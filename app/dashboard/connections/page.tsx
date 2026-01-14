@@ -29,113 +29,113 @@ export default function ConnectionsPage() {
       setSelectedPlatform("");
       setBaseUrl("");
       setApiToken("");
-      alert("Store connected and initial sync started!");
+      // alert replaced with a simpler log or could be a toast in a real app
+      console.log("Store connected!");
     } catch (error) {
-      alert("Failed to connect store. Please check your credentials.");
+      console.error("Failed to connect store.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <h1 className="text-4xl font-black tracking-tight">Integration Center</h1>
-          <p className="text-muted-foreground font-medium">Link your e-commerce ecosystem to the PricePilot engine.</p>
+    <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Integrations</h2>
+          <p className="text-muted-foreground text-sm">Manage your e-commerce store connections.</p>
         </div>
         {!isAdding && (
           <button
             onClick={() => setIsAdding(true)}
-            className="w-full md:w-auto bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-2 transition-all shadow-2xl shadow-primary/20 glow transition-transform active:scale-95"
+            className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
           >
-            <Plus className="w-5 h-5" />
-            Connect New Store
+            <Plus className="w-4 h-4" />
+            Connect Store
           </button>
         )}
       </div>
 
       {isAdding ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-           <div className="bg-card border border-border rounded-[2.5rem] p-10 space-y-8 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="space-y-2">
-                 <h2 className="text-2xl font-black tracking-tight">Configure Endpoint</h2>
-                 <p className="text-sm font-medium text-muted-foreground">Select your platform and provide your access credentials.</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+           <div className="lg:col-span-2 bg-card border border-border rounded-lg p-6 md:p-8 space-y-6">
+              <div className="space-y-1">
+                 <h3 className="text-xl font-bold">Configure Connection</h3>
+                 <p className="text-sm text-muted-foreground">Select your platform and provide your access credentials.</p>
               </div>
 
-              <form onSubmit={handleAddConnection} className="space-y-8">
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleAddConnection} className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {platforms.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => setSelectedPlatform(p.id)}
                       className={cn(
-                        "p-6 border rounded-3xl flex flex-col items-center gap-4 transition-all group relative overflow-hidden",
+                        "p-4 border rounded-md flex flex-col items-center gap-3 transition-all group relative",
                         selectedPlatform === p.id
-                          ? "border-primary bg-primary/5 ring-4 ring-primary/10"
-                          : "border-border hover:border-primary/30 hover:bg-muted/50"
+                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                          : "border-border hover:border-primary/50 hover:bg-muted/50"
                       )}
                     >
                       {selectedPlatform === p.id && (
-                        <div className="absolute top-3 right-3">
-                           <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10" />
+                        <div className="absolute top-2 right-2">
+                           <CheckCircle2 className="w-4 h-4 text-primary" />
                         </div>
                       )}
-                      <div className="w-14 h-14 flex items-center justify-center grayscale brightness-150 group-hover:grayscale-0 group-hover:brightness-100 transition-all">
+                      <div className="w-12 h-12 flex items-center justify-center grayscale group-hover:grayscale-0 transition-all p-1">
                         <img src={p.icon} alt={p.name} className="max-w-full max-h-full object-contain" />
                       </div>
-                      <span className="font-black text-xs uppercase tracking-widest">{p.name}</span>
+                      <span className="font-bold text-[10px] uppercase tracking-wider">{p.name}</span>
                     </button>
                   ))}
                 </div>
 
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">Store Base URL</label>
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Store Base URL</label>
                     <div className="relative group">
-                       <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                       <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
                           type="url"
                           value={baseUrl}
                           onChange={(e) => setBaseUrl(e.target.value)}
                           placeholder="https://yourstore.com"
-                          className="w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all font-bold placeholder:text-muted-foreground/30"
+                          className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
                           required
                         />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-1">Secure API Token</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Secure API Token</label>
                     <div className="relative group">
-                       <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
                           type="password"
                           value={apiToken}
                           onChange={(e) => setApiToken(e.target.value)}
-                          placeholder="Paste your PricePilot secret here"
-                          className="w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all font-bold placeholder:text-muted-foreground/30"
+                          placeholder="Your PricePilot secret key"
+                          className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
                           required
                         />
                     </div>
-                    <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex items-start gap-3 mt-4">
+                    <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-start gap-2.5 mt-2">
                        <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                       <p className="text-[11px] font-bold text-primary/80 leading-relaxed uppercase tracking-wider">
-                         You can find this in your store&apos;s admin panel after installing the official PricePilot module.
+                       <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
+                         You can find this in your store&apos;s admin panel after installing the PricePilot extension.
                        </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 pt-4">
+                <div className="flex items-center gap-3 pt-2">
                   <button
                     type="submit"
                     disabled={loading || !selectedPlatform}
-                    className="flex-1 premium-gradient text-white font-black py-5 rounded-2xl transition-all disabled:opacity-50 shadow-xl shadow-primary/20 glow transition-transform active:scale-95 flex items-center justify-center gap-2"
+                    className="flex-1 bg-primary text-primary-foreground font-bold py-2.5 rounded-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]"
                   >
-                    {loading ? <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>
+                    {loading ? <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> : <>
                        <Zap className="w-4 h-4 fill-current" />
                        Verify & Connect
                     </>}
@@ -143,7 +143,7 @@ export default function ConnectionsPage() {
                   <button
                     type="button"
                     onClick={() => setIsAdding(false)}
-                    className="flex-1 bg-muted hover:bg-muted/80 text-foreground font-black py-5 rounded-2xl border border-border transition-all"
+                    className="flex-1 bg-secondary text-secondary-foreground font-bold py-2.5 rounded-md border border-border transition-all hover:bg-secondary/80"
                   >
                     Cancel
                   </button>
@@ -151,83 +151,82 @@ export default function ConnectionsPage() {
               </form>
            </div>
 
-           <div className="hidden lg:block space-y-6 pt-10">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <Shield className="w-6 h-6" />
+           <div className="space-y-6 pt-2">
+              <div className="flex items-start gap-3">
+                 <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <Shield className="w-4 h-4" />
                  </div>
-                 <div className="space-y-0.5">
-                    <p className="text-lg font-black tracking-tight">Military Grade Auth</p>
-                    <p className="text-sm text-muted-foreground font-medium">All connection tokens are encrypted with AES-256 for your protection.</p>
+                 <div className="space-y-1">
+                    <p className="text-sm font-bold">Secure Authentication</p>
+                    <p className="text-[12px] text-muted-foreground leading-snug">All connection tokens are encrypted with industry standard AES-256 protocols.</p>
                  </div>
               </div>
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center text-success">
-                    <Zap className="w-6 h-6" />
+              <div className="flex items-start gap-3">
+                 <div className="w-8 h-8 rounded-md bg-success/10 flex items-center justify-center text-success shrink-0">
+                    <Zap className="w-4 h-4" />
                  </div>
-                 <div className="space-y-0.5">
-                    <p className="text-lg font-black tracking-tight">Real-time Data Streaming</p>
-                    <p className="text-sm text-muted-foreground font-medium">Once connected, products sync instantly with zero backend latency.</p>
+                 <div className="space-y-1">
+                    <p className="text-sm font-bold">Live Data Streaming</p>
+                    <p className="text-[12px] text-muted-foreground leading-snug">Once connected, your product catalog synchronizes automatically in the background.</p>
                  </div>
               </div>
            </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {existingConnections.map((conn) => (
-            <div key={conn.id} className="bg-card border border-border rounded-[2.5rem] p-8 group hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/5 transition-all relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none group-hover:bg-primary/10 transition-colors" />
-
-              <div className="flex items-start justify-between mb-10">
-                <div className="w-16 h-16 rounded-2xl bg-muted border border-border flex items-center justify-center p-3 group-hover:bg-background transition-colors duration-500">
-                  <img
-                    src={platforms.find(p => p.id === conn.platform)?.icon}
-                    alt={conn.platform}
-                    className="max-w-full max-h-full object-contain grayscale group-hover:grayscale-0 transition-all duration-500"
-                  />
+            <div key={conn.id} className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all flex flex-col justify-between h-full">
+              <div>
+                <div className="flex items-start justify-between mb-6">
+                  <div className="w-12 h-12 rounded-md bg-muted border border-border flex items-center justify-center p-2">
+                    <img
+                      src={platforms.find(p => p.id === conn.platform)?.icon}
+                      alt={conn.platform}
+                      className="max-w-full max-h-full object-contain grayscale"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-success/10 border border-success/20 rounded-full">
+                    <div className="w-1.5 h-1.5 rounded-full bg-success" />
+                    <span className="text-[9px] font-bold text-success tracking-widest uppercase">{conn.status}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-success/10 border border-success/20 rounded-full">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                  <span className="text-[10px] font-black text-success tracking-widest uppercase">{conn.status}</span>
+
+                <div className="space-y-1">
+                  <h3 className="font-bold text-lg">{conn.name}</h3>
+                  <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5 hover:text-primary transition-colors cursor-pointer truncate">
+                    {conn.url}
+                    <ExternalLink className="w-3 h-3" />
+                  </p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <h3 className="font-black text-2xl tracking-tight">{conn.name}</h3>
-                <p className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 group/link cursor-pointer hover:text-primary transition-colors">
-                  {conn.url}
-                  <ExternalLink className="w-3.5 h-3.5 opacity-50 transition-transform group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5" />
-                </p>
-              </div>
-
-              <div className="mt-10 pt-8 border-t border-border flex items-center justify-between">
+              <div className="mt-8 pt-4 border-t border-border flex items-center justify-between">
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last Activity</span>
-                  <span className="text-xs font-bold text-foreground">{conn.lastSync}</span>
+                  <span className="text-[9px] font-bold uppercase text-muted-foreground tracking-widest">Last Activity</span>
+                  <span className="text-[11px] font-semibold text-foreground">{conn.lastSync}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                   <button className="p-3 bg-muted hover:bg-background border border-border rounded-xl text-muted-foreground hover:text-primary transition-all shadow-sm">
-                      <Link2 className="w-5 h-5" />
+                   <button className="p-2 hover:bg-muted border border-transparent hover:border-border rounded-md text-muted-foreground transition-all">
+                      <Link2 className="w-4 h-4" />
                    </button>
-                   <button className="p-3 bg-muted hover:bg-danger/10 border border-border hover:border-danger/20 rounded-xl text-muted-foreground hover:text-danger transition-all shadow-sm">
-                      <Trash2 className="w-5 h-5" />
+                   <button className="p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all">
+                      <Trash2 className="w-4 h-4" />
                    </button>
                 </div>
               </div>
             </div>
           ))}
 
-          {/* New Connection Card */}
           <button
              onClick={() => setIsAdding(true)}
-             className="bg-muted/10 border-2 border-dashed border-border rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center space-y-4 hover:border-primary/40 hover:bg-primary/5 transition-all group"
+             className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-[220px]"
           >
-             <div className="w-16 h-16 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground group-hover:scale-110 group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-500">
-                <Plus className="w-8 h-8" />
+             <div className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
+                <Plus className="w-5 h-5" />
              </div>
-             <div className="space-y-1">
-                <p className="text-xl font-black">Add Integration</p>
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Scale your reach</p>
+             <div className="space-y-0.5">
+                <p className="text-base font-bold">Add New Store</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Integrate platform</p>
              </div>
           </button>
         </div>

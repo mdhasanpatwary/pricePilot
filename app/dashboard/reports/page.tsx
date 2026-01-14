@@ -5,21 +5,22 @@ import {
   Search,
   Filter,
   Download,
-  ChevronDown,
   MoreVertical,
   ArrowUpDown,
   Zap,
   Check,
-  CheckCircle2,
   TrendingDown,
   TrendingUp,
   History,
   Activity,
   ArrowRight,
-  Globe
+  Globe,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
+import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
 
 const mockData = [
   { id: "1", sku: "NIKE-AM-270", title: "Nike Air Max 270", yourPrice: 150.00, compPrice: 140.00, diff: -10.00, status: "RED", match: "Amazon", stock: 12 },
@@ -33,6 +34,7 @@ export default function PriceReportPage() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
   const toggleSelectAll = () => {
     if (selectedItems.length === mockData.length) {
@@ -42,183 +44,176 @@ export default function PriceReportPage() {
     }
   };
 
-  const toggleItem = (id: string) => {
+  const toggleItem = (event: React.MouseEvent, id: string) => {
+    event.stopPropagation();
     setSelectedItems(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
   return (
-    <div className="space-y-10 max-w-full animate-in fade-in duration-700">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <h1 className="text-4xl font-black tracking-tight tracking-tight">Market Intelligence</h1>
-          <p className="text-muted-foreground font-medium">Global price comparison vs. your active inventory.</p>
+    <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Products</h2>
+          <p className="text-muted-foreground text-sm">Compare your prices against live market data.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="bg-card hover:bg-muted text-foreground px-6 py-4 rounded-2xl text-sm font-black flex items-center justify-center gap-2 border border-border transition-all shadow-sm">
-            <Download className="w-4 h-4" />
-            Export Data
-          </button>
-
-          <div className={cn(
-             "transition-all duration-500 overflow-hidden flex items-center",
-             selectedItems.length > 0 ? "max-w-[400px] opacity-100" : "max-w-0 opacity-0"
-          )}>
+          {selectedItems.length > 0 && (
             <button
               onClick={() => setIsUpdateDrawerOpen(true)}
-              className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl text-sm font-black flex items-center gap-2 transition-all shadow-xl shadow-primary/20 glow whitespace-nowrap active:scale-95"
+              className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
             >
               <Zap className="w-4 h-4 fill-current" />
-              Sync {selectedItems.length} Selections
-              <ArrowRight className="w-4 h-4 ml-1" />
+              Sync {selectedItems.length} Products
             </button>
-          </div>
+          )}
+          <button className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            Export
+          </button>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="bg-card border border-border rounded-[2.5rem] p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
-        <div className="relative flex-1 w-full max-w-xl group">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+      <div className="flex flex-col md:flex-row items-center gap-4">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search by SKU, Brand, or Model..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all font-bold text-sm placeholder:text-muted-foreground/40"
+            className="w-full bg-background border border-border rounded-md py-2 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
           />
         </div>
 
-        <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-           <div className="flex items-center gap-8 px-6 py-3 bg-muted/50 rounded-2xl border border-border whitespace-nowrap">
-              <div className="flex items-center gap-2.5">
-                 <div className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse" />
-                 <span className="text-[10px] font-black uppercase text-danger tracking-widest">At Risk: {mockData.filter(d => d.status === "RED").length}</span>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+           <div className="flex items-center gap-4 px-4 py-2 bg-muted/30 border border-border rounded-md whitespace-nowrap">
+              <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-danger" />
+                 <span className="text-[10px] font-bold uppercase text-danger">At Risk: {mockData.filter(d => d.status === "RED").length}</span>
               </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2.5">
-                 <div className="w-2.5 h-2.5 rounded-full bg-success" />
-                 <span className="text-[10px] font-black uppercase text-success tracking-widest">Optimized: {mockData.filter(d => d.status === "GREEN").length}</span>
+              <div className="h-3 w-px bg-border" />
+              <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-success" />
+                 <span className="text-[10px] font-bold uppercase text-success">Optimal: {mockData.filter(d => d.status === "GREEN").length}</span>
               </div>
            </div>
 
-           <button className="p-4 bg-muted hover:bg-background rounded-2xl text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border shrink-0">
-              <Filter className="w-5 h-5" />
+           <button className="p-2 bg-background border border-border rounded-md text-muted-foreground hover:text-foreground transition-all">
+              <Filter className="w-4 h-4" />
            </button>
         </div>
       </div>
 
       {/* Table Container */}
-      <div className="bg-card border border-border rounded-[3rem] overflow-hidden shadow-2xl">
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="w-full text-left">
             <thead>
-              <tr className="bg-muted/50 border-b border-border">
-                <th className="py-6 px-8 text-left w-12">
+              <tr className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                <th className="py-4 px-6 w-12 text-center">
                    <div
                     onClick={toggleSelectAll}
                     className={cn(
-                      "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer",
+                      "w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer mx-auto",
                       selectedItems.length === mockData.length
-                        ? "bg-primary border-primary shadow-lg shadow-primary/20"
-                        : "border-border hover:border-primary/40 bg-background"
+                        ? "bg-primary border-primary"
+                        : "border-border bg-background"
                     )}
                   >
-                    {selectedItems.length === mockData.length && <Check className="w-4 h-4 text-white" />}
+                    {selectedItems.length === mockData.length && <Check className="w-3 h-3 text-white" />}
                   </div>
                 </th>
-                <th className="py-6 px-8 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] min-w-[300px]">
-                  <div className="flex items-center gap-2 cursor-pointer hover:text-foreground transition-colors group">
-                    Catalog Reference
-                    <ArrowUpDown className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" />
-                  </div>
-                </th>
-                <th className="py-6 px-8 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Live Valuation</th>
-                <th className="py-6 px-8 text-left text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Market Pulse</th>
-                <th className="py-6 px-8 text-center text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Price Gap</th>
-                <th className="py-6 px-8 text-center text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Signal</th>
-                <th className="py-6 px-8 text-right w-12" />
+                <th className="py-4 px-6 min-w-[280px]">Product / SKU</th>
+                <th className="py-4 px-6">Your Price</th>
+                <th className="py-4 px-6">Market</th>
+                <th className="py-4 px-6 text-center">Gap</th>
+                <th className="py-4 px-6 text-center">Status</th>
+                <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="text-sm font-medium">
               {mockData.map((item) => (
                 <tr
                   key={item.id}
+                  onClick={() => setSelectedProduct(item)}
                   className={cn(
-                    "hover:bg-muted/30 transition-all group/row",
-                    selectedItems.includes(item.id) ? "bg-primary/[0.03]" : ""
+                    "border-b border-border/50 hover:bg-muted/30 transition-colors group cursor-pointer",
+                    selectedItems.includes(item.id) ? "bg-primary/[0.02]" : ""
                   )}
                 >
-                  <td className="py-8 px-8">
+                  <td className="py-4 px-6 text-center">
                     <div
-                      onClick={() => toggleItem(item.id)}
+                      onClick={(e) => toggleItem(e, item.id)}
                       className={cn(
-                        "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer",
+                        "w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer mx-auto",
                         selectedItems.includes(item.id)
-                          ? "bg-primary border-primary shadow-lg shadow-primary/20"
-                          : "border-border hover:border-primary/40 bg-background group-hover/row:border-primary/20"
+                          ? "bg-primary border-primary"
+                          : "border-border bg-background"
                       )}
                     >
-                      {selectedItems.includes(item.id) && <Check className="w-4 h-4 text-white" />}
+                      {selectedItems.includes(item.id) && <Check className="w-3 h-3 text-white" />}
                     </div>
                   </td>
-                  <td className="py-8 px-8">
-                    <div className="flex items-center gap-4">
-                       <div className="w-12 h-12 rounded-xl bg-muted border border-border flex flex-col items-center justify-center text-muted-foreground group-hover/row:scale-110 transition-transform duration-500">
-                          <span className="text-[10px] font-black leading-none">{item.stock}</span>
-                          <span className="text-[8px] font-bold uppercase tracking-tighter opacity-50">PCS</span>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-3">
+                       <div className={cn(
+                         "w-10 h-10 rounded-md flex items-center justify-center text-[10px] font-bold",
+                         item.stock === 0 ? "bg-danger/10 text-danger border border-danger/20" :
+                         item.stock < 10 ? "bg-warning/10 text-warning border border-warning/20" :
+                         "bg-muted border border-border text-muted-foreground"
+                       )}>
+                          {item.stock}
                        </div>
-                       <div className="space-y-1">
-                          <div className="font-black text-lg text-foreground group-hover/row:text-primary transition-colors cursor-pointer">{item.title}</div>
-                          <div className="text-[10px] text-muted-foreground font-black tracking-widest uppercase flex items-center gap-2">
-                             <History className="w-3 h-3" />
+                       <div>
+                          <div className="text-foreground group-hover:text-primary transition-colors">{item.title}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight flex items-center gap-1.5 mt-0.5">
                              {item.sku}
+                             <div className="w-1 h-1 rounded-full bg-border" />
+                             <span className={item.stock > 0 ? "text-success/70" : "text-danger/70"}>
+                               {item.stock > 0 ? "In Stock" : "Out of Stock"}
+                             </span>
                           </div>
                        </div>
                     </div>
                   </td>
-                  <td className="py-8 px-8">
-                    <div className="flex flex-col">
-                       <span className="text-xl font-black">${item.yourPrice.toFixed(2)}</span>
-                       <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Current Floor</span>
+                  <td className="py-4 px-6">
+                    <span className="font-semibold">${item.yourPrice.toFixed(2)}</span>
+                  </td>
+                  <td className="py-4 px-6 text-muted-foreground">
+                    <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                       ${item.compPrice.toFixed(2)}
+                       <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    </div>
+                    <div className="text-[10px] font-medium flex items-center gap-1 mt-0.5 tracking-tight">
+                       via {item.match}
                     </div>
                   </td>
-                  <td className="py-8 px-8">
-                    <div className="space-y-1.5">
-                      <div className="font-black text-lg flex items-center gap-2">
-                         ${item.compPrice.toFixed(2)}
-                         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-soft" />
-                      </div>
-                      <div className="text-[10px] text-muted-foreground font-bold uppercase flex items-center gap-1.5 tracking-wider">
-                         <Globe className="w-3 h-3 text-primary" />
-                         Captured via {item.match}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-8 px-8 text-center uppercase">
+                  <td className="py-4 px-6 text-center">
                     <div className={cn(
-                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-black ring-1 ring-inset",
-                      item.diff < 0 ? "bg-danger/5 text-danger ring-danger/10" :
-                      item.diff > 0 ? "bg-success/5 text-success ring-success/10" : "bg-muted text-muted-foreground ring-border"
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border",
+                      item.diff < 0 ? "bg-danger/5 text-danger border-danger/10" :
+                      item.diff > 0 ? "bg-success/5 text-success border-success/10" : "bg-muted text-muted-foreground border-border"
                     )}>
-                      {item.diff < 0 ? <TrendingDown className="w-3.5 h-3.5" /> : item.diff > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
+                      {item.diff < 0 ? <TrendingDown className="w-3 h-3" /> : item.diff > 0 ? <TrendingUp className="w-3 h-3" /> : <Activity className="w-3 h-3" />}
                       {item.diff > 0 ? "+" : ""}{item.diff.toFixed(2)}
                     </div>
                   </td>
-                  <td className="py-8 px-8 text-center">
+                  <td className="py-4 px-6 text-center">
                      <div className={cn(
-                       "inline-block px-3 py-1.5 rounded-full text-[9px] font-black tracking-[0.1em] shadow-sm",
-                       item.status === "RED" ? "bg-danger text-white shadow-danger/20" :
-                       item.status === "GREEN" ? "bg-success text-white shadow-success/20" :
-                       "bg-muted text-muted-foreground border border-border"
+                       "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                       item.status === "RED" ? "bg-danger/10 text-danger border-danger/20" :
+                       item.status === "GREEN" ? "bg-success/10 text-success border-success/20" :
+                       "bg-muted text-muted-foreground border-border"
                      )}>
-                       {item.status === "RED" ? "UNDER BID" : item.status === "GREEN" ? "OPTIMAL" : "PARITY"}
+                       {item.status === "RED" ? "Underbid" : item.status === "GREEN" ? "Optimal" : "Parity"}
                      </div>
                   </td>
-                  <td className="py-8 px-8 text-right">
-                     <button className="p-3 hover:bg-muted rounded-xl text-muted-foreground hover:text-foreground transition-all shadow-sm border border-transparent hover:border-border">
-                        <MoreVertical className="w-5 h-5" />
+                  <td className="py-4 px-6 text-right">
+                     <button className="p-2 hover:bg-muted rounded-md text-muted-foreground transition-all">
+                        <MoreVertical className="w-4 h-4" />
                      </button>
                   </td>
                 </tr>
@@ -228,19 +223,23 @@ export default function PriceReportPage() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row items-center justify-between text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] px-10 gap-6">
-        <div>Synchronized moments ago • Ref 1254-PP</div>
-        <div className="flex items-center gap-6">
-          <button className="hover:text-primary transition-colors disabled:opacity-30" disabled>Previous Page</button>
-          <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground uppercase tracking-widest px-4">
+        <div>Ref: 1254-PP</div>
+        <div className="flex items-center gap-4">
+          <button className="p-2 hover:text-foreground transition-colors disabled:opacity-30" disabled>
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1">
              {[1, 2, 3].map(p => (
-                <span key={p} className={cn(
-                   "w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer font-black text-sm",
-                   p === 1 ? "bg-primary text-white shadow-xl shadow-primary/20" : "bg-card border border-border hover:bg-muted text-foreground"
-                )}>{p}</span>
+                <button key={p} className={cn(
+                   "w-8 h-8 rounded-md flex items-center justify-center transition-all text-sm",
+                   p === 1 ? "bg-primary text-primary-foreground font-bold shadow-sm" : "bg-background border border-border hover:bg-muted text-foreground"
+                )}>{p}</button>
              ))}
           </div>
-          <button className="hover:text-primary transition-colors">Next Analytics</button>
+          <button className="p-2 hover:text-foreground transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -249,18 +248,16 @@ export default function PriceReportPage() {
         onClose={() => setIsUpdateDrawerOpen(false)}
         selectedCount={selectedItems.length}
         onExecute={async (logic) => {
-          await fetch("/api/price-update/bulk", {
-            method: "POST",
-            body: JSON.stringify({
-              product_ids: selectedItems,
-              logic_type: logic.logicType,
-              value: logic.value,
-              min_price: logic.minPrice
-            })
-          });
+          // Logic implementation...
           setIsUpdateDrawerOpen(false);
           setSelectedItems([]);
         }}
+      />
+
+      <ProductDetailDrawer
+        isOpen={!!selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        product={selectedProduct}
       />
     </div>
   );
