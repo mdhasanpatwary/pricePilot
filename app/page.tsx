@@ -7,12 +7,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background selection:bg-primary selection:text-white">
+    <div className="min-h-screen bg-background selection:bg-primary selection:text-primary-foreground">
       {/* Header */}
       <nav className="fixed top-0 w-full z-50 glass border-b border-border/50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center glow">
-            <ShieldCheck className="w-6 h-6 text-white" />
+            <ShieldCheck className="w-6 h-6 text-primary-foreground" />
           </div>
           <span className="text-2xl font-bold tracking-tighter">PricePilot</span>
         </div>
@@ -26,7 +26,7 @@ export default function LandingPage() {
           <Link href="/auth/login" className="text-sm font-semibold hover:text-primary transition-colors px-4 py-2">
             Login
           </Link>
-          <Link href="/auth/register" className="premium-gradient px-6 py-2.5 rounded-full text-sm font-bold text-white glow-hover">
+          <Link href="/auth/register" className="premium-gradient px-6 py-2.5 rounded-full text-sm font-bold text-primary-foreground glow-hover">
             Get Started
           </Link>
         </div>
@@ -55,7 +55,7 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-10">
-            <Link href="/auth/register" className="w-full sm:w-auto premium-gradient px-12 py-6 rounded-[2rem] text-xl font-black text-white glow-hover flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20">
+            <Link href="/auth/register" className="w-full sm:w-auto premium-gradient px-12 py-6 rounded-[2rem] text-xl font-black text-primary-foreground glow-hover flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20">
               Start Scaling Now
               <ArrowRight className="w-6 h-6" />
             </Link>
@@ -97,7 +97,7 @@ export default function LandingPage() {
             ].map((f, i) => (
               <div key={i} className="group bg-card border border-border p-10 rounded-[2.5rem] hover:border-primary/40 hover:bg-primary/[0.01] transition-all hover:-translate-y-3 shadow-xl shadow-black/[0.02] relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-primary/10 transition-colors" />
-                <div className="w-16 h-16 rounded-2xl bg-muted border border-border flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-white group-hover:glow transition-all duration-500 text-primary">
+                <div className="w-16 h-16 rounded-2xl bg-muted border border-border flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-primary-foreground group-hover:glow transition-all duration-500 text-primary">
                   <f.icon className="w-8 h-8" />
                 </div>
                 <h3 className="text-2xl font-black mb-4 tracking-tight">{f.title}</h3>
@@ -123,7 +123,7 @@ export default function LandingPage() {
               Join 500+ merchants who optimized their pricing this week. 14-day free trial. No credit card required.
             </p>
             <div className="pt-8">
-              <Link href="/auth/register" className="inline-flex items-center gap-4 bg-white text-primary px-14 py-7 rounded-[2rem] font-black text-2xl hover:scale-105 active:scale-95 transition-all shadow-2xl hover:shadow-white/10">
+              <Link href="/auth/register" className="inline-flex items-center gap-4 bg-background text-foreground px-14 py-7 rounded-[2rem] font-black text-2xl hover:scale-105 active:scale-95 transition-all shadow-2xl hover:shadow-background/10">
                 Get Early Access
                 <ArrowRight className="w-8 h-8" />
               </Link>
@@ -137,7 +137,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
            <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center glow transition-transform hover:rotate-6">
-              <ShieldCheck className="w-7 h-7 text-white" />
+              <ShieldCheck className="w-7 h-7 text-primary-foreground" />
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-black tracking-tighter leading-none">PricePilot</span>

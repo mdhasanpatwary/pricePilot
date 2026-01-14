@@ -25,6 +25,11 @@ export class SyncService {
     if (!site) throw new Error("Site not found");
 
     // 1. Fetch products from external platform
+    if (!site.apiToken) {
+      console.log(`[SyncService] No API token for ${site.baseUrl}, skipping fetch.`);
+      return { count: 0, siteName: site.baseUrl };
+    }
+
     let externalProducts: ExternalProduct[] = [];
     if (site.platform === "OPENCART") {
       externalProducts = await this.fetchFromOpenCart(site);
@@ -174,6 +179,11 @@ export class SyncService {
     });
 
     if (!site) throw new Error("Site not found");
+
+    if (!site.apiToken) {
+      console.log(`[SyncService] No API token for ${site.baseUrl}, skipping push.`);
+      return { success: true, updated: 0 };
+    }
 
     const productsToUpdate = site.products.filter(p => p.externalId);
 

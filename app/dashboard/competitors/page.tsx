@@ -52,14 +52,65 @@ export default function CompetitorsPage() {
 
   const onSubmit = async (data: CompetitorFormValues) => {
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/competitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        toast.success("Crawler deployed successfully");
+        setIsAdding(false);
+        reset();
+        fetchCompetitors();
+      } else {
+        const result = await res.json();
+        toast.error(result.error || "Failed to deploy crawler");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    } finally {
       setLoading(false);
-      setIsAdding(false);
-      reset();
-      toast.success("Crawler deployed successfully");
+    }
+  };
+
+  const handleSyncSite = async (id: string) => {
+    const toastId = toast.loading("Deploying high-speed crawler...");
+    try {
+      const res = await fetch("/api/competitors/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId: id }),
+      });
+
+      if (!res.ok) throw new Error("Sync failed");
+
+      const result = await res.json();
+      toast.success(`Site crawl complete. Updated ${result.count || 0} products.`, { id: toastId });
       fetchCompetitors();
-    }, 2000);
+    } catch (error) {
+      toast.error("Crawler failed to reach target", { id: toastId });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this competitor site? All tracking data for this site will be lost.")) return;
+
+    try {
+      const res = await fetch(`/api/competitors?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Competitor removed");
+        fetchCompetitors();
+      } else {
+        toast.error("Failed to remove competitor");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    }
   };
 
   return (
@@ -230,16 +281,33 @@ export default function CompetitorsPage() {
                           <span className="text-xs text-muted-foreground">{comp.health}%</span>
                        </div>
                     </td>
-                    <td className="py-5 px-6 text-right">
+                     <td className="py-5 px-6 text-right">
                        <div className="flex items-center justify-end gap-2 text-muted-foreground">
-                         <button className="p-2 hover:bg-muted rounded-md transition-all">
-                           <MoreVertical className="w-4 h-4" />
+                         <button
+                           onClick={() => handleSyncSite(comp.id)}
+                           className="p-2 hover:bg-primary/10 hover:text-primary rounded-md transition-all group"
+                           title="Force Sync"
+                         >
+                           <Zap className="w-4 h-4 group-active:scale-95 transition-transform" />
                          </button>
-                         <button className="p-2 hover:bg-danger/10 rounded-md hover:text-danger transition-all">
+                         <a
+                           href={comp.url}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="p-2 hover:bg-muted rounded-md transition-all"
+                           title="View Website"
+                         >
+                           <ExternalLink className="w-4 h-4" />
+                         </a>
+                         <button
+                           onClick={() => handleDelete(comp.id)}
+                           className="p-2 hover:bg-danger/10 rounded-md hover:text-danger transition-all"
+                           title="Remove Tracker"
+                         >
                            <Trash2 className="w-4 h-4" />
                          </button>
                        </div>
-                    </td>
+                     </td>
                   </tr>
                 ))}
               </tbody>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Plus, Link2, ExternalLink, Trash2, CheckCircle2, AlertCircle, Zap, Shield, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -9,14 +10,19 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 const platforms = [
-  { id: "OPENCART", name: "OpenCart", icon: "https://www.opencart.com/application/view/image/home/opencart-logo.png" },
-  { id: "LARAVEL", name: "Laravel", icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Laravel.svg/1200px-Laravel.svg.png" },
+  { id: "SHOPIFY", name: "Shopify", icon: "/icons/platforms/shopify.svg" },
+  { id: "WOOCOMMERCE", name: "WooCommerce", icon: "/icons/platforms/woocommerce.svg" },
+  { id: "MAGENTO", name: "Magento", icon: "/icons/platforms/magento.png" },
+  { id: "PRESTASHOP", name: "PrestaShop", icon: "/icons/platforms/prestashop.svg" },
+  { id: "BIGCOMMERCE", name: "BigCommerce", icon: "/icons/platforms/bigcommerce.svg" },
+  { id: "OPENCART", name: "OpenCart", icon: "/icons/platforms/opencart.svg" },
+  { id: "LARAVEL", name: "Laravel", icon: "/icons/platforms/laravel.png" },
 ];
 
 const connectionSchema = z.object({
   platform: z.string().min(1, "Please select a platform"),
   baseUrl: z.string().url("Please enter a valid store URL"),
-  apiToken: z.string().min(1, "API Token is required"),
+  apiToken: z.string().optional(),
 });
 
 type ConnectionFormValues = z.infer<typeof connectionSchema>;
@@ -133,14 +139,14 @@ export default function ConnectionsPage() {
 
       {isAdding ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-           <div className="lg:col-span-2 bg-card border border-border rounded-lg p-6 md:p-8 space-y-6">
+           <div className="lg:col-span-2 bg-card border border-border rounded-lg p-4 md:p-6 space-y-6">
               <div className="space-y-1">
                  <h3 className="text-xl font-bold">Configure Connection</h3>
                  <p className="text-sm text-muted-foreground">Select your platform and provide your access credentials.</p>
               </div>
 
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {platforms.map((p) => (
                     <button
                       key={p.id}
@@ -158,8 +164,14 @@ export default function ConnectionsPage() {
                            <CheckCircle2 className="w-4 h-4 text-primary" />
                         </div>
                       )}
-                      <div className="w-12 h-12 flex items-center justify-center grayscale group-hover:grayscale-0 transition-all p-1">
-                        <img src={p.icon} alt={p.name} className="max-w-full max-h-full object-contain" />
+                      <div className="w-12 h-12 flex items-center justify-center grayscale group-hover:grayscale-0 transition-all p-1 relative">
+                        <Image
+                          src={p.icon}
+                          alt={p.name}
+                          fill
+                          className="object-contain p-1"
+                          sizes="48px"
+                        />
                       </div>
                       <span className="font-bold text-[10px] uppercase tracking-wider">{p.name}</span>
                     </button>
@@ -186,7 +198,7 @@ export default function ConnectionsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Secure API Token</label>
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Secure API Token (Optional)</label>
                     <div className="relative group">
                        <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
@@ -203,7 +215,7 @@ export default function ConnectionsPage() {
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-start gap-2.5 mt-2">
                        <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                        <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
-                         You can find this in your store&apos;s admin panel after installing the PricePilot extension.
+                         Required only for automated price updates. You can find this in your store&apos;s admin panel after installing the PricePilot extension.
                        </p>
                     </div>
                   </div>
@@ -261,12 +273,21 @@ export default function ConnectionsPage() {
             <div key={conn.id} className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all flex flex-col justify-between h-full">
               <div>
                 <div className="flex items-start justify-between mb-6">
-                  <div className="w-12 h-12 rounded-md bg-muted border border-border flex items-center justify-center p-2">
-                    <img
-                      src={platforms.find(p => p.id === conn.platform)?.icon}
-                      alt={conn.platform}
-                      className="max-w-full max-h-full object-contain grayscale"
-                    />
+                  <div className="w-12 h-12 rounded-md bg-muted border border-border flex items-center justify-center p-2 relative">
+                    {(() => {
+                      const platform = platforms.find(p => p.id === conn.platform);
+                      return platform ? (
+                        <Image
+                          src={platform.icon}
+                          alt={conn.platform}
+                          fill
+                          className="object-contain p-2 grayscale"
+                          sizes="48px"
+                        />
+                      ) : (
+                        <Globe className="w-6 h-6 text-muted-foreground/20" />
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 bg-success/10 border border-success/20 rounded-full">
                     <div className="w-1.5 h-1.5 rounded-full bg-success" />

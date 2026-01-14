@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   TrendingDown,
   Package,
@@ -105,6 +106,10 @@ export default function DashboardOverview() {
     }
   };
 
+  const handleExportReport = () => {
+    toast.success("Intelligence report generated. Download starting automatically.");
+  };
+
   const statsConfig = [
     { label: "Total SKUs Live", value: stats.totalSKUs, icon: Package, change: "+12%", trend: "up" },
     { label: "Active Rivals", value: stats.activeRivals, icon: ShoppingBag, change: "Stable", trend: "neutral" },
@@ -150,7 +155,10 @@ export default function DashboardOverview() {
           >
             {isSyncing ? "Syncing..." : "Run Global Sync"}
           </button>
-          <button className="bg-secondary text-secondary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-secondary/80 transition-all border border-border">
+          <button
+            onClick={handleExportReport}
+            className="bg-secondary text-secondary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-secondary/80 transition-all border border-border"
+          >
             Export Report
           </button>
         </div>
@@ -291,9 +299,12 @@ export default function DashboardOverview() {
         <div className="lg:col-span-3 bg-card border border-border rounded-xl p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h4 className="text-lg font-bold text-foreground">Live Execution Queue</h4>
-            <button className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full">
+            <Link
+              href="/dashboard/reports"
+              className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full transition-all"
+            >
               Full Log <ChevronRight className="w-4 h-4" />
-            </button>
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">

@@ -25,6 +25,11 @@ enum SiteType {
 enum PlatformType {
   OPENCART
   LARAVEL
+  SHOPIFY
+  WOOCOMMERCE
+  MAGENTO
+  PRESTASHOP
+  BIGCOMMERCE
   GENERIC
 }
 

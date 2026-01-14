@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const sites = await prisma.site.findMany({
       where: {
         tenantId,
+        type: "USER",
       },
       include: {
         _count: {
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     const { platform, baseUrl, apiToken, type } = body;
 
     // Validation
-    if (!platform || !baseUrl || !apiToken) {
+    if (!platform || !baseUrl) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }

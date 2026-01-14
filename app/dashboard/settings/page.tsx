@@ -287,7 +287,7 @@ export default function SettingsPage() {
                          <div className="flex items-center gap-4">
                             <div className={cn(
                               "w-10 h-10 rounded-full flex items-center justify-center",
-                              plan.active ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                              plan.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                             )}>
                                <Zap className="w-5 h-5" />
                             </div>

@@ -122,4 +122,113 @@ export class SyncOrchestrator {
       throw error;
     }
   }
+
+  /**
+   * Run sync for a specific site
+   */
+  static async syncSite(siteId: string) {
+    console.log(`[SyncOrchestrator] Starting single-site sync for: ${siteId}`);
+
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      include: { tenant: true }
+    });
+
+    if (!site) throw new Error("Site not found");
+
+    // Get all competitor products for this site that are matched to user products
+    const matchedProducts = await prisma.product.findMany({
+      where: {
+        siteId,
+      },
+      include: {
+        matchesAsCompetitor: true
+      }
+    });
+
+    const scraper = new ScraperService();
+    await scraper.init();
+
+    let count = 0;
+    for (const product of matchedProducts) {
+      if (!product.url) continue;
+
+      const result = await scraper.scrapeProductPage(product.url);
+      if (result && result.price) {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            currentPrice: result.price,
+            lastCrawledAt: new Date(),
+          }
+        });
+
+        await prisma.priceHistory.create({
+          data: {
+            productId: product.id,
+            price: result.price,
+            recordedAt: new Date(),
+          }
+        });
+        count++;
+      }
+    }
+
+    await scraper.close();
+
+    // Trigger rule evaluation for the tenant
+    await RulesEngine.evaluateAllRules(site.tenantId);
+
+    // Sync to user stores
+    const userSites = await prisma.site.findMany({
+      where: { tenantId: site.tenantId, type: "USER" }
+    });
+
+    for (const userSite of userSites) {
+       await SyncService.syncProductsToStore(userSite.id);
+    }
+
+    return { success: true, count };
+  }
+
+  /**
+   * Run sync for a single product
+   */
+  static async syncProduct(productId: string) {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { site: true }
+    });
+
+    if (!product || !product.url) throw new Error("Product or URL not found");
+
+    const scraper = new ScraperService();
+    await scraper.init();
+
+    const result = await scraper.scrapeProductPage(product.url);
+    if (result && result.price) {
+      await prisma.product.update({
+        where: { id: productId },
+        data: {
+          currentPrice: result.price,
+          lastCrawledAt: new Date(),
+        }
+      });
+
+      await prisma.priceHistory.create({
+         data: {
+           productId,
+           price: result.price,
+           recordedAt: new Date()
+         }
+      });
+    }
+
+    await scraper.close();
+
+    // Re-evaluate rules for this product's tenant
+    await RulesEngine.evaluateAllRules(product.site.tenantId);
+
+    return { success: true, price: result?.price };
+  }
 }

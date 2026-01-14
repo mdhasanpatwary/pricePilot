@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Shield, Lock, Mail, ArrowRight, Loader2, Sparkles, Building2 } from "lucide-react";
+import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -43,8 +44,21 @@ export default function RegisterPage() {
       const result = await res.json();
 
       if (res.ok) {
-        toast.success("Account created! Please login.");
-        router.push("/auth/login");
+        toast.success("Account created! Accessing dashboard...");
+
+        // Auto-login after registration
+        const loginResult = await signIn("credentials", {
+          email: data.email,
+          password: data.password,
+          redirect: false,
+        });
+
+        if (loginResult?.error) {
+          toast.error("Account created, but automatic login failed. Please login manually.");
+          router.push("/auth/login");
+        } else {
+          router.push("/dashboard");
+        }
       } else {
         toast.error(result.error || "Registration failed");
       }
@@ -158,7 +172,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full premium-gradient text-white font-black text-lg py-5 rounded-2xl transition-all flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-primary/20 glow-hover"
+              className="w-full premium-gradient text-primary-foreground font-black text-lg py-5 rounded-2xl transition-all flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-primary/20 glow-hover"
             >
               {isLoading ? (
                 <Loader2 className="w-6 h-6 animate-spin" />

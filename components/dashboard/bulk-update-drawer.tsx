@@ -79,7 +79,7 @@ export default function BulkUpdateDrawer({
         <div className="p-10 border-b border-border flex items-center justify-between relative z-10 bg-background/30 backdrop-blur-xl">
           <div className="flex items-center gap-5">
              <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-2xl shadow-primary/20 glow">
-                <Settings2 className="w-7 h-7 text-white" />
+                <Settings2 className="w-7 h-7 text-primary-foreground" />
              </div>
              <div className="space-y-0.5">
                 <h2 className="text-2xl font-black tracking-tight">Execution Engine</h2>
@@ -114,7 +114,7 @@ export default function BulkUpdateDrawer({
                 >
                   <div className={cn(
                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 shadow-sm",
-                     logicType === "FIXED" ? "bg-primary text-white" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
+                     logicType === "FIXED" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
                   )}>
                      <TrendingDown className="w-6 h-6" />
                   </div>
@@ -136,7 +136,7 @@ export default function BulkUpdateDrawer({
                 >
                   <div className={cn(
                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 shadow-sm",
-                     logicType === "PERCENTAGE" ? "bg-primary text-white" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
+                     logicType === "PERCENTAGE" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
                   )}>
                      <ShieldCheck className="w-6 h-6" />
                   </div>
@@ -218,7 +218,7 @@ export default function BulkUpdateDrawer({
             type="submit"
             form="bulk-update-form"
             disabled={loading}
-            className="w-full premium-gradient text-white font-black py-7 rounded-[2.5rem] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-4 group disabled:opacity-50 active:scale-[0.98] text-xl glow"
+            className="w-full premium-gradient text-primary-foreground font-black py-7 rounded-[2.5rem] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-4 group disabled:opacity-50 active:scale-[0.98] text-xl glow"
           >
             {loading ? (
               <Loader2 className="w-8 h-8 animate-spin" />

@@ -28,18 +28,85 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const formattedCompetitors = competitors.map((site) => ({
-      id: site.id,
-      name: new URL(site.baseUrl).hostname.split('.')[0],
-      url: site.baseUrl,
-      products: site._count.products,
-      status: site.lastSyncAt ? "ACTIVE" : "PENDING",
-      health: 100, // Mocking health
-    }));
+    const formattedCompetitors = competitors.map((site) => {
+      const hostname = new URL(site.baseUrl).hostname;
+      const cleanHostname = hostname.replace(/^www\./, "");
+      const name = cleanHostname.split(".")[0];
+
+      return {
+        id: site.id,
+        name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
+        url: site.baseUrl,
+        products: site._count.products,
+        status: site.lastSyncAt ? "ACTIVE" : "PENDING",
+        health: 100, // Mocking health
+      };
+    });
 
     return NextResponse.json(formattedCompetitors);
   } catch (error) {
     console.error("Error fetching competitors:", error);
     return NextResponse.json({ error: "Failed to fetch competitors" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = (session.user as any).tenantId;
+
+  try {
+    const { url } = await req.json();
+
+    if (!url) {
+      return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    }
+
+    const site = await prisma.site.create({
+      data: {
+        baseUrl: url,
+        type: "COMPETITOR",
+        tenantId,
+      },
+    });
+
+    return NextResponse.json(site);
+  } catch (error) {
+    console.error("Error creating competitor:", error);
+    return NextResponse.json({ error: "Failed to create competitor" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = (session.user as any).tenantId;
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json({ error: "ID is required" }, { status: 400 });
+  }
+
+  try {
+    await prisma.site.delete({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting competitor:", error);
+    return NextResponse.json({ error: "Failed to delete competitor" }, { status: 500 });
   }
 }

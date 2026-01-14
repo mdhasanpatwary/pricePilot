@@ -146,7 +146,7 @@ export default function PriceReportPage() {
                         : "border-border bg-background"
                     )}
                   >
-                    {selectedItems.length === filteredData.length && <Check className="w-3 h-3 text-white" />}
+                    {selectedItems.length === filteredData.length && <Check className="w-3 h-3 text-primary-foreground" />}
                   </div>
                 </th>
                 <th className="py-4 px-6 min-w-[280px]">Product / SKU</th>
@@ -189,7 +189,7 @@ export default function PriceReportPage() {
                           : "border-border bg-background"
                       )}
                     >
-                      {selectedItems.includes(item.id) && <Check className="w-3 h-3 text-white" />}
+                      {selectedItems.includes(item.id) && <Check className="w-3 h-3 text-primary-foreground" />}
                     </div>
                   </td>
                   <td className="py-4 px-6">

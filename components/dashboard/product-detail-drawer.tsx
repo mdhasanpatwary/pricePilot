@@ -203,7 +203,7 @@ export default function ProductDetailDrawer({ isOpen, onClose, product, onExecut
             <div className="pt-8 flex items-center gap-4">
                <button
                  onClick={() => onExecute?.(product.id)}
-                 className="flex-1 premium-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-primary/20 glow flex items-center justify-center gap-2 active:scale-95 transition-all"
+                 className="flex-1 premium-gradient text-primary-foreground font-black py-5 rounded-2xl shadow-xl shadow-primary/20 glow flex items-center justify-center gap-2 active:scale-95 transition-all"
                >
                   <Zap className="w-5 h-5 fill-current" />
                   Execute Auto-Adjustment
