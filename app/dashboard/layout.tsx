@@ -135,10 +135,9 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen bg-background text-foreground selection:bg-primary selection:text-white relative overflow-hidden">
       {/* Sidebar - Desktop */}
-      <aside className="w-[280px] border-r border-border hidden lg:flex flex-col bg-card/40 backdrop-blur-xl relative overflow-hidden group/sidebar">
+      <aside className="w-[240px] xl:w-[280px] border-r border-border hidden lg:flex flex-col bg-card/40 backdrop-blur-xl relative overflow-hidden group/sidebar transition-all duration-300">
         <Sidebar pathname={pathname} />
       </aside>
-
 
       {/* Sidebar - Mobile Overlay */}
       {isSidebarOpen && (
@@ -159,7 +158,7 @@ export default function DashboardLayout({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-muted/30">
         <Header onMenuClick={() => setIsSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-5 md:p-8 lg:p-10">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 2xl:p-10">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
