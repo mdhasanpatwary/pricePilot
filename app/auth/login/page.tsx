@@ -5,23 +5,39 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Shield, Lock, Mail, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const loginSchema = z.object({
+  email: z.string().email("Please enter a valid work email"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = async (data: LoginFormValues) => {
     setLoading(true);
     setError("");
 
     try {
       const result = await signIn("credentials", {
-        email,
-        password,
+        email: data.email,
+        password: data.password,
         redirect: false,
       });
 
@@ -84,7 +100,7 @@ export default function LoginPage() {
             <p className="text-muted-foreground font-medium">Welcome back to your command center.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {error && (
               <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-4 rounded-2xl flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
@@ -98,14 +114,16 @@ export default function LoginPage() {
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <input
+                    {...register("email")}
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30"
+                    className={cn(
+                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      errors.email && "border-destructive focus:ring-destructive/10"
+                    )}
                     placeholder="name@company.com"
-                    required
                   />
                 </div>
+                {errors.email && <p className="text-xs text-destructive font-bold ml-1">{errors.email.message}</p>}
               </div>
 
               <div className="space-y-2">
@@ -115,14 +133,16 @@ export default function LoginPage() {
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <input
+                    {...register("password")}
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30"
+                    className={cn(
+                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      errors.password && "border-destructive focus:ring-destructive/10"
+                    )}
                     placeholder="••••••••"
-                    required
                   />
                 </div>
+                {errors.password && <p className="text-xs text-destructive font-bold ml-1">{errors.password.message}</p>}
               </div>
             </div>
 
@@ -144,9 +164,9 @@ export default function LoginPage() {
 
           <div className="pt-8 space-y-4 border-t border-border">
              <p className="text-center text-sm text-muted-foreground font-medium">
-                Don&apos;t have access?{" "}
-                <Link href="#" className="text-foreground hover:text-primary transition-colors font-bold border-b border-foreground hover:border-primary">
-                  Contact Sales
+                Don&apos;t have an account?{" "}
+                <Link href="/auth/register" className="text-foreground hover:text-primary transition-colors font-bold border-b border-foreground hover:border-primary">
+                  Sign up
                 </Link>
              </p>
           </div>

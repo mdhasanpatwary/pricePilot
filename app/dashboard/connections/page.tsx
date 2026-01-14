@@ -4,20 +4,46 @@ import { useState, useEffect } from "react";
 import { Plus, Link2, ExternalLink, Trash2, CheckCircle2, AlertCircle, Zap, Shield, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 const platforms = [
   { id: "OPENCART", name: "OpenCart", icon: "https://www.opencart.com/application/view/image/home/opencart-logo.png" },
   { id: "LARAVEL", name: "Laravel", icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Laravel.svg/1200px-Laravel.svg.png" },
 ];
 
+const connectionSchema = z.object({
+  platform: z.string().min(1, "Please select a platform"),
+  baseUrl: z.string().url("Please enter a valid store URL"),
+  apiToken: z.string().min(1, "API Token is required"),
+});
+
+type ConnectionFormValues = z.infer<typeof connectionSchema>;
+
 export default function ConnectionsPage() {
   const [isAdding, setIsAdding] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiToken, setApiToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [connections, setConnections] = useState<any[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(true);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<ConnectionFormValues>({
+    resolver: zodResolver(connectionSchema),
+    defaultValues: {
+      platform: "",
+      baseUrl: "",
+      apiToken: "",
+    }
+  });
+
+  const selectedPlatform = watch("platform");
 
   useEffect(() => {
     fetchConnections();
@@ -40,23 +66,14 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleAddConnection = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!selectedPlatform || !baseUrl || !apiToken) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
+  const onSubmit = async (data: ConnectionFormValues) => {
     setLoading(true);
     try {
       const res = await fetch("/api/integrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          platform: selectedPlatform,
-          baseUrl,
-          apiToken,
+          ...data,
           type: "USER",
         }),
       });
@@ -64,9 +81,7 @@ export default function ConnectionsPage() {
       if (res.ok) {
         toast.success("Store connected successfully!");
         setIsAdding(false);
-        setSelectedPlatform("");
-        setBaseUrl("");
-        setApiToken("");
+        reset();
         fetchConnections();
       } else {
         const error = await res.json();
@@ -124,13 +139,13 @@ export default function ConnectionsPage() {
                  <p className="text-sm text-muted-foreground">Select your platform and provide your access credentials.</p>
               </div>
 
-              <form onSubmit={handleAddConnection} className="space-y-6">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {platforms.map((p) => (
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setSelectedPlatform(p.id)}
+                      onClick={() => setValue("platform", p.id, { shouldValidate: true })}
                       className={cn(
                         "p-4 border rounded-md flex flex-col items-center gap-3 transition-all group relative",
                         selectedPlatform === p.id
@@ -150,6 +165,7 @@ export default function ConnectionsPage() {
                     </button>
                   ))}
                 </div>
+                {errors.platform && <p className="text-xs text-destructive font-bold">{errors.platform.message}</p>}
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
@@ -157,14 +173,16 @@ export default function ConnectionsPage() {
                     <div className="relative group">
                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
+                          {...register("baseUrl")}
                           type="url"
-                          value={baseUrl}
-                          onChange={(e) => setBaseUrl(e.target.value)}
                           placeholder="https://yourstore.com"
-                          className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
-                          required
+                          className={cn(
+                            "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                            errors.baseUrl && "border-destructive focus:ring-destructive/20"
+                          )}
                         />
                     </div>
+                    {errors.baseUrl && <p className="text-xs text-destructive font-bold">{errors.baseUrl.message}</p>}
                   </div>
 
                   <div className="space-y-1.5">
@@ -172,14 +190,16 @@ export default function ConnectionsPage() {
                     <div className="relative group">
                        <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                         <input
+                          {...register("apiToken")}
                           type="password"
-                          value={apiToken}
-                          onChange={(e) => setApiToken(e.target.value)}
                           placeholder="Your PricePilot secret key"
-                          className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
-                          required
+                          className={cn(
+                            "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                            errors.apiToken && "border-destructive focus:ring-destructive/20"
+                          )}
                         />
                     </div>
+                    {errors.apiToken && <p className="text-xs text-destructive font-bold">{errors.apiToken.message}</p>}
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-start gap-2.5 mt-2">
                        <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                        <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
@@ -192,7 +212,7 @@ export default function ConnectionsPage() {
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="submit"
-                    disabled={loading || !selectedPlatform}
+                    disabled={loading}
                     className="flex-1 bg-primary text-primary-foreground font-bold py-2.5 rounded-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]"
                   >
                     {loading ? <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> : <>
@@ -202,7 +222,10 @@ export default function ConnectionsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsAdding(false)}
+                    onClick={() => {
+                      setIsAdding(false);
+                      reset();
+                    }}
                     className="flex-1 bg-secondary text-secondary-foreground font-bold py-2.5 rounded-md border border-border transition-all hover:bg-secondary/80"
                   >
                     Cancel

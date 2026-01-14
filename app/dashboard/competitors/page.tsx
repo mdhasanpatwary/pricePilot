@@ -4,13 +4,30 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Plus, Globe, Search, Trash2, ShieldAlert, Zap, ExternalLink, MoreVertical, Target, MousePointer2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const competitorSchema = z.object({
+  url: z.string().url("Please enter a valid URL"),
+});
+
+type CompetitorFormValues = z.infer<typeof competitorSchema>;
 
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<any[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [competitorUrl, setCompetitorUrl] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<CompetitorFormValues>({
+    resolver: zodResolver(competitorSchema),
+  });
 
   useEffect(() => {
     fetchCompetitors();
@@ -33,13 +50,15 @@ export default function CompetitorsPage() {
     }
   };
 
-  const handleAddCompetitor = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: CompetitorFormValues) => {
     setLoading(true);
+    // Simulate API call
     setTimeout(() => {
       setLoading(false);
       setIsAdding(false);
-      setCompetitorUrl("");
+      reset();
+      toast.success("Crawler deployed successfully");
+      fetchCompetitors();
     }, 2000);
   };
 
@@ -74,20 +93,22 @@ export default function CompetitorsPage() {
                 </button>
              </div>
 
-             <form onSubmit={handleAddCompetitor} className="space-y-6">
+             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="space-y-2">
                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Website URL</label>
                    <div className="relative group">
                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
                      <input
+                       {...register("url")}
                        type="url"
-                       value={competitorUrl}
-                       onChange={(e) => setCompetitorUrl(e.target.value)}
                        placeholder="https://competitor.com"
-                       className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
-                       required
+                       className={cn(
+                         "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                         errors.url && "border-destructive focus:ring-destructive/20"
+                       )}
                      />
                    </div>
+                   {errors.url && <p className="text-xs text-destructive font-bold">{errors.url.message}</p>}
                 </div>
 
                 <div className="p-4 bg-muted/30 rounded-md border border-border space-y-2">

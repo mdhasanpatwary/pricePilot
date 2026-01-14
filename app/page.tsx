@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ShieldCheck, ArrowRight, TrendingUp, Zap, BarChart3, Globe, Shield, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LandingPage() {
   return (
@@ -21,10 +22,11 @@ export default function LandingPage() {
           <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
         </div>
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <Link href="/auth/login" className="text-sm font-semibold hover:text-primary transition-colors px-4 py-2">
             Login
           </Link>
-          <Link href="/auth/login" className="premium-gradient px-6 py-2.5 rounded-full text-sm font-bold text-white glow-hover">
+          <Link href="/auth/register" className="premium-gradient px-6 py-2.5 rounded-full text-sm font-bold text-white glow-hover">
             Get Started
           </Link>
         </div>
@@ -53,7 +55,7 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-10">
-            <Link href="/auth/login" className="w-full sm:w-auto premium-gradient px-12 py-6 rounded-[2rem] text-xl font-black text-white glow-hover flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20">
+            <Link href="/auth/register" className="w-full sm:w-auto premium-gradient px-12 py-6 rounded-[2rem] text-xl font-black text-white glow-hover flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20">
               Start Scaling Now
               <ArrowRight className="w-6 h-6" />
             </Link>
@@ -121,7 +123,7 @@ export default function LandingPage() {
               Join 500+ merchants who optimized their pricing this week. 14-day free trial. No credit card required.
             </p>
             <div className="pt-8">
-              <Link href="/auth/login" className="inline-flex items-center gap-4 bg-white text-primary px-14 py-7 rounded-[2rem] font-black text-2xl hover:scale-105 active:scale-95 transition-all shadow-2xl hover:shadow-white/10">
+              <Link href="/auth/register" className="inline-flex items-center gap-4 bg-white text-primary px-14 py-7 rounded-[2rem] font-black text-2xl hover:scale-105 active:scale-95 transition-all shadow-2xl hover:shadow-white/10">
                 Get Early Access
                 <ArrowRight className="w-8 h-8" />
               </Link>

@@ -17,6 +17,21 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const ruleSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Rule name is required"),
+  description: z.string(),
+  strategy: z.enum(["UNDERCUT", "MATCH", "MARGIN_LOCK", "THRESHOLD", "PERCENTAGE"]),
+  parameter: z.number().min(0, "Value must be positive"),
+  priority: z.number().int().min(1, "Priority must be at least 1"),
+  isActive: z.boolean(),
+});
+
+type RuleFormValues = z.infer<typeof ruleSchema>;
 
 interface Rule {
   id: string;
@@ -32,15 +47,23 @@ export default function PricingRulesPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form state for new/edit rule
-  const [formData, setFormData] = useState<Partial<Rule>>({
-    name: "",
-    description: "",
-    strategy: "UNDERCUT",
-    parameter: 1,
-    priority: 1,
-    isActive: true
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<RuleFormValues>({
+    resolver: zodResolver(ruleSchema),
+    defaultValues: {
+      strategy: "UNDERCUT",
+      parameter: 1,
+      priority: 1,
+      isActive: true,
+    },
   });
 
   useEffect(() => {
@@ -64,24 +87,22 @@ export default function PricingRulesPage() {
     }
   };
 
-  const handleSave = async () => {
-    if (!formData.name) {
-      toast.error("Please enter a rule name");
-      return;
-    }
-
+  const onSubmit = async (data: RuleFormValues) => {
     try {
-      const method = formData.id ? "PUT" : "POST";
+      const method = editingId ? "PUT" : "POST";
+      const payload = editingId ? { ...data, id: editingId } : data;
+
       const res = await fetch("/api/rules", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        toast.success(formData.id ? "Rule updated" : "Rule created");
+        toast.success(editingId ? "Rule updated" : "Rule created");
         setIsAdding(false);
-        setFormData({
+        setEditingId(null);
+        reset({
           name: "",
           description: "",
           strategy: "UNDERCUT",
@@ -97,6 +118,12 @@ export default function PricingRulesPage() {
     } catch (error) {
       toast.error("Connection error");
     }
+  };
+
+  const handleEdit = (rule: Rule) => {
+    setEditingId(rule.id);
+    reset(rule);
+    setIsAdding(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -149,7 +176,7 @@ export default function PricingRulesPage() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Pricing Engine</h1>
           <p className="text-muted-foreground mt-1 text-lg">Define how your prices adjust relative to competitors.</p>
         </div>
-        {!isAdding && !formData.id && (
+        {!isAdding && !editingId && (
           <button
             onClick={() => setIsAdding(true)}
             className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-all font-semibold shadow-lg shadow-primary/10"
@@ -160,96 +187,108 @@ export default function PricingRulesPage() {
         )}
       </div>
 
-      {(isAdding || formData.id) && (
+      {(isAdding || editingId) && (
         <div className="bg-card border border-primary/20 rounded-xl p-8 shadow-xl animate-in slide-in-from-top-4 duration-300">
           <div className="flex items-center gap-3 mb-8 border-b border-border pb-4">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Settings2 className="w-6 h-6 text-primary" />
             </div>
-            <h2 className="text-xl font-bold">{formData.id ? "Edit Rule" : "New Pricing Rule"}</h2>
+            <h2 className="text-xl font-bold">{editingId ? "Edit Rule" : "New Pricing Rule"}</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Rule Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                  placeholder="e.g. Aggressive Undercut"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all h-24 resize-none"
-                  placeholder="Describe when this rule should apply..."
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Strategy Type</label>
-                <select
-                  value={formData.strategy}
-                  onChange={(e) => setFormData({...formData, strategy: e.target.value as any})}
-                  className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                >
-                  <option value="UNDERCUT">Undercut ($ Amount)</option>
-                  <option value="MATCH">Exact Price Match</option>
-                  <option value="PERCENTAGE">Cheaper By %</option>
-                  <option value="MARGIN_LOCK">Margin Protection</option>
-                  <option value="THRESHOLD">Difference Threshold</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Value</label>
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Rule Name</label>
                   <input
-                    type="number"
-                    value={formData.parameter}
-                    onChange={(e) => setFormData({...formData, parameter: parseFloat(e.target.value)})}
-                    className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                    {...register("name")}
+                    type="text"
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
+                      errors.name && "border-destructive focus:ring-destructive/50"
+                    )}
+                    placeholder="e.g. Aggressive Undercut"
                   />
+                  {errors.name && <p className="text-xs text-destructive font-bold">{errors.name.message}</p>}
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Priority</label>
-                  <input
-                    type="number"
-                    value={formData.priority}
-                    onChange={(e) => setFormData({...formData, priority: parseInt(e.target.value)})}
-                    className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Description</label>
+                  <textarea
+                    {...register("description")}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all h-24 resize-none"
+                    placeholder="Describe when this rule should apply..."
                   />
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-end gap-3 mt-10 pt-6 border-t border-border">
-            <button
-              onClick={() => {
-                setIsAdding(false);
-                setFormData({ name: "", strategy: "UNDERCUT", parameter: 1, priority: rules.length + 1, isActive: true });
-              }}
-              className="px-6 py-2.5 rounded-lg border border-border hover:bg-muted font-semibold transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-8 py-2.5 rounded-lg hover:bg-primary/90 transition-all font-bold shadow-lg shadow-primary/10"
-            >
-              <Save className="w-5 h-5" />
-              Save Strategy
-            </button>
-          </div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Strategy Type</label>
+                  <select
+                    {...register("strategy")}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                  >
+                    <option value="UNDERCUT">Undercut ($ Amount)</option>
+                    <option value="MATCH">Exact Price Match</option>
+                    <option value="PERCENTAGE">Cheaper By %</option>
+                    <option value="MARGIN_LOCK">Margin Protection</option>
+                    <option value="THRESHOLD">Difference Threshold</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Value</label>
+                    <input
+                      {...register("parameter", { valueAsNumber: true })}
+                      type="number"
+                      step="any"
+                      className={cn(
+                        "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
+                        errors.parameter && "border-destructive focus:ring-destructive/50"
+                      )}
+                    />
+                    {errors.parameter && <p className="text-xs text-destructive font-bold">{errors.parameter.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Priority</label>
+                    <input
+                      {...register("priority", { valueAsNumber: true })}
+                      type="number"
+                      className={cn(
+                        "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
+                        errors.priority && "border-destructive focus:ring-destructive/50"
+                      )}
+                    />
+                    {errors.priority && <p className="text-xs text-destructive font-bold">{errors.priority.message}</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-10 pt-6 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdding(false);
+                  setEditingId(null);
+                  reset();
+                }}
+                className="px-6 py-2.5 rounded-lg border border-border hover:bg-muted font-semibold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-8 py-2.5 rounded-lg hover:bg-primary/90 transition-all font-bold shadow-lg shadow-primary/10"
+              >
+                <Save className="w-5 h-5" />
+                Save Strategy
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -337,12 +376,14 @@ export default function PricingRulesPage() {
                       {rule.isActive ? "Active" : "Paused"}
                     </button>
                     <button
-                      onClick={() => setFormData(rule)}
+                      type="button"
+                      onClick={() => handleEdit(rule)}
                       className="p-2.5 hover:bg-muted border border-transparent hover:border-border rounded-xl text-muted-foreground hover:text-foreground transition-all"
                     >
                       <Settings2 className="w-5 h-5" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDelete(rule.id)}
                       className="p-2.5 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-xl text-muted-foreground hover:text-danger transition-all"
                     >

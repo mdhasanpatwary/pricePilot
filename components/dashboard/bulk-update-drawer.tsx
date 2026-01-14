@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import {
   X,
@@ -15,12 +13,23 @@ import {
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const bulkUpdateSchema = z.object({
+  logicType: z.enum(["FIXED", "PERCENTAGE"]),
+  value: z.number().min(0, "Value must be positive"),
+  minPrice: z.number().optional(),
+});
+
+type BulkUpdateFormValues = z.infer<typeof bulkUpdateSchema>;
 
 interface BulkUpdateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   selectedCount: number;
-  onExecute: (logic: any) => Promise<void>;
+  onExecute: (logic: BulkUpdateFormValues) => Promise<void>;
 }
 
 export default function BulkUpdateDrawer({
@@ -29,19 +38,28 @@ export default function BulkUpdateDrawer({
   selectedCount,
   onExecute
 }: BulkUpdateDrawerProps) {
-  const [logicType, setLogicType] = useState<"FIXED" | "PERCENTAGE">("FIXED");
-  const [value, setValue] = useState("0.50");
-  const [minPrice, setMinPrice] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<BulkUpdateFormValues>({
+    resolver: zodResolver(bulkUpdateSchema),
+    defaultValues: {
+      logicType: "FIXED",
+      value: 0.50,
+    }
+  });
+
+  const logicType = watch("logicType");
+  const value = watch("value");
+
+  const onSubmit = async (data: BulkUpdateFormValues) => {
     setLoading(true);
-    await onExecute({
-      logicType,
-      value: parseFloat(value),
-      minPrice: minPrice ? parseFloat(minPrice) : undefined
-    });
+    await onExecute(data);
     setLoading(false);
   };
 
@@ -79,14 +97,14 @@ export default function BulkUpdateDrawer({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-10 space-y-12 relative z-10">
+        <form id="bulk-update-form" onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-10 space-y-12 relative z-10">
           <div className="space-y-8">
             <div className="space-y-6">
               <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.3em] ml-1">Strategy Selection</p>
               <div className="grid grid-cols-2 gap-6">
                 <button
                   type="button"
-                  onClick={() => setLogicType("FIXED")}
+                  onClick={() => setValue("logicType", "FIXED", { shouldValidate: true })}
                   className={cn(
                     "p-6 border-2 rounded-[2rem] flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
                     logicType === "FIXED"
@@ -108,7 +126,7 @@ export default function BulkUpdateDrawer({
 
                 <button
                   type="button"
-                  onClick={() => setLogicType("PERCENTAGE")}
+                  onClick={() => setValue("logicType", "PERCENTAGE", { shouldValidate: true })}
                   className={cn(
                     "p-6 border-2 rounded-[2rem] flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
                     logicType === "PERCENTAGE"
@@ -140,15 +158,17 @@ export default function BulkUpdateDrawer({
                       {logicType === "FIXED" ? "$" : "%"}
                    </div>
                    <input
+                    {...register("value", { valueAsNumber: true })}
                     type="number"
                     step="0.01"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    className="w-full bg-muted/30 border border-border rounded-3xl py-7 pl-14 pr-8 outline-none focus:border-primary/50 focus:ring-8 focus:ring-primary/5 transition-all font-black text-4xl tracking-tighter"
+                    className={cn(
+                      "w-full bg-muted/30 border border-border rounded-3xl py-7 pl-14 pr-8 outline-none focus:border-primary/50 focus:ring-8 focus:ring-primary/5 transition-all font-black text-4xl tracking-tighter",
+                      errors.value && "border-destructive focus:ring-destructive/5"
+                    )}
                     placeholder="0.00"
-                    required
                   />
                 </div>
+                {errors.value && <p className="text-xs text-destructive font-bold ml-1">{errors.value.message}</p>}
               </div>
 
               <div className="space-y-4">
@@ -164,14 +184,17 @@ export default function BulkUpdateDrawer({
                       $
                    </div>
                    <input
+                    {...register("minPrice", { valueAsNumber: true })}
                     type="number"
                     step="0.01"
-                    value={minPrice}
-                    onChange={(e) => setMinPrice(e.target.value)}
-                    className="w-full bg-muted/30 border border-border rounded-3xl py-6 pl-14 pr-8 outline-none focus:border-warning/30 focus:ring-8 focus:ring-warning/5 transition-all font-black text-2xl tracking-tight placeholder:text-muted-foreground/20"
+                    className={cn(
+                      "w-full bg-muted/30 border border-border rounded-3xl py-6 pl-14 pr-8 outline-none focus:border-warning/30 focus:ring-8 focus:ring-warning/5 transition-all font-black text-2xl tracking-tight placeholder:text-muted-foreground/20",
+                      errors.minPrice && "border-destructive focus:ring-destructive/5"
+                    )}
                     placeholder="Global Min Price"
                   />
                 </div>
+                {errors.minPrice && <p className="text-xs text-destructive font-bold ml-1">{errors.minPrice.message}</p>}
               </div>
             </div>
           </div>
@@ -192,7 +215,8 @@ export default function BulkUpdateDrawer({
 
         <div className="p-10 border-t border-border bg-card/60 backdrop-blur-3xl relative z-10">
           <button
-            onClick={handleSubmit}
+            type="submit"
+            form="bulk-update-form"
             disabled={loading}
             className="w-full premium-gradient text-white font-black py-7 rounded-[2.5rem] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-4 group disabled:opacity-50 active:scale-[0.98] text-xl glow"
           >

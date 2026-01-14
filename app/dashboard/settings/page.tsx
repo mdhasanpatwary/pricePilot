@@ -18,9 +18,70 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const generalSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Please enter a valid email"),
+});
+
+const securitySchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Please confirm your password"),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+type GeneralFormValues = z.infer<typeof generalSchema>;
+type SecurityFormValues = z.infer<typeof securitySchema>;
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const {
+    register: registerGeneral,
+    handleSubmit: handleSubmitGeneral,
+    formState: { errors: errorsGeneral },
+  } = useForm<GeneralFormValues>({
+    resolver: zodResolver(generalSchema),
+    defaultValues: {
+      name: "Felix Agent",
+      email: "felix@pricepilot.ai",
+    }
+  });
+
+  const {
+    register: registerSecurity,
+    handleSubmit: handleSubmitSecurity,
+    reset: resetSecurity,
+    formState: { errors: errorsSecurity },
+  } = useForm<SecurityFormValues>({
+    resolver: zodResolver(securitySchema),
+  });
+
+  const onGeneralSubmit = (data: GeneralFormValues) => {
+    setIsSaving(true);
+    // Simulate API call
+    setTimeout(() => {
+      toast.success("Account information updated");
+      setIsSaving(false);
+    }, 1000);
+  };
+
+  const onSecuritySubmit = (data: SecurityFormValues) => {
+    setIsSaving(true);
+    // Simulate API call
+    setTimeout(() => {
+      toast.success("Security settings updated");
+      resetSecurity();
+      setIsSaving(false);
+    }, 1000);
+  };
 
   const tabs = [
     { id: "general", label: "General", icon: User },
@@ -62,35 +123,47 @@ export default function SettingsPage() {
         <div className="flex-1 max-w-2xl">
           <div className="bg-card border border-border rounded-lg p-6 md:p-8 space-y-8">
             {activeTab === "general" && (
-              <div className="space-y-6">
+              <form onSubmit={handleSubmitGeneral(onGeneralSubmit)} className="space-y-6">
                 <div className="space-y-4">
                   <h3 className="text-lg font-bold">Account Information</h3>
                   <div className="grid gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Profile Name</label>
                       <input
+                        {...registerGeneral("name")}
                         type="text"
-                        defaultValue="Felix Agent"
-                        className="w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                        className={cn(
+                          "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
+                          errorsGeneral.name && "border-destructive focus:ring-destructive/20"
+                        )}
                       />
+                      {errorsGeneral.name && <p className="text-xs text-destructive font-bold">{errorsGeneral.name.message}</p>}
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Contact Email</label>
                       <input
+                        {...registerGeneral("email")}
                         type="email"
-                        defaultValue="felix@pricepilot.ai"
-                        className="w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                        className={cn(
+                          "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
+                          errorsGeneral.email && "border-destructive focus:ring-destructive/20"
+                        )}
                       />
+                      {errorsGeneral.email && <p className="text-xs text-destructive font-bold">{errorsGeneral.email.message}</p>}
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-border">
-                  <button className="bg-primary text-primary-foreground text-sm font-bold px-4 py-2 rounded-md hover:opacity-90 transition-all">
-                    Save Changes
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="bg-primary text-primary-foreground text-sm font-bold px-4 py-2 rounded-md hover:opacity-90 transition-all disabled:opacity-70"
+                  >
+                    {isSaving ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
-              </div>
+              </form>
             )}
 
             {activeTab === "notifications" && (
@@ -122,31 +195,46 @@ export default function SettingsPage() {
             )}
 
             {activeTab === "security" && (
-              <div className="space-y-8 animate-in slide-in-from-bottom-2">
+              <form onSubmit={handleSubmitSecurity(onSecuritySubmit)} className="space-y-8 animate-in slide-in-from-bottom-2">
                 <div className="space-y-4">
                   <h3 className="text-lg font-bold">Security Settings</h3>
                   <div className="grid gap-6">
                     <div className="space-y-1.5">
                       <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Current Password</label>
                       <input
+                        {...registerSecurity("currentPassword")}
                         type="password"
-                        className="w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                        className={cn(
+                          "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
+                          errorsSecurity.currentPassword && "border-destructive focus:ring-destructive/20"
+                        )}
                       />
+                      {errorsSecurity.currentPassword && <p className="text-xs text-destructive font-bold">{errorsSecurity.currentPassword.message}</p>}
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">New Password</label>
                         <input
+                          {...registerSecurity("newPassword")}
                           type="password"
-                          className="w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                          className={cn(
+                            "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
+                            errorsSecurity.newPassword && "border-destructive focus:ring-destructive/20"
+                          )}
                         />
+                        {errorsSecurity.newPassword && <p className="text-xs text-destructive font-bold">{errorsSecurity.newPassword.message}</p>}
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Confirm Password</label>
                         <input
+                          {...registerSecurity("confirmPassword")}
                           type="password"
-                          className="w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                          className={cn(
+                            "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
+                            errorsSecurity.confirmPassword && "border-destructive focus:ring-destructive/20"
+                          )}
                         />
+                        {errorsSecurity.confirmPassword && <p className="text-xs text-destructive font-bold">{errorsSecurity.confirmPassword.message}</p>}
                       </div>
                     </div>
                   </div>
@@ -162,18 +250,19 @@ export default function SettingsPage() {
                          <p className="text-xs text-muted-foreground">Add an extra layer of security to your account.</p>
                       </div>
                    </div>
-                   <button className="text-xs font-bold text-primary hover:underline">Enable</button>
+                   <button type="button" className="text-xs font-bold text-primary hover:underline">Enable</button>
                 </div>
 
                 <div className="pt-4 border-t border-border">
                   <button
-                    onClick={() => toast.success("Security settings updated")}
-                    className="bg-primary text-primary-foreground text-sm font-bold px-4 py-2 rounded-md hover:opacity-90 transition-all"
+                    type="submit"
+                    disabled={isSaving}
+                    className="bg-primary text-primary-foreground text-sm font-bold px-4 py-2 rounded-md hover:opacity-90 transition-all disabled:opacity-70"
                   >
-                    Update Security
+                    {isSaving ? "Updating..." : "Update Security"}
                   </button>
                 </div>
-              </div>
+              </form>
             )}
 
             {activeTab === "billing" && (
