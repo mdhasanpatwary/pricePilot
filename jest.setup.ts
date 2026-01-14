@@ -1,0 +1,31 @@
+import '@testing-library/jest-dom';
+const { TextEncoder, TextDecoder } = require('util');
+const fetch = require('node-fetch');
+
+// Mock environment variables for tests
+process.env.NEXTAUTH_SECRET = 'test-secret-key-for-testing-only';
+process.env.NEXTAUTH_URL = 'http://localhost:3000';
+process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+
+// Polyfills for Fetch API and other Node.js globals missing in JSDOM
+if (typeof global.setImmediate === 'undefined') {
+  // @ts-ignore
+  global.setImmediate = (callback: (...args: any[]) => void, ...args: any[]) => {
+    return setTimeout(callback, 0, ...args);
+  };
+}
+
+// Ensure TextEncoder and TextDecoder are globally available
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
+// Next.js 13+ APIs like NextRequest/NextResponse require a Fetch API polyfill
+if (typeof global.fetch === 'undefined') {
+  global.fetch = fetch;
+}
+
+if (typeof global.Request === 'undefined') {
+  global.Request = fetch.Request;
+  global.Response = fetch.Response;
+  global.Headers = fetch.Headers;
+}

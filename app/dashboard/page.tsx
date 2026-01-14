@@ -38,8 +38,12 @@ export default function DashboardOverview() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     fetchAnalytics();
+    fetchRecentLogs();
   }, []);
 
   const fetchAnalytics = async () => {
@@ -65,6 +69,42 @@ export default function DashboardOverview() {
     }
   };
 
+  const fetchRecentLogs = async () => {
+    try {
+      // Create a new API or just use this local fetch
+      const res = await fetch("/api/analytics/history?recent=true");
+      if (res.ok) {
+        const data = await res.json();
+        // For now, let's assume we have dummy logs if no history
+        setRecentLogs(data.length > 0 ? data : [
+          { name: "Nike Air Max 270", sku: "NIKE-AM-270", action: "Price Drop", value: "-$12.50", time: "4m" },
+          { name: "Adidas Ultraboost 22", sku: "AD-UB-22", action: "Undercut", value: "-$4.00", time: "18m" },
+        ]);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRunSync = async () => {
+    setIsSyncing(true);
+    const id = toast.loading("Syncing market data...");
+    try {
+      const res = await fetch("/api/sync/full", { method: "POST" });
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(`Sync complete! Scrapped ${result.scrapped} products, updated ${result.updated}.`, { id });
+        fetchAnalytics();
+      } else {
+        toast.error("Sync failed", { id });
+      }
+    } catch (error) {
+      toast.error("Sync connection error", { id });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const statsConfig = [
     { label: "Total SKUs Live", value: stats.totalSKUs, icon: Package, change: "+12%", trend: "up" },
     { label: "Active Rivals", value: stats.activeRivals, icon: ShoppingBag, change: "Stable", trend: "neutral" },
@@ -79,7 +119,7 @@ export default function DashboardOverview() {
     { label: "Expensive", value: positionSummary.expensive, color: "bg-danger" },
   ];
 
-  const total = positionSummary.cheapest + positionSummary.nearCheapest + positionSummary.neutral + positionSummary.expensive || 1;
+  const total = (positionSummary.cheapest || 0) + (positionSummary.nearCheapest || 0) + (positionSummary.neutral || 0) + (positionSummary.expensive || 0) || 1;
 
   const chartData = [
     { name: "01 Jan", index: 102, rivals: 105 },
@@ -90,19 +130,27 @@ export default function DashboardOverview() {
     { name: "20 Jan", index: 101, rivals: 100 },
     { name: "24 Jan", index: 93, rivals: 99 },
   ];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Overview</h2>
-          <p className="text-muted-foreground text-sm">Monitor your market position and pricing performance.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Command Dashboard</h1>
+          <p className="text-muted-foreground mt-1 text-lg">Monitor your market position and pricing performance.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all">
-            Run Sync
+          <button
+            disabled={isSyncing}
+            onClick={handleRunSync}
+            className={cn(
+              "bg-primary text-primary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-primary/10",
+              isSyncing && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            {isSyncing ? "Syncing..." : "Run Global Sync"}
           </button>
-          <button className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border">
+          <button className="bg-secondary text-secondary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-secondary/80 transition-all border border-border">
             Export Report
           </button>
         </div>
@@ -111,10 +159,10 @@ export default function DashboardOverview() {
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statsConfig.map((stat) => (
-          <div key={stat.label} className="bg-card border border-border rounded-lg p-5">
+          <div key={stat.label} className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-muted/50 rounded-md">
-                <stat.icon className="w-4 h-4 text-foreground/70" />
+              <div className="p-2.5 bg-muted/50 rounded-lg">
+                <stat.icon className="w-5 h-5 text-foreground/70" />
               </div>
               <div className={cn(
                 "text-[10px] font-bold px-2 py-0.5 rounded-full border",
@@ -126,8 +174,8 @@ export default function DashboardOverview() {
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
-              <h3 className="text-2xl font-bold">{stat.value}</h3>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</p>
+              <h3 className="text-3xl font-bold">{stat.value}</h3>
             </div>
           </div>
         ))}
@@ -136,71 +184,75 @@ export default function DashboardOverview() {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Position Summary */}
-        <div className="lg:col-span-1 bg-card border border-border rounded-lg p-6">
-          <div className="mb-6">
-            <h4 className="text-sm font-semibold">Position Summary</h4>
-            <p className="text-xs text-muted-foreground">Your market stance vs. competition</p>
+        <div className="lg:col-span-1 bg-card border border-border rounded-xl p-8 shadow-sm">
+          <div className="mb-8">
+            <h4 className="text-lg font-bold">Position Summary</h4>
+            <p className="text-sm text-muted-foreground">Your market stance vs. competition</p>
           </div>
-          <div className="space-y-5">
-            {[
-              { label: "Cheapest", value: 42, color: "bg-success" },
-              { label: "Near Cheapest", value: 28, color: "bg-primary" },
-              { label: "Neutral", value: 15, color: "bg-muted-foreground/30" },
-              { label: "Expensive", value: 15, color: "bg-danger" },
-            ].map((item, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
-                  <span className="text-muted-foreground">{item.label}</span>
-                  <span>{item.value}%</span>
+          <div className="space-y-6">
+            {positionData.map((item, i) => {
+              const percentage = Math.round((item.value / total) * 100);
+              return (
+                <div key={i} className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-widest">
+                    <span className="text-muted-foreground">{item.label}</span>
+                    <span>{percentage}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full transition-all duration-1000", item.color)}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 w-full bg-muted rounded-full">
-                  <div
-                    className={cn("h-full rounded-full", item.color)}
-                    style={{ width: `${item.value}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <div className="mt-8 pt-6 border-t border-border flex justify-between">
+          <div className="mt-10 pt-8 border-t border-border flex justify-between">
             <div>
-              <p className="text-lg font-bold text-primary">100%</p>
-              <p className="text-[10px] text-muted-foreground uppercase font-bold">Coverage</p>
+              <p className="text-2xl font-bold text-primary">100%</p>
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-tighter">Coverage</p>
             </div>
             <div>
-              <p className="text-lg font-bold">8.4k</p>
-              <p className="text-[10px] text-muted-foreground uppercase font-bold">Calculations</p>
+              <p className="text-2xl font-bold">8.4k</p>
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-tighter">Calculations</p>
             </div>
           </div>
         </div>
 
         {/* Price Trend Chart */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-lg p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
             <div>
-              <h4 className="text-sm font-semibold">Price Index Trend</h4>
-              <p className="text-xs text-muted-foreground">30-day market movement</p>
+              <h4 className="text-lg font-bold">Price Index Trend</h4>
+              <p className="text-sm text-muted-foreground">30-day market movement</p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground">You</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                <span className="text-xs font-bold text-muted-foreground">YOU</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-                <span className="text-[10px] font-medium text-muted-foreground">Rivals</span>
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/30" />
+                <span className="text-xs font-bold text-muted-foreground">RIVALS</span>
               </div>
             </div>
           </div>
-          <div className="h-[240px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorIndex" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fontWeight: 600, fill: "hsl(var(--muted-foreground))" }}
                   dy={10}
                 />
                 <YAxis hide={true} domain={['dataMin - 5', 'dataMax + 5']} />
@@ -208,22 +260,25 @@ export default function DashboardOverview() {
                   contentStyle={{
                     backgroundColor: "hsl(var(--card))",
                     border: "1px solid hsl(var(--border))",
-                    borderRadius: "0.5rem",
+                    borderRadius: "0.75rem",
                     fontSize: "12px",
+                    fontWeight: 600,
+                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="index"
                   stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fill="hsl(var(--primary)/0.05)"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorIndex)"
                 />
                 <Area
                   type="monotone"
                   dataKey="rivals"
                   stroke="hsl(var(--muted-foreground))"
-                  strokeWidth={1}
+                  strokeWidth={2}
                   strokeDasharray="4 4"
                   fill="transparent"
                 />
@@ -233,42 +288,43 @@ export default function DashboardOverview() {
         </div>
 
         {/* Execution Queue */}
-        <div className="lg:col-span-3 bg-card border border-border rounded-lg p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h4 className="text-sm font-semibold">Recent Activity</h4>
-            <button className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-              View All <ChevronRight className="w-3 h-3" />
+        <div className="lg:col-span-3 bg-card border border-border rounded-xl p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h4 className="text-lg font-bold text-foreground">Live Execution Queue</h4>
+            <button className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full">
+              Full Log <ChevronRight className="w-4 h-4" />
             </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                  <th className="pb-3 pr-4">Product</th>
-                  <th className="pb-3 px-4">Action</th>
-                  <th className="pb-3 px-4">Value</th>
-                  <th className="pb-3 pl-4 text-right">Time</th>
+                <tr className="border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+                  <th className="pb-4 pr-4">Product / SKU</th>
+                  <th className="pb-4 px-4">Action Type</th>
+                  <th className="pb-4 px-4">Adjustment</th>
+                  <th className="pb-4 pl-4 text-right">Time Ago</th>
                 </tr>
               </thead>
               <tbody className="text-sm font-medium">
-                {[
-                  { name: "Nike Air Max 270", sku: "NIKE-AM-270", action: "Price Drop", value: "-$12.50", time: "4m" },
-                  { name: "Adidas Ultraboost 22", sku: "AD-UB-22", action: "Undercut", value: "-$4.00", time: "18m" },
-                  { name: "Puma RS-X", sku: "PU-RSX-99", action: "Outbid", value: "-$1.20", time: "32m" },
-                  { name: "Jordan Retro Black", sku: "JD-RT-11", action: "Price Drop", value: "-$42.00", time: "1h" },
-                ].map((item, i) => (
+                {recentLogs.map((item, i) => (
                   <tr key={i} className="border-b border-border/50 group hover:bg-muted/30 transition-colors">
-                    <td className="py-4 pr-4">
+                    <td className="py-5 pr-4">
                       <div>
-                        <div className="text-foreground">{item.name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{item.sku}</div>
+                        <div className="text-foreground font-bold">{item.name}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono tracking-tighter">{item.sku}</div>
                       </div>
                     </td>
-                    <td className="py-4 px-4 text-muted-foreground text-xs">{item.action}</td>
-                    <td className="py-4 px-4">
-                      <span className="text-danger bg-danger/5 px-2 py-0.5 rounded-md text-xs">{item.value}</span>
+                    <td className="py-5 px-4">
+                      <span className="text-[10px] font-bold bg-muted px-2 py-0.5 rounded uppercase tracking-wider text-muted-foreground">
+                        {item.action}
+                      </span>
                     </td>
-                    <td className="py-4 pl-4 text-right text-muted-foreground text-xs">{item.time} ago</td>
+                    <td className="py-5 px-4">
+                      <span className="text-danger bg-danger/5 px-3 py-1 rounded-lg text-xs font-bold border border-danger/10">
+                        {item.value}
+                      </span>
+                    </td>
+                    <td className="py-5 pl-4 text-right text-muted-foreground text-xs font-bold">{item.time}</td>
                   </tr>
                 ))}
               </tbody>

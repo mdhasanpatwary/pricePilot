@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { prisma } from "@/lib/prisma";
+
+/**
+ * GET /api/rules
+ * Fetch all pricing rules for the tenant
+ */
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = (session.user as any).tenantId;
+
+  try {
+    const rules = await prisma.pricingRule.findMany({
+      where: { tenantId },
+      orderBy: { priority: "asc" },
+    });
+
+    return NextResponse.json(rules);
+  } catch (error) {
+    console.error("Error fetching rules:", error);
+    return NextResponse.json({ error: "Failed to fetch rules" }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/rules
+ * Create a new pricing rule
+ */
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = (session.user as any).tenantId;
+
+  try {
+    const body = await req.json();
+    const { name, strategy, parameter, priority, isActive, description } = body;
+
+    if (!name || !strategy || parameter === undefined) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const rule = await prisma.pricingRule.create({
+      data: {
+        tenantId,
+        name,
+        strategy,
+        parameter,
+        priority: priority || 1,
+        isActive: isActive !== undefined ? isActive : true,
+        description,
+      },
+    });
+
+    return NextResponse.json(rule, { status: 201 });
+  } catch (error) {
+    console.error("Error creating rule:", error);
+    return NextResponse.json({ error: "Failed to create rule" }, { status: 500 });
+  }
+}
+
+/**
+ * PUT /api/rules
+ * Update an existing pricing rule
+ */
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = (session.user as any).tenantId;
+
+  try {
+    const body = await req.json();
+    const { id, ...updateData } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Rule ID required" }, { status: 400 });
+    }
+
+    // Verify ownership
+    const existingRule = await prisma.pricingRule.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!existingRule) {
+      return NextResponse.json({ error: "Rule not found" }, { status: 404 });
+    }
+
+    const updatedRule = await prisma.pricingRule.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return NextResponse.json(updatedRule);
+  } catch (error) {
+    console.error("Error updating rule:", error);
+    return NextResponse.json({ error: "Failed to update rule" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/rules
+ * Delete a pricing rule
+ */
+export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = (session.user as any).tenantId;
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json({ error: "Rule ID required" }, { status: 400 });
+  }
+
+  try {
+    // Verify ownership
+    const existingRule = await prisma.pricingRule.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!existingRule) {
+      return NextResponse.json({ error: "Rule not found" }, { status: 404 });
+    }
+
+    await prisma.pricingRule.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting rule:", error);
+    return NextResponse.json({ error: "Failed to delete rule" }, { status: 500 });
+  }
+}

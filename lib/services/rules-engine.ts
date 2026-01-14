@@ -1,10 +1,5 @@
 import { prisma } from "@/lib/prisma";
-
-interface PricingStrategy {
-  type: "UNDERCUT" | "MATCH" | "MARGIN_LOCK" | "THRESHOLD" | "PERCENTAGE";
-  parameter: number;
-  priority: number;
-}
+import { PricingRule, StrategyType } from "@prisma/client";
 
 interface PriceRecommendation {
   productId: string;
@@ -15,21 +10,22 @@ interface PriceRecommendation {
 }
 
 export class RulesEngine {
-  // Default pricing strategies (can be configured per tenant in the future)
-  private static readonly DEFAULT_STRATEGIES: PricingStrategy[] = [
-    { type: "UNDERCUT", parameter: 1, priority: 1 }, // Undercut by $1
-    { type: "MARGIN_LOCK", parameter: 20, priority: 2 }, // Maintain 20% margin
-  ];
-
   /**
    * Evaluate all active pricing rules for a tenant
    */
   static async evaluateAllRules(
-    tenantId: string,
-    strategies: PricingStrategy[] = this.DEFAULT_STRATEGIES
+    tenantId: string
   ): Promise<PriceRecommendation[]> {
-    // Sort strategies by priority (lower number = higher priority)
-    strategies.sort((a, b) => a.priority - b.priority);
+    // Get all active pricing rules from database
+    const rules = await prisma.pricingRule.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+      },
+      orderBy: {
+        priority: "asc", // Lower number = higher priority
+      },
+    });
 
     // Get all user products with their matches
     const products = await prisma.product.findMany({
@@ -49,7 +45,7 @@ export class RulesEngine {
     const recommendations: PriceRecommendation[] = [];
 
     for (const product of products) {
-      const recommendation = await this.evaluateProduct(product, strategies);
+      const recommendation = await this.evaluateProduct(product, rules);
       if (recommendation) {
         recommendations.push(recommendation);
       }
@@ -63,7 +59,7 @@ export class RulesEngine {
    */
   private static async evaluateProduct(
     product: any,
-    strategies: PricingStrategy[]
+    rules: PricingRule[]
   ): Promise<PriceRecommendation | null> {
     const currentPrice = parseFloat(product.currentPrice.toString());
 
@@ -75,9 +71,9 @@ export class RulesEngine {
 
     const competitorPrice = parseFloat(bestMatch.competitorProduct.currentPrice.toString());
 
-    // Apply strategies in priority order
-    for (const strategy of strategies) {
-      const result = this.applyStrategy(strategy, currentPrice, competitorPrice);
+    // Apply rules in priority order
+    for (const rule of rules) {
+      const result = this.applyRule(rule, currentPrice, competitorPrice);
 
       if (result) {
         return {
@@ -85,7 +81,7 @@ export class RulesEngine {
           currentPrice,
           recommendedPrice: result.price,
           reason: result.reason,
-          appliedRule: strategy.type,
+          appliedRule: rule.strategy,
         };
       }
     }
@@ -94,17 +90,17 @@ export class RulesEngine {
   }
 
   /**
-   * Apply a specific pricing strategy
+   * Apply a specific pricing rule
    */
-  private static applyStrategy(
-    strategy: PricingStrategy,
+  private static applyRule(
+    rule: PricingRule,
     currentPrice: number,
     competitorPrice: number
   ): { price: number; reason: string } | null {
-    switch (strategy.type) {
+    switch (rule.strategy) {
       case "UNDERCUT":
         // Always be cheaper by a fixed amount
-        const undercutAmount = strategy.parameter;
+        const undercutAmount = parseFloat(rule.parameter.toString());
         const undercutPrice = competitorPrice - undercutAmount;
 
         if (currentPrice > undercutPrice) {
@@ -127,7 +123,7 @@ export class RulesEngine {
 
       case "MARGIN_LOCK":
         // Maintain a minimum margin percentage
-        const minMargin = strategy.parameter;
+        const minMargin = parseFloat(rule.parameter.toString());
         const cost = currentPrice * (1 - minMargin / 100); // Reverse calculate cost
         const minPrice = cost / (1 - minMargin / 100);
 
@@ -146,7 +142,7 @@ export class RulesEngine {
 
       case "THRESHOLD":
         // Only adjust if difference exceeds threshold
-        const threshold = strategy.parameter;
+        const threshold = parseFloat(rule.parameter.toString());
         const difference = Math.abs(currentPrice - competitorPrice);
 
         if (difference > threshold && currentPrice > competitorPrice) {
@@ -159,7 +155,7 @@ export class RulesEngine {
 
       case "PERCENTAGE":
         // Be X% cheaper than competitor
-        const percentage = strategy.parameter;
+        const percentage = parseFloat(rule.parameter.toString());
         const targetPrice = competitorPrice * (1 - percentage / 100);
 
         if (currentPrice > targetPrice) {

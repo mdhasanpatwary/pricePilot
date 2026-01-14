@@ -53,6 +53,7 @@ model Tenant {
   users        User[]
   sites        Site[]
   products     Product[]
+  pricingRules PricingRule[]
 }
 
 model User {
@@ -88,6 +89,7 @@ model Product {
   tenant          Tenant        @relation(fields: [tenantId], references: [id])
   externalId      String?       // ID from OpenCart/Laravel
   sku             String?
+  url             String?       // Product page URL (for competitors)
   title           String
   brand           String?
   model           String?
@@ -137,4 +139,28 @@ model PriceUpdateLog {
   status       UpdateStatus @default(SUCCESS)
   errorDetails String?
   executedAt   DateTime     @default(now())
+}
+
+enum StrategyType {
+  UNDERCUT
+  MATCH
+  MARGIN_LOCK
+  THRESHOLD
+  PERCENTAGE
+}
+
+model PricingRule {
+  id          String       @id @default(uuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  strategy    StrategyType
+  parameter   Decimal      @db.Decimal(10, 2)
+  priority    Int          @default(1)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([tenantId])
 }
