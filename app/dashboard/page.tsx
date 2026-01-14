@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   TrendingDown,
   Package,
@@ -20,25 +21,75 @@ import {
   Tooltip,
   CartesianGrid
 } from "recharts";
-
-const stats = [
-  { label: "Total SKUs Live", value: "1,254", icon: Package, change: "+12%", trend: "up" },
-  { label: "Active Rivals", value: "8", icon: ShoppingBag, change: "Stable", trend: "neutral" },
-  { label: "Critical Alerts", value: "482", icon: TrendingDown, change: "-14%", trend: "down" },
-  { label: "Market Edge", value: "+$4.20", icon: Activity, change: "+2%", trend: "up" },
-];
-
-const chartData = [
-  { name: "01 Jan", index: 102, rivals: 105 },
-  { name: "04 Jan", index: 98, rivals: 103 },
-  { name: "08 Jan", index: 95, rivals: 101 },
-  { name: "12 Jan", index: 99, rivals: 98 },
-  { name: "16 Jan", index: 104, rivals: 97 },
-  { name: "20 Jan", index: 101, rivals: 100 },
-  { name: "24 Jan", index: 93, rivals: 99 },
-];
+import { toast } from "sonner";
 
 export default function DashboardOverview() {
+  const [stats, setStats] = useState({
+    totalSKUs: "0",
+    activeRivals: "0",
+    criticalAlerts: "0",
+    marketEdge: "$0.00",
+  });
+  const [positionSummary, setPositionSummary] = useState({
+    cheapest: 0,
+    nearCheapest: 0,
+    neutral: 0,
+    expensive: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
+
+  const fetchAnalytics = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/analytics/summary");
+      if (res.ok) {
+        const data = await res.json();
+        setStats({
+          totalSKUs: data.stats.totalSKUs.toString(),
+          activeRivals: data.stats.activeRivals.toString(),
+          criticalAlerts: data.stats.criticalAlerts.toString(),
+          marketEdge: data.stats.marketEdge,
+        });
+        setPositionSummary(data.positionSummary);
+      } else {
+        toast.error("Failed to load analytics");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const statsConfig = [
+    { label: "Total SKUs Live", value: stats.totalSKUs, icon: Package, change: "+12%", trend: "up" },
+    { label: "Active Rivals", value: stats.activeRivals, icon: ShoppingBag, change: "Stable", trend: "neutral" },
+    { label: "Critical Alerts", value: stats.criticalAlerts, icon: TrendingDown, change: "-14%", trend: "down" },
+    { label: "Market Edge", value: stats.marketEdge, icon: Activity, change: "+2%", trend: "up" },
+  ];
+
+  const positionData = [
+    { label: "Cheapest", value: positionSummary.cheapest, color: "bg-success" },
+    { label: "Near Cheapest", value: positionSummary.nearCheapest, color: "bg-primary" },
+    { label: "Neutral", value: positionSummary.neutral, color: "bg-muted-foreground/30" },
+    { label: "Expensive", value: positionSummary.expensive, color: "bg-danger" },
+  ];
+
+  const total = positionSummary.cheapest + positionSummary.nearCheapest + positionSummary.neutral + positionSummary.expensive || 1;
+
+  const chartData = [
+    { name: "01 Jan", index: 102, rivals: 105 },
+    { name: "04 Jan", index: 98, rivals: 103 },
+    { name: "08 Jan", index: 95, rivals: 101 },
+    { name: "12 Jan", index: 99, rivals: 98 },
+    { name: "16 Jan", index: 104, rivals: 97 },
+    { name: "20 Jan", index: 101, rivals: 100 },
+    { name: "24 Jan", index: 93, rivals: 99 },
+  ];
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       {/* Header Section */}
@@ -59,7 +110,7 @@ export default function DashboardOverview() {
 
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
+        {statsConfig.map((stat) => (
           <div key={stat.label} className="bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-muted/50 rounded-md">

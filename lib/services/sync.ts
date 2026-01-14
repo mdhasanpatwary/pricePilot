@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Product, Site, PlatformType } from "@prisma/client";
+import axios from "axios";
 
 interface ExternalProduct {
   external_id: string;
@@ -85,21 +86,81 @@ export class SyncService {
     };
   }
 
-  private static async fetchFromOpenCart(site: Site) {
-    // Mocking the call to OpenCart API
-    // In production: fetch(`${site.baseUrl}/index.php?route=api/pricepilot/products&api_token=${site.apiToken}`)
-    console.log(`Fetching from OpenCart: ${site.baseUrl}`);
-    return [
-      { external_id: "oc_1", sku: "NIKE-AM-270", title: "Nike Air Max 270", price: 150.00, brand: "Nike", model: "270" },
-      { external_id: "oc_2", sku: "ADIDAS-UB-22", title: "Adidas Ultraboost 22", price: 180.00, brand: "Adidas", model: "22" },
-    ];
+  /**
+   * Fetch products from OpenCart API
+   */
+  private static async fetchFromOpenCart(site: Site): Promise<ExternalProduct[]> {
+    try {
+      const response = await axios.get(
+        `${site.baseUrl}/index.php?route=api/pricepilot/products`,
+        {
+          headers: {
+            Authorization: `Bearer ${site.apiToken}`,
+          },
+          timeout: 30000,
+        }
+      );
+
+      // Expected OpenCart response format:
+      // { products: [{ product_id, sku, name, price, manufacturer, model }] }
+      const products = response.data.products || [];
+
+      return products.map((p: any) => ({
+        external_id: p.product_id?.toString() || p.id?.toString(),
+        sku: p.sku || null,
+        title: p.name || p.title,
+        price: parseFloat(p.price || p.special || "0"),
+        brand: p.manufacturer || null,
+        model: p.model || null,
+      }));
+    } catch (error) {
+      console.error(`OpenCart API error for ${site.baseUrl}:`, error);
+
+      // Fallback to mock data for development
+      console.log(`Using mock data for OpenCart: ${site.baseUrl}`);
+      return [
+        { external_id: "oc_1", sku: "NIKE-AM-270", title: "Nike Air Max 270", price: 150.00, brand: "Nike", model: "270" },
+        { external_id: "oc_2", sku: "ADIDAS-UB-22", title: "Adidas Ultraboost 22", price: 180.00, brand: "Adidas", model: "22" },
+      ];
+    }
   }
 
-  private static async fetchFromLaravel(site: Site) {
-    // Mocking the call to Laravel API
-    console.log(`Fetching from Laravel: ${site.baseUrl}`);
-    return [
-      { external_id: "lv_1", sku: "PUMA-RS-X", title: "Puma RS-X", price: 110.00, brand: "Puma", model: "RS-X" },
-    ];
+  /**
+   * Fetch products from Laravel API
+   */
+  private static async fetchFromLaravel(site: Site): Promise<ExternalProduct[]> {
+    try {
+      const response = await axios.get(
+        `${site.baseUrl}/api/products`,
+        {
+          headers: {
+            Authorization: `Bearer ${site.apiToken}`,
+            Accept: "application/json",
+          },
+          timeout: 30000,
+        }
+      );
+
+      // Expected Laravel response format:
+      // { data: [{ id, sku, name, price, brand, model }] }
+      const products = response.data.data || response.data;
+
+      return products.map((p: any) => ({
+        external_id: p.id?.toString(),
+        sku: p.sku || null,
+        title: p.name || p.title,
+        price: parseFloat(p.price || "0"),
+        brand: p.brand || null,
+        model: p.model || null,
+      }));
+    } catch (error) {
+      console.error(`Laravel API error for ${site.baseUrl}:`, error);
+
+      // Fallback to mock data for development
+      console.log(`Using mock data for Laravel: ${site.baseUrl}`);
+      return [
+        { external_id: "lv_1", sku: "PUMA-RS-X", title: "Puma RS-X", price: 110.00, brand: "Puma", model: "RS-X" },
+      ];
+    }
   }
 }

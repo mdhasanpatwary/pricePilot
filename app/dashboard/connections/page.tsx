@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Link2, ExternalLink, Trash2, CheckCircle2, AlertCircle, Zap, Shield, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const platforms = [
   { id: "OPENCART", name: "OpenCart", icon: "https://www.opencart.com/application/view/image/home/opencart-logo.png" },
@@ -15,26 +16,85 @@ export default function ConnectionsPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [apiToken, setApiToken] = useState("");
   const [loading, setLoading] = useState(false);
+  const [connections, setConnections] = useState<any[]>([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(true);
 
-  const existingConnections = [
-    { id: "1", platform: "OPENCART", name: "Main Store", url: "https://mystore.com", status: "CONNECTED", lastSync: "2 hours ago" },
-  ];
+  useEffect(() => {
+    fetchConnections();
+  }, []);
+
+  const fetchConnections = async () => {
+    setIsLoadingConnections(true);
+    try {
+      const res = await fetch("/api/integrations");
+      if (res.ok) {
+        const data = await res.json();
+        setConnections(data);
+      } else {
+        toast.error("Failed to load connections");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    } finally {
+      setIsLoadingConnections(false);
+    }
+  };
 
   const handleAddConnection = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!selectedPlatform || !baseUrl || !apiToken) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
     setLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setIsAdding(false);
-      setSelectedPlatform("");
-      setBaseUrl("");
-      setApiToken("");
-      // alert replaced with a simpler log or could be a toast in a real app
-      console.log("Store connected!");
+      const res = await fetch("/api/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: selectedPlatform,
+          baseUrl,
+          apiToken,
+          type: "USER",
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Store connected successfully!");
+        setIsAdding(false);
+        setSelectedPlatform("");
+        setBaseUrl("");
+        setApiToken("");
+        fetchConnections();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || "Failed to connect store");
+      }
     } catch (error) {
-      console.error("Failed to connect store.");
+      toast.error("Connection error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteConnection = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this connection?")) return;
+
+    try {
+      const res = await fetch(`/api/integrations?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Connection removed");
+        fetchConnections();
+      } else {
+        toast.error("Failed to remove connection");
+      }
+    } catch (error) {
+      toast.error("Connection error");
     }
   };
 
@@ -174,7 +234,7 @@ export default function ConnectionsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {existingConnections.map((conn) => (
+          {connections.map((conn: any) => (
             <div key={conn.id} className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all flex flex-col justify-between h-full">
               <div>
                 <div className="flex items-start justify-between mb-6">
@@ -209,7 +269,10 @@ export default function ConnectionsPage() {
                    <button className="p-2 hover:bg-muted border border-transparent hover:border-border rounded-md text-muted-foreground transition-all">
                       <Link2 className="w-4 h-4" />
                    </button>
-                   <button className="p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all">
+                   <button
+                     onClick={() => handleDeleteConnection(conn.id)}
+                     className="p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all"
+                   >
                       <Trash2 className="w-4 h-4" />
                    </button>
                 </div>
