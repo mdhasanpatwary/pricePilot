@@ -21,11 +21,12 @@ import { signOut } from "next-auth/react";
 import Header from "@/components/header";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Intelligence Hub", href: "/dashboard", short: "Hub" },
-  { icon: Link2, label: "Integration Center", href: "/dashboard/connections", short: "Links" },
-  { icon: Users, label: "Rival Tracking", href: "/dashboard/competitors", short: "Rivals" },
-  { icon: BarChart3, label: "Market Reports", href: "/dashboard/reports", short: "Data" },
-  { icon: Settings, label: "Console Config", href: "/dashboard/settings", short: "Settings" },
+  { icon: LayoutDashboard, label: "Command Dashboard", href: "/dashboard", short: "Dash" },
+  { icon: BarChart3, label: "Product Catalog", href: "/dashboard/reports", short: "Catalog" },
+  { icon: Users, label: "Rival Monitoring", href: "/dashboard/competitors", short: "Rivals" },
+  { icon: Zap, label: "Pricing Rules", href: "/dashboard/rules", short: "Rules" },
+  { icon: Link2, label: "Integration Hub", href: "/dashboard/connections", short: "Links" },
+  { icon: Settings, label: "System Config", href: "/dashboard/settings", short: "Config" },
 ];
 
 function Sidebar({

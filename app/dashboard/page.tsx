@@ -91,44 +91,82 @@ export default function DashboardOverview() {
 
       {/* Activity and Tracking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8 md:gap-10 pt-2 md:pt-4">
-        {/* Market Analysis Visual (Placeholder) */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-[2.5rem] md:rounded-[3.5rem] p-8 md:p-12 xl:p-14 min-h-[450px] md:min-h-[550px] flex flex-col shadow-xl shadow-black/[0.01] relative overflow-hidden group/viz">
+        {/* Market Analysis Visual (Position Summary) */}
+        <div className="lg:col-span-1 bg-card border border-border rounded-[2.5rem] md:rounded-[3.5rem] p-8 md:p-12 xl:p-14 min-h-[450px] md:min-h-[550px] flex flex-col shadow-xl shadow-black/[0.01] relative overflow-hidden group/viz">
            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-10 md:mb-12">
               <div>
-                 <h4 className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-tight">Market Distribution</h4>
-                 <p className="text-[8px] md:text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em] mt-1 opacity-40">Segment Analysis Engine</p>
+                 <h4 className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-tight">Position Summary</h4>
+                 <p className="text-[8px] md:text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em] mt-1 opacity-40">Your market stance vs. competition</p>
               </div>
               <div className="flex items-center gap-2 bg-muted/40 p-1 rounded-xl border border-border">
                   <button className="px-4 py-1.5 md:px-5 md:py-2 bg-background border border-border rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-black uppercase tracking-widest shadow-sm hover:text-primary transition-all">Real-time</button>
-                  <button className="px-4 py-1.5 md:px-5 md:py-2 text-[8px] md:text-[9px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all">Global</button>
+                  <button className="px-4 py-1.5 md:px-5 md:py-2 text-[8px] md:text-[9px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all">Daily</button>
               </div>
            </div>
 
-           <div className="flex-1 flex flex-col justify-center items-center text-center space-y-6 md:space-y-8">
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2.5rem] md:rounded-[3rem] bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center relative group-hover/viz:scale-105 transition-transform duration-700">
-                 <div className="absolute inset-0 bg-primary/20 blur-[60px] animate-pulse-soft" />
-                 <BarChart3 className="w-16 h-16 md:w-20 md:h-20 text-primary glow animate-float" />
+           <div className="flex-1 flex flex-col justify-center space-y-10">
+              <div className="space-y-6">
+                {[
+                  { label: "Cheapest", value: 42, color: "bg-success", total: 100 },
+                  { label: "Near Cheapest", value: 28, color: "bg-primary", total: 100 },
+                  { label: "Neutral Position", value: 15, color: "bg-muted-foreground/30", total: 100 },
+                  { label: "Most Expensive", value: 15, color: "bg-danger", total: 100 },
+                ].map((item, i) => (
+                  <div key={i} className="space-y-2.5 group/bar">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.1em]">
+                      <span className="text-muted-foreground group-hover/bar:text-foreground transition-colors">{item.label}</span>
+                      <span className="text-foreground">{item.value}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full transition-all duration-1000 delay-300", item.color)}
+                        style={{ width: `${item.value}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                 <h5 className="text-lg md:text-xl font-black tracking-tight">Synchronizing Compute Cores...</h5>
-                 <p className="text-muted-foreground max-w-sm font-medium text-sm md:text-base leading-relaxed opacity-60">Engine is ready. Feed data via the Integration center.</p>
-              </div>
-              <div className="flex items-center gap-8 md:gap-12 pt-2 md:pt-4">
+
+              <div className="flex items-center gap-8 md:gap-12 pt-6 border-t border-border/50">
                  <div className="space-y-1 text-center">
-                    <p className="text-2xl md:text-3xl font-black text-primary">1.2s</p>
-                    <p className="text-[8px] md:text-[9px] font-black uppercase text-muted-foreground tracking-[0.2em] opacity-40">Latency</p>
+                    <p className="text-2xl md:text-3xl font-black text-primary">100%</p>
+                    <p className="text-[8px] md:text-[9px] font-black uppercase text-muted-foreground tracking-[0.2em] opacity-40">Coverage</p>
                  </div>
                  <div className="h-8 md:h-10 w-px bg-border/50" />
                  <div className="space-y-1 text-center">
-                    <p className="text-2xl md:text-3xl font-black text-foreground">100%</p>
-                    <p className="text-[8px] md:text-[9px] font-black uppercase text-muted-foreground tracking-[0.2em] opacity-40">Integrity</p>
+                    <p className="text-2xl md:text-3xl font-black text-foreground">8.4k</p>
+                    <p className="text-[8px] md:text-[9px] font-black uppercase text-muted-foreground tracking-[0.2em] opacity-40">Calculations</p>
                  </div>
               </div>
            </div>
         </div>
 
+        {/* Global Market Overview */}
+        <div className="lg:col-span-1 bg-card border border-border rounded-[2.5rem] md:rounded-[3.5rem] p-8 md:p-12 flex flex-col shadow-xl shadow-black/[0.01] relative overflow-hidden group/globe">
+           <div className="flex flex-col md:row items-center justify-between gap-6 mb-10">
+              <div>
+                 <h4 className="text-xl md:text-2xl font-black tracking-tight text-foreground leading-tight">Pulse Index</h4>
+                 <p className="text-[8px] md:text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em] mt-1 opacity-40">System wide latency & health</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center text-success animate-pulse">
+                <Activity className="w-5 h-5" />
+              </div>
+           </div>
+
+           <div className="flex-1 flex flex-col justify-center items-center text-center space-y-8">
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2.5rem] md:rounded-[3rem] bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center relative group-hover/globe:scale-105 transition-transform duration-700">
+                 <div className="absolute inset-0 bg-primary/20 blur-[60px] animate-pulse-soft" />
+                 <History className="w-16 h-16 md:w-20 md:h-20 text-primary glow animate-float" />
+              </div>
+              <div className="space-y-2">
+                 <h5 className="text-lg md:text-xl font-black tracking-tight tracking-tight uppercase">Ready for Sync</h5>
+                 <p className="text-muted-foreground max-w-sm font-medium text-sm md:text-base leading-relaxed opacity-60">Engine cores are initialized. Start monitoring rivals to populate this index.</p>
+              </div>
+           </div>
+        </div>
+
         {/* Priority Execution Queue */}
-        <div className="bg-card border border-border rounded-[2.5rem] md:rounded-[3.5rem] p-8 md:p-10 space-y-8 md:space-y-10 shadow-xl shadow-black/[0.01] relative group/queue overflow-hidden">
+        <div className="bg-card border border-border rounded-[2.5rem] md:rounded-[3.5rem] p-8 md:p-10 space-y-8 md:space-y-10 shadow-xl shadow-black/[0.01] relative group/queue overflow-hidden group/queue">
           <div className="flex items-center justify-between">
              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-danger/10 flex items-center justify-center animate-pulse shadow-sm">
