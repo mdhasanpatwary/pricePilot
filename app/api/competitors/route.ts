@@ -66,6 +66,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
+    // Fetch tenant limits
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId }
+    });
+
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    // Check for existing integration (Dynamic Limit)
+    const existingCount = await prisma.site.count({
+      where: {
+        tenantId,
+        type: "COMPETITOR"
+      }
+    });
+
+    if (existingCount >= tenant.competitorLimit) {
+      return NextResponse.json(
+        { error: `Competitor tracking limit reached (${tenant.competitorLimit}). Please upgrade your plan to track more sites.` },
+        { status: 403 }
+      );
+    }
+
     const site = await prisma.site.create({
       data: {
         baseUrl: url,

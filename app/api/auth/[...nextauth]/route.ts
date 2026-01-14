@@ -42,6 +42,7 @@ export const authOptions: NextAuthOptions = {
           name: user.tenant.companyName,
           role: user.role,
           tenantId: user.tenantId,
+          isSuperAdmin: user.isSuperAdmin,
         };
       },
     }),
@@ -51,6 +52,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as any).role;
         token.tenantId = (user as any).tenantId;
+        token.isSuperAdmin = (user as any).isSuperAdmin;
       }
       return token;
     },
@@ -58,6 +60,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).role = token.role;
         (session.user as any).tenantId = token.tenantId;
+        (session.user as any).isSuperAdmin = token.isSuperAdmin;
       }
       return session;
     },

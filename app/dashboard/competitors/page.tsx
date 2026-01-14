@@ -113,6 +113,27 @@ export default function CompetitorsPage() {
     }
   };
 
+  const [limits, setLimits] = useState({ storeLimit: 1, competitorLimit: 3 });
+
+  useEffect(() => {
+    fetchCompetitors();
+    fetchLimits();
+  }, []);
+
+  const fetchLimits = async () => {
+    try {
+      const res = await fetch("/api/tenant/limits");
+      if (res.ok) {
+        const data = await res.json();
+        setLimits(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // ... fetchCompetitors ...
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -120,7 +141,7 @@ export default function CompetitorsPage() {
           <h2 className="text-2xl font-bold tracking-tight">Competitors</h2>
           <p className="text-muted-foreground text-sm">Monitor and track rival pricing strategies.</p>
         </div>
-        {!isAdding && (
+        {(!isAdding && competitors.length < limits.competitorLimit) && (
           <button
             onClick={() => setIsAdding(true)}
             className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
@@ -128,6 +149,14 @@ export default function CompetitorsPage() {
             <Plus className="w-4 h-4" />
             Add Site
           </button>
+        )}
+        {competitors.length >= limits.competitorLimit && !isAdding && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-lg">
+             <ShieldAlert className="w-3.5 h-3.5 text-primary" />
+             <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+               Tracker Limit Reached ({competitors.length}/{limits.competitorLimit})
+             </span>
+          </div>
         )}
       </div>
 

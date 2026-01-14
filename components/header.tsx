@@ -34,6 +34,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
      if (pathname === "/dashboard/reports") return "Products";
      if (pathname === "/dashboard/connections") return "Integrations";
      if (pathname === "/dashboard/competitors") return "Competitors";
+     if (pathname.startsWith("/admin")) {
+        if (pathname === "/admin") return "Platform Overview";
+        if (pathname === "/admin/tenants") return "Tenants (Merchants)";
+        if (pathname === "/admin/scrapers") return "Scraper Status";
+        if (pathname === "/admin/config") return "Global Config";
+        if (pathname === "/admin/settings") return "System Settings";
+        return "Admin Console";
+     }
      return "Settings";
   }
 

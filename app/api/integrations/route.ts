@@ -88,6 +88,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Fetch tenant limits
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId }
+    });
+
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    // Check for existing integration (Dynamic Limit)
+    const existingCount = await prisma.site.count({
+      where: {
+        tenantId,
+        type: "USER"
+      }
+    });
+
+    if (existingCount >= tenant.storeLimit) {
+      return NextResponse.json(
+        { error: `Site integration limit reached (${tenant.storeLimit}). Please upgrade your plan or contact support to add more stores.` },
+        { status: 403 }
+      );
+    }
+
     // Create the site
     const site = await prisma.site.create({
       data: {

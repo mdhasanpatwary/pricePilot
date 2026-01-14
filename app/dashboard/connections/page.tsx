@@ -119,6 +119,31 @@ export default function ConnectionsPage() {
     }
   };
 
+  const [limits, setLimits] = useState({ storeLimit: 1, competitorLimit: 3 });
+
+  useEffect(() => {
+    fetchConnections();
+    fetchLimits();
+  }, []);
+
+  const fetchLimits = async () => {
+    try {
+      const res = await fetch("/api/tenant/limits");
+      if (res.ok) {
+        const data = await res.json();
+        setLimits(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // ... fetchConnections ...
+
+  // ... onSubmit ...
+
+  // ... handleDeleteConnection ...
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -126,7 +151,7 @@ export default function ConnectionsPage() {
           <h2 className="text-2xl font-bold tracking-tight">Integrations</h2>
           <p className="text-muted-foreground text-sm">Manage your e-commerce store connections.</p>
         </div>
-        {!isAdding && (
+        {(!isAdding && connections.length < limits.storeLimit) && (
           <button
             onClick={() => setIsAdding(true)}
             className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
@@ -134,6 +159,14 @@ export default function ConnectionsPage() {
             <Plus className="w-4 h-4" />
             Connect Store
           </button>
+        )}
+        {connections.length >= limits.storeLimit && !isAdding && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-lg">
+             <Shield className="w-3.5 h-3.5 text-primary" />
+             <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+               Store Limit Reached ({connections.length}/{limits.storeLimit}) — Upgrade for More
+             </span>
+          </div>
         )}
       </div>
 
@@ -324,18 +357,20 @@ export default function ConnectionsPage() {
             </div>
           ))}
 
-          <button
-             onClick={() => setIsAdding(true)}
-             className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-[220px]"
-          >
-             <div className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
-                <Plus className="w-5 h-5" />
-             </div>
-             <div className="space-y-0.5">
-                <p className="text-base font-bold">Add New Store</p>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Integrate platform</p>
-             </div>
-          </button>
+          {connections.length < limits.storeLimit && (
+            <button
+               onClick={() => setIsAdding(true)}
+               className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-[220px]"
+            >
+               <div className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
+                  <Plus className="w-5 h-5" />
+               </div>
+               <div className="space-y-0.5">
+                  <p className="text-base font-bold">Add New Store</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Integrate platform</p>
+               </div>
+            </button>
+          )}
         </div>
       )}
     </div>

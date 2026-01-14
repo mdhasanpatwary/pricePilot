@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import {
   User,
   Bell,
@@ -40,20 +41,32 @@ type GeneralFormValues = z.infer<typeof generalSchema>;
 type SecurityFormValues = z.infer<typeof securitySchema>;
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState("general");
   const [isSaving, setIsSaving] = useState(false);
 
   const {
     register: registerGeneral,
     handleSubmit: handleSubmitGeneral,
+    reset: resetGeneral,
     formState: { errors: errorsGeneral },
   } = useForm<GeneralFormValues>({
     resolver: zodResolver(generalSchema),
     defaultValues: {
-      name: "Felix Agent",
-      email: "felix@pricepilot.ai",
+      name: "",
+      email: "",
     }
   });
+
+  // Sync session data with form
+  useEffect(() => {
+    if (session?.user) {
+      resetGeneral({
+        name: session.user.name || "",
+        email: session.user.email || "",
+      });
+    }
+  }, [session, resetGeneral]);
 
   const {
     register: registerSecurity,
