@@ -100,7 +100,7 @@ export default function CompetitorsPage() {
                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
                      <input
                        {...register("url")}
-                       type="url"
+                       type="text"
                        placeholder="https://competitor.com"
                        className={cn(
                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
