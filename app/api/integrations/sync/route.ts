@@ -1,0 +1,33 @@
+import { NextRequest, NextResponse } from "next/server";
+import { SyncService } from "@/lib/services/sync";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../../auth/[...nextauth]/route";
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { site_id } = await req.json();
+
+    if (!site_id) {
+      return NextResponse.json({ error: "Site ID is required" }, { status: 400 });
+    }
+
+    const result = await SyncService.syncSite(site_id);
+
+    return NextResponse.json({
+      message: "Sync completed successfully",
+      ...result
+    });
+  } catch (error: any) {
+    console.error("Sync error:", error);
+    return NextResponse.json({
+      error: "Failed to complete sync",
+      details: error.message
+    }, { status: 500 });
+  }
+}

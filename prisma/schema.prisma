@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlanType {
+  BASIC
+  PREMIUM
+  PRO
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum SiteType {
+  USER
+  COMPETITOR
+}
+
+enum PlatformType {
+  OPENCART
+  LARAVEL
+  GENERIC
+}
+
+enum MatchType {
+  AUTO_SKU
+  AUTO_MODEL
+  MANUAL
+}
+
+enum LogicType {
+  FIXED
+  PERCENTAGE
+}
+
+enum UpdateStatus {
+  SUCCESS
+  FAILED
+}
+
+model Tenant {
+  id           String    @id @default(uuid())
+  companyName  String
+  planType     PlanType  @default(BASIC)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  users        User[]
+  sites        Site[]
+  products     Product[]
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(ADMIN)
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Site {
+  id         String       @id @default(uuid())
+  tenantId   String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  type       SiteType
+  platform   PlatformType @default(GENERIC)
+  baseUrl    String
+  apiToken   String?
+  lastSyncAt DateTime?
+  products   Product[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model Product {
+  id              String        @id @default(uuid())
+  siteId          String
+  site            Site          @relation(fields: [siteId], references: [id])
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  externalId      String?       // ID from OpenCart/Laravel
+  sku             String?
+  title           String
+  brand           String?
+  model           String?
+  currentPrice    Decimal       @db.Decimal(10, 2)
+  currency        String        @default("USD")
+  lastCrawledAt   DateTime?
+  priceHistory    PriceHistory[]
+  updateLogs      PriceUpdateLog[]
+
+  // Relations for matching
+  matchesAsUser       ProductMatch[] @relation("UserProduct")
+  matchesAsCompetitor ProductMatch[] @relation("CompetitorProduct")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sku])
+  @@index([tenantId])
+}
+
+model ProductMatch {
+  id                  String    @id @default(uuid())
+  userProductId       String
+  userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id])
+  competitorProductId String
+  competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id])
+  matchType           MatchType @default(AUTO_SKU)
+  confidenceScore     Decimal   @db.Decimal(5, 2)
+  createdAt           DateTime  @default(now())
+}
+
+model PriceHistory {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  price     Decimal  @db.Decimal(10, 2)
+  recordedAt DateTime @default(now())
+}
+
+model PriceUpdateLog {
+  id           String       @id @default(uuid())
+  productId    String
+  product      Product      @relation(fields: [productId], references: [id])
+  oldPrice     Decimal      @db.Decimal(10, 2)
+  newPrice     Decimal      @db.Decimal(10, 2)
+  logicType    LogicType
+  status       UpdateStatus @default(SUCCESS)
+  errorDetails String?
+  executedAt   DateTime     @default(now())
+}
