@@ -65,10 +65,10 @@ export default function BulkUpdateDrawer({
              </div>
              <div className="space-y-0.5">
                 <h2 className="text-2xl font-black tracking-tight">Execution Engine</h2>
-                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                <div className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] flex items-center gap-2">
                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                    Queue: {selectedCount} Strategic Targets
-                </p>
+                </div>
              </div>
           </div>
           <button

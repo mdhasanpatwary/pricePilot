@@ -27,6 +27,7 @@ interface ProductDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   product: any;
+  onExecute?: (productId: string) => Promise<void>;
 }
 
 const historyData = [
@@ -39,7 +40,7 @@ const historyData = [
   { date: "07/24", you: 150, amazon: 140, ebay: 142 },
 ];
 
-export default function ProductDetailDrawer({ isOpen, onClose, product }: ProductDetailDrawerProps) {
+export default function ProductDetailDrawer({ isOpen, onClose, product, onExecute }: ProductDetailDrawerProps) {
   if (!product) return null;
 
   return (
@@ -200,7 +201,10 @@ export default function ProductDetailDrawer({ isOpen, onClose, product }: Produc
 
             {/* Terminal Actions */}
             <div className="pt-8 flex items-center gap-4">
-               <button className="flex-1 premium-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-primary/20 glow flex items-center justify-center gap-2 active:scale-95 transition-all">
+               <button
+                 onClick={() => onExecute?.(product.id)}
+                 className="flex-1 premium-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-primary/20 glow flex items-center justify-center gap-2 active:scale-95 transition-all"
+               >
                   <Zap className="w-5 h-5 fill-current" />
                   Execute Auto-Adjustment
                </button>

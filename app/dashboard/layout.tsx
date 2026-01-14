@@ -23,6 +23,7 @@ const menuItems = [
   { icon: Package, label: "Products", href: "/dashboard/reports" },
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
+  { icon: LineChart, label: "Pricing Rules", href: "/dashboard/rules" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 

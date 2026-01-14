@@ -1,18 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Plus, Globe, Search, Trash2, ShieldAlert, Zap, ExternalLink, MoreVertical, Target, MousePointer2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function CompetitorsPage() {
+  const [competitors, setCompetitors] = useState<any[]>([]);
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [competitorUrl, setCompetitorUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const competitors = [
-    { id: "1", name: "Competitor A", url: "https://competitor-a.com", products: 145, status: "ACTIVE", health: 98 },
-    { id: "2", name: "Big Rival", url: "https://rival-shop.com", products: 890, status: "CRAWLING", health: 100 },
-  ];
+  useEffect(() => {
+    fetchCompetitors();
+  }, []);
+
+  const fetchCompetitors = async () => {
+    setIsDataLoading(true);
+    try {
+      const res = await fetch("/api/competitors");
+      if (res.ok) {
+        const data = await res.json();
+        setCompetitors(data);
+      } else {
+        toast.error("Failed to load competitors");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
 
   const handleAddCompetitor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +154,27 @@ export default function CompetitorsPage() {
                 </tr>
               </thead>
               <tbody className="text-sm font-medium">
-                {competitors.map((comp) => (
+                {isDataLoading ? (
+                  <tr>
+                    <td colSpan={5} className="py-20 text-center text-muted-foreground animate-pulse">
+                      Scanning market signals...
+                    </td>
+                  </tr>
+                ) : competitors.length === 0 ? (
+                   <tr>
+                    <td colSpan={5} className="py-20 text-center text-muted-foreground">
+                       <div className="space-y-4">
+                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
+                           <Globe className="w-8 h-8 text-muted-foreground/30" />
+                        </div>
+                        <div>
+                           <h4 className="font-semibold">No Sites Tracked</h4>
+                           <p className="text-sm text-muted-foreground">Add a competitor website to start monitoring prices.</p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : competitors.map((comp) => (
                   <tr key={comp.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                     <td className="py-5 px-6">
                       <div className="flex items-center gap-3">
@@ -185,17 +224,6 @@ export default function CompetitorsPage() {
               </tbody>
             </table>
           </div>
-          {competitors.length === 0 && (
-            <div className="py-20 text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-                 <Globe className="w-8 h-8 text-muted-foreground/30" />
-              </div>
-              <div>
-                 <h4 className="font-semibold">No Sites Tracked</h4>
-                 <p className="text-sm text-muted-foreground">Add a competitor website to start monitoring prices.</p>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

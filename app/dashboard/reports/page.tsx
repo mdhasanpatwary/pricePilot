@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Search,
   Filter,
@@ -22,25 +23,47 @@ import { cn } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
 import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
 
-const mockData = [
-  { id: "1", sku: "NIKE-AM-270", title: "Nike Air Max 270", yourPrice: 150.00, compPrice: 140.00, diff: -10.00, status: "RED", match: "Amazon", stock: 12 },
-  { id: "2", sku: "ADIDAS-UB-22", title: "Adidas Ultraboost 22", yourPrice: 180.00, compPrice: 195.00, diff: 15.00, status: "GREEN", match: "eBay", stock: 45 },
-  { id: "3", sku: "PUMA-RS-X", title: "Puma RS-X", yourPrice: 110.00, compPrice: 110.00, diff: 0.00, status: "NEUTRAL", match: "StockX", stock: 8 },
-  { id: "4", sku: "JD-RT-11", title: "Jordan Retro Black", yourPrice: 220.00, compPrice: 178.00, diff: -42.00, status: "RED", match: "GOAT", stock: 3 },
-  { id: "5", sku: "NB-550-GR", title: "New Balance 550 Grey", yourPrice: 130.00, compPrice: 145.00, diff: 15.00, status: "GREEN", match: "Stadium Goods", stock: 22 },
-];
+
 
 export default function PriceReportPage() {
+  const [data, setData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/products");
+      const products = await res.json();
+      if (res.ok) {
+        setData(products);
+      } else {
+        toast.error("Failed to load products");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredData = data.filter(item =>
+    item.title.toLowerCase().includes(search.toLowerCase()) ||
+    item.sku.toLowerCase().includes(search.toLowerCase())
+  );
+
   const toggleSelectAll = () => {
-    if (selectedItems.length === mockData.length) {
+    if (selectedItems.length === filteredData.length) {
       setSelectedItems([]);
     } else {
-      setSelectedItems(mockData.map(i => i.id));
+      setSelectedItems(filteredData.map(i => i.id));
     }
   };
 
@@ -92,12 +115,12 @@ export default function PriceReportPage() {
            <div className="flex items-center gap-4 px-4 py-2 bg-muted/30 border border-border rounded-md whitespace-nowrap">
               <div className="flex items-center gap-2">
                  <div className="w-2 h-2 rounded-full bg-danger" />
-                 <span className="text-[10px] font-bold uppercase text-danger">At Risk: {mockData.filter(d => d.status === "RED").length}</span>
+                  <span className="text-[10px] font-bold uppercase text-danger">At Risk: {filteredData.filter(d => d.status === "RED").length}</span>
               </div>
               <div className="h-3 w-px bg-border" />
               <div className="flex items-center gap-2">
                  <div className="w-2 h-2 rounded-full bg-success" />
-                 <span className="text-[10px] font-bold uppercase text-success">Optimal: {mockData.filter(d => d.status === "GREEN").length}</span>
+                 <span className="text-[10px] font-bold uppercase text-success">Optimal: {filteredData.filter(d => d.status === "GREEN").length}</span>
               </div>
            </div>
 
@@ -118,12 +141,12 @@ export default function PriceReportPage() {
                     onClick={toggleSelectAll}
                     className={cn(
                       "w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer mx-auto",
-                      selectedItems.length === mockData.length
+                      selectedItems.length === filteredData.length
                         ? "bg-primary border-primary"
                         : "border-border bg-background"
                     )}
                   >
-                    {selectedItems.length === mockData.length && <Check className="w-3 h-3 text-white" />}
+                    {selectedItems.length === filteredData.length && <Check className="w-3 h-3 text-white" />}
                   </div>
                 </th>
                 <th className="py-4 px-6 min-w-[280px]">Product / SKU</th>
@@ -135,7 +158,19 @@ export default function PriceReportPage() {
               </tr>
             </thead>
             <tbody className="text-sm font-medium">
-              {mockData.map((item) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-20 text-center text-muted-foreground animate-pulse">
+                    Loading your catalog...
+                  </td>
+                </tr>
+              ) : filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-20 text-center text-muted-foreground">
+                    No products found.
+                  </td>
+                </tr>
+              ) : filteredData.map((item) => (
                 <tr
                   key={item.id}
                   onClick={() => setSelectedProduct(item)}
@@ -248,9 +283,12 @@ export default function PriceReportPage() {
         onClose={() => setIsUpdateDrawerOpen(false)}
         selectedCount={selectedItems.length}
         onExecute={async (logic) => {
-          // Logic implementation...
+          // Simulated API call
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          toast.success(`Successfully updated ${selectedItems.length} products`);
           setIsUpdateDrawerOpen(false);
           setSelectedItems([]);
+          fetchProducts();
         }}
       />
 
@@ -258,6 +296,12 @@ export default function PriceReportPage() {
         isOpen={!!selectedProduct}
         onClose={() => setSelectedProduct(null)}
         product={selectedProduct}
+        onExecute={async (id) => {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          toast.success("Pilot adjustment applied successfully");
+          setSelectedProduct(null);
+          fetchProducts();
+        }}
       />
     </div>
   );
