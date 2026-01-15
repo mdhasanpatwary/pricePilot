@@ -41,9 +41,10 @@ const sidebarLinks = [
     title: "API Reference",
     icon: Code,
     items: [
+      { name: "Overview", href: "/docs/api" },
       { name: "Authentication", href: "/docs/api/auth" },
       { name: "Endpoints", href: "/docs/api/endpoints" },
-      { name: "Errors", href: "/docs/api/errors", badge: "Soon" },
+      { name: "Errors", href: "/docs/api/errors" },
     ],
   },
   {

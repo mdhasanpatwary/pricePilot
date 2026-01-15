@@ -127,6 +127,27 @@ export default function ConnectionsPage() {
     fetchLimits();
   }, []);
 
+  const handleSyncConnection = async (siteId: string) => {
+    const toastId = toast.loading("Syncing store products...");
+    try {
+      const res = await fetch("/api/integrations/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`Successfully synced ${data.count} products.`, { id: toastId });
+        fetchConnections();
+      } else {
+        toast.error("Failed to sync products", { id: toastId });
+      }
+    } catch (error) {
+      toast.error("Network error during sync", { id: toastId });
+    }
+  };
+
   const fetchLimits = async () => {
     try {
       const res = await fetch("/api/tenant/limits");
@@ -363,8 +384,12 @@ export default function ConnectionsPage() {
                   <span className="text-[11px] font-semibold text-foreground">{conn.lastSync}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                   <button className="p-2 hover:bg-muted border border-transparent hover:border-border rounded-md text-muted-foreground transition-all">
-                      <Link2 className="w-4 h-4" />
+                   <button
+                     onClick={() => handleSyncConnection(conn.id)}
+                     className="p-2 hover:bg-primary/10 hover:text-primary rounded-md transition-all"
+                     title="Sync Products"
+                   >
+                      <Zap className="w-4 h-4" />
                    </button>
                    <button
                      onClick={() => handleDeleteConnection(conn.id)}

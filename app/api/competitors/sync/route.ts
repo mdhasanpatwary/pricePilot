@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
     const result = await SyncOrchestrator.syncSite(siteId);
 
     return NextResponse.json(result);
-  } catch (error: any) {
-    console.error("Site sync failed:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Site sync failed:", err);
     return NextResponse.json(
-      { error: error.message || "Site sync failed" },
+      { error: err.message || "Site sync failed" },
       { status: 500 }
     );
   }

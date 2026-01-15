@@ -41,11 +41,13 @@ export default function DashboardOverview() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     fetchAnalytics();
     fetchRecentLogs();
+    fetchHistory();
   }, []);
 
   const fetchAnalytics = async () => {
@@ -73,15 +75,22 @@ export default function DashboardOverview() {
 
   const fetchRecentLogs = async () => {
     try {
-      // Create a new API or just use this local fetch
-      const res = await fetch("/api/analytics/history?recent=true");
+      const res = await fetch("/api/analytics/logs");
       if (res.ok) {
         const data = await res.json();
-        // For now, let's assume we have dummy logs if no history
-        setRecentLogs(data.length > 0 ? data : [
-          { name: "Nike Air Max 270", sku: "NIKE-AM-270", action: "Price Drop", value: "-$12.50", time: "4m" },
-          { name: "Adidas Ultraboost 22", sku: "AD-UB-22", action: "Undercut", value: "-$4.00", time: "18m" },
-        ]);
+        setRecentLogs(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch("/api/analytics/history?days=30");
+      if (res.ok) {
+        const data = await res.json();
+        setChartData(data);
       }
     } catch (e) {
       console.error(e);
@@ -127,15 +136,7 @@ export default function DashboardOverview() {
 
   const total = (positionSummary.cheapest || 0) + (positionSummary.nearCheapest || 0) + (positionSummary.neutral || 0) + (positionSummary.expensive || 0) || 1;
 
-  const chartData = [
-    { name: "01 Jan", index: 102, rivals: 105 },
-    { name: "04 Jan", index: 98, rivals: 103 },
-    { name: "08 Jan", index: 95, rivals: 101 },
-    { name: "12 Jan", index: 99, rivals: 98 },
-    { name: "16 Jan", index: 104, rivals: 97 },
-    { name: "20 Jan", index: 101, rivals: 100 },
-    { name: "24 Jan", index: 93, rivals: 99 },
-  ];
+
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">

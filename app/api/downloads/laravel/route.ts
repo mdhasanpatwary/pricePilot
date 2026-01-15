@@ -19,7 +19,8 @@ export async function GET() {
     // Path to the Laravel package zip file
     const filePath = path.join(
       process.cwd(),
-      'integrations',
+      'public',
+      'downloads',
       'pricepilot-laravel-v1.0.0.zip'
     );
 

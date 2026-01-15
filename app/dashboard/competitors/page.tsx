@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, Globe, Search, Trash2, ShieldAlert, Zap, ExternalLink, MoreVertical, Target, MousePointer2, X } from "lucide-react";
+import { Plus, Globe, Search, Trash2, ShieldAlert, Zap, ExternalLink, MoreVertical, Target, MousePointer2, X, Download, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -14,10 +14,13 @@ const competitorSchema = z.object({
 
 type CompetitorFormValues = z.infer<typeof competitorSchema>;
 
+import { Competitor } from "@/lib/types";
+
 export default function CompetitorsPage() {
-  const [competitors, setCompetitors] = useState<any[]>([]);
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const {
@@ -113,6 +116,36 @@ export default function CompetitorsPage() {
     }
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/imports/competitors", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(`Import complete: Added ${result.added} sites. Skipped ${result.skipped}.`);
+        fetchCompetitors();
+      } else {
+        const result = await res.json();
+        toast.error(result.error || "Failed to import sites");
+      }
+    } catch (error) {
+      toast.error("Network error during import");
+    } finally {
+      setIsImporting(false);
+      e.target.value = "";
+    }
+  };
+
   const [limits, setLimits] = useState({ storeLimit: 1, competitorLimit: 3 });
 
   useEffect(() => {
@@ -141,23 +174,46 @@ export default function CompetitorsPage() {
           <h2 className="text-2xl font-bold tracking-tight">Competitors</h2>
           <p className="text-muted-foreground text-sm">Monitor and track rival pricing strategies.</p>
         </div>
-        {(!isAdding && competitors.length < limits.competitorLimit) && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsAdding(true)}
-            className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
+            onClick={() => {
+              window.location.href = "/api/exports/competitors";
+              toast.success("Downloading competitor list...");
+            }}
+            className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" />
-            Add Site
+            <Download className="w-4 h-4" />
+            Export
           </button>
-        )}
-        {competitors.length >= limits.competitorLimit && !isAdding && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-lg">
-             <ShieldAlert className="w-3.5 h-3.5 text-primary" />
-             <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-               Tracker Limit Reached ({competitors.length}/{limits.competitorLimit})
-             </span>
-          </div>
-        )}
+
+          <label className="bg-primary/5 text-primary text-sm font-semibold px-4 py-2 rounded-md border border-primary/10 hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer active:scale-95">
+            {isImporting ? (
+               <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            ) : (
+               <Filter className="w-4 h-4 rotate-180" />
+            )}
+            Import
+            <input type="file" className="hidden" accept=".csv" onChange={handleImport} disabled={isImporting} />
+          </label>
+
+          {(!isAdding && competitors.length < limits.competitorLimit) && (
+            <button
+              onClick={() => setIsAdding(true)}
+              className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Site
+            </button>
+          )}
+          {competitors.length >= limits.competitorLimit && !isAdding && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-lg">
+               <ShieldAlert className="w-3.5 h-3.5 text-primary" />
+               <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                 Tracker Limit Reached ({competitors.length}/{limits.competitorLimit})
+               </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {isAdding ? (

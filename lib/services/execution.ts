@@ -66,7 +66,8 @@ export class UpdateExecutionService {
         });
 
         results.push({ id: pid, success: true });
-      } catch (err: any) {
+      } catch (error) {
+        const err = error as Error;
         await prisma.priceUpdateLog.create({
           data: {
             productId: pid,

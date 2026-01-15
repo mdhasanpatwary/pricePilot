@@ -4,10 +4,13 @@ import { ScraperService } from '@/lib/services/scraper';
 jest.mock('playwright', () => ({
   chromium: {
     launch: jest.fn().mockResolvedValue({
-      newPage: jest.fn().mockResolvedValue({
-        goto: jest.fn().mockResolvedValue({}),
-        content: jest.fn().mockResolvedValue('<html><body>Test</body></html>'),
-        waitForTimeout: jest.fn().mockResolvedValue({}),
+      newContext: jest.fn().mockResolvedValue({
+        newPage: jest.fn().mockResolvedValue({
+          goto: jest.fn().mockResolvedValue({}),
+          content: jest.fn().mockResolvedValue('<html><body>Test</body></html>'),
+          waitForTimeout: jest.fn().mockResolvedValue({}),
+          close: jest.fn().mockResolvedValue({}),
+        }),
         close: jest.fn().mockResolvedValue({}),
       }),
       close: jest.fn().mockResolvedValue({}),

@@ -15,7 +15,11 @@ import {
   Zap,
   CreditCard as BillingIcon,
   ShieldCheck,
-  Key
+  Key,
+  Code2,
+  Trash2,
+  Plus,
+  ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -96,10 +100,72 @@ export default function SettingsPage() {
     }, 1000);
   };
 
+  const [webhooks, setWebhooks] = useState<any[]>([]);
+  const [showAddWebhook, setShowAddWebhook] = useState(false);
+  const [newWebhookUrl, setNewWebhookUrl] = useState("");
+  const [newWebhookSecret, setNewWebhookSecret] = useState("");
+
+  useEffect(() => {
+    if (activeTab === "developers") {
+      fetchWebhooks();
+    }
+  }, [activeTab]);
+
+  const fetchWebhooks = async () => {
+    try {
+      const res = await fetch("/api/webhooks");
+      if (res.ok) {
+        setWebhooks(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddWebhook = async () => {
+    if (!newWebhookUrl) return toast.error("URL is required");
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/webhooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: newWebhookUrl, secret: newWebhookSecret }),
+      });
+
+      if (res.ok) {
+        toast.success("Webhook endpoint added");
+        setNewWebhookUrl("");
+        setNewWebhookSecret("");
+        setShowAddWebhook(false);
+        fetchWebhooks();
+      } else {
+        toast.error("Failed to add webhook");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteWebhook = async (id: string) => {
+    if (!confirm("Are you sure? This endpoint will no longer receive updates.")) return;
+    try {
+      const res = await fetch(`/api/webhooks?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Webhook removed");
+        fetchWebhooks();
+      }
+    } catch (e) {
+      toast.error("Failed to remove webhook");
+    }
+  };
+
   const tabs = [
     { id: "general", label: "General", icon: User },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "security", label: "Security", icon: Lock },
+    { id: "developers", label: "Developers", icon: Code2 },
     { id: "billing", label: "Billing", icon: CreditCard },
   ];
 
@@ -276,6 +342,100 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
+            )}
+
+            {activeTab === "developers" && (
+              <div className="space-y-8 animate-in slide-in-from-bottom-2">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">Outgoing Webhooks</h3>
+                      <p className="text-sm text-muted-foreground">Receive real-time notifications when prices change.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAddWebhook(true)}
+                      className="p-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {webhooks.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed border-border rounded-lg text-muted-foreground bg-muted/5">
+                        <Database className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">No webhooks configured.</p>
+                      </div>
+                    ) : (
+                      webhooks.map((webhook) => (
+                        <div key={webhook.id} className="p-4 rounded-lg border border-border bg-muted/10 flex items-center justify-between group">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded bg-background border border-border flex items-center justify-center">
+                              <Zap className="w-4 h-4 text-primary" />
+                            </div>
+                            <div>
+                               <p className="text-sm font-bold truncate max-w-[200px]">{webhook.url}</p>
+                               <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] font-bold text-success uppercase">Active</span>
+                                  <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">Secret: {webhook.secret ? "••••••••" : "None"}</span>
+                               </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <button
+                                onClick={() => handleDeleteWebhook(webhook.id)}
+                                className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                             >
+                                <Trash2 className="w-4 h-4" />
+                             </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {showAddWebhook && (
+                  <div className="p-6 rounded-xl border border-primary/20 bg-primary/5 space-y-4 animate-in fade-in zoom-in-95">
+                    <h4 className="text-sm font-bold">Add New Webhook</h4>
+                    <div className="grid gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Payload URL</label>
+                        <input
+                          value={newWebhookUrl}
+                          onChange={(e) => setNewWebhookUrl(e.target.value)}
+                          placeholder="https://your-api.com/webhooks"
+                          className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Secret (Optional)</label>
+                        <input
+                          value={newWebhookSecret}
+                          onChange={(e) => setNewWebhookSecret(e.target.value)}
+                          placeholder="whsec_..."
+                          className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 pt-2">
+                       <button
+                         onClick={handleAddWebhook}
+                         disabled={isSaving}
+                         className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-2 rounded-md hover:opacity-90 transition-all"
+                       >
+                         {isSaving ? "Adding..." : "Add Endpoint"}
+                       </button>
+                       <button
+                         onClick={() => setShowAddWebhook(false)}
+                         className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-2 rounded-md border border-border hover:bg-muted"
+                       >
+                         Cancel
+                       </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {activeTab === "billing" && (

@@ -51,8 +51,69 @@ export default function APIEndpointsPage() {
         </div>
       </section>
 
+      {/* Competitors Endpoint */}
+      <section className="space-y-6 pt-10 border-t border-border/30">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">GET</span>
+          <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
+            /competitors
+          </h2>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Retrieve a list of all competitor sites and their health status currently being monitored.
+        </p>
+
+        <div className="space-y-4 pt-2">
+          <CodeBlock
+            language="json"
+            code={`{
+  "status": "success",
+  "competitors": [
+    {
+      "id": "comp_1",
+      "baseUrl": "https://rival-shop.com",
+      "status": "HEALTHY",
+      "lastSync": "2024-03-15T15:20:00Z"
+    }
+  ]
+}`}
+          />
+        </div>
+      </section>
+
+      {/* Rules Endpoint */}
+      <section className="space-y-6 pt-10 border-t border-border/30">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-500/20">GET</span>
+          <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
+            /rules
+          </h2>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          List all active pricing strategies and their current parameters.
+        </p>
+
+        <div className="space-y-4 pt-2">
+          <CodeBlock
+            language="json"
+            code={`{
+  "status": "success",
+  "rules": [
+    {
+      "id": "rule_1",
+      "name": "Market Undercutter",
+      "strategy": "UNDERCUT",
+      "parameter": 0.50,
+      "isActive": true
+    }
+  ]
+}`}
+          />
+        </div>
+      </section>
+
       {/* Update Endpoint */}
-      <section className="space-y-6 pt-10">
+      <section className="space-y-6 pt-10 border-t border-border/30">
         <div className="flex flex-wrap items-center gap-3">
           <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">POST</span>
           <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">

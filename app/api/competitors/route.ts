@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = (session.user as any).tenantId;
+  const tenantId = session.user.tenantId;
 
   try {
     const competitors = await prisma.site.findMany({
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = (session.user as any).tenantId;
+  const tenantId = session.user.tenantId;
 
   try {
     const { url } = await req.json();
@@ -112,7 +112,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = (session.user as any).tenantId;
+  const tenantId = session.user.tenantId;
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
 

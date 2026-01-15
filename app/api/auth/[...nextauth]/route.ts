@@ -50,17 +50,17 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role;
-        token.tenantId = (user as any).tenantId;
-        token.isSuperAdmin = (user as any).isSuperAdmin;
+        token.role = user.role;
+        token.tenantId = user.tenantId;
+        token.isSuperAdmin = user.isSuperAdmin;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).role = token.role;
-        (session.user as any).tenantId = token.tenantId;
-        (session.user as any).isSuperAdmin = token.isSuperAdmin;
+        session.user.role = token.role;
+        session.user.tenantId = token.tenantId;
+        session.user.isSuperAdmin = token.isSuperAdmin;
       }
       return session;
     },

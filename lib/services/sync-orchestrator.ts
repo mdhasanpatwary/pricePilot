@@ -43,7 +43,7 @@ export class SyncOrchestrator {
       await scraper.init();
 
       let scrappedCount = 0;
-      const scrapedProductsMap = new Map<string, any>();
+      const scrapedProductsMap = new Map<string, unknown>();
 
       for (const match of matches) {
         const cp = match.competitorProduct;
@@ -63,6 +63,7 @@ export class SyncOrchestrator {
             where: { id: cp.id },
             data: {
               currentPrice: result.price,
+              inStock: result.inStock,
               lastCrawledAt: new Date(),
             }
           });
@@ -159,6 +160,7 @@ export class SyncOrchestrator {
           where: { id: product.id },
           data: {
             currentPrice: result.price,
+            inStock: result.inStock,
             lastCrawledAt: new Date(),
           }
         });
@@ -211,6 +213,7 @@ export class SyncOrchestrator {
         where: { id: productId },
         data: {
           currentPrice: result.price,
+          inStock: result.inStock,
           lastCrawledAt: new Date(),
         }
       });

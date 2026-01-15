@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = (session.user as any).tenantId;
+  const tenantId = session.user.tenantId;
   const url = new URL(req.url);
   const productId = url.searchParams.get("productId");
   const days = parseInt(url.searchParams.get("days") || "7");
@@ -42,20 +42,25 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json(formattedHistory);
     } else {
-      // Get aggregated price trend for all user products
-      const userProducts = await prisma.product.findMany({
-        where: {
-          tenantId,
-          site: { type: "USER" },
+      // Get aggregated price trend for ALL products (User and competitors)
+      const allProducts = await prisma.product.findMany({
+        where: { tenantId },
+        select: {
+          id: true,
+          site: {
+            select: {
+              type: true
+            }
+          }
         },
-        select: { id: true },
       });
 
-      const productIds = userProducts.map((p) => p.id);
+      const userProductIds = allProducts.filter(p => p.site.type === "USER").map(p => p.id);
+      const rivalProductIds = allProducts.filter(p => p.site.type === "COMPETITOR").map(p => p.id);
 
       const history = await prisma.priceHistory.findMany({
         where: {
-          productId: { in: productIds },
+          productId: { in: [...userProductIds, ...rivalProductIds] },
           recordedAt: {
             gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
           },
@@ -65,21 +70,36 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      // Group by date and calculate average
-      const grouped = history.reduce((acc: any, h) => {
-        const date = h.recordedAt.toISOString().split("T")[0];
-        if (!acc[date]) {
-          acc[date] = { total: 0, count: 0 };
-        }
-        acc[date].total += parseFloat(h.price.toString());
-        acc[date].count += 1;
-        return acc;
-      }, {});
+      // Group by date and calculate average for each type
+      interface GroupedData {
+        [key: string]: {
+          user: { total: number; count: number };
+          rivals: { total: number; count: number };
+        };
+      }
 
-      const chartData = Object.entries(grouped).map(([date, data]: [string, any]) => ({
-        date,
-        index: Math.round(data.total / data.count),
-      }));
+      const grouped = history.reduce((acc: GroupedData, h) => {
+        const date = h.recordedAt.toISOString().split("T")[0];
+        const isUser = userProductIds.includes(h.productId);
+
+        if (!acc[date]) {
+          acc[date] = {
+            user: { total: 0, count: 0 },
+            rivals: { total: 0, count: 0 }
+          };
+        }
+
+        const type = isUser ? 'user' : 'rivals';
+        acc[date][type].total += parseFloat(h.price.toString());
+        acc[date][type].count += 1;
+        return acc;
+      }, {} as GroupedData);
+
+      const chartData = Object.entries(grouped).map(([date, data]) => ({
+        name: date.split("-").slice(1).reverse().join(" "), // "15 Jan" format
+        index: data.user.count > 0 ? Math.round(data.user.total / data.user.count) : null,
+        rivals: data.rivals.count > 0 ? Math.round(data.rivals.total / data.rivals.count) : null,
+      })).filter(d => d.index !== null || d.rivals !== null);
 
       return NextResponse.json(chartData);
     }

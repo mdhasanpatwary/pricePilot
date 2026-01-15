@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { toast } from "sonner";
+
 import {
   X,
   TrendingUp,
@@ -12,6 +15,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Product } from "@/lib/types";
 import {
   ResponsiveContainer,
   LineChart,
@@ -20,13 +24,12 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  ReferenceArea
 } from "recharts";
 
 interface ProductDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  product: any;
+  product: Product | null;
   onExecute?: (productId: string) => Promise<void>;
 }
 
@@ -41,6 +44,31 @@ const historyData = [
 ];
 
 export default function ProductDetailDrawer({ isOpen, onClose, product, onExecute }: ProductDetailDrawerProps) {
+  const [matchUrl, setMatchUrl] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+
+  const handleLinkCompetitor = async () => {
+    if (!matchUrl || !product) return;
+    setIsLinking(true);
+    try {
+      const res = await fetch(`/api/products/${product.id}/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: matchUrl }),
+      });
+      if (res.ok) {
+        toast.success("Competitor URL linked successfully! Run sync to fetch latest price.");
+        setMatchUrl("");
+      } else {
+        toast.error("Failed to link competitor");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
   if (!product) return null;
 
   return (
@@ -170,6 +198,35 @@ export default function ProductDetailDrawer({ isOpen, onClose, product, onExecut
                        />
                     </LineChart>
                   </ResponsiveContainer>
+               </div>
+            </div>
+
+            {/* Competitor Matching */}
+            <div className="space-y-6">
+               <h3 className="text-xl font-black flex items-center gap-3">
+                  <Target className="w-5 h-5 text-primary" />
+                  Manual Competitor Link
+               </h3>
+               <div className="p-6 bg-muted/20 border border-border rounded-2xl space-y-4">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest leading-relaxed">
+                    Accurately track specific rivals by linking this product directly to their listing URL.
+                  </p>
+                  <div className="flex gap-2">
+                     <input
+                        type="url"
+                        value={matchUrl}
+                        onChange={(e) => setMatchUrl(e.target.value)}
+                        placeholder="https://competitor.com/p/product-name"
+                        className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
+                     />
+                     <button
+                        onClick={handleLinkCompetitor}
+                        disabled={isLinking || !matchUrl}
+                        className="bg-primary text-primary-foreground text-xs font-bold px-6 py-3 rounded-xl hover:opacity-90 transition-all disabled:opacity-50 shadow-lg shadow-primary/10"
+                     >
+                        {isLinking ? "Linking..." : "Link"}
+                     </button>
+                  </div>
                </div>
             </div>
 

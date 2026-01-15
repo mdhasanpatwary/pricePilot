@@ -25,13 +25,19 @@ import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
 
 
 
+import { Product, Stats } from "@/lib/types";
+
+
 export default function PriceReportPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<Product[]>([]);
+  const [stats, setStats] = useState<Stats>({ atRisk: 0, optimal: 0, parity: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [filterSegment, setFilterSegment] = useState<string>("ALL");
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     fetchProducts();
@@ -41,9 +47,10 @@ export default function PriceReportPage() {
     setIsLoading(true);
     try {
       const res = await fetch("/api/products");
-      const products = await res.json();
+      const result = await res.json();
       if (res.ok) {
-        setData(products);
+        setData(result.products);
+        setStats(result.stats);
       } else {
         toast.error("Failed to load products");
       }
@@ -54,10 +61,20 @@ export default function PriceReportPage() {
     }
   };
 
-  const filteredData = data.filter(item =>
-    item.title.toLowerCase().includes(search.toLowerCase()) ||
-    item.sku.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredData = data.filter(item => {
+    const matchesSearch = item.title.toLowerCase().includes(search.toLowerCase()) ||
+                         item.sku.toLowerCase().includes(search.toLowerCase());
+
+    if (filterSegment === "ALL") return matchesSearch;
+
+    const segmentMap: Record<string, string> = {
+      "CHEAPEST": "GREEN",
+      "EXPENSIVE": "RED",
+      "MATCHED": "NEUTRAL"
+    };
+
+    return matchesSearch && item.status === segmentMap[filterSegment];
+  });
 
   const toggleSelectAll = () => {
     if (selectedItems.length === filteredData.length) {
@@ -72,6 +89,41 @@ export default function PriceReportPage() {
     setSelectedItems(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
+  };
+
+  const handleExport = () => {
+    window.location.href = "/api/exports/products";
+    toast.success("Preparing your CSV export...");
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/imports/products", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(`Import complete: ${result.created} created, ${result.updated} updated.`);
+        fetchProducts();
+      } else {
+        toast.error("Failed to import products");
+      }
+    } catch (error) {
+      toast.error("Network error during import");
+    } finally {
+      setIsImporting(false);
+      // Reset input
+      e.target.value = "";
+    }
   };
 
   return (
@@ -91,10 +143,23 @@ export default function PriceReportPage() {
               Sync {selectedItems.length} Products
             </button>
           )}
-          <button className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2">
+           <button
+             onClick={handleExport}
+             className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2"
+           >
             <Download className="w-4 h-4" />
             Export
           </button>
+
+          <label className="bg-primary/5 text-primary text-sm font-semibold px-4 py-2 rounded-md border border-primary/10 hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer transition-all active:scale-95">
+            {isImporting ? (
+               <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            ) : (
+               <Filter className="w-4 h-4 rotate-180" />
+            )}
+            Import
+            <input type="file" className="hidden" accept=".csv" onChange={handleImport} disabled={isImporting} />
+          </label>
         </div>
       </div>
 
@@ -111,20 +176,50 @@ export default function PriceReportPage() {
           />
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
-           <div className="flex items-center gap-4 px-4 py-2 bg-muted/30 border border-border rounded-md whitespace-nowrap">
-              <div className="flex items-center gap-2">
-                 <div className="w-2 h-2 rounded-full bg-danger" />
-                  <span className="text-[10px] font-bold uppercase text-danger">At Risk: {filteredData.filter(d => d.status === "RED").length}</span>
-              </div>
-              <div className="h-3 w-px bg-border" />
-              <div className="flex items-center gap-2">
-                 <div className="w-2 h-2 rounded-full bg-success" />
-                 <span className="text-[10px] font-bold uppercase text-success">Optimal: {filteredData.filter(d => d.status === "GREEN").length}</span>
-              </div>
+        <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+           <div className="flex items-center gap-1.5 p-1 bg-muted/30 border border-border rounded-lg whitespace-nowrap">
+             <button
+               onClick={() => setFilterSegment("ALL")}
+               className={cn(
+                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
+                 filterSegment === "ALL" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+               )}
+             >
+               All
+             </button>
+             <button
+               onClick={() => setFilterSegment("CHEAPEST")}
+               className={cn(
+                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+                 filterSegment === "CHEAPEST" ? "bg-success/10 text-success shadow-sm" : "text-muted-foreground hover:text-foreground"
+               )}
+             >
+               <div className="w-1.5 h-1.5 rounded-full bg-success" />
+               Cheapest ({stats.optimal})
+             </button>
+             <button
+               onClick={() => setFilterSegment("MATCHED")}
+               className={cn(
+                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+                 filterSegment === "MATCHED" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+               )}
+             >
+               <div className="w-1.5 h-1.5 rounded-full bg-border" />
+               Matched ({stats.parity})
+             </button>
+             <button
+               onClick={() => setFilterSegment("EXPENSIVE")}
+               className={cn(
+                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+                 filterSegment === "EXPENSIVE" ? "bg-danger/10 text-danger shadow-sm" : "text-muted-foreground hover:text-foreground"
+               )}
+             >
+               <div className="w-1.5 h-1.5 rounded-full bg-danger" />
+               Expensive ({stats.atRisk})
+             </button>
            </div>
 
-           <button className="p-2 bg-background border border-border rounded-md text-muted-foreground hover:text-foreground transition-all">
+           <button className="p-2 bg-background border border-border rounded-md text-muted-foreground hover:text-foreground transition-all shrink-0">
               <Filter className="w-4 h-4" />
            </button>
         </div>

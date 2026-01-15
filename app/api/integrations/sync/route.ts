@@ -11,23 +11,24 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { site_id } = await req.json();
+    const { siteId } = await req.json();
 
-    if (!site_id) {
+    if (!siteId) {
       return NextResponse.json({ error: "Site ID is required" }, { status: 400 });
     }
 
-    const result = await SyncService.syncSite(site_id);
+    const result = await SyncService.syncSite(siteId);
 
     return NextResponse.json({
       message: "Sync completed successfully",
       ...result
     });
-  } catch (error: any) {
-    console.error("Sync error:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Sync error:", err);
     return NextResponse.json({
       error: "Failed to complete sync",
-      details: error.message
+      details: err.message
     }, { status: 500 });
   }
 }

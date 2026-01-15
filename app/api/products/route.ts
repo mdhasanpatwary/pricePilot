@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = (session.user as any).tenantId;
+  const tenantId = session.user.tenantId;
 
   try {
     const products = await prisma.product.findMany({
@@ -34,31 +34,67 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Map to the format expected by the frontend
-    const formattedProducts = products.map((product) => {
-      const bestMatch = product.matchesAsUser[0];
-      const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : parseFloat(product.currentPrice.toString());
-      const yourPrice = parseFloat(product.currentPrice.toString());
-      const diff = yourPrice - compPrice;
+    // Aggregate stats
+    const stats = {
+      atRisk: 0,
+       optimal: 0,
+       parity: 0,
+    };
 
+    interface ProductWithStock {
+      id: string;
+      sku: string | null;
+      title: string;
+      currentPrice: any;
+      inStock: boolean;
+      stockLevel: number | null;
+      matchesAsUser: any[];
+      updatedAt: Date;
+    }
+
+    // Map to the format expected by the frontend
+    const formattedProducts = (products as unknown as ProductWithStock[]).map((product) => {
+      const bestMatch = product.matchesAsUser[0];
+      const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : 0;
+      const yourPrice = parseFloat(product.currentPrice.toString());
+
+      let diff = 0;
       let status = "NEUTRAL";
-      if (diff > 0) status = "RED"; // More expensive
-      if (diff < 0) status = "GREEN"; // Cheaper
+
+      if (compPrice > 0) {
+        diff = compPrice - yourPrice;
+        if (yourPrice > compPrice) {
+          status = "RED";
+          stats.atRisk++;
+        } else if (yourPrice < compPrice) {
+          status = "GREEN";
+          stats.optimal++;
+        } else {
+          status = "NEUTRAL";
+          stats.parity++;
+        }
+      } else {
+        stats.parity++;
+      }
 
       return {
         id: product.id,
         sku: product.sku || "N/A",
         title: product.title,
         yourPrice,
-        compPrice,
-        diff: -diff, // Frontend expects positive for "gain" (cheaper than rival) or negative for "loss"
+        compPrice: compPrice || yourPrice,
+        diff,
         status,
         match: bestMatch?.competitorProduct.site?.baseUrl || "Market",
-        stock: 10, // Mocking stock for now
+        stock: product.inStock ? (product.stockLevel || 24) : 0,
+        inStock: product.inStock,
       };
     });
 
-    return NextResponse.json(formattedProducts);
+    return NextResponse.json({
+      products: formattedProducts,
+      stats
+    });
   } catch (error) {
     console.error("Error fetching products:", error);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });

@@ -8,10 +8,31 @@ interface ScrapedProduct {
   brand?: string;
   model?: string;
   url: string;
+  inStock: boolean;
 }
 
 export class ScraperService {
   private browser: Browser | null = null;
+  private proxies: string[] = [];
+  private proxyIndex: number = 0;
+
+  constructor() {
+    const proxyEnv = process.env.SCRAPER_PROXIES;
+    if (proxyEnv) {
+      this.proxies = proxyEnv.split(',').map(p => p.trim()).filter(Boolean);
+      console.log(`[ScraperService] Initialized with ${this.proxies.length} proxies.`);
+    }
+  }
+
+  /**
+   * Get the next proxy in rotation
+   */
+  private getNextProxy(): string | null {
+    if (this.proxies.length === 0) return null;
+    const proxy = this.proxies[this.proxyIndex];
+    this.proxyIndex = (this.proxyIndex + 1) % this.proxies.length;
+    return proxy;
+  }
 
   /**
    * Initialize the browser instance
@@ -41,7 +62,16 @@ export class ScraperService {
   async scrapeProductPage(url: string): Promise<ScrapedProduct | null> {
     await this.init();
 
-    const page = await this.browser!.newPage();
+    const proxyUrl = this.getNextProxy();
+    const contextOptions: Parameters<Browser['newContext']>[0] = {};
+
+    if (proxyUrl) {
+      contextOptions.proxy = { server: proxyUrl };
+      console.log(`[ScraperService] Using proxy for ${url}: ${proxyUrl}`);
+    }
+
+    const context = await this.browser!.newContext(contextOptions);
+    const page = await context.newPage();
 
     try {
       // Navigate with timeout
@@ -81,6 +111,7 @@ export class ScraperService {
       return null;
     } finally {
       await page.close();
+      await context.close();
     }
   }
 
@@ -119,6 +150,9 @@ export class ScraperService {
         sku: jsonLd.sku || jsonLd.gtin || undefined,
         brand: jsonLd.brand?.name || jsonLd.brand || undefined,
         model: jsonLd.model || undefined,
+        inStock: jsonLd.offers?.availability?.includes('InStock') ||
+                jsonLd.offers?.[0]?.availability?.includes('InStock') ||
+                true,
       };
     } catch (error) {
       return null;
@@ -141,6 +175,7 @@ export class ScraperService {
           price: getMeta('product:price:amount') || getMeta('og:price:amount'),
           currency: getMeta('product:price:currency') || getMeta('og:price:currency'),
           brand: getMeta('product:brand'),
+          availability: getMeta('og:availability') || getMeta('product:availability') || getMeta('product:availability:status'),
         };
       });
 
@@ -151,6 +186,7 @@ export class ScraperService {
         price: parseFloat(ogData.price),
         currency: ogData.currency || 'USD',
         brand: ogData.brand || undefined,
+        inStock: ogData.availability !== 'oos' && ogData.availability !== 'out of stock' && ogData.availability !== 'instock' ? true : ogData.availability === 'instock',
       };
     } catch (error) {
       return null;
@@ -182,6 +218,14 @@ export class ScraperService {
           '.price-value',
         ];
 
+        // Common stock selectors
+        const oosSelectors = [
+          '.out-of-stock',
+          '.sold-out',
+          '.unavailable',
+          '.stock-out',
+        ];
+
         const getTextContent = (selectors: string[]) => {
           for (const selector of selectors) {
             const el = document.querySelector(selector);
@@ -195,6 +239,7 @@ export class ScraperService {
         return {
           title: getTextContent(titleSelectors),
           priceText: getTextContent(priceSelectors),
+          isOos: oosSelectors.some(s => document.querySelector(s) !== null),
         };
       });
 
@@ -210,6 +255,7 @@ export class ScraperService {
         title: data.title,
         price,
         currency: 'USD', // Default assumption
+        inStock: !data.isOos,
       };
     } catch (error) {
       return null;

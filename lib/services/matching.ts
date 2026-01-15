@@ -2,6 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { MatchType } from "@prisma/client";
 import { compareTwoStrings } from "string-similarity";
 
+interface LiteProduct {
+  id: string;
+  sku: string | null;
+  brand: string | null;
+  model: string | null;
+  title: string;
+}
+
 /**
  * Advanced Product Matching Service
  * Uses multi-pass strategy: SKU → Brand/Model → Semantic Similarity
@@ -11,6 +19,17 @@ export class MatchingService {
   private static readonly HIGH_CONFIDENCE = 0.9;
   private static readonly MEDIUM_CONFIDENCE = 0.75;
   private static readonly LOW_CONFIDENCE = 0.6;
+
+  // Common e-commerce noise to strip during matching
+  private static readonly NOISE_WORDS = [
+    "new", "hot", "deal", "cheap", "best", "sale", "official",
+    "original", "fast", "shipping", "free", "discount", "promo"
+  ];
+
+  private static readonly COLORS = [
+    "red", "blue", "green", "black", "white", "yellow", "orange",
+    "purple", "grey", "gray", "silver", "gold", "pink", "navy", "maroon"
+  ];
 
   /**
    * Run matching logic for a specific tenant
@@ -36,7 +55,7 @@ export class MatchingService {
     const matchesCreated = [];
 
     for (const up of userProducts) {
-      const match = await this.findBestMatch(up, competitorProducts);
+      const match = await this.findBestMatch(up as LiteProduct, competitorProducts as LiteProduct[]);
 
       if (match) {
         matchesCreated.push(
@@ -59,13 +78,14 @@ export class MatchingService {
    * Find the best match for a user product
    */
   private static async findBestMatch(
-    userProduct: any,
-    competitorProducts: any[]
-  ): Promise<{ product: any; type: MatchType; confidence: number } | null> {
+    userProduct: LiteProduct,
+    competitorProducts: LiteProduct[]
+  ): Promise<{ product: LiteProduct; type: MatchType; confidence: number } | null> {
     // Pass 1: Exact SKU Match (Highest Confidence)
-    if (userProduct.sku) {
+    const userSku = userProduct.sku;
+    if (userSku) {
       const skuMatch = competitorProducts.find(
-        (cp) => cp.sku && cp.sku.toLowerCase() === userProduct.sku.toLowerCase()
+        (cp) => cp.sku && cp.sku.toLowerCase() === userSku.toLowerCase()
       );
       if (skuMatch) {
         return {
@@ -120,18 +140,36 @@ export class MatchingService {
     const normalized1 = this.normalizeTitle(title1);
     const normalized2 = this.normalizeTitle(title2);
 
-    return compareTwoStrings(normalized1, normalized2);
+    const words1 = new Set(normalized1.split(" "));
+    const words2 = new Set(normalized2.split(" "));
+
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+    const wordScore = intersection.size / union.size;
+
+    // 2. String similarity score (Dice's Coefficient)
+    const diceScore = compareTwoStrings(normalized1, normalized2);
+
+    // 3. Weighted average (Dice is better for typos, Jaccard better for word-set matches)
+    return (wordScore * 0.4) + (diceScore * 0.6);
   }
 
   /**
    * Normalize product title for comparison
    */
   private static normalizeTitle(title: string): string {
-    return title
+    let cleaned = title
       .toLowerCase()
-      .replace(/[^\w\s]/g, "") // Remove special characters
+      .replace(/[^\w\s]/g, " ") // Replace punctuation with space
       .replace(/\s+/g, " ") // Normalize whitespace
       .trim();
+
+    // Strip common noise words and colors
+    const words = cleaned.split(" ").filter(word => {
+      return !this.NOISE_WORDS.includes(word) && !this.COLORS.includes(word);
+    });
+
+    return words.join(" ");
   }
 
   /**

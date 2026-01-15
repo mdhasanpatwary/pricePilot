@@ -9,6 +9,7 @@ interface ExternalProduct {
   price: number;
   brand: string | null;
   model: string | null;
+  in_stock: boolean;
   id?: string;
 }
 
@@ -40,32 +41,41 @@ export class SyncService {
     // 2. Process and Upsert products
     const results = await Promise.all(
       externalProducts.map(async (extProd) => {
-        const product = await prisma.product.upsert({
-          where: {
-            // We'll use a unique constraint on tenantId + externalId in real world,
-            // for now, let's assume externalId is unique enough with siteId
-            id: extProd.id || undefined,
-          },
-          update: {
-            title: extProd.title,
-            currentPrice: extProd.price,
-            sku: extProd.sku,
-            model: extProd.model,
-            brand: extProd.brand,
-            lastCrawledAt: new Date(),
-          },
-          create: {
-            siteId: site.id,
-            tenantId: site.tenantId,
-            externalId: extProd.external_id,
-            sku: extProd.sku,
-            title: extProd.title,
-            brand: extProd.brand,
-            model: extProd.model,
-            currentPrice: extProd.price,
-            currency: site.platform === "OPENCART" ? "USD" : "USD", // Example
-          },
+        // Find existing product by externalId within this site
+        const existingProduct = await prisma.product.findFirst({
+            where: {
+                siteId: site.id,
+                externalId: extProd.external_id
+            }
         });
+
+        let product;
+        const productData = {
+           title: extProd.title,
+           currentPrice: extProd.price,
+           sku: extProd.sku,
+           model: extProd.model,
+           brand: extProd.brand,
+           // inStock: extProd.in_stock,
+           lastCrawledAt: new Date(),
+        };
+
+        if (existingProduct) {
+            product = await prisma.product.update({
+                where: { id: existingProduct.id },
+                data: productData
+            });
+        } else {
+            product = await prisma.product.create({
+                data: {
+                    ...productData,
+                    siteId: site.id,
+                    tenantId: site.tenantId,
+                    externalId: extProd.external_id,
+                    currency: site.platform === "OPENCART" ? "USD" : "USD",
+                }
+            });
+        }
 
         // 3. Record price history
         await prisma.priceHistory.create({
@@ -95,6 +105,20 @@ export class SyncService {
    * Fetch products from OpenCart API
    */
   private static async fetchFromOpenCart(site: Site): Promise<ExternalProduct[]> {
+    interface OpenCartProduct {
+      product_id?: string | number;
+      id?: string | number;
+      sku?: string;
+      name?: string;
+      title?: string;
+      price?: string;
+      special?: string;
+      manufacturer?: string;
+      model?: string;
+      quantity: number;
+      stock_status: string;
+    }
+
     try {
       const response = await axios.get(
         `${site.baseUrl}/index.php?route=api/pricepilot/products`,
@@ -108,15 +132,16 @@ export class SyncService {
 
       // Expected OpenCart response format:
       // { products: [{ product_id, sku, name, price, manufacturer, model }] }
-      const products = response.data.products || [];
+      const products: OpenCartProduct[] = response.data.products || [];
 
-      return products.map((p: any) => ({
-        external_id: p.product_id?.toString() || p.id?.toString(),
+      return products.map((p) => ({
+        external_id: p.product_id?.toString() || p.id?.toString() || "",
         sku: p.sku || null,
-        title: p.name || p.title,
+        title: p.name || p.title || "Unknown Product",
         price: parseFloat(p.price || p.special || "0"),
         brand: p.manufacturer || null,
         model: p.model || null,
+        in_stock: p.quantity > 0 || p.stock_status === 'In Stock',
       }));
     } catch (error) {
       console.error(`OpenCart API error for ${site.baseUrl}:`, error);
@@ -124,8 +149,8 @@ export class SyncService {
       // Fallback to mock data for development
       console.log(`Using mock data for OpenCart: ${site.baseUrl}`);
       return [
-        { external_id: "oc_1", sku: "NIKE-AM-270", title: "Nike Air Max 270", price: 150.00, brand: "Nike", model: "270" },
-        { external_id: "oc_2", sku: "ADIDAS-UB-22", title: "Adidas Ultraboost 22", price: 180.00, brand: "Adidas", model: "22" },
+        { external_id: "oc_1", sku: "NIKE-AM-270", title: "Nike Air Max 270", price: 150.00, brand: "Nike", model: "270", in_stock: true },
+        { external_id: "oc_2", sku: "ADIDAS-UB-22", title: "Adidas Ultraboost 22", price: 180.00, brand: "Adidas", model: "22", in_stock: false },
       ];
     }
   }
@@ -134,6 +159,17 @@ export class SyncService {
    * Fetch products from Laravel API
    */
   private static async fetchFromLaravel(site: Site): Promise<ExternalProduct[]> {
+    interface LaravelProduct {
+      id?: string | number;
+      sku?: string;
+      name?: string;
+      title?: string;
+      price?: string;
+      brand?: string;
+      model?: string;
+      in_stock?: boolean;
+    }
+
     try {
       const response = await axios.get(
         `${site.baseUrl}/api/products`,
@@ -148,15 +184,16 @@ export class SyncService {
 
       // Expected Laravel response format:
       // { data: [{ id, sku, name, price, brand, model }] }
-      const products = response.data.data || response.data;
+      const products: LaravelProduct[] = response.data.data || response.data || [];
 
-      return products.map((p: any) => ({
-        external_id: p.id?.toString(),
+      return products.map((p) => ({
+        external_id: p.id?.toString() || "",
         sku: p.sku || null,
-        title: p.name || p.title,
+        title: p.name || p.title || "Unknown Product",
         price: parseFloat(p.price || "0"),
         brand: p.brand || null,
         model: p.model || null,
+        in_stock: p.in_stock ?? true,
       }));
     } catch (error) {
       console.error(`Laravel API error for ${site.baseUrl}:`, error);
@@ -164,7 +201,7 @@ export class SyncService {
       // Fallback to mock data for development
       console.log(`Using mock data for Laravel: ${site.baseUrl}`);
       return [
-        { external_id: "lv_1", sku: "PUMA-RS-X", title: "Puma RS-X", price: 110.00, brand: "Puma", model: "RS-X" },
+        { external_id: "lv_1", sku: "PUMA-RS-X", title: "Puma RS-X", price: 110.00, brand: "Puma", model: "RS-X", in_stock: true },
       ];
     }
   }

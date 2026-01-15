@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   // Still check if the user is a super admin in the DB before allowing code verification
-  if (!session || !(session.user as any).isSuperAdmin) {
+  if (!session || !session.user.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

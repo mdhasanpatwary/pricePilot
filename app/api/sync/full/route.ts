@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = (session.user as any).tenantId;
+  const tenantId = session.user.tenantId;
 
   try {
     const result = await SyncOrchestrator.runFullSync(tenantId);

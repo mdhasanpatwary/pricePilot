@@ -10,7 +10,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
-  if (!session || !(session.user as any).isSuperAdmin) {
+  if (!session || !session.user.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

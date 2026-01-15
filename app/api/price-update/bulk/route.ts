@@ -28,11 +28,12 @@ export async function POST(req: NextRequest) {
       message: "Price updates completed",
       ...result
     });
-  } catch (error: any) {
-    console.error("Execution error:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Execution error:", err);
     return NextResponse.json({
       error: "Failed to execute price updates",
-      details: error.message
+      details: err.message
     }, { status: 500 });
   }
 }

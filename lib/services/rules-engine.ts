@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { PricingRule, StrategyType } from "@prisma/client";
+import { WebhookService } from "./webhook";
 
 interface PriceRecommendation {
   productId: string;
@@ -58,7 +59,13 @@ export class RulesEngine {
    * Evaluate a single product against all rules
    */
   private static async evaluateProduct(
-    product: any,
+    product: {
+      id: string;
+      currentPrice: any; // Decimal type from Prisma
+      matchesAsUser: any[];
+      sku: string | null;
+      title: string;
+    },
     rules: PricingRule[]
   ): Promise<PriceRecommendation | null> {
     const currentPrice = parseFloat(product.currentPrice.toString());
@@ -70,10 +77,11 @@ export class RulesEngine {
     }
 
     const competitorPrice = parseFloat(bestMatch.competitorProduct.currentPrice.toString());
+    const competitorIsOutOfStock = !bestMatch.competitorProduct.inStock;
 
     // Apply rules in priority order
     for (const rule of rules) {
-      const result = this.applyRule(rule, currentPrice, competitorPrice);
+      const result = this.applyRule(rule, currentPrice, competitorPrice, competitorIsOutOfStock);
 
       if (result) {
         return {
@@ -95,9 +103,10 @@ export class RulesEngine {
   private static applyRule(
     rule: PricingRule,
     currentPrice: number,
-    competitorPrice: number
+    competitorPrice: number,
+    competitorIsOutOfStock: boolean = false
   ): { price: number; reason: string } | null {
-    switch (rule.strategy) {
+    switch (rule.strategy as any) {
       case "UNDERCUT":
         // Always be cheaper by a fixed amount
         const undercutAmount = parseFloat(rule.parameter.toString());
@@ -165,6 +174,18 @@ export class RulesEngine {
           };
         }
         break;
+
+      case "INVENTORY_HIKE":
+        // Increase price if competitor is out of stock
+        if (competitorIsOutOfStock) {
+          const hike = parseFloat(rule.parameter.toString());
+          const hikedPrice = currentPrice * (1 + hike / 100);
+          return {
+            price: hikedPrice,
+            reason: `Competitor is Out of Stock. Increasing price by ${hike}%`,
+          };
+        }
+        break;
     }
 
     return null;
@@ -181,7 +202,7 @@ export class RulesEngine {
 
     for (const rec of recommendations) {
       try {
-        await prisma.product.update({
+        const product = await prisma.product.update({
           where: { id: rec.productId },
           data: {
             currentPrice: rec.recommendedPrice,
@@ -195,6 +216,17 @@ export class RulesEngine {
             productId: rec.productId,
             price: rec.recommendedPrice,
           },
+        });
+
+        // Dispatch webhook
+        await WebhookService.dispatch(product.tenantId, "price.updated", {
+          productId: product.id,
+          sku: product.sku,
+          title: product.title,
+          oldPrice: rec.currentPrice,
+          newPrice: rec.recommendedPrice,
+          reason: rec.reason,
+          timestamp: new Date().toISOString()
         });
 
         updated++;
