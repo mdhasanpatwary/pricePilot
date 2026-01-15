@@ -35,6 +35,10 @@ jest.mock('@/lib/prisma', () => ({
       create: jest.fn(),
       findFirst: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
+    },
+    tenant: {
+      findUnique: jest.fn(),
     },
   },
 }));
@@ -176,6 +180,11 @@ describe('/api/integrations', () => {
         tenantId: 'test-tenant-123',
       };
 
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
+        id: 'test-tenant-123',
+        storeLimit: 5,
+      });
+      (prisma.site.count as jest.Mock).mockResolvedValue(1);
       (prisma.site.create as jest.Mock).mockResolvedValue(mockSite);
 
       const req = {

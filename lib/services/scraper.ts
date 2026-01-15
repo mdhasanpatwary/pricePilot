@@ -71,7 +71,9 @@ export class ScraperService {
         return { ...cssData, url };
       }
 
-      console.warn(`Failed to scrape product from ${url}`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn(`Failed to scrape product from ${url}`);
+      }
       return null;
 
     } catch (error) {

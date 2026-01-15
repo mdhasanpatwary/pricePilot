@@ -6,6 +6,119 @@ datasource db {
   provider = "postgresql"
 }
 
+model Tenant {
+  id              String        @id @default(uuid())
+  companyName     String
+  planType        PlanType      @default(BASIC)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  competitorLimit Int           @default(3)
+  storeLimit      Int           @default(1)
+  pricingRules    PricingRule[]
+  products        Product[]
+  sites           Site[]
+  users           User[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(ADMIN)
+  tenantId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  isSuperAdmin Boolean  @default(false)
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Site {
+  id         String       @id @default(uuid())
+  tenantId   String
+  type       SiteType
+  platform   PlatformType @default(GENERIC)
+  baseUrl    String
+  apiToken   String?
+  lastSyncAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  products   Product[]
+  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+}
+
+model Product {
+  id                  String           @id @default(uuid())
+  siteId              String
+  tenantId            String
+  externalId          String?
+  sku                 String?
+  url                 String?
+  title               String
+  brand               String?
+  model               String?
+  currentPrice        Decimal          @db.Decimal(10, 2)
+  currency            String           @default("USD")
+  lastCrawledAt       DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  priceHistory        PriceHistory[]
+  updateLogs          PriceUpdateLog[]
+  site                Site             @relation(fields: [siteId], references: [id])
+  tenant              Tenant           @relation(fields: [tenantId], references: [id])
+  matchesAsCompetitor ProductMatch[]   @relation("CompetitorProduct")
+  matchesAsUser       ProductMatch[]   @relation("UserProduct")
+
+  @@index([sku])
+  @@index([tenantId])
+}
+
+model ProductMatch {
+  id                  String    @id @default(uuid())
+  userProductId       String
+  competitorProductId String
+  matchType           MatchType @default(AUTO_SKU)
+  confidenceScore     Decimal   @db.Decimal(5, 2)
+  createdAt           DateTime  @default(now())
+  competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id])
+  userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id])
+}
+
+model PriceHistory {
+  id         String   @id @default(uuid())
+  productId  String
+  price      Decimal  @db.Decimal(10, 2)
+  recordedAt DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model PriceUpdateLog {
+  id           String       @id @default(uuid())
+  productId    String
+  oldPrice     Decimal      @db.Decimal(10, 2)
+  newPrice     Decimal      @db.Decimal(10, 2)
+  logicType    LogicType
+  status       UpdateStatus @default(SUCCESS)
+  errorDetails String?
+  executedAt   DateTime     @default(now())
+  product      Product      @relation(fields: [productId], references: [id])
+}
+
+model PricingRule {
+  id          String       @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  strategy    StrategyType
+  parameter   Decimal      @db.Decimal(10, 2)
+  priority    Int          @default(1)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
 enum PlanType {
   BASIC
   PREMIUM
@@ -25,12 +138,12 @@ enum SiteType {
 enum PlatformType {
   OPENCART
   LARAVEL
+  GENERIC
   SHOPIFY
   WOOCOMMERCE
   MAGENTO
   PRESTASHOP
   BIGCOMMERCE
-  GENERIC
 }
 
 enum MatchType {
@@ -49,126 +162,10 @@ enum UpdateStatus {
   FAILED
 }
 
-model Tenant {
-  id              String    @id @default(uuid())
-  companyName     String
-  planType        PlanType  @default(BASIC)
-  storeLimit      Int       @default(1)
-  competitorLimit Int       @default(3)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  users           User[]
-  sites           Site[]
-  products        Product[]
-  pricingRules    PricingRule[]
-}
-
-model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  passwordHash String
-  role         Role      @default(ADMIN)
-  isSuperAdmin Boolean   @default(false)
-  tenantId     String
-  tenant       Tenant    @relation(fields: [tenantId], references: [id])
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-}
-
-model Site {
-  id         String       @id @default(uuid())
-  tenantId   String
-  tenant     Tenant       @relation(fields: [tenantId], references: [id])
-  type       SiteType
-  platform   PlatformType @default(GENERIC)
-  baseUrl    String
-  apiToken   String?
-  lastSyncAt DateTime?
-  products   Product[]
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-}
-
-model Product {
-  id              String        @id @default(uuid())
-  siteId          String
-  site            Site          @relation(fields: [siteId], references: [id])
-  tenantId        String
-  tenant          Tenant        @relation(fields: [tenantId], references: [id])
-  externalId      String?       // ID from OpenCart/Laravel
-  sku             String?
-  url             String?       // Product page URL (for competitors)
-  title           String
-  brand           String?
-  model           String?
-  currentPrice    Decimal       @db.Decimal(10, 2)
-  currency        String        @default("USD")
-  lastCrawledAt   DateTime?
-  priceHistory    PriceHistory[]
-  updateLogs      PriceUpdateLog[]
-
-  // Relations for matching
-  matchesAsUser       ProductMatch[] @relation("UserProduct")
-  matchesAsCompetitor ProductMatch[] @relation("CompetitorProduct")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([sku])
-  @@index([tenantId])
-}
-
-model ProductMatch {
-  id                  String    @id @default(uuid())
-  userProductId       String
-  userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id])
-  competitorProductId String
-  competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id])
-  matchType           MatchType @default(AUTO_SKU)
-  confidenceScore     Decimal   @db.Decimal(5, 2)
-  createdAt           DateTime  @default(now())
-}
-
-model PriceHistory {
-  id        String   @id @default(uuid())
-  productId String
-  product   Product  @relation(fields: [productId], references: [id])
-  price     Decimal  @db.Decimal(10, 2)
-  recordedAt DateTime @default(now())
-}
-
-model PriceUpdateLog {
-  id           String       @id @default(uuid())
-  productId    String
-  product      Product      @relation(fields: [productId], references: [id])
-  oldPrice     Decimal      @db.Decimal(10, 2)
-  newPrice     Decimal      @db.Decimal(10, 2)
-  logicType    LogicType
-  status       UpdateStatus @default(SUCCESS)
-  errorDetails String?
-  executedAt   DateTime     @default(now())
-}
-
 enum StrategyType {
   UNDERCUT
   MATCH
   MARGIN_LOCK
   THRESHOLD
   PERCENTAGE
-}
-
-model PricingRule {
-  id          String       @id @default(uuid())
-  tenantId    String
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  name        String
-  description String?
-  strategy    StrategyType
-  parameter   Decimal      @db.Decimal(10, 2)
-  priority    Int          @default(1)
-  isActive    Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-
-  @@index([tenantId])
 }

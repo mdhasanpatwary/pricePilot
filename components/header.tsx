@@ -16,6 +16,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -147,7 +148,13 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 <p className="text-[10px] text-muted-foreground uppercase font-black mt-1">Admin</p>
               </div>
               <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-sm group-hover:border-primary/30 transition-all">
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${session?.user?.email || 'User'}`} alt="User" className="w-full h-full object-cover" />
+                <Image
+                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${session?.user?.email || 'User'}`}
+                  alt="User"
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-cover"
+                />
               </div>
               <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-300", isProfileOpen && "rotate-180")} />
             </div>

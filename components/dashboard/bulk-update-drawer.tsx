@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 const bulkUpdateSchema = z.object({
@@ -44,7 +44,7 @@ export default function BulkUpdateDrawer({
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<BulkUpdateFormValues>({
     resolver: zodResolver(bulkUpdateSchema),
@@ -54,8 +54,8 @@ export default function BulkUpdateDrawer({
     }
   });
 
-  const logicType = watch("logicType");
-  const value = watch("value");
+  const logicType = useWatch({ control, name: "logicType" }) || "FIXED";
+  const value = useWatch({ control, name: "value" }) || 0;
 
   const onSubmit = async (data: BulkUpdateFormValues) => {
     setLoading(true);

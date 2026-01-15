@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AnnouncementBanner from "@/components/announcement-banner";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -138,6 +139,15 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+      {/* Announcement Banner */}
+      <AnnouncementBanner
+        id="laravel-integration-launch"
+        message="🎉 Laravel Integration Now Available! Download the package and connect your Laravel store to PricePilot."
+        ctaText="Get Started"
+        ctaLink="/dashboard/integrations/laravel"
+        variant="success"
+      />
+
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

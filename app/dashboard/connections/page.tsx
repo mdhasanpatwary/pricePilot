@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Plus, Link2, ExternalLink, Trash2, CheckCircle2, AlertCircle, Zap, Shield, Globe } from "lucide-react";
+import Link from "next/link";
+import { Plus, Link2, ExternalLink, Trash2, CheckCircle2, AlertCircle, Zap, Shield, Globe, Download, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -16,7 +17,7 @@ const platforms = [
   { id: "PRESTASHOP", name: "PrestaShop", icon: "/icons/platforms/prestashop.svg" },
   { id: "BIGCOMMERCE", name: "BigCommerce", icon: "/icons/platforms/bigcommerce.svg" },
   { id: "OPENCART", name: "OpenCart", icon: "/icons/platforms/opencart.svg" },
-  { id: "LARAVEL", name: "Laravel", icon: "/icons/platforms/laravel.png" },
+  { id: "LARAVEL", name: "Laravel", icon: "/icons/platforms/laravel.png", downloadUrl: "/dashboard/integrations/laravel" },
 ];
 
 const connectionSchema = z.object({
@@ -211,6 +212,25 @@ export default function ConnectionsPage() {
                   ))}
                 </div>
                 {errors.platform && <p className="text-xs text-destructive font-bold">{errors.platform.message}</p>}
+                {platforms.find(p => p.id === selectedPlatform)?.downloadUrl && (
+                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col gap-3">
+                    <div className="flex items-start gap-3">
+                      <Download className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-bold text-primary">Integration Package Required</p>
+                        <p className="text-xs font-semibold text-primary/70 leading-relaxed uppercase tracking-tight">
+                          To connect Laravel, you first need to download and install our integration package on your store.
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href={platforms.find(p => p.id === selectedPlatform)!.downloadUrl!}
+                      className="text-[10px] font-black uppercase tracking-tighter bg-primary text-primary-foreground px-4 py-2 rounded flex items-center justify-center gap-2 hover:opacity-90 transition-all self-start"
+                    >
+                      Go to Download & Instructions <ArrowUpRight className="w-3 h-3" />
+                    </Link>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
@@ -248,7 +268,7 @@ export default function ConnectionsPage() {
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-start gap-2.5 mt-2">
                        <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                        <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
-                         Required only for automated price updates. You can find this in your store&apos;s admin panel after installing the PricePilot extension.
+                         This must match the API token configured in your store&apos;s integration settings or .env file (e.g., PRICEPILOT_API_TOKEN for Laravel).
                        </p>
                     </div>
                   </div>

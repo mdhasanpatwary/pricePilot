@@ -199,7 +199,9 @@ export class RulesEngine {
 
         updated++;
       } catch (error) {
-        console.error(`Failed to update product ${rec.productId}:`, error);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error(`Failed to update product ${rec.productId}:`, error);
+        }
         failed++;
       }
     }
