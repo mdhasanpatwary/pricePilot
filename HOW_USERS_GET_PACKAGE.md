@@ -195,12 +195,21 @@ Installation complete! 🚀
 ### Step 3: User Connects
 
 ```
-User → PricePilot Dashboard → Integrations → Connect Store
-  Platform: Laravel
+User → PricePilot Dashboard → Integration Page (e.g., OpenCart/Laravel) → Click "Go back and Connect Store"
+User → Connections Page → Click "Connect Store"
+  Platform: Laravel / OpenCart
   Store URL: https://mystore.com
   API Token: abc123def456...xyz789
   → Click "Verify & Connect"
 ```
+
+### Step 4: Navigation Flow
+
+We have implemented a seamless flow for users:
+1. **Connections Page**: User selects platform.
+2. **Integration Page**: User downloads package, following steps 1-4.
+3. **Step 5 / Bottom CTA**: A clear "Go back and Connect Store" button leads them back to the connections flow.
+4. **Header Link**: A "&larr; Back to Connections" link is provided in the header for easy return.
 
 ### Step 4: Connection Verified
 

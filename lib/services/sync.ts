@@ -39,8 +39,8 @@ export class SyncService {
     }
 
     // 2. Process and Upsert products
-    const results = await Promise.all(
-      externalProducts.map(async (extProd) => {
+    const results = [];
+    for (const extProd of externalProducts) {
         // Find existing product by externalId within this site
         const existingProduct = await prisma.product.findFirst({
             where: {
@@ -72,7 +72,7 @@ export class SyncService {
                     siteId: site.id,
                     tenantId: site.tenantId,
                     externalId: extProd.external_id,
-                    currency: site.platform === "OPENCART" ? "USD" : "USD",
+                    currency: "USD",
                 }
             });
         }
@@ -85,9 +85,8 @@ export class SyncService {
           },
         });
 
-        return product;
-      })
-    );
+        results.push(product);
+    }
 
     // 4. Update last sync time
     await prisma.site.update({
@@ -121,11 +120,8 @@ export class SyncService {
 
     try {
       const response = await axios.get(
-        `${site.baseUrl}/index.php?route=api/pricepilot/products`,
+        `${site.baseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`,
         {
-          headers: {
-            Authorization: `Bearer ${site.apiToken}`,
-          },
           timeout: 30000,
         }
       );
@@ -172,11 +168,11 @@ export class SyncService {
 
     try {
       const response = await axios.get(
-        `${site.baseUrl}/api/products`,
+        `${site.baseUrl}/api/pricepilot/sync`,
         {
           headers: {
-            Authorization: `Bearer ${site.apiToken}`,
-            Accept: "application/json",
+            'X-PricePilot-Token': site.apiToken,
+            'Accept': "application/json",
           },
           timeout: 30000,
         }
@@ -254,21 +250,19 @@ export class SyncService {
   private static async updateOpenCartPrice(site: Site, product: Product) {
     // This is a placeholder for actual API call
     // In real OpenCart PicePilot extension, we would call a specific route
-    const url = `${site.baseUrl}/index.php?route=api/pricepilot/update_price`;
+    const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${site.apiToken}`;
 
     try {
       await axios.post(url, {
         product_id: product.externalId,
-        sku: product.sku,
         price: product.currentPrice.toString(),
       }, {
-        headers: { Authorization: `Bearer ${site.apiToken}` },
         timeout: 10000,
       });
       return true;
     } catch (error) {
-      console.log(`OpenCart Update Mock Success for ${product.id}`);
-      return true; // Return true as mock
+      console.error(`OpenCart Update Error for ${product.id}:`, error);
+      return false;
     }
   }
 
@@ -276,22 +270,23 @@ export class SyncService {
    * Update price in Laravel
    */
   private static async updateLaravelPrice(site: Site, product: Product) {
-    const url = `${site.baseUrl}/api/products/${product.externalId}/update-price`;
+    const url = `${site.baseUrl}/api/pricepilot/update`;
 
     try {
-      await axios.put(url, {
+      await axios.post(url, {
+        product_id: product.externalId,
         price: product.currentPrice.toString(),
       }, {
         headers: {
-          Authorization: `Bearer ${site.apiToken}`,
-          Accept: "application/json"
+          'X-PricePilot-Token': site.apiToken,
+          'Accept': "application/json"
         },
         timeout: 10000,
       });
       return true;
     } catch (error) {
-      console.log(`Laravel Update Mock Success for ${product.id}`);
-      return true; // Return true as mock
+      console.error(`Laravel Update Error for ${product.id}:`, error);
+      return false;
     }
   }
 }

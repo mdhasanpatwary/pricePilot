@@ -159,15 +159,23 @@ PRICEPILOT_API_TOKEN=your-secure-random-token-here
 
 > **Generate token**: Use `openssl rand -base64 32` or `php -r "echo bin2hex(random_bytes(32));"`
 
-#### Connect to PricePilot
+6. Follow the on-page instructions to download, install, and get your API token.
+7. Use the "Go back and Connect Store" button to return to the connections page.
+8. Click **Verify & Connect** to finalize the link.
 
-1. Go to **Dashboard → Integrations**
-2. Click **Connect Store**
-3. Select **Laravel** platform
-4. Enter your store details:
-   - **Store Base URL**: `https://yourstore.com`
-   - **Secure API Token**: The token from your `.env` file
-5. Click **Verify & Connect**
+#### OpenCart Integration
+
+**Connecting Your Store**
+
+1. Log in to Your PricePilot account.
+2. Navigate to **Dashboard &rarr; Integrations &rarr; OpenCart**.
+3. Click **Download OpenCart Extension** to get the `.ocmod.zip` package.
+4. Follow the installation steps on that page.
+5. Once your API token is generated in your OpenCart sidebar, return to the **Connections** page.
+6. Enter your Store URL and API Token.
+7. Click **Verify & Connect**.
+
+For technical details, see the OpenCart section below.
 
 #### How It Works
 
@@ -205,12 +213,16 @@ Example configuration:
 For detailed customization options, see the [Laravel Integration README](integrations/laravel/README.md).
 
 
-### WooCommerce Integration
+### PHP Platform Integrations (OpenCart & Laravel)
 
-1. Install the PricePilot plugin from WordPress admin
-2. Navigate to **WooCommerce → Settings → PricePilot**
-3. Generate an API token
-4. Enter the token in PricePilot dashboard
+For custom PHP platforms like OpenCart and Laravel, we provide dedicated integration packages.
+
+**Flow Overview:**
+1. **Initiate**: Click "Download" from the Connections page.
+2. **Download & Install**: Follow the step-by-step guide on the specific integration page.
+3. **Connect**: Use the provided "Back to Connections" link or bottom action button to return and enter your credentials.
+
+> **Pro Tip**: Use the **Copy API Token** button in the OpenCart admin to ensure accuracy when connecting.
 
 ### Shopify Integration
 

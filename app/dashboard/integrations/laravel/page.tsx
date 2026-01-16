@@ -43,6 +43,11 @@ export default function LaravelIntegrationPage() {
             <Package className="w-6 h-6 text-primary" />
           </div>
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <a href="/dashboard/connections" className="text-sm font-medium text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
+                &larr; Back to Connections
+              </a>
+            </div>
             <h1 className="text-3xl font-bold tracking-tight">Laravel Integration</h1>
             <p className="text-muted-foreground">Connect your Laravel e-commerce store to PricePilot</p>
           </div>
@@ -153,15 +158,28 @@ export default function LaravelIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Connect Your Store</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to Integrations → Connect Store → Select Laravel → Enter your store URL and API token
+                    Go to <b>Integrations &rarr; Connect Store</b>, select <b>Laravel</b>, then enter your store URL and the API token you copied.
                   </p>
                   <a
                     href="/dashboard/connections"
                     className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline"
                   >
-                    Go to Integrations
+                    Go back and Connect Store
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-success/20 flex items-center justify-center text-success font-bold text-sm">
+                  5
+                </div>
+                <div className="space-y-2 flex-1">
+                  <h3 className="font-bold text-sm text-success">Verify Connection</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Click &quot;Connect Store&quot; on the connections page. PricePilot will verify your token and start syncing your products.
+                  </p>
                 </div>
               </div>
             </div>
@@ -301,6 +319,25 @@ export default function LaravelIntegrationPage() {
             </a>
           </div>
         </div>
+      </div>
+
+      {/* Final Action */}
+      <div className="bg-primary/5 border border-primary/20 rounded-xl p-8 flex flex-col items-center text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center">
+          <CheckCircle2 className="w-8 h-8 text-success" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">Ready to Connect?</h2>
+          <p className="text-muted-foreground max-w-md mx-auto">
+            Once you have installed the package and have your API token, you are ready to link your store.
+          </p>
+        </div>
+        <a 
+          href="/dashboard/connections"
+          className="bg-primary text-primary-foreground px-8 py-3 rounded-full font-bold hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20"
+        >
+          Go Back & Connect Store Now
+        </a>
       </div>
     </div>
   );

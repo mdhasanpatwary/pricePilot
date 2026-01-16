@@ -34,7 +34,7 @@ class InstallCommand extends Command
         // Publish configuration
         $this->call('vendor:publish', [
             '--provider' => 'PricePilot\LaravelClient\PricePilotServiceProvider',
-            '--tag' => 'config'
+            '--tag' => 'pricepilot-config'
         ]);
 
         // Generate API token if not exists

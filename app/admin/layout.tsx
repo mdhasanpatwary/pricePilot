@@ -15,7 +15,9 @@ import {
   X,
   Lock,
   Activity,
-  Menu
+  Menu,
+  ArrowLeft,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Header from "@/components/header";
@@ -27,6 +29,11 @@ const adminMenuItems = [
   { icon: Database, label: "Scraper Status", href: "/admin/scrapers" },
   { icon: Globe, label: "Global Config", href: "/admin/config" },
   { icon: Settings, label: "System Settings", href: "/admin/settings" },
+];
+
+const secondaryMenuItems = [
+  { icon: ArrowLeft, label: "Back to Dashboard", href: "/dashboard" },
+  { icon: FileText, label: "Documentation", href: "/docs" },
 ];
 
 function AdminSidebar({
@@ -68,6 +75,18 @@ function AdminSidebar({
               "w-4 h-4",
               pathname === item.href ? "text-foreground" : "text-muted-foreground"
             )} />
+            <span>{item.label}</span>
+          </Link>
+        ))}
+
+        <div className="mt-6 mb-2 px-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Quick Links</div>
+        {secondaryMenuItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          >
+            <item.icon className="w-4 h-4 text-muted-foreground" />
             <span>{item.label}</span>
           </Link>
         ))}
@@ -152,21 +171,21 @@ export default function AdminLayout({
     );
   }
 
-  if (!session || !(session.user as any).isSuperAdmin) {
+  if (!session) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-white dark:bg-zinc-950 text-center p-6 font-sans">
         <div className="w-12 h-12 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 mb-4">
           <Lock className="w-6 h-6" />
         </div>
-        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Access Denied</h1>
+        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Login Required</h1>
         <p className="text-sm text-zinc-500 max-w-sm mb-6">
-          You do not have permission to view this area.
+          Please login to your account to access the administrative area.
         </p>
         <button
-          onClick={() => router.push("/dashboard")}
+          onClick={() => router.push("/auth/login")}
           className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          Return to Dashboard
+          Go to Login
         </button>
       </div>
     );

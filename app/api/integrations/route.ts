@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { SyncService } from "@/lib/services/sync";
 
 /**
  * GET /api/integrations
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: site.id,
       platform: site.platform,
-      type: site.type,
+      type: site.platform,
       url: site.baseUrl,
       status: "CONNECTED",
     }, { status: 201 });

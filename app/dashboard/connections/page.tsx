@@ -16,7 +16,7 @@ const platforms = [
   { id: "MAGENTO", name: "Magento", icon: "/icons/platforms/magento.png" },
   { id: "PRESTASHOP", name: "PrestaShop", icon: "/icons/platforms/prestashop.svg" },
   { id: "BIGCOMMERCE", name: "BigCommerce", icon: "/icons/platforms/bigcommerce.svg" },
-  { id: "OPENCART", name: "OpenCart", icon: "/icons/platforms/opencart.svg" },
+  { id: "OPENCART", name: "OpenCart", icon: "/icons/platforms/opencart.svg", downloadUrl: "/dashboard/integrations/opencart" },
   { id: "LARAVEL", name: "Laravel", icon: "/icons/platforms/laravel.png", downloadUrl: "/dashboard/integrations/laravel" },
 ];
 
@@ -33,6 +33,9 @@ export default function ConnectionsPage() {
   const [loading, setLoading] = useState(false);
   const [connections, setConnections] = useState<any[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(true);
+  const [successData, setSuccessData] = useState<{ name: string; platform: string; count: number } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [progressCount, setProgressCount] = useState(0);
 
   const {
     register,
@@ -86,8 +89,58 @@ export default function ConnectionsPage() {
       });
 
       if (res.ok) {
-        toast.success("Store connected successfully!");
-        setIsAdding(false);
+        const site = await res.json();
+        const siteId = site.id;
+        
+        setIsSyncing(true);
+        setProgressCount(0);
+
+        // Start polling for progress
+        const pollInterval = setInterval(async () => {
+          try {
+            const pollRes = await fetch("/api/integrations");
+            if (pollRes.ok) {
+              const currentSites = await pollRes.json();
+              const currentSite = currentSites.find((s: any) => s.id === siteId);
+              if (currentSite) {
+                // Animate count up to current detected count
+                setProgressCount(prev => {
+                  const target = currentSite.products;
+                  if (target > prev) return target;
+                  return prev;
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Polling error", e);
+          }
+        }, 1000);
+
+        // Trigger the actual sync
+        try {
+          const syncRes = await fetch("/api/integrations/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ siteId }),
+          });
+          
+          if (syncRes.ok) {
+            const syncData = await syncRes.json();
+            clearInterval(pollInterval);
+            setIsSyncing(false);
+            setSuccessData({
+              name: new URL(data.baseUrl).hostname,
+              platform: data.platform,
+              count: syncData.count || 0
+            });
+            toast.success("Store connected & synced!");
+          }
+        } catch (syncErr) {
+          clearInterval(pollInterval);
+          setIsSyncing(false);
+          toast.error("Sync failed, but store added.");
+        }
+
         reset();
         fetchConnections();
       } else {
@@ -200,7 +253,39 @@ export default function ConnectionsPage() {
                  <p className="text-sm text-muted-foreground">Select your platform and provide your access credentials.</p>
               </div>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {successData ? (
+                 <div className="py-10 flex flex-col items-center text-center space-y-6 animate-in zoom-in-95 duration-300">
+                    <div className="w-20 h-20 rounded-full bg-success/20 flex items-center justify-center">
+                       <CheckCircle2 className="w-10 h-10 text-success" />
+                    </div>
+                    <div className="space-y-2">
+                       <h4 className="text-2xl font-bold text-foreground">Connection Successful!</h4>
+                       <p className="text-muted-foreground">Your {successData.platform} store <b>{successData.name}</b> has been linked.</p>
+                    </div>
+                    
+                    <div className="bg-primary/5 rounded-xl p-6 w-full max-w-sm border border-primary/10">
+                       <div className="text-3xl font-black text-primary mb-1 animate-pulse">
+                         {isSyncing ? progressCount : successData.count}
+                       </div>
+                       <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                         {isSyncing ? "Scanning & Importing..." : "Products Imported"}
+                       </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setIsAdding(false);
+                        setSuccessData(null);
+                        setIsSyncing(false);
+                      }}
+                      disabled={isSyncing}
+                      className="bg-primary text-primary-foreground font-bold px-8 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-50"
+                    >
+                      {isSyncing ? "Please wait..." : "Continue to Dashboard"}
+                    </button>
+                 </div>
+               ) : (
+               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {platforms.map((p) => (
                     <button
@@ -318,7 +403,8 @@ export default function ConnectionsPage() {
                   </button>
                 </div>
               </form>
-           </div>
+               )}
+            </div>
 
            <div className="space-y-6 pt-2">
               <div className="flex items-start gap-3">
