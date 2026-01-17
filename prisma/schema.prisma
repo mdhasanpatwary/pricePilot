@@ -40,11 +40,26 @@ model Site {
   platform   PlatformType @default(GENERIC)
   baseUrl    String
   apiToken   String?
-  lastSyncAt DateTime?
-  createdAt  DateTime     @default(now())
+  lastSyncAt     DateTime?
+  isSyncing      Boolean      @default(false)
+  syncTotal      Int          @default(0)
+  syncProcessed  Int          @default(0)
+  syncLastAction String?
+  syncStartedAt  DateTime?
+  createdAt      DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
   products   Product[]
+  syncLogs   SyncLog[]
   tenant     Tenant       @relation(fields: [tenantId], references: [id])
+}
+
+model SyncLog {
+  id        String   @id @default(uuid())
+  siteId    String
+  message   String
+  level     String   @default("INFO")
+  createdAt DateTime @default(now())
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model Product {

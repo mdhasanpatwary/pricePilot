@@ -282,4 +282,63 @@ export class ScraperService {
 
     return results;
   }
+
+  /**
+   * Attempt to find and scrape a product on a site using a search query
+   */
+  async searchAndScrape(baseUrl: string, query: string): Promise<ScrapedProduct | null> {
+    await this.init();
+    const context = await this.browser!.newContext();
+    const page = await context.newPage();
+
+    try {
+      // 1. Build search URL based on site-specific patterns
+      const hostname = new URL(baseUrl).hostname.toLowerCase();
+      let searchUrl: string;
+      
+      if (hostname.includes('startech.com.bd')) {
+        // Startech uses: /product/search?search=QUERY
+        searchUrl = `${baseUrl.replace(/\/$/, '')}/product/search?search=${encodeURIComponent(query)}`;
+      } else if (hostname.includes('ryans.com')) {
+        // Ryans uses: /search?q=QUERY
+        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(query)}`;
+      } else {
+        // Default fallback pattern
+        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(query)}`;
+      }
+      
+      console.log(`[ScraperService] Searching: ${searchUrl}`);
+      
+      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await page.waitForTimeout(2000);
+
+      // 2. Look for links that might be products (heuristics)
+      const productLink = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('a'));
+        // Filter for links that might be product pages
+        const potentialProducts = links.filter(a => {
+          const href = a.href.toLowerCase();
+          const text = a.textContent?.toLowerCase() || '';
+          // Heuristic: URL contains 'product' or 'item' or the text is long and matches query-like words
+          return (href.includes('/product/') || href.includes('/p/') || href.includes('/item/')) && 
+                 text.length > 5;
+        });
+        
+        return potentialProducts[0]?.href || null;
+      });
+
+      if (productLink) {
+        console.log(`[ScraperService] Found potential match: ${productLink}`);
+        return await this.scrapeProductPage(productLink);
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`[ScraperService] Search failed for ${query}:`, error);
+      return null;
+    } finally {
+      await page.close();
+      await context.close();
+    }
+  }
 }

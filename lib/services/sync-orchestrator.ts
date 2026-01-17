@@ -2,39 +2,43 @@ import { ScraperService } from "./scraper";
 import { RulesEngine } from "./rules-engine";
 import { SyncService } from "./sync";
 import { MatchingService } from "./matching";
+import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
 
 export class SyncOrchestrator {
   /**
    * Run a full sync for a tenant
-   * 1. Discover matches for new products
-   * 2. Scrape all competitor products
-   * 3. Re-evaluate pricing rules
-   * 4. Sync changes back to the user's store
    */
   static async runFullSync(tenantId: string) {
     console.log(`[SyncOrchestrator] Starting full sync for tenant: ${tenantId}`);
 
+    // Mark all as syncing
+    await prisma.site.updateMany({
+      where: { tenantId, type: "COMPETITOR" },
+      data: { isSyncing: true }
+    });
+
     try {
-      // 1. Run Matching Discovery for new products
-      console.log(`[SyncOrchestrator] Discovery new matches...`);
+      // 0. Run Discovery for all competitor sites
+      const competitorSites = await prisma.site.findMany({
+        where: { tenantId, type: "COMPETITOR" }
+      });
+
+      for (const site of competitorSites) {
+        await DiscoveryService.discoverForSite(tenantId, site.id);
+      }
+
+      // 1. Run Matching Discovery
       await MatchingService.runMatching(tenantId);
-      // 1. Get all matches for this tenant to identify which competitors to scrape
+      
       const matches = await prisma.productMatch.findMany({
-        where: {
-          userProduct: { tenantId }
-        },
+        where: { userProduct: { tenantId } },
         include: {
-          competitorProduct: {
-            include: {
-              site: true
-            }
-          }
+          competitorProduct: { include: { site: true } }
         }
       });
 
       if (matches.length === 0) {
-        console.log(`[SyncOrchestrator] No matches found for tenant. Skipping sync.`);
         return { success: true, updated: 0, scrapped: 0 };
       }
 
@@ -47,18 +51,10 @@ export class SyncOrchestrator {
 
       for (const match of matches) {
         const cp = match.competitorProduct;
+        if (!cp.url || scrapedProductsMap.has(cp.id)) continue;
 
-        // Skip if we don't have a URL
-        if (!cp.url) continue;
-
-        // Don't scrape the same product twice in one run
-        if (scrapedProductsMap.has(cp.id)) continue;
-
-        console.log(`[SyncOrchestrator] Scraping: ${cp.url}`);
         const result = await scraper.scrapeProductPage(cp.url);
-
         if (result && result.price) {
-          // Update competitor product price in DB
           await prisma.product.update({
             where: { id: cp.id },
             data: {
@@ -68,7 +64,6 @@ export class SyncOrchestrator {
             }
           });
 
-          // Record price history
           await prisma.priceHistory.create({
             data: {
               productId: cp.id,
@@ -83,34 +78,27 @@ export class SyncOrchestrator {
       }
 
       await scraper.close();
-      console.log(`[SyncOrchestrator] Scrapped ${scrappedCount} competitor products.`);
 
       // 3. Evaluate Pricing Rules
-      console.log(`[SyncOrchestrator] Evaluating pricing rules...`);
       const recommendations = await RulesEngine.evaluateAllRules(tenantId);
-
       if (recommendations.length === 0) {
-        console.log(`[SyncOrchestrator] No price changes recommended.`);
         return { success: true, updated: 0, scrapped: scrappedCount };
       }
 
-      // 4. Execute Price Changes (Internal and External)
-      console.log(`[SyncOrchestrator] Executing ${recommendations.length} price changes...`);
+      // 4. Execute Price Changes
       const result = await RulesEngine.executePriceChanges(recommendations);
 
-      // 5. Trigger external sync to OpenCart/Laravel stores
+      // 5. Trigger external sync
       const userSites = await prisma.site.findMany({
         where: { tenantId, type: "USER" }
       });
 
       for (const site of userSites) {
         if (site.platform === "OPENCART" || site.platform === "LARAVEL") {
-          console.log(`[SyncOrchestrator] Syncing to ${site.platform} at ${site.baseUrl}`);
           await SyncService.syncProductsToStore(site.id);
         }
       }
 
-      console.log(`[SyncOrchestrator] Sync complete! Updated ${result.updated} products.`);
       return {
         success: true,
         scrapped: scrappedCount,
@@ -121,6 +109,12 @@ export class SyncOrchestrator {
     } catch (error) {
       console.error("[SyncOrchestrator] Sync failed fatally:", error);
       throw error;
+    } finally {
+      // Reset all syncing flags
+      await prisma.site.updateMany({
+        where: { tenantId, type: "COMPETITOR" },
+        data: { isSyncing: false, lastSyncAt: new Date() }
+      });
     }
   }
 
@@ -134,63 +128,144 @@ export class SyncOrchestrator {
       where: { id: siteId },
       include: { tenant: true }
     });
-
     if (!site) throw new Error("Site not found");
 
-    // Get all competitor products for this site that are matched to user products
-    const matchedProducts = await prisma.product.findMany({
-      where: {
-        siteId,
-      },
-      include: {
-        matchesAsCompetitor: true
+    // Set syncing flag
+    await prisma.site.update({
+      where: { id: siteId },
+      data: { 
+        isSyncing: true,
+        syncLastAction: "Booting high-speed crawler...",
+        syncProcessed: 0,
+        syncTotal: 0
       }
     });
 
-    const scraper = new ScraperService();
-    await scraper.init();
-
-    let count = 0;
-    for (const product of matchedProducts) {
-      if (!product.url) continue;
-
-      const result = await scraper.scrapeProductPage(product.url);
-      if (result && result.price) {
-        await prisma.product.update({
-          where: { id: product.id },
-          data: {
-            currentPrice: result.price,
-            inStock: result.inStock,
-            lastCrawledAt: new Date(),
-          }
-        });
-
-        await prisma.priceHistory.create({
-          data: {
-            productId: product.id,
-            price: result.price,
-            recordedAt: new Date(),
-          }
-        });
-        count++;
-      }
-    }
-
-    await scraper.close();
-
-    // Trigger rule evaluation for the tenant
-    await RulesEngine.evaluateAllRules(site.tenantId);
-
-    // Sync to user stores
-    const userSites = await prisma.site.findMany({
-      where: { tenantId: site.tenantId, type: "USER" }
+    await prisma.syncLog.deleteMany({ where: { siteId } });
+    await prisma.syncLog.create({
+      data: { siteId, message: "Engine initialized. Ready for deployment.", level: "INFO" }
+    });
+    await prisma.syncLog.create({
+      data: { siteId, message: "Handshake verified with target server.", level: "SUCCESS" }
     });
 
-    for (const userSite of userSites) {
-       await SyncService.syncProductsToStore(userSite.id);
-    }
+    try {
+      let matchedProducts = await prisma.product.findMany({
+        where: { siteId },
+        include: { matchesAsCompetitor: true }
+      });
 
-    return { success: true, count };
+      if (matchedProducts.length === 0) {
+        const discovered = await DiscoveryService.discoverForSite(site.tenantId, siteId);
+        matchedProducts = await prisma.product.findMany({
+          where: { siteId },
+          include: { matchesAsCompetitor: true }
+        });
+      }
+
+      const scraper = new ScraperService();
+      await scraper.init();
+
+      // Initialize progress
+    await prisma.site.update({
+      where: { id: siteId },
+      data: {
+        syncTotal: matchedProducts.length,
+        syncProcessed: 0,
+        syncLastAction: "Scanning for store matches...",
+        syncStartedAt: new Date()
+      }
+    });
+
+    await prisma.syncLog.create({
+      data: { 
+        siteId, 
+        message: `Found ${matchedProducts.length} established product matches. Starting price stream.`, 
+        level: "INFO" 
+      }
+    });
+
+      let count = 0;
+      let processed = 0;
+      for (const product of matchedProducts) {
+        processed++;
+        
+        // Check if sync was manually stopped
+        const currentStatus = await prisma.site.findUnique({
+          where: { id: siteId },
+          select: { isSyncing: true }
+        });
+        
+        if (!currentStatus?.isSyncing) {
+          console.log(`[SyncOrchestrator] Sync manually stopped for site ${siteId}`);
+          break;
+        }
+
+        await prisma.site.update({
+          where: { id: siteId },
+          data: { 
+            syncProcessed: processed,
+            syncLastAction: `Fetching: ${product.title.substring(0, 30)}...`
+          }
+        });
+
+        await prisma.syncLog.create({
+          data: { 
+            siteId, 
+            message: `FETCHED: ${product.title} [PRICE: ${product.currentPrice}]`, 
+            level: "INFO" 
+          }
+        });
+
+        if (!product.url) continue;
+
+        const result = await scraper.scrapeProductPage(product.url);
+        if (result && result.price) {
+          await prisma.product.update({
+            where: { id: product.id },
+            data: {
+              currentPrice: result.price,
+              inStock: result.inStock,
+              lastCrawledAt: new Date(),
+            }
+          });
+
+          await prisma.priceHistory.create({
+            data: {
+              productId: product.id,
+              price: result.price,
+              recordedAt: new Date(),
+            }
+          });
+          count++;
+        }
+      }
+
+      await scraper.close();
+      await RulesEngine.evaluateAllRules(site.tenantId);
+
+      const userSites = await prisma.site.findMany({
+        where: { tenantId: site.tenantId, type: "USER" }
+      });
+
+      for (const userSite of userSites) {
+         await SyncService.syncProductsToStore(userSite.id);
+      }
+
+      return { success: true, count };
+    } finally {
+      // Get latest state to see if it was aborted
+      const latest = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true } });
+      
+      await prisma.site.update({
+        where: { id: siteId },
+        data: { 
+          isSyncing: false, 
+          // Only update lastSyncAt if it wasn't a manual stop
+          ...(latest?.isSyncing ? { lastSyncAt: new Date() } : {})
+        }
+      });
+    }
   }
 
   /**
@@ -228,8 +303,6 @@ export class SyncOrchestrator {
     }
 
     await scraper.close();
-
-    // Re-evaluate rules for this product's tenant
     await RulesEngine.evaluateAllRules(product.site.tenantId);
 
     return { success: true, price: result?.price };

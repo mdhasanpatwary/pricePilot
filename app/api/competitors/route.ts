@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -22,6 +22,10 @@ export async function GET(req: NextRequest) {
         _count: {
           select: { products: true },
         },
+        syncLogs: {
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -29,24 +33,47 @@ export async function GET(req: NextRequest) {
     });
 
     const formattedCompetitors = competitors.map((site) => {
-      const hostname = new URL(site.baseUrl).hostname;
-      const cleanHostname = hostname.replace(/^www\./, "");
-      const name = cleanHostname.split(".")[0];
+      try {
+        let name = "Unknown";
+        try {
+          const urlObj = new URL(site.baseUrl.startsWith('http') ? site.baseUrl : `https://${site.baseUrl}`);
+          const hostname = urlObj.hostname;
+          const cleanHostname = hostname.replace(/^www\./, "");
+          const parts = cleanHostname.split(".");
+          const rawName = parts.length > 1 ? parts[0] : cleanHostname;
+          name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+        } catch (e) {
+          console.error(`Invalid baseUrl for site ${site.id}: ${site.baseUrl}`);
+        }
 
-      return {
-        id: site.id,
-        name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
-        url: site.baseUrl,
-        products: site._count.products,
-        status: site.lastSyncAt ? "ACTIVE" : "PENDING",
-        health: 100, // Mocking health
-      };
-    });
+        return {
+          id: site.id,
+          name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
+          url: site.baseUrl,
+          products: site._count.products,
+          status: site.isSyncing ? "SYNCING" : (site._count.products > 0 ? "ACTIVE" : (site.lastSyncAt ? "NO MATCHES" : "PENDING")),
+          health: site._count.products > 0 ? 100 : 0,
+          isSyncing: site.isSyncing,
+          syncTotal: site.syncTotal,
+          syncProcessed: site.syncProcessed,
+          syncLastAction: site.syncLastAction,
+          syncStartedAt: site.syncStartedAt,
+          logs: site.syncLogs || [],
+        };
+      } catch (e) {
+        console.error(`Error formatting site ${site.id}:`, e);
+        return null;
+      }
+    }).filter(Boolean);
 
     return NextResponse.json(formattedCompetitors);
   } catch (error) {
     console.error("Error fetching competitors:", error);
-    return NextResponse.json({ error: "Failed to fetch competitors" }, { status: 500 });
+    if (error instanceof Error) {
+      console.error("Message:", error.message);
+      console.error("Stack:", error.stack);
+    }
+    return NextResponse.json({ error: "Failed to fetch competitors", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
 

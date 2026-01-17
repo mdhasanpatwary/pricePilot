@@ -24,4 +24,10 @@ export interface Competitor {
   products: number;
   status: string;
   health: number;
+  isSyncing?: boolean;
+  syncTotal?: number;
+  syncProcessed?: number;
+  syncLastAction?: string | null;
+  syncStartedAt?: string | Date | null;
+  logs?: any[];
 }
