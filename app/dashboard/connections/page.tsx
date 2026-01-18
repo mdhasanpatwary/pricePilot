@@ -91,7 +91,7 @@ export default function ConnectionsPage() {
       if (res.ok) {
         const site = await res.json();
         const siteId = site.id;
-        
+
         setIsSyncing(true);
         setProgressCount(0);
 
@@ -123,7 +123,7 @@ export default function ConnectionsPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ siteId }),
           });
-          
+
           if (syncRes.ok) {
             const syncData = await syncRes.json();
             clearInterval(pollInterval);
@@ -262,7 +262,7 @@ export default function ConnectionsPage() {
                        <h4 className="text-2xl font-bold text-foreground">Connection Successful!</h4>
                        <p className="text-muted-foreground">Your {successData.platform} store <b>{successData.name}</b> has been linked.</p>
                     </div>
-                    
+
                     <div className="bg-primary/5 rounded-xl p-6 w-full max-w-sm border border-primary/10">
                        <div className="text-3xl font-black text-primary mb-1 animate-pulse">
                          {isSyncing ? progressCount : successData.count}
@@ -461,6 +461,10 @@ export default function ConnectionsPage() {
                     {conn.url}
                     <ExternalLink className="w-3 h-3" />
                   </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Products:</span>
+                    <span className="text-sm font-bold text-primary">{conn.products || 0}</span>
+                  </div>
                 </div>
               </div>
 

@@ -246,6 +246,7 @@ export default function PriceReportPage() {
                     {selectedItems.length === filteredData.length && <Check className="w-3 h-3 text-primary-foreground" />}
                   </div>
                 </th>
+                <th className="py-4 px-6 w-16 text-center">SL</th>
                 <th className="py-4 px-6 min-w-[280px]">Product / SKU</th>
                 <th className="py-4 px-6">Your Price</th>
                 <th className="py-4 px-6">Competitor</th>
@@ -257,17 +258,17 @@ export default function PriceReportPage() {
             <tbody className="text-sm font-medium">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center text-muted-foreground animate-pulse">
+                  <td colSpan={8} className="py-20 text-center text-muted-foreground animate-pulse">
                     Loading your catalog...
                   </td>
                 </tr>
               ) : filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center text-muted-foreground">
+                  <td colSpan={8} className="py-20 text-center text-muted-foreground">
                     No products found.
                   </td>
                 </tr>
-              ) : filteredData.map((item) => (
+              ) : filteredData.map((item, index) => (
                 <tr
                   key={item.id}
                   onClick={() => setSelectedProduct(item)}
@@ -288,6 +289,9 @@ export default function PriceReportPage() {
                     >
                       {selectedItems.includes(item.id) && <Check className="w-3 h-3 text-primary-foreground" />}
                     </div>
+                  </td>
+                  <td className="py-4 px-6 text-center">
+                    <span className="text-xs font-bold text-muted-foreground">{index + 1}</span>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-3">

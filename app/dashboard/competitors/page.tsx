@@ -22,6 +22,7 @@ export default function CompetitorsPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncingSiteId, setSyncingSiteId] = useState<string | null>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll console to bottom when logs update
@@ -59,15 +60,19 @@ export default function CompetitorsPage() {
 
   // Polling for active syncs
   const syncingKey = useMemo(() => competitors.map(c => c.isSyncing).join(','), [competitors]);
+  const hasActiveSync = useMemo(() => competitors.some(c => c.isSyncing), [competitors]);
 
   useEffect(() => {
-    const activeSync = competitors.some(c => c.isSyncing);
-    if (!activeSync) return;
+    if (!hasActiveSync) {
+      // Clear syncing state when all syncs are complete
+      setSyncingSiteId(null);
+      return;
+    }
     const interval = setInterval(() => {
       fetchCompetitors(true);
     }, 2000);
     return () => clearInterval(interval);
-  }, [syncingKey, fetchCompetitors, competitors]);
+  }, [hasActiveSync, fetchCompetitors]);
 
   const onSubmit = async (data: CompetitorFormValues) => {
     setLoading(true);
@@ -95,6 +100,21 @@ export default function CompetitorsPage() {
   };
 
   const handleSyncSite = async (id: string) => {
+    // Prevent duplicate sync attempts
+    if (syncingSiteId === id) {
+      return;
+    }
+
+    // Check if already syncing
+    const competitor = competitors.find(c => c.id === id);
+    if (competitor?.isSyncing) {
+      toast.info("Sync is already in progress for this site");
+      return;
+    }
+
+    // Set syncing state to prevent double clicks
+    setSyncingSiteId(id);
+
     // 1. Optimistically update UI to start polling immediately
     setCompetitors(prev => prev.map(c =>
       c.id === id ? { ...c, isSyncing: true, status: 'SYNCING' } : c
@@ -109,20 +129,27 @@ export default function CompetitorsPage() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to start sync");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to start sync");
       }
 
       const result = await res.json();
 
       if (result.success) {
         toast.success("Sync started successfully. Monitoring progress...");
+      } else {
+        throw new Error(result.error || "Sync failed to start");
       }
 
       // Polling will handle the rest of the updates
     } catch (error) {
       // Revert state if request failed
-      toast.error("Failed to start sync");
-      fetchCompetitors(true);
+      const errorMessage = error instanceof Error ? error.message : "Failed to start sync";
+      toast.error(errorMessage);
+
+      // Fetch fresh data to revert optimistic update
+      await fetchCompetitors(true);
+      setSyncingSiteId(null);
     }
   };
 
@@ -136,10 +163,19 @@ export default function CompetitorsPage() {
 
       if (res.ok) {
         toast.info("Crawler shutdown signal sent");
-        fetchCompetitors(true);
+        // Immediately update UI optimistically
+        setCompetitors(prev => prev.map(c =>
+          c.id === id ? { ...c, isSyncing: false, status: c.status === 'SYNCING' ? 'ACTIVE' : c.status } : c
+        ));
+        // Then fetch fresh data
+        await fetchCompetitors(true);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || "Failed to stop crawler");
       }
     } catch (error) {
-      toast.error("Failed to stop crawler");
+      const errorMessage = error instanceof Error ? error.message : "Failed to stop crawler";
+      toast.error(errorMessage);
     }
   };
 
@@ -472,9 +508,11 @@ export default function CompetitorsPage() {
                       <div className="flex items-center justify-end gap-2 text-muted-foreground">
                         <button
                           onClick={() => comp.isSyncing ? handleStopSync(comp.id) : handleSyncSite(comp.id)}
+                          disabled={syncingSiteId === comp.id || (comp.isSyncing && syncingSiteId !== null)}
                           className={cn(
                             "p-2 rounded-md transition-all group",
-                            comp.isSyncing ? "bg-danger/10 text-danger hover:bg-danger/20" : "hover:bg-primary/10 hover:text-primary"
+                            comp.isSyncing ? "bg-danger/10 text-danger hover:bg-danger/20" : "hover:bg-primary/10 hover:text-primary",
+                            (syncingSiteId === comp.id || (comp.isSyncing && syncingSiteId !== null)) && "opacity-50 cursor-not-allowed"
                           )}
                           title={comp.isSyncing ? "Stop Crawler" : "Force Sync"}
                         >

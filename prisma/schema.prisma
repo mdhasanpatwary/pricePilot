@@ -83,7 +83,7 @@ model Product {
   updatedAt           DateTime         @updatedAt
   priceHistory        PriceHistory[]
   updateLogs          PriceUpdateLog[]
-  site                Site             @relation(fields: [siteId], references: [id])
+  site                Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   tenant              Tenant           @relation(fields: [tenantId], references: [id])
   matchesAsCompetitor ProductMatch[]   @relation("CompetitorProduct")
   matchesAsUser       ProductMatch[]   @relation("UserProduct")
@@ -99,8 +99,8 @@ model ProductMatch {
   matchType           MatchType @default(AUTO_SKU)
   confidenceScore     Decimal   @db.Decimal(5, 2)
   createdAt           DateTime  @default(now())
-  competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id])
-  userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id])
+  competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
+  userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id], onDelete: Cascade)
 }
 
 model PriceHistory {
@@ -108,7 +108,7 @@ model PriceHistory {
   productId  String
   price      Decimal  @db.Decimal(10, 2)
   recordedAt DateTime @default(now())
-  product    Product  @relation(fields: [productId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model PriceUpdateLog {
@@ -120,7 +120,7 @@ model PriceUpdateLog {
   status       UpdateStatus @default(SUCCESS)
   errorDetails String?
   executedAt   DateTime     @default(now())
-  product      Product      @relation(fields: [productId], references: [id])
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model PricingRule {

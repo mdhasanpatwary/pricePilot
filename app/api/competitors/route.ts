@@ -18,7 +18,21 @@ export async function GET(req: NextRequest) {
         tenantId,
         type: "COMPETITOR",
       },
-      include: {
+      select: {
+        id: true,
+        tenantId: true,
+        type: true,
+        platform: true,
+        baseUrl: true,
+        apiToken: true,
+        lastSyncAt: true,
+        isSyncing: true,
+        syncTotal: true,
+        syncProcessed: true,
+        syncLastAction: true,
+        syncStartedAt: true,
+        createdAt: true,
+        updatedAt: true,
         _count: {
           select: { products: true },
         },

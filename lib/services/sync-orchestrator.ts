@@ -130,7 +130,13 @@ export class SyncOrchestrator {
     });
     if (!site) throw new Error("Site not found");
 
-    // Set syncing flag
+    // Check if already syncing (double-check to prevent race conditions)
+    if (site.isSyncing) {
+      console.log(`[SyncOrchestrator] Site ${siteId} is already syncing, skipping duplicate request`);
+      return { success: true, skipped: true, message: "Sync already in progress" };
+    }
+
+    // Set syncing flag atomically
     await prisma.site.update({
       where: { id: siteId },
       data: {
