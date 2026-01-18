@@ -17,6 +17,36 @@ export async function GET(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
+    // Determine currency dynamically from integrated USER site products first,
+    // then fall back to Tenant.currency, then USD.
+    let currency = "USD";
+    try {
+      // Prefer the USER Site currency (most recently synced or created)
+      const userSite = await prisma.site.findFirst({
+        where: { tenantId, type: "USER" },
+        orderBy: [
+          { lastSyncAt: "desc" },
+          { createdAt: "desc" },
+        ],
+      });
+      if ((userSite as any)?.currency) {
+        currency = (userSite as any).currency;
+      } else {
+        const anyUserProduct = await prisma.product.findFirst({
+          where: { tenantId, site: { type: "USER" } },
+          select: { currency: true },
+          orderBy: { createdAt: "desc" },
+        });
+        if (anyUserProduct?.currency) {
+          currency = anyUserProduct.currency;
+        } else {
+          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          currency = (tenant as any)?.currency || "USD";
+        }
+      }
+    } catch {
+      // ignore and keep default USD
+    }
     // 1. Total SKUs (user products)
     const totalProducts = await prisma.product.count({
       where: {
@@ -58,8 +88,8 @@ export async function GET(req: NextRequest) {
     }, 0);
 
     const marketEdge = matches.length > 0
-      ? (totalDifference / matches.length).toFixed(2)
-      : "0.00";
+      ? Number((totalDifference / matches.length).toFixed(2))
+      : 0;
 
     // 5. Position Summary
     const cheapestCount = matches.filter((m) => {
@@ -86,7 +116,8 @@ export async function GET(req: NextRequest) {
         totalSKUs: totalProducts,
         activeRivals: activeCompetitors,
         criticalAlerts: atRiskCount,
-        marketEdge: `$${marketEdge}`,
+        marketEdge,
+        currency,
       },
       positionSummary: {
         cheapest: cheapestCount,

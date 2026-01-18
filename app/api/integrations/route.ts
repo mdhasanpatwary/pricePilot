@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: site.id,
       platform: site.platform,
-      type: site.platform,
+      type: site.type,
       url: site.baseUrl,
       status: "CONNECTED",
     }, { status: 201 });

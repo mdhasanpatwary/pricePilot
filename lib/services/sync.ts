@@ -41,51 +41,51 @@ export class SyncService {
     // 2. Process and Upsert products
     const results = [];
     for (const extProd of externalProducts) {
-        // Find existing product by externalId within this site
-        const existingProduct = await prisma.product.findFirst({
-            where: {
-                siteId: site.id,
-                externalId: extProd.external_id
-            }
-        });
-
-        let product;
-        const productData = {
-           title: extProd.title,
-           currentPrice: extProd.price,
-           sku: extProd.sku,
-           model: extProd.model,
-           brand: extProd.brand,
-           // inStock: extProd.in_stock,
-           lastCrawledAt: new Date(),
-        };
-
-        if (existingProduct) {
-            product = await prisma.product.update({
-                where: { id: existingProduct.id },
-                data: productData
-            });
-        } else {
-            product = await prisma.product.create({
-                data: {
-                    ...productData,
-                    siteId: site.id,
-                    tenantId: site.tenantId,
-                    externalId: extProd.external_id,
-                    currency: "USD",
-                }
-            });
+      // Find existing product by externalId within this site
+      const existingProduct = await prisma.product.findFirst({
+        where: {
+          siteId: site.id,
+          externalId: extProd.external_id
         }
+      });
 
-        // 3. Record price history
-        await prisma.priceHistory.create({
-          data: {
-            productId: product.id,
-            price: extProd.price,
-          },
+      let product;
+      const productData = {
+        title: extProd.title,
+        currentPrice: extProd.price,
+        sku: extProd.sku,
+        model: extProd.model,
+        brand: extProd.brand,
+        // inStock: extProd.in_stock,
+        lastCrawledAt: new Date(),
+      };
+
+      if (existingProduct) {
+        product = await prisma.product.update({
+          where: { id: existingProduct.id },
+          data: productData
         });
+      } else {
+        product = await prisma.product.create({
+          data: {
+            ...productData,
+            siteId: site.id,
+            tenantId: site.tenantId,
+            externalId: extProd.external_id,
+            currency: "USD",
+          }
+        });
+      }
 
-        results.push(product);
+      // 3. Record price history
+      await prisma.priceHistory.create({
+        data: {
+          productId: product.id,
+          price: extProd.price,
+        },
+      });
+
+      results.push(product);
     }
 
     // 4. Update last sync time

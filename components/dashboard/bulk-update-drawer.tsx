@@ -78,16 +78,16 @@ export default function BulkUpdateDrawer({
 
         <div className="p-10 border-b border-border flex items-center justify-between relative z-10 bg-background/30 backdrop-blur-xl">
           <div className="flex items-center gap-5">
-             <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-2xl shadow-primary/20 glow">
-                <Settings2 className="w-7 h-7 text-primary-foreground" />
-             </div>
-             <div className="space-y-0.5">
-                <h2 className="text-2xl font-black tracking-tight">Execution Engine</h2>
-                <div className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                   <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                   Queue: {selectedCount} Strategic Targets
-                </div>
-             </div>
+            <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-2xl shadow-primary/20 glow">
+              <Settings2 className="w-7 h-7 text-primary-foreground" />
+            </div>
+            <div className="space-y-0.5">
+              <h2 className="text-2xl font-black tracking-tight">Execution Engine</h2>
+              <div className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                Queue: {selectedCount} Strategic Targets
+              </div>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -113,10 +113,10 @@ export default function BulkUpdateDrawer({
                   )}
                 >
                   <div className={cn(
-                     "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 shadow-sm",
-                     logicType === "FIXED" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
+                    "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 shadow-sm",
+                    logicType === "FIXED" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
                   )}>
-                     <TrendingDown className="w-6 h-6" />
+                    <TrendingDown className="w-6 h-6" />
                   </div>
                   <div className="space-y-1">
                     <span className="font-black text-lg tracking-tight">Static Dip</span>
@@ -135,10 +135,10 @@ export default function BulkUpdateDrawer({
                   )}
                 >
                   <div className={cn(
-                     "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 shadow-sm",
-                     logicType === "PERCENTAGE" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
+                    "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 shadow-sm",
+                    logicType === "PERCENTAGE" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover/opt:text-primary"
                   )}>
-                     <ShieldCheck className="w-6 h-6" />
+                    <ShieldCheck className="w-6 h-6" />
                   </div>
                   <div className="space-y-1">
                     <span className="font-black text-lg tracking-tight">Index Scaler</span>
@@ -151,13 +151,13 @@ export default function BulkUpdateDrawer({
             <div className="space-y-8">
               <div className="space-y-4">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-1">
-                   {logicType === "FIXED" ? "Reduction Value ($)" : "Spread Intensity (%)"}
+                  {logicType === "FIXED" ? "Reduction Value ($)" : "Spread Intensity (%)"}
                 </label>
                 <div className="relative group">
-                   <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground group-focus-within:text-primary transition-colors">
-                      {logicType === "FIXED" ? "$" : "%"}
-                   </div>
-                   <input
+                  <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground group-focus-within:text-primary transition-colors">
+                    {logicType === "FIXED" ? "$" : "%"}
+                  </div>
+                  <input
                     {...register("value", { valueAsNumber: true })}
                     type="number"
                     step="0.01"
@@ -175,15 +175,15 @@ export default function BulkUpdateDrawer({
                 <div className="flex items-center justify-between ml-1">
                   <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Margin Lockdown</label>
                   <div className="flex items-center gap-1.5 px-3 py-1 bg-warning/10 border border-warning/20 rounded-full">
-                     <Lock className="w-2.5 h-2.5 text-warning" />
-                     <span className="text-[8px] text-warning font-black uppercase tracking-widest">Safety Valve</span>
+                    <Lock className="w-2.5 h-2.5 text-warning" />
+                    <span className="text-[8px] text-warning font-black uppercase tracking-widest">Safety Valve</span>
                   </div>
                 </div>
                 <div className="relative group">
-                   <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-xl text-muted-foreground group-focus-within:text-warning transition-colors">
-                      $
-                   </div>
-                   <input
+                  <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-xl text-muted-foreground group-focus-within:text-warning transition-colors">
+                    $
+                  </div>
+                  <input
                     {...register("minPrice", { valueAsNumber: true })}
                     type="number"
                     step="0.01"
@@ -200,16 +200,16 @@ export default function BulkUpdateDrawer({
           </div>
 
           <div className="bg-primary/5 border border-primary/10 rounded-[2rem] p-8 space-y-4 relative overflow-hidden group/alert">
-             <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-primary/10 rounded-full blur-2xl group-hover/alert:scale-150 transition-transform duration-700" />
-             <div className="flex items-center gap-3 text-primary">
-                <AlertTriangle className="w-5 h-5" />
-                <span className="text-xs font-black uppercase tracking-[0.2em]">Execution Summary</span>
-             </div>
-             <p className="text-sm text-muted-foreground font-medium leading-relaxed">
-                You are authorizing <span className="text-foreground font-black">instant deployment</span> of price updates to your
-                synchronized storefront. This action will undercut <span className="text-foreground font-black">{selectedCount} rival positions</span> with a {logicType === "FIXED" ? "fixed drop" : "percentage spread"} of
-                <span className="text-primary font-black"> {logicType === "FIXED" ? `$${value}` : `${value}%`}</span>.
-             </p>
+            <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-primary/10 rounded-full blur-2xl group-hover/alert:scale-150 transition-transform duration-700" />
+            <div className="flex items-center gap-3 text-primary">
+              <AlertTriangle className="w-5 h-5" />
+              <span className="text-xs font-black uppercase tracking-[0.2em]">Execution Summary</span>
+            </div>
+            <p className="text-sm text-muted-foreground font-medium leading-relaxed">
+              You are authorizing <span className="text-foreground font-black">instant deployment</span> of price updates to your
+              synchronized storefront. This action will undercut <span className="text-foreground font-black">{selectedCount} rival positions</span> with a {logicType === "FIXED" ? "fixed drop" : "percentage spread"} of
+              <span className="text-primary font-black"> {logicType === "FIXED" ? `$${value}` : `${value}%`}</span>.
+            </p>
           </div>
         </form>
 
@@ -226,7 +226,7 @@ export default function BulkUpdateDrawer({
               <>
                 Confirm Execution
                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center transition-transform group-hover:translate-x-2">
-                   <ChevronRight className="w-6 h-6" />
+                  <ChevronRight className="w-6 h-6" />
                 </div>
               </>
             )}

@@ -8,7 +8,7 @@ export class DiscoveryService {
    */
   static async discoverForSite(tenantId: string, siteId: string) {
     console.log(`[DiscoveryService] Starting discovery for tenant ${tenantId} on site ${siteId}`);
-    
+
     const site = await prisma.site.findUnique({ where: { id: siteId } });
     if (!site) throw new Error("Site not found");
 
@@ -37,10 +37,17 @@ export class DiscoveryService {
     });
 
     await prisma.syncLog.create({
-      data: { 
-        siteId, 
-        message: `DISCOVERY_BOOT: Prepared ${userProducts.length} site targets for deep-scan.`, 
-        level: "INFO" 
+      data: {
+        siteId,
+        message: `🔬 DISCOVERY PHASE: Scanning ${userProducts.length} products across competitor catalog...`,
+        level: "INFO"
+      }
+    });
+    await prisma.syncLog.create({
+      data: {
+        siteId,
+        message: `🧠 Neural matching algorithm activated. Preparing semantic analysis...`,
+        level: "INFO"
       }
     });
 
@@ -61,17 +68,17 @@ export class DiscoveryService {
       // Update progress every product (or every few)
       await prisma.site.update({
         where: { id: siteId },
-        data: { 
+        data: {
           syncProcessed: processedCount,
           syncLastAction: `Searching: ${up.title.substring(0, 30)}...`
         }
       });
 
       await prisma.syncLog.create({
-        data: { 
-          siteId, 
-          message: `SEARCH_PHASE: Querying "${up.title.substring(0, 40)}${up.title.length > 40 ? '...' : ''}" on target domain.`, 
-          level: "INFO" 
+        data: {
+          siteId,
+          message: `🔎 [${processedCount}/${userProducts.length}] Searching: "${up.title.substring(0, 40)}${up.title.length > 40 ? '...' : ''}"`,
+          level: "INFO"
         }
       });
       // Skip if we already have a match for this product on this site
@@ -89,7 +96,7 @@ export class DiscoveryService {
 
       if (result) {
         await prisma.syncLog.create({
-          data: { siteId, message: `MATCH_FOUND: Found identity match for "${up.title.substring(0, 30)}..."`, level: "SUCCESS" }
+          data: { siteId, message: `✅ MATCH CONFIRMED: "${up.title.substring(0, 35)}..." → ৳${result.price} (${result.brand || 'Unknown'})`, level: "SUCCESS" }
         });
         // Create the product in our DB for this competitor
         const compProduct = await prisma.product.create({

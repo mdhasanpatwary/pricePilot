@@ -12,7 +12,7 @@ import {
   Activity,
   ChevronRight
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import AnnouncementBanner from "@/components/announcement-banner";
 import {
   ResponsiveContainer,
@@ -30,8 +30,9 @@ export default function DashboardOverview() {
     totalSKUs: "0",
     activeRivals: "0",
     criticalAlerts: "0",
-    marketEdge: "$0.00",
+    marketEdge: 0 as number,
   });
+  const [currency, setCurrency] = useState<string>("USD");
   const [positionSummary, setPositionSummary] = useState({
     cheapest: 0,
     nearCheapest: 0,
@@ -60,8 +61,9 @@ export default function DashboardOverview() {
           totalSKUs: data.stats.totalSKUs.toString(),
           activeRivals: data.stats.activeRivals.toString(),
           criticalAlerts: data.stats.criticalAlerts.toString(),
-          marketEdge: data.stats.marketEdge,
+          marketEdge: Number(data.stats.marketEdge || 0),
         });
+        if (data.stats.currency) setCurrency(data.stats.currency);
         setPositionSummary(data.positionSummary);
       } else {
         toast.error("Failed to load analytics");
@@ -124,7 +126,7 @@ export default function DashboardOverview() {
     { label: "Total SKUs Live", value: stats.totalSKUs, icon: Package, change: "+12%", trend: "up" },
     { label: "Active Rivals", value: stats.activeRivals, icon: ShoppingBag, change: "Stable", trend: "neutral" },
     { label: "Critical Alerts", value: stats.criticalAlerts, icon: TrendingDown, change: "-14%", trend: "down" },
-    { label: "Market Edge", value: stats.marketEdge, icon: Activity, change: "+2%", trend: "up" },
+    { label: "Market Edge", value: formatCurrency(Number(stats.marketEdge || 0), currency), icon: Activity, change: "+2%", trend: "up" },
   ];
 
   const positionData = [
@@ -186,8 +188,8 @@ export default function DashboardOverview() {
               <div className={cn(
                 "text-[10px] font-bold px-2 py-0.5 rounded-full border",
                 stat.trend === "up" ? "bg-success/5 text-success border-success/10" :
-                stat.trend === "down" ? "bg-danger/5 text-danger border-danger/10" :
-                "bg-muted text-muted-foreground border-border"
+                  stat.trend === "down" ? "bg-danger/5 text-danger border-danger/10" :
+                    "bg-muted text-muted-foreground border-border"
               )}>
                 {stat.change}
               </div>
@@ -262,8 +264,8 @@ export default function DashboardOverview() {
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorIndex" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />

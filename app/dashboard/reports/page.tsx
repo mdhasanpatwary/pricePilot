@@ -19,7 +19,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
 import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
 
@@ -32,6 +32,7 @@ export default function PriceReportPage() {
   const [data, setData] = useState<Product[]>([]);
   const [stats, setStats] = useState<Stats>({ atRisk: 0, optimal: 0, parity: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [currency, setCurrency] = useState<string>("USD");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [filterSegment, setFilterSegment] = useState<string>("ALL");
@@ -51,6 +52,7 @@ export default function PriceReportPage() {
       if (res.ok) {
         setData(result.products);
         setStats(result.stats);
+        if (result.currency) setCurrency(result.currency);
       } else {
         toast.error("Failed to load products");
       }
@@ -63,7 +65,7 @@ export default function PriceReportPage() {
 
   const filteredData = data.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(search.toLowerCase()) ||
-                         item.sku.toLowerCase().includes(search.toLowerCase());
+      item.sku.toLowerCase().includes(search.toLowerCase());
 
     if (filterSegment === "ALL") return matchesSearch;
 
@@ -143,19 +145,19 @@ export default function PriceReportPage() {
               Sync {selectedItems.length} Products
             </button>
           )}
-           <button
-             onClick={handleExport}
-             className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2"
-           >
+          <button
+            onClick={handleExport}
+            className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2"
+          >
             <Download className="w-4 h-4" />
             Export
           </button>
 
           <label className="bg-primary/5 text-primary text-sm font-semibold px-4 py-2 rounded-md border border-primary/10 hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer transition-all active:scale-95">
             {isImporting ? (
-               <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             ) : (
-               <Filter className="w-4 h-4 rotate-180" />
+              <Filter className="w-4 h-4 rotate-180" />
             )}
             Import
             <input type="file" className="hidden" accept=".csv" onChange={handleImport} disabled={isImporting} />
@@ -177,51 +179,51 @@ export default function PriceReportPage() {
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-           <div className="flex items-center gap-1.5 p-1 bg-muted/30 border border-border rounded-lg whitespace-nowrap">
-             <button
-               onClick={() => setFilterSegment("ALL")}
-               className={cn(
-                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
-                 filterSegment === "ALL" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-               )}
-             >
-               All
-             </button>
-             <button
-               onClick={() => setFilterSegment("CHEAPEST")}
-               className={cn(
-                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                 filterSegment === "CHEAPEST" ? "bg-success/10 text-success shadow-sm" : "text-muted-foreground hover:text-foreground"
-               )}
-             >
-               <div className="w-1.5 h-1.5 rounded-full bg-success" />
-               Cheapest ({stats.optimal})
-             </button>
-             <button
-               onClick={() => setFilterSegment("MATCHED")}
-               className={cn(
-                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                 filterSegment === "MATCHED" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-               )}
-             >
-               <div className="w-1.5 h-1.5 rounded-full bg-border" />
-               Matched ({stats.parity})
-             </button>
-             <button
-               onClick={() => setFilterSegment("EXPENSIVE")}
-               className={cn(
-                 "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                 filterSegment === "EXPENSIVE" ? "bg-danger/10 text-danger shadow-sm" : "text-muted-foreground hover:text-foreground"
-               )}
-             >
-               <div className="w-1.5 h-1.5 rounded-full bg-danger" />
-               Expensive ({stats.atRisk})
-             </button>
-           </div>
+          <div className="flex items-center gap-1.5 p-1 bg-muted/30 border border-border rounded-lg whitespace-nowrap">
+            <button
+              onClick={() => setFilterSegment("ALL")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
+                filterSegment === "ALL" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilterSegment("CHEAPEST")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+                filterSegment === "CHEAPEST" ? "bg-success/10 text-success shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-success" />
+              Cheapest ({stats.optimal})
+            </button>
+            <button
+              onClick={() => setFilterSegment("MATCHED")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+                filterSegment === "MATCHED" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-border" />
+              Matched ({stats.parity})
+            </button>
+            <button
+              onClick={() => setFilterSegment("EXPENSIVE")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
+                filterSegment === "EXPENSIVE" ? "bg-danger/10 text-danger shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-danger" />
+              Expensive ({stats.atRisk})
+            </button>
+          </div>
 
-           <button className="p-2 bg-background border border-border rounded-md text-muted-foreground hover:text-foreground transition-all shrink-0">
-              <Filter className="w-4 h-4" />
-           </button>
+          <button className="p-2 bg-background border border-border rounded-md text-muted-foreground hover:text-foreground transition-all shrink-0">
+            <Filter className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -232,7 +234,7 @@ export default function PriceReportPage() {
             <thead>
               <tr className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                 <th className="py-4 px-6 w-12 text-center">
-                   <div
+                  <div
                     onClick={toggleSelectAll}
                     className={cn(
                       "w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer mx-auto",
@@ -246,7 +248,7 @@ export default function PriceReportPage() {
                 </th>
                 <th className="py-4 px-6 min-w-[280px]">Product / SKU</th>
                 <th className="py-4 px-6">Your Price</th>
-                <th className="py-4 px-6">Market</th>
+                <th className="py-4 px-6">Competitor</th>
                 <th className="py-4 px-6 text-center">Gap</th>
                 <th className="py-4 px-6 text-center">Status</th>
                 <th className="py-4 px-6 text-right">Actions</th>
@@ -289,62 +291,68 @@ export default function PriceReportPage() {
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-3">
-                       <div className={cn(
-                         "w-10 h-10 rounded-md flex items-center justify-center text-[10px] font-bold",
-                         item.stock === 0 ? "bg-danger/10 text-danger border border-danger/20" :
-                         item.stock < 10 ? "bg-warning/10 text-warning border border-warning/20" :
-                         "bg-muted border border-border text-muted-foreground"
-                       )}>
-                          {item.stock}
-                       </div>
-                       <div>
-                          <div className="text-foreground group-hover:text-primary transition-colors">{item.title}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight flex items-center gap-1.5 mt-0.5">
-                             {item.sku}
-                             <div className="w-1 h-1 rounded-full bg-border" />
-                             <span className={item.stock > 0 ? "text-success/70" : "text-danger/70"}>
-                               {item.stock > 0 ? "In Stock" : "Out of Stock"}
-                             </span>
-                          </div>
-                       </div>
+                      <div className={cn(
+                        "w-10 h-10 rounded-md flex items-center justify-center text-[10px] font-bold",
+                        item.stock === 0 ? "bg-danger/10 text-danger border border-danger/20" :
+                          item.stock < 10 ? "bg-warning/10 text-warning border border-warning/20" :
+                            "bg-muted border border-border text-muted-foreground"
+                      )}>
+                        {item.stock}
+                      </div>
+                      <div>
+                        <div className="text-foreground group-hover:text-primary transition-colors">{item.title}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight flex items-center gap-1.5 mt-0.5">
+                          {item.sku}
+                          <div className="w-1 h-1 rounded-full bg-border" />
+                          <span className={item.stock > 0 ? "text-success/70" : "text-danger/70"}>
+                            {item.stock > 0 ? "In Stock" : "Out of Stock"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td className="py-4 px-6">
-                    <span className="font-semibold">${item.yourPrice.toFixed(2)}</span>
+                    <span className="font-semibold">{formatCurrency(item.yourPrice, currency)}</span>
                   </td>
                   <td className="py-4 px-6 text-muted-foreground">
-                    <div className="flex items-center gap-1.5 font-semibold text-foreground">
-                       ${item.compPrice.toFixed(2)}
-                       <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    </div>
-                    <div className="text-[10px] font-medium flex items-center gap-1 mt-0.5 tracking-tight">
-                       via {item.match}
-                    </div>
+                    {item.compPrice !== null ? (
+                      <>
+                        <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                          {formatCurrency(item.compPrice, currency)}
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        </div>
+                        <div className="text-[10px] font-medium flex items-center gap-1 mt-0.5 tracking-tight">
+                          via {item.match ? new URL(item.match).hostname.replace('www.', '') : 'Unknown'}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/50 italic">N/A</span>
+                    )}
                   </td>
                   <td className="py-4 px-6 text-center">
                     <div className={cn(
                       "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border",
                       item.diff < 0 ? "bg-danger/5 text-danger border-danger/10" :
-                      item.diff > 0 ? "bg-success/5 text-success border-success/10" : "bg-muted text-muted-foreground border-border"
+                        item.diff > 0 ? "bg-success/5 text-success border-success/10" : "bg-muted text-muted-foreground border-border"
                     )}>
                       {item.diff < 0 ? <TrendingDown className="w-3 h-3" /> : item.diff > 0 ? <TrendingUp className="w-3 h-3" /> : <Activity className="w-3 h-3" />}
-                      {item.diff > 0 ? "+" : ""}{item.diff.toFixed(2)}
+                      {item.diff > 0 ? "+" : ""}{formatCurrency(Math.abs(item.diff), currency)}
                     </div>
                   </td>
                   <td className="py-4 px-6 text-center">
-                     <div className={cn(
-                       "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
-                       item.status === "RED" ? "bg-danger/10 text-danger border-danger/20" :
-                       item.status === "GREEN" ? "bg-success/10 text-success border-success/20" :
-                       "bg-muted text-muted-foreground border-border"
-                     )}>
-                       {item.status === "RED" ? "Underbid" : item.status === "GREEN" ? "Optimal" : "Parity"}
-                     </div>
+                    <div className={cn(
+                      "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                      item.status === "RED" ? "bg-danger/10 text-danger border-danger/20" :
+                        item.status === "GREEN" ? "bg-success/10 text-success border-success/20" :
+                          "bg-muted text-muted-foreground border-border"
+                    )}>
+                      {item.status === "RED" ? "Underbid" : item.status === "GREEN" ? "Optimal" : "Parity"}
+                    </div>
                   </td>
                   <td className="py-4 px-6 text-right">
-                     <button className="p-2 hover:bg-muted rounded-md text-muted-foreground transition-all">
-                        <MoreVertical className="w-4 h-4" />
-                     </button>
+                    <button className="p-2 hover:bg-muted rounded-md text-muted-foreground transition-all">
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -360,12 +368,12 @@ export default function PriceReportPage() {
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div className="flex items-center gap-1">
-             {[1, 2, 3].map(p => (
-                <button key={p} className={cn(
-                   "w-8 h-8 rounded-md flex items-center justify-center transition-all text-sm",
-                   p === 1 ? "bg-primary text-primary-foreground font-bold shadow-sm" : "bg-background border border-border hover:bg-muted text-foreground"
-                )}>{p}</button>
-             ))}
+            {[1, 2, 3].map(p => (
+              <button key={p} className={cn(
+                "w-8 h-8 rounded-md flex items-center justify-center transition-all text-sm",
+                p === 1 ? "bg-primary text-primary-foreground font-bold shadow-sm" : "bg-background border border-border hover:bg-muted text-foreground"
+              )}>{p}</button>
+            ))}
           </div>
           <button className="p-2 hover:text-foreground transition-colors">
             <ChevronRight className="w-4 h-4" />
@@ -391,6 +399,7 @@ export default function PriceReportPage() {
         isOpen={!!selectedProduct}
         onClose={() => setSelectedProduct(null)}
         product={selectedProduct}
+        currency={currency}
         onExecute={async (id) => {
           await new Promise(resolve => setTimeout(resolve, 1500));
           toast.success("Pilot adjustment applied successfully");

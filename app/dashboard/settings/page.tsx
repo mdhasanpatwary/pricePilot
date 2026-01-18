@@ -48,6 +48,8 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState("general");
   const [isSaving, setIsSaving] = useState(false);
+  const [detectedCurrency, setDetectedCurrency] = useState<string>("USD");
+  const [isLoadingCurrency, setIsLoadingCurrency] = useState<boolean>(false);
 
   const {
     register: registerGeneral,
@@ -71,6 +73,23 @@ export default function SettingsPage() {
       });
     }
   }, [session, resetGeneral]);
+
+  useEffect(() => {
+    const fetchCurrency = async () => {
+      setIsLoadingCurrency(true);
+      try {
+        const res = await fetch("/api/analytics/summary");
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.stats?.currency) setDetectedCurrency(data.stats.currency);
+        }
+      } catch (e) {
+      } finally {
+        setIsLoadingCurrency(false);
+      }
+    };
+    fetchCurrency();
+  }, []);
 
   const {
     register: registerSecurity,
@@ -233,6 +252,12 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                <div className="space-y-2 p-4 rounded-md border border-border bg-muted/20">
+                  <div className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Detected Currency</div>
+                  <div className="text-sm font-semibold">{isLoadingCurrency ? "Loading..." : detectedCurrency}</div>
+                  <div className="text-[12px] text-muted-foreground">Derived from your integrated store configuration. This value is not editable.</div>
+                </div>
+
                 <div className="pt-4 border-t border-border">
                   <button
                     type="submit"
@@ -320,16 +345,16 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="p-4 rounded-xl border border-border bg-muted/20 flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-background border border-border">
-                         <Smartphone className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                         <p className="text-sm font-bold">Two-Factor Authentication</p>
-                         <p className="text-xs text-muted-foreground">Add an extra layer of security to your account.</p>
-                      </div>
-                   </div>
-                   <button type="button" className="text-xs font-bold text-primary hover:underline">Enable</button>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-background border border-border">
+                      <Smartphone className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">Two-Factor Authentication</p>
+                      <p className="text-xs text-muted-foreground">Add an extra layer of security to your account.</p>
+                    </div>
+                  </div>
+                  <button type="button" className="text-xs font-bold text-primary hover:underline">Enable</button>
                 </div>
 
                 <div className="pt-4 border-t border-border">
@@ -374,20 +399,20 @@ export default function SettingsPage() {
                               <Zap className="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                               <p className="text-sm font-bold truncate max-w-[200px]">{webhook.url}</p>
-                               <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[10px] font-bold text-success uppercase">Active</span>
-                                  <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">Secret: {webhook.secret ? "••••••••" : "None"}</span>
-                               </div>
+                              <p className="text-sm font-bold truncate max-w-[200px]">{webhook.url}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] font-bold text-success uppercase">Active</span>
+                                <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">Secret: {webhook.secret ? "••••••••" : "None"}</span>
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                             <button
-                                onClick={() => handleDeleteWebhook(webhook.id)}
-                                className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                             >
-                                <Trash2 className="w-4 h-4" />
-                             </button>
+                            <button
+                              onClick={() => handleDeleteWebhook(webhook.id)}
+                              className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))
@@ -419,19 +444,19 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3 pt-2">
-                       <button
-                         onClick={handleAddWebhook}
-                         disabled={isSaving}
-                         className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-2 rounded-md hover:opacity-90 transition-all"
-                       >
-                         {isSaving ? "Adding..." : "Add Endpoint"}
-                       </button>
-                       <button
-                         onClick={() => setShowAddWebhook(false)}
-                         className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-2 rounded-md border border-border hover:bg-muted"
-                       >
-                         Cancel
-                       </button>
+                      <button
+                        onClick={handleAddWebhook}
+                        disabled={isSaving}
+                        className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-2 rounded-md hover:opacity-90 transition-all"
+                      >
+                        {isSaving ? "Adding..." : "Add Endpoint"}
+                      </button>
+                      <button
+                        onClick={() => setShowAddWebhook(false)}
+                        className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-2 rounded-md border border-border hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
                 )}
@@ -457,42 +482,42 @@ export default function SettingsPage() {
                             : "bg-background border-border hover:border-primary/50"
                         )}
                       >
-                         <div className="flex items-center gap-4">
-                            <div className={cn(
-                              "w-10 h-10 rounded-full flex items-center justify-center",
-                              plan.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                            )}>
-                               <Zap className="w-5 h-5" />
-                            </div>
-                            <div>
-                               <p className="text-sm font-bold">{plan.name}</p>
-                               <p className="text-xs text-muted-foreground">{plan.price} / month</p>
-                            </div>
-                         </div>
-                         <div className="flex items-center gap-6">
-                            <div className="hidden md:flex items-center gap-4">
-                               {plan.features.slice(0, 2).map((f, j) => (
-                                 <div key={j} className="flex items-center gap-1.5">
-                                    <Check className="w-3 h-3 text-success" />
-                                    <span className="text-[10px] font-medium text-muted-foreground">{f}</span>
-                                 </div>
-                               ))}
-                            </div>
-                            {plan.active ? (
-                              <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Current Plan</span>
-                            ) : (
-                              <button className="text-xs font-bold text-muted-foreground hover:text-foreground">Upgrade</button>
-                            )}
-                         </div>
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            "w-10 h-10 rounded-full flex items-center justify-center",
+                            plan.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          )}>
+                            <Zap className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold">{plan.name}</p>
+                            <p className="text-xs text-muted-foreground">{plan.price} / month</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="hidden md:flex items-center gap-4">
+                            {plan.features.slice(0, 2).map((f, j) => (
+                              <div key={j} className="flex items-center gap-1.5">
+                                <Check className="w-3 h-3 text-success" />
+                                <span className="text-[10px] font-medium text-muted-foreground">{f}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {plan.active ? (
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Current Plan</span>
+                          ) : (
+                            <button className="text-xs font-bold text-muted-foreground hover:text-foreground">Upgrade</button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 space-y-3">
-                   <h4 className="text-sm font-bold text-destructive">Danger Zone</h4>
-                   <p className="text-xs text-muted-foreground">Once you cancel your subscription, you will lose access to all premium features at the end of your billing cycle.</p>
-                   <button className="text-xs font-bold text-destructive hover:underline">Cancel Subscription</button>
+                  <h4 className="text-sm font-bold text-destructive">Danger Zone</h4>
+                  <p className="text-xs text-muted-foreground">Once you cancel your subscription, you will lose access to all premium features at the end of your billing cycle.</p>
+                  <button className="text-xs font-bold text-destructive hover:underline">Cancel Subscription</button>
                 </div>
               </div>
             )}

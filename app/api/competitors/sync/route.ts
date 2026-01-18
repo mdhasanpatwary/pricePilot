@@ -21,9 +21,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Site ID is required" }, { status: 400 });
     }
 
-    const result = await SyncOrchestrator.syncSite(siteId);
+    // Run sync in background (don't await)
+    // This prevents API timeout and allows the frontend to poll for progress
+    SyncOrchestrator.syncSite(siteId).catch((error) => {
+      console.error(`[API] Background sync failed for site ${siteId}:`, error);
+    });
 
-    return NextResponse.json(result);
+    // Return immediately so the frontend can start polling
+    return NextResponse.json({
+      success: true,
+      message: "Sync started successfully",
+      siteId
+    });
   } catch (error) {
     const err = error as Error;
     console.error("Site sync failed:", err);

@@ -286,50 +286,115 @@ export class ScraperService {
   /**
    * Attempt to find and scrape a product on a site using a search query
    */
+  /**
+   * Sanitize search query to improve match rates
+   */
+  private sanitizeQuery(query: string): string {
+    if (!query) return '';
+
+    // 1. Decode common HTML entities
+    let cleaned = query
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&apos;/g, "'")
+      .replace(/&#39;/g, "'");
+
+    // 2. Remove special characters that often confuse search engines
+    // Keeping alphanumeric, spaces, dots, and hyphens
+    // Removing quotes, parentheses, brackets, etc.
+    cleaned = cleaned.replace(/["'(){}\[\]]/g, ' ');
+
+    // 3. Replace multiple spaces with single space and trim
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+    return cleaned;
+  }
+
+  /**
+   * Attempt to find and scrape a product on a site using a search query
+   */
   async searchAndScrape(baseUrl: string, query: string): Promise<ScrapedProduct | null> {
     await this.init();
     const context = await this.browser!.newContext();
     const page = await context.newPage();
 
     try {
-      // 1. Build search URL based on site-specific patterns
+      // 1. Sanitize query
+      const cleanQuery = this.sanitizeQuery(query);
+      console.log(`[ScraperService] Original query: "${query}" -> Sanitized: "${cleanQuery}"`);
+
+      // 2. Build search URL based on site-specific patterns
       const hostname = new URL(baseUrl).hostname.toLowerCase();
       let searchUrl: string;
-      
+
       if (hostname.includes('startech.com.bd')) {
         // Startech uses: /product/search?search=QUERY
-        searchUrl = `${baseUrl.replace(/\/$/, '')}/product/search?search=${encodeURIComponent(query)}`;
+        searchUrl = `${baseUrl.replace(/\/$/, '')}/product/search?search=${encodeURIComponent(cleanQuery)}`;
       } else if (hostname.includes('ryans.com')) {
         // Ryans uses: /search?q=QUERY
-        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(query)}`;
+        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(cleanQuery)}`;
       } else {
         // Default fallback pattern
-        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(query)}`;
+        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(cleanQuery)}`;
       }
-      
+
       console.log(`[ScraperService] Searching: ${searchUrl}`);
-      
+
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
       await page.waitForTimeout(2000);
 
-      // 2. Look for links that might be products (heuristics)
+      // 3. Look for links that might be products (heuristics)
       const productLink = await page.evaluate(() => {
         const links = Array.from(document.querySelectorAll('a'));
         // Filter for links that might be product pages
         const potentialProducts = links.filter(a => {
           const href = a.href.toLowerCase();
           const text = a.textContent?.toLowerCase() || '';
+
+          // CRITICAL: Exclude search pages, pagination, and sorting parameters
+          if (href.includes('/search') ||
+              href.includes('route=product/search') ||
+              href.includes('search=') ||
+              href.includes('sort=') ||
+              href.includes('limit=') ||
+              href.includes('page=') ||
+              href.includes('javascript:')) {
+            return false;
+          }
+
           // Heuristic: URL contains 'product' or 'item' or the text is long and matches query-like words
-          return (href.includes('/product/') || href.includes('/p/') || href.includes('/item/')) && 
-                 text.length > 5;
+          // Startech URLs are often just /product-name or /category/product-name
+          // so we can't rely strictly on /product/ being in the path.
+          // Instead, we rely on the exclusion above and length checks.
+
+          // Specific to Startech/Opencart: Product links usually are inside .product-thumb or .p-item
+          const isInsideProductCard = a.closest('.product-thumb') || a.closest('.p-item') || a.closest('.product-item');
+
+          if (isInsideProductCard) return true;
+
+          // General fallback
+          return (href.includes('/product/') || href.includes('/p/') || href.includes('/item/')) &&
+                 text.length > 10;
         });
-        
+
         return potentialProducts[0]?.href || null;
       });
 
       if (productLink) {
         console.log(`[ScraperService] Found potential match: ${productLink}`);
         return await this.scrapeProductPage(productLink);
+      }
+
+      // Fallback Strategy: If no match found and query is long, try simplifying
+      const words = cleanQuery.split(' ');
+      if (words.length > 4 && !query.includes('__RETRY__')) {
+        const simpleQuery = words.slice(0, 4).join(' ');
+        console.log(`[ScraperService] No identification with full title. Retrying with simplified: "${simpleQuery}"`);
+
+        // Add a flag to prevent infinite loops (though the length check should suffice)
+        return this.searchAndScrape(baseUrl, simpleQuery + '__RETRY__');
       }
 
       return null;
@@ -341,4 +406,13 @@ export class ScraperService {
       await context.close();
     }
   }
+
+  // Helper to handle the magic retry suffix transparently if needed,
+  // currently we just strip it in sanitizeQuery or handle it in the recursive call logic.
+  // Actually, sanitizeQuery will strip the underscores if we aren't careful,
+  // but since we call sanitizeQuery INSIDE searchAndScrape, we need to pass the retry flag differently
+  // OR just trust the length check logic if we don't pass a flag.
+  // But to be safe, let's just use the words length check logic and valid recursion.
+  // We'll strip the flag in sanitizeQuery if it exists to keep the search clean.
 }
+

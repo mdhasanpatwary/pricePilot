@@ -13,6 +13,33 @@ export async function GET(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
+    // Determine currency from user's integrated products first, then tenant, else USD
+    let currency = "USD";
+    try {
+      const anyUserProduct = await prisma.product.findFirst({
+        where: { tenantId, site: { type: "USER" } },
+        select: { currency: true },
+        orderBy: { createdAt: "desc" },
+      });
+      if (anyUserProduct?.currency) {
+        currency = anyUserProduct.currency;
+      } else {
+        // Prefer USER site currency if available
+        const userSite = await prisma.site.findFirst({
+          where: { tenantId, type: "USER" },
+          orderBy: { createdAt: "desc" },
+        });
+        if ((userSite as any)?.currency) {
+          currency = (userSite as any).currency;
+        } else {
+          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          currency = (tenant as any)?.currency || "USD";
+        }
+      }
+    } catch (e) {
+      // keep default USD on any error
+    }
+
     const products = await prisma.product.findMany({
       where: {
         tenantId,
@@ -37,8 +64,8 @@ export async function GET(req: NextRequest) {
     // Aggregate stats
     const stats = {
       atRisk: 0,
-       optimal: 0,
-       parity: 0,
+      optimal: 0,
+      parity: 0,
     };
 
     interface ProductWithStock {
@@ -55,13 +82,13 @@ export async function GET(req: NextRequest) {
     // Map to the format expected by the frontend
     const formattedProducts = (products as unknown as ProductWithStock[]).map((product) => {
       const bestMatch = product.matchesAsUser[0];
-      const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : 0;
+      const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : null;
       const yourPrice = parseFloat(product.currentPrice.toString());
 
       let diff = 0;
       let status = "NEUTRAL";
 
-      if (compPrice > 0) {
+      if (compPrice !== null) {
         diff = compPrice - yourPrice;
         if (yourPrice > compPrice) {
           status = "RED";
@@ -74,6 +101,10 @@ export async function GET(req: NextRequest) {
           stats.parity++;
         }
       } else {
+        // If no match, we don't count it as parity, optimal, or risk.
+        // Or maybe default to parity?
+        // User didn't specify, but usually unmatched = neutral or ignored in stats.
+        // Keeping it as neutral/parity for stats but distinguishing in UI.
         stats.parity++;
       }
 
@@ -82,10 +113,10 @@ export async function GET(req: NextRequest) {
         sku: product.sku || "N/A",
         title: product.title,
         yourPrice,
-        compPrice: compPrice || yourPrice,
+        compPrice: compPrice, // Can be null
         diff,
         status,
-        match: bestMatch?.competitorProduct.site?.baseUrl || "Market",
+        match: bestMatch?.competitorProduct.site?.baseUrl || null,
         stock: product.inStock ? (product.stockLevel || 24) : 0,
         inStock: product.inStock,
       };
@@ -93,7 +124,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       products: formattedProducts,
-      stats
+      stats,
+      currency,
     });
   } catch (error) {
     console.error("Error fetching products:", error);
