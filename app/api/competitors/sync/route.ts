@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * POST /api/competitors/sync
  * Trigger a sync for a specific competitor site
  */
-export async function POST(req: NextRequest) {
+async function handleSync(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -59,4 +60,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "sync", handleSync);
 }

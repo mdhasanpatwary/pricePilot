@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST(req: NextRequest) {
+async function handleRegister(req: NextRequest) {
   try {
     const { email, password, companyName } = await req.json();
 
@@ -59,4 +60,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "auth", handleRegister);
 }
