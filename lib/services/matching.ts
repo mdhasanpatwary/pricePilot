@@ -18,17 +18,40 @@ export class MatchingService {
   private static readonly SIMILARITY_THRESHOLD = 0.65; // 65% similarity required
   private static readonly HIGH_CONFIDENCE = 0.9;
   private static readonly MEDIUM_CONFIDENCE = 0.75;
-  private static readonly LOW_CONFIDENCE = 0.6;
 
   // Common e-commerce noise to strip during matching
   private static readonly NOISE_WORDS = [
-    "new", "hot", "deal", "cheap", "best", "sale", "official",
-    "original", "fast", "shipping", "free", "discount", "promo"
+    "new",
+    "hot",
+    "deal",
+    "cheap",
+    "best",
+    "sale",
+    "official",
+    "original",
+    "fast",
+    "shipping",
+    "free",
+    "discount",
+    "promo",
   ];
 
   private static readonly COLORS = [
-    "red", "blue", "green", "black", "white", "yellow", "orange",
-    "purple", "grey", "gray", "silver", "gold", "pink", "navy", "maroon"
+    "red",
+    "blue",
+    "green",
+    "black",
+    "white",
+    "yellow",
+    "orange",
+    "purple",
+    "grey",
+    "gray",
+    "silver",
+    "gold",
+    "pink",
+    "navy",
+    "maroon",
   ];
 
   /**
@@ -55,7 +78,10 @@ export class MatchingService {
     const matchesCreated = [];
 
     for (const up of userProducts) {
-      const match = await this.findBestMatch(up as LiteProduct, competitorProducts as LiteProduct[]);
+      const match = await this.findBestMatch(
+        up as LiteProduct,
+        competitorProducts as LiteProduct[],
+      );
 
       if (match) {
         matchesCreated.push(
@@ -63,8 +89,8 @@ export class MatchingService {
             up.id,
             match.product.id,
             match.type,
-            match.confidence
-          )
+            match.confidence,
+          ),
         );
       }
     }
@@ -79,13 +105,17 @@ export class MatchingService {
    */
   private static async findBestMatch(
     userProduct: LiteProduct,
-    competitorProducts: LiteProduct[]
-  ): Promise<{ product: LiteProduct; type: MatchType; confidence: number } | null> {
+    competitorProducts: LiteProduct[],
+  ): Promise<{
+    product: LiteProduct;
+    type: MatchType;
+    confidence: number;
+  } | null> {
     // Pass 1: Exact SKU Match (Highest Confidence)
     const userSku = userProduct.sku;
     if (userSku) {
       const skuMatch = competitorProducts.find(
-        (cp) => cp.sku && cp.sku.toLowerCase() === userSku.toLowerCase()
+        (cp) => cp.sku && cp.sku.toLowerCase() === userSku.toLowerCase(),
       );
       if (skuMatch) {
         return {
@@ -101,7 +131,7 @@ export class MatchingService {
       const modelMatch = competitorProducts.find(
         (cp) =>
           cp.brand?.toLowerCase() === userProduct.brand?.toLowerCase() &&
-          cp.model?.toLowerCase() === userProduct.model?.toLowerCase()
+          cp.model?.toLowerCase() === userProduct.model?.toLowerCase(),
       );
       if (modelMatch) {
         return {
@@ -136,14 +166,17 @@ export class MatchingService {
   /**
    * Calculate title similarity using Levenshtein distance
    */
-  private static calculateTitleSimilarity(title1: string, title2: string): number {
+  private static calculateTitleSimilarity(
+    title1: string,
+    title2: string,
+  ): number {
     const normalized1 = this.normalizeTitle(title1);
     const normalized2 = this.normalizeTitle(title2);
 
     const words1 = new Set(normalized1.split(" "));
     const words2 = new Set(normalized2.split(" "));
 
-    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const intersection = new Set([...words1].filter((x) => words2.has(x)));
     const union = new Set([...words1, ...words2]);
     const wordScore = intersection.size / union.size;
 
@@ -151,7 +184,7 @@ export class MatchingService {
     const diceScore = compareTwoStrings(normalized1, normalized2);
 
     // 3. Weighted average (Dice is better for typos, Jaccard better for word-set matches)
-    return (wordScore * 0.4) + (diceScore * 0.6);
+    return wordScore * 0.4 + diceScore * 0.6;
   }
 
   /**
@@ -165,7 +198,7 @@ export class MatchingService {
       .trim();
 
     // Strip common noise words and colors
-    const words = cleaned.split(" ").filter(word => {
+    const words = cleaned.split(" ").filter((word) => {
       return !this.NOISE_WORDS.includes(word) && !this.COLORS.includes(word);
     });
 
@@ -179,7 +212,7 @@ export class MatchingService {
     userId: string,
     competitorId: string,
     type: MatchType,
-    score: number
+    score: number,
   ) {
     return prisma.productMatch.create({
       data: {
@@ -220,15 +253,18 @@ export class MatchingService {
 
       const betterMatch = await this.findBestMatch(
         match.userProduct,
-        competitorProducts
+        competitorProducts,
       );
 
-      if (betterMatch && betterMatch.confidence > parseFloat(match.confidenceScore.toString())) {
+      if (
+        betterMatch &&
+        betterMatch.confidence > parseFloat(match.confidenceScore.toString())
+      ) {
         await this.createMatch(
           match.userProduct.id,
           betterMatch.product.id,
           betterMatch.type,
-          betterMatch.confidence
+          betterMatch.confidence,
         );
       }
     }

@@ -1,6 +1,6 @@
 import CodeBlock from "@/components/docs/code-block";
 import Callout from "@/components/docs/callout";
-import { Terminal, Globe, Send, RefreshCw, ArrowRight, Code } from "lucide-react";
+import { ArrowRight, Code } from "lucide-react";
 import Link from "next/link";
 
 export default function APIEndpointsPage() {
@@ -15,7 +15,10 @@ export default function APIEndpointsPage() {
           Endpoints
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-          Comprehensive reference for PricePilot core API endpoints. Base URL: <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs text-foreground font-bold">https://api.pricepilot.com/v1</code>
+          Comprehensive reference for PricePilot core API endpoints. Base URL:{" "}
+          <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs text-foreground font-bold">
+            https://api.pricepilot.com/v1
+          </code>
         </p>
       </div>
 
@@ -24,17 +27,22 @@ export default function APIEndpointsPage() {
       {/* Sync Endpoint */}
       <section className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">GET</span>
+          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">
+            GET
+          </span>
           <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
             /products/sync
           </h2>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-          Retrieve a synchronized list of products between PricePilot and your connected store. This is the primary endpoint for reconciliation.
+          Retrieve a synchronized list of products between PricePilot and your
+          connected store. This is the primary endpoint for reconciliation.
         </p>
 
         <div className="space-y-4 pt-2">
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-foreground/70">Sample Response</p>
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-foreground/70">
+            Sample Response
+          </p>
           <CodeBlock
             language="json"
             code={`{
@@ -54,13 +62,16 @@ export default function APIEndpointsPage() {
       {/* Competitors Endpoint */}
       <section className="space-y-6 pt-10 border-t border-border/30">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">GET</span>
+          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">
+            GET
+          </span>
           <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
             /competitors
           </h2>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Retrieve a list of all competitor sites and their health status currently being monitored.
+          Retrieve a list of all competitor sites and their health status
+          currently being monitored.
         </p>
 
         <div className="space-y-4 pt-2">
@@ -84,7 +95,9 @@ export default function APIEndpointsPage() {
       {/* Rules Endpoint */}
       <section className="space-y-6 pt-10 border-t border-border/30">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-500/20">GET</span>
+          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-500/20">
+            GET
+          </span>
           <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
             /rules
           </h2>
@@ -115,7 +128,9 @@ export default function APIEndpointsPage() {
       {/* Update Endpoint */}
       <section className="space-y-6 pt-10 border-t border-border/30">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">POST</span>
+          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">
+            POST
+          </span>
           <h2 className="text-2xl font-bold tracking-tight inline-flex items-center gap-2">
             /products/price-update
           </h2>
@@ -125,7 +140,9 @@ export default function APIEndpointsPage() {
         </p>
 
         <div className="space-y-4 pt-2">
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-foreground/70">Request Body</p>
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-foreground/70">
+            Request Body
+          </p>
           <CodeBlock
             language="json"
             code={`{
@@ -139,12 +156,19 @@ export default function APIEndpointsPage() {
       </section>
 
       <Callout type="warning">
-        Rate limiting is enforced at 100 requests per minute per API key. Exceeding this will result in <code className="font-mono text-xs">429 Too Many Requests</code>.
+        Rate limiting is enforced at 100 requests per minute per API key.
+        Exceeding this will result in{" "}
+        <code className="font-mono text-xs">429 Too Many Requests</code>.
       </Callout>
 
       <div className="pt-10 flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-border mt-20">
-        <p className="text-sm text-muted-foreground italic">Need help with complex queries?</p>
-        <Link href="/docs/faq" className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all">
+        <p className="text-sm text-muted-foreground italic">
+          Need help with complex queries?
+        </p>
+        <Link
+          href="/docs/faq"
+          className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all"
+        >
           Visit FAQ <ArrowRight className="w-4 h-4" />
         </Link>
       </div>

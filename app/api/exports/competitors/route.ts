@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../auth/[...nextauth]/route";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
       },
       include: {
         _count: {
-          select: { products: true }
-        }
-      }
+          select: { products: true },
+        },
+      },
     });
 
     // Prepare CSV header
@@ -32,32 +32,34 @@ export async function GET(req: NextRequest) {
       "Platform",
       "Product Count",
       "Last Sync",
-      "Created At"
+      "Created At",
     ];
 
-    const rows = sites.map(s => [
+    const rows = sites.map((s) => [
       s.id,
       s.baseUrl,
       s.platform,
       s._count.products,
       s.lastSyncAt?.toISOString() || "Never",
-      s.createdAt.toISOString()
+      s.createdAt.toISOString(),
     ]);
 
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => row.join(","))
+      ...rows.map((row) => row.join(",")),
     ].join("\n");
 
     return new NextResponse(csvContent, {
       headers: {
         "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="pricepilot-competitors-${new Date().toISOString().split('T')[0]}.csv"`,
+        "Content-Disposition": `attachment; filename="pricepilot-competitors-${new Date().toISOString().split("T")[0]}.csv"`,
       },
     });
-
   } catch (error) {
     console.error("Export error:", error);
-    return NextResponse.json({ error: "Failed to export competitors" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to export competitors" },
+      { status: 500 },
+    );
   }
 }

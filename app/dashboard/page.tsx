@@ -6,11 +6,8 @@ import {
   TrendingDown,
   Package,
   ShoppingBag,
-  AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight,
   Activity,
-  ChevronRight
+  ChevronRight,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import AnnouncementBanner from "@/components/announcement-banner";
@@ -21,7 +18,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid
+  CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
 
@@ -39,7 +36,7 @@ export default function DashboardOverview() {
     neutral: 0,
     expensive: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [_isLoading, setIsLoading] = useState(true);
 
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -106,7 +103,10 @@ export default function DashboardOverview() {
       const res = await fetch("/api/sync/full", { method: "POST" });
       if (res.ok) {
         const result = await res.json();
-        toast.success(`Sync complete! Scrapped ${result.scrapped} products, updated ${result.updated}.`, { id });
+        toast.success(
+          `Sync complete! Scrapped ${result.scrapped} products, updated ${result.updated}.`,
+          { id },
+        );
         fetchAnalytics();
       } else {
         toast.error("Sync failed", { id });
@@ -119,26 +119,66 @@ export default function DashboardOverview() {
   };
 
   const handleExportReport = () => {
-    toast.success("Intelligence report generated. Download starting automatically.");
+    toast.success(
+      "Intelligence report generated. Download starting automatically.",
+    );
   };
 
   const statsConfig = [
-    { label: "Total SKUs Live", value: stats.totalSKUs, icon: Package, change: "+12%", trend: "up" },
-    { label: "Active Rivals", value: stats.activeRivals, icon: ShoppingBag, change: "Stable", trend: "neutral" },
-    { label: "Critical Alerts", value: stats.criticalAlerts, icon: TrendingDown, change: "-14%", trend: "down" },
-    { label: "Market Edge", value: formatCurrency(Number(stats.marketEdge || 0), currency), icon: Activity, change: "+2%", trend: "up" },
+    {
+      label: "Total SKUs Live",
+      value: stats.totalSKUs,
+      icon: Package,
+      change: "+12%",
+      trend: "up",
+    },
+    {
+      label: "Active Rivals",
+      value: stats.activeRivals,
+      icon: ShoppingBag,
+      change: "Stable",
+      trend: "neutral",
+    },
+    {
+      label: "Critical Alerts",
+      value: stats.criticalAlerts,
+      icon: TrendingDown,
+      change: "-14%",
+      trend: "down",
+    },
+    {
+      label: "Market Edge",
+      value: formatCurrency(Number(stats.marketEdge || 0), currency),
+      icon: Activity,
+      change: "+2%",
+      trend: "up",
+    },
   ];
 
   const positionData = [
     { label: "Cheapest", value: positionSummary.cheapest, color: "bg-success" },
-    { label: "Near Cheapest", value: positionSummary.nearCheapest, color: "bg-primary" },
-    { label: "Neutral", value: positionSummary.neutral, color: "bg-muted-foreground/30" },
-    { label: "Expensive", value: positionSummary.expensive, color: "bg-danger" },
+    {
+      label: "Near Cheapest",
+      value: positionSummary.nearCheapest,
+      color: "bg-primary",
+    },
+    {
+      label: "Neutral",
+      value: positionSummary.neutral,
+      color: "bg-muted-foreground/30",
+    },
+    {
+      label: "Expensive",
+      value: positionSummary.expensive,
+      color: "bg-danger",
+    },
   ];
 
-  const total = (positionSummary.cheapest || 0) + (positionSummary.nearCheapest || 0) + (positionSummary.neutral || 0) + (positionSummary.expensive || 0) || 1;
-
-
+  const total =
+    (positionSummary.cheapest || 0) +
+      (positionSummary.nearCheapest || 0) +
+      (positionSummary.neutral || 0) +
+      (positionSummary.expensive || 0) || 1;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -154,8 +194,12 @@ export default function DashboardOverview() {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Command Dashboard</h1>
-          <p className="text-muted-foreground mt-1 text-lg">Monitor your market position and pricing performance.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Command Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1 text-lg">
+            Monitor your market position and pricing performance.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -163,7 +207,7 @@ export default function DashboardOverview() {
             onClick={handleRunSync}
             className={cn(
               "bg-primary text-primary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-primary/10",
-              isSyncing && "opacity-50 cursor-not-allowed"
+              isSyncing && "opacity-50 cursor-not-allowed",
             )}
           >
             {isSyncing ? "Syncing..." : "Run Global Sync"}
@@ -180,22 +224,31 @@ export default function DashboardOverview() {
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statsConfig.map((stat) => (
-          <div key={stat.label} className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all">
+          <div
+            key={stat.label}
+            className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all"
+          >
             <div className="flex items-center justify-between mb-4">
               <div className="p-2.5 bg-muted/50 rounded-lg">
                 <stat.icon className="w-5 h-5 text-foreground/70" />
               </div>
-              <div className={cn(
-                "text-[10px] font-bold px-2 py-0.5 rounded-full border",
-                stat.trend === "up" ? "bg-success/5 text-success border-success/10" :
-                  stat.trend === "down" ? "bg-danger/5 text-danger border-danger/10" :
-                    "bg-muted text-muted-foreground border-border"
-              )}>
+              <div
+                className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                  stat.trend === "up"
+                    ? "bg-success/5 text-success border-success/10"
+                    : stat.trend === "down"
+                      ? "bg-danger/5 text-danger border-danger/10"
+                      : "bg-muted text-muted-foreground border-border",
+                )}
+              >
                 {stat.change}
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {stat.label}
+              </p>
               <h3 className="text-3xl font-bold">{stat.value}</h3>
             </div>
           </div>
@@ -208,7 +261,9 @@ export default function DashboardOverview() {
         <div className="lg:col-span-1 bg-card border border-border rounded-xl p-8 shadow-sm">
           <div className="mb-8">
             <h4 className="text-lg font-bold">Position Summary</h4>
-            <p className="text-sm text-muted-foreground">Your market stance vs. competition</p>
+            <p className="text-sm text-muted-foreground">
+              Your market stance vs. competition
+            </p>
           </div>
           <div className="space-y-6">
             {positionData.map((item, i) => {
@@ -221,7 +276,10 @@ export default function DashboardOverview() {
                   </div>
                   <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                     <div
-                      className={cn("h-full rounded-full transition-all duration-1000", item.color)}
+                      className={cn(
+                        "h-full rounded-full transition-all duration-1000",
+                        item.color,
+                      )}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
@@ -232,11 +290,15 @@ export default function DashboardOverview() {
           <div className="mt-10 pt-8 border-t border-border flex justify-between">
             <div>
               <p className="text-2xl font-bold text-primary">100%</p>
-              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-tighter">Coverage</p>
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-tighter">
+                Coverage
+              </p>
             </div>
             <div>
               <p className="text-2xl font-bold">8.4k</p>
-              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-tighter">Calculations</p>
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-tighter">
+                Calculations
+              </p>
             </div>
           </div>
         </div>
@@ -246,37 +308,62 @@ export default function DashboardOverview() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h4 className="text-lg font-bold">Price Index Trend</h4>
-              <p className="text-sm text-muted-foreground">30-day market movement</p>
+              <p className="text-sm text-muted-foreground">
+                30-day market movement
+              </p>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-                <span className="text-xs font-bold text-muted-foreground">YOU</span>
+                <span className="text-xs font-bold text-muted-foreground">
+                  YOU
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/30" />
-                <span className="text-xs font-bold text-muted-foreground">RIVALS</span>
+                <span className="text-xs font-bold text-muted-foreground">
+                  RIVALS
+                </span>
               </div>
             </div>
           </div>
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart
+                data={chartData}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
                 <defs>
                   <linearGradient id="colorIndex" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop
+                      offset="5%"
+                      stopColor="hsl(var(--primary))"
+                      stopOpacity={0.1}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor="hsl(var(--primary))"
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="hsl(var(--border))"
+                />
                 <XAxis
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fontWeight: 600, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fill: "hsl(var(--muted-foreground))",
+                  }}
                   dy={10}
                 />
-                <YAxis hide={true} domain={['dataMin - 5', 'dataMax + 5']} />
+                <YAxis hide={true} domain={["dataMin - 5", "dataMax + 5"]} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "hsl(var(--card))",
@@ -284,7 +371,7 @@ export default function DashboardOverview() {
                     borderRadius: "0.75rem",
                     fontSize: "12px",
                     fontWeight: 600,
-                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
+                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
                   }}
                 />
                 <Area
@@ -311,7 +398,9 @@ export default function DashboardOverview() {
         {/* Execution Queue */}
         <div className="lg:col-span-3 bg-card border border-border rounded-xl p-8 shadow-sm">
           <div className="flex items-center justify-between mb-8">
-            <h4 className="text-lg font-bold text-foreground">Live Execution Queue</h4>
+            <h4 className="text-lg font-bold text-foreground">
+              Live Execution Queue
+            </h4>
             <Link
               href="/dashboard/reports"
               className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full transition-all"
@@ -331,11 +420,18 @@ export default function DashboardOverview() {
               </thead>
               <tbody className="text-sm font-medium">
                 {recentLogs.map((item, i) => (
-                  <tr key={i} className="border-b border-border/50 group hover:bg-muted/30 transition-colors">
+                  <tr
+                    key={i}
+                    className="border-b border-border/50 group hover:bg-muted/30 transition-colors"
+                  >
                     <td className="py-5 pr-4">
                       <div>
-                        <div className="text-foreground font-bold">{item.name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono tracking-tighter">{item.sku}</div>
+                        <div className="text-foreground font-bold">
+                          {item.name}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono tracking-tighter">
+                          {item.sku}
+                        </div>
                       </div>
                     </td>
                     <td className="py-5 px-4">
@@ -348,7 +444,9 @@ export default function DashboardOverview() {
                         {item.value}
                       </span>
                     </td>
-                    <td className="py-5 pl-4 text-right text-muted-foreground text-xs font-bold">{item.time}</td>
+                    <td className="py-5 pl-4 text-right text-muted-foreground text-xs font-bold">
+                      {item.time}
+                    </td>
                   </tr>
                 ))}
               </tbody>

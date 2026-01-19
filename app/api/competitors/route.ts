@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -46,39 +47,53 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const formattedCompetitors = competitors.map((site) => {
-      try {
-        let name = "Unknown";
+    const formattedCompetitors = competitors
+      .map((site) => {
         try {
-          const urlObj = new URL(site.baseUrl.startsWith('http') ? site.baseUrl : `https://${site.baseUrl}`);
-          const hostname = urlObj.hostname;
-          const cleanHostname = hostname.replace(/^www\./, "");
-          const parts = cleanHostname.split(".");
-          const rawName = parts.length > 1 ? parts[0] : cleanHostname;
-          name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-        } catch (e) {
-          console.error(`Invalid baseUrl for site ${site.id}: ${site.baseUrl}`);
-        }
+          let name = "Unknown";
+          try {
+            const urlObj = new URL(
+              site.baseUrl.startsWith("http")
+                ? site.baseUrl
+                : `https://${site.baseUrl}`,
+            );
+            const hostname = urlObj.hostname;
+            const cleanHostname = hostname.replace(/^www\./, "");
+            const parts = cleanHostname.split(".");
+            const rawName = parts.length > 1 ? parts[0] : cleanHostname;
+            name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+          } catch (e) {
+            console.error(
+              `Invalid baseUrl for site ${site.id}: ${site.baseUrl}`,
+            );
+          }
 
-        return {
-          id: site.id,
-          name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
-          url: site.baseUrl,
-          products: site._count.products,
-          status: site.isSyncing ? "SYNCING" : (site._count.products > 0 ? "ACTIVE" : (site.lastSyncAt ? "NO MATCHES" : "PENDING")),
-          health: site._count.products > 0 ? 100 : 0,
-          isSyncing: site.isSyncing,
-          syncTotal: site.syncTotal,
-          syncProcessed: site.syncProcessed,
-          syncLastAction: site.syncLastAction,
-          syncStartedAt: site.syncStartedAt,
-          logs: site.syncLogs || [],
-        };
-      } catch (e) {
-        console.error(`Error formatting site ${site.id}:`, e);
-        return null;
-      }
-    }).filter(Boolean);
+          return {
+            id: site.id,
+            name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
+            url: site.baseUrl,
+            products: site._count.products,
+            status: site.isSyncing
+              ? "SYNCING"
+              : site._count.products > 0
+                ? "ACTIVE"
+                : site.lastSyncAt
+                  ? "NO MATCHES"
+                  : "PENDING",
+            health: site._count.products > 0 ? 100 : 0,
+            isSyncing: site.isSyncing,
+            syncTotal: site.syncTotal,
+            syncProcessed: site.syncProcessed,
+            syncLastAction: site.syncLastAction,
+            syncStartedAt: site.syncStartedAt,
+            logs: site.syncLogs || [],
+          };
+        } catch (e) {
+          console.error(`Error formatting site ${site.id}:`, e);
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     return NextResponse.json(formattedCompetitors);
   } catch (error) {
@@ -87,7 +102,13 @@ export async function GET(req: NextRequest) {
       console.error("Message:", error.message);
       console.error("Stack:", error.stack);
     }
-    return NextResponse.json({ error: "Failed to fetch competitors", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to fetch competitors",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }
 
@@ -109,7 +130,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch tenant limits
     const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId }
+      where: { id: tenantId },
     });
 
     if (!tenant) {
@@ -120,14 +141,16 @@ export async function POST(req: NextRequest) {
     const existingCount = await prisma.site.count({
       where: {
         tenantId,
-        type: "COMPETITOR"
-      }
+        type: "COMPETITOR",
+      },
     });
 
     if (existingCount >= tenant.competitorLimit) {
       return NextResponse.json(
-        { error: `Competitor tracking limit reached (${tenant.competitorLimit}). Please upgrade your plan to track more sites.` },
-        { status: 403 }
+        {
+          error: `Competitor tracking limit reached (${tenant.competitorLimit}). Please upgrade your plan to track more sites.`,
+        },
+        { status: 403 },
       );
     }
 
@@ -136,13 +159,29 @@ export async function POST(req: NextRequest) {
         baseUrl: url,
         type: "COMPETITOR",
         tenantId,
+        isSyncing: true, // Start as syncing immediately so UI picks it up
+        syncLastAction: "Initializing crawler...",
       },
     });
+
+    // Trigger auto-fetch immediately in background (with slight delay for DB propagation)
+    setTimeout(() => {
+      // Pass true to force sync even though isSyncing is already true
+      SyncOrchestrator.syncSite(site.id, true).catch((error) => {
+        console.error(
+          `[API] Auto-fetch failed for new site ${site.id}:`,
+          error,
+        );
+      });
+    }, 500);
 
     return NextResponse.json(site);
   } catch (error) {
     console.error("Error creating competitor:", error);
-    return NextResponse.json({ error: "Failed to create competitor" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create competitor" },
+      { status: 500 },
+    );
   }
 }
 
@@ -172,6 +211,9 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting competitor:", error);
-    return NextResponse.json({ error: "Failed to delete competitor" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to delete competitor" },
+      { status: 500 },
+    );
   }
 }

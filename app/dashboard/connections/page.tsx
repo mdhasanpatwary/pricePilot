@@ -3,7 +3,18 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus, Link2, ExternalLink, Trash2, CheckCircle2, AlertCircle, Zap, Shield, Globe, Download, ArrowUpRight } from "lucide-react";
+import {
+  Plus,
+  ExternalLink,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  Zap,
+  Shield,
+  Globe,
+  Download,
+  ArrowUpRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -12,12 +23,34 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 const platforms = [
   { id: "SHOPIFY", name: "Shopify", icon: "/icons/platforms/shopify.svg" },
-  { id: "WOOCOMMERCE", name: "WooCommerce", icon: "/icons/platforms/woocommerce.svg" },
+  {
+    id: "WOOCOMMERCE",
+    name: "WooCommerce",
+    icon: "/icons/platforms/woocommerce.svg",
+  },
   { id: "MAGENTO", name: "Magento", icon: "/icons/platforms/magento.png" },
-  { id: "PRESTASHOP", name: "PrestaShop", icon: "/icons/platforms/prestashop.svg" },
-  { id: "BIGCOMMERCE", name: "BigCommerce", icon: "/icons/platforms/bigcommerce.svg" },
-  { id: "OPENCART", name: "OpenCart", icon: "/icons/platforms/opencart.svg", downloadUrl: "/dashboard/integrations/opencart" },
-  { id: "LARAVEL", name: "Laravel", icon: "/icons/platforms/laravel.png", downloadUrl: "/dashboard/integrations/laravel" },
+  {
+    id: "PRESTASHOP",
+    name: "PrestaShop",
+    icon: "/icons/platforms/prestashop.svg",
+  },
+  {
+    id: "BIGCOMMERCE",
+    name: "BigCommerce",
+    icon: "/icons/platforms/bigcommerce.svg",
+  },
+  {
+    id: "OPENCART",
+    name: "OpenCart",
+    icon: "/icons/platforms/opencart.svg",
+    downloadUrl: "/dashboard/integrations/opencart",
+  },
+  {
+    id: "LARAVEL",
+    name: "Laravel",
+    icon: "/icons/platforms/laravel.png",
+    downloadUrl: "/dashboard/integrations/laravel",
+  },
 ];
 
 const connectionSchema = z.object({
@@ -32,8 +65,12 @@ export default function ConnectionsPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(false);
   const [connections, setConnections] = useState<any[]>([]);
-  const [isLoadingConnections, setIsLoadingConnections] = useState(true);
-  const [successData, setSuccessData] = useState<{ name: string; platform: string; count: number } | null>(null);
+  const [_isLoadingConnections, setIsLoadingConnections] = useState(true);
+  const [successData, setSuccessData] = useState<{
+    name: string;
+    platform: string;
+    count: number;
+  } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [progressCount, setProgressCount] = useState(0);
 
@@ -50,7 +87,7 @@ export default function ConnectionsPage() {
       platform: "",
       baseUrl: "",
       apiToken: "",
-    }
+    },
   });
 
   const selectedPlatform = watch("platform");
@@ -101,10 +138,12 @@ export default function ConnectionsPage() {
             const pollRes = await fetch("/api/integrations");
             if (pollRes.ok) {
               const currentSites = await pollRes.json();
-              const currentSite = currentSites.find((s: any) => s.id === siteId);
+              const currentSite = currentSites.find(
+                (s: any) => s.id === siteId,
+              );
               if (currentSite) {
                 // Animate count up to current detected count
-                setProgressCount(prev => {
+                setProgressCount((prev) => {
                   const target = currentSite.products;
                   if (target > prev) return target;
                   return prev;
@@ -131,7 +170,7 @@ export default function ConnectionsPage() {
             setSuccessData({
               name: new URL(data.baseUrl).hostname,
               platform: data.platform,
-              count: syncData.count || 0
+              count: syncData.count || 0,
             });
             toast.success("Store connected & synced!");
           }
@@ -191,7 +230,9 @@ export default function ConnectionsPage() {
 
       if (res.ok) {
         const data = await res.json();
-        toast.success(`Successfully synced ${data.count} products.`, { id: toastId });
+        toast.success(`Successfully synced ${data.count} products.`, {
+          id: toastId,
+        });
         fetchConnections();
       } else {
         toast.error("Failed to sync products", { id: toastId });
@@ -224,9 +265,11 @@ export default function ConnectionsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Integrations</h2>
-          <p className="text-muted-foreground text-sm">Manage your e-commerce store connections.</p>
+          <p className="text-muted-foreground text-sm">
+            Manage your e-commerce store connections.
+          </p>
         </div>
-        {(!isAdding && connections.length < limits.storeLimit) && (
+        {!isAdding && connections.length < limits.storeLimit && (
           <button
             onClick={() => setIsAdding(true)}
             className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
@@ -237,71 +280,83 @@ export default function ConnectionsPage() {
         )}
         {connections.length >= limits.storeLimit && !isAdding && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-lg">
-             <Shield className="w-3.5 h-3.5 text-primary" />
-             <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-               Store Limit Reached ({connections.length}/{limits.storeLimit}) — Upgrade for More
-             </span>
+            <Shield className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+              Store Limit Reached ({connections.length}/{limits.storeLimit}) —
+              Upgrade for More
+            </span>
           </div>
         )}
       </div>
 
       {isAdding ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-           <div className="lg:col-span-2 bg-card border border-border rounded-lg p-4 md:p-6 space-y-6">
-              <div className="space-y-1">
-                 <h3 className="text-xl font-bold">Configure Connection</h3>
-                 <p className="text-sm text-muted-foreground">Select your platform and provide your access credentials.</p>
+          <div className="lg:col-span-2 bg-card border border-border rounded-lg p-4 md:p-6 space-y-6">
+            <div className="space-y-1">
+              <h3 className="text-xl font-bold">Configure Connection</h3>
+              <p className="text-sm text-muted-foreground">
+                Select your platform and provide your access credentials.
+              </p>
+            </div>
+
+            {successData ? (
+              <div className="py-10 flex flex-col items-center text-center space-y-6 animate-in zoom-in-95 duration-300">
+                <div className="w-20 h-20 rounded-full bg-success/20 flex items-center justify-center">
+                  <CheckCircle2 className="w-10 h-10 text-success" />
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-2xl font-bold text-foreground">
+                    Connection Successful!
+                  </h4>
+                  <p className="text-muted-foreground">
+                    Your {successData.platform} store <b>{successData.name}</b>{" "}
+                    has been linked.
+                  </p>
+                </div>
+
+                <div className="bg-primary/5 rounded-xl p-6 w-full max-w-sm border border-primary/10">
+                  <div className="text-3xl font-black text-primary mb-1 animate-pulse">
+                    {isSyncing ? progressCount : successData.count}
+                  </div>
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    {isSyncing
+                      ? "Scanning & Importing..."
+                      : "Products Imported"}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setIsAdding(false);
+                    setSuccessData(null);
+                    setIsSyncing(false);
+                  }}
+                  disabled={isSyncing}
+                  className="bg-primary text-primary-foreground font-bold px-8 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-50"
+                >
+                  {isSyncing ? "Please wait..." : "Continue to Dashboard"}
+                </button>
               </div>
-
-              {successData ? (
-                 <div className="py-10 flex flex-col items-center text-center space-y-6 animate-in zoom-in-95 duration-300">
-                    <div className="w-20 h-20 rounded-full bg-success/20 flex items-center justify-center">
-                       <CheckCircle2 className="w-10 h-10 text-success" />
-                    </div>
-                    <div className="space-y-2">
-                       <h4 className="text-2xl font-bold text-foreground">Connection Successful!</h4>
-                       <p className="text-muted-foreground">Your {successData.platform} store <b>{successData.name}</b> has been linked.</p>
-                    </div>
-
-                    <div className="bg-primary/5 rounded-xl p-6 w-full max-w-sm border border-primary/10">
-                       <div className="text-3xl font-black text-primary mb-1 animate-pulse">
-                         {isSyncing ? progressCount : successData.count}
-                       </div>
-                       <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                         {isSyncing ? "Scanning & Importing..." : "Products Imported"}
-                       </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setIsAdding(false);
-                        setSuccessData(null);
-                        setIsSyncing(false);
-                      }}
-                      disabled={isSyncing}
-                      className="bg-primary text-primary-foreground font-bold px-8 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-50"
-                    >
-                      {isSyncing ? "Please wait..." : "Continue to Dashboard"}
-                    </button>
-                 </div>
-               ) : (
-               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            ) : (
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {platforms.map((p) => (
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setValue("platform", p.id, { shouldValidate: true })}
+                      onClick={() =>
+                        setValue("platform", p.id, { shouldValidate: true })
+                      }
                       className={cn(
                         "p-4 border rounded-md flex flex-col items-center gap-3 transition-all group relative",
                         selectedPlatform === p.id
                           ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : "border-border hover:border-primary/50 hover:bg-muted/50"
+                          : "border-border hover:border-primary/50 hover:bg-muted/50",
                       )}
                     >
                       {selectedPlatform === p.id && (
                         <div className="absolute top-2 right-2">
-                           <CheckCircle2 className="w-4 h-4 text-primary" />
+                          <CheckCircle2 className="w-4 h-4 text-primary" />
                         </div>
                       )}
                       <div className="w-12 h-12 flex items-center justify-center grayscale group-hover:grayscale-0 transition-all p-1 relative">
@@ -313,69 +368,99 @@ export default function ConnectionsPage() {
                           sizes="48px"
                         />
                       </div>
-                      <span className="font-bold text-[10px] uppercase tracking-wider">{p.name}</span>
+                      <span className="font-bold text-[10px] uppercase tracking-wider">
+                        {p.name}
+                      </span>
                     </button>
                   ))}
                 </div>
-                {errors.platform && <p className="text-xs text-destructive font-bold">{errors.platform.message}</p>}
-                {platforms.find(p => p.id === selectedPlatform)?.downloadUrl && (
+                {errors.platform && (
+                  <p className="text-xs text-destructive font-bold">
+                    {errors.platform.message}
+                  </p>
+                )}
+                {platforms.find((p) => p.id === selectedPlatform)
+                  ?.downloadUrl && (
                   <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col gap-3">
                     <div className="flex items-start gap-3">
                       <Download className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm font-bold text-primary">Integration Package Required</p>
+                        <p className="text-sm font-bold text-primary">
+                          Integration Package Required
+                        </p>
                         <p className="text-xs font-semibold text-primary/70 leading-relaxed uppercase tracking-tight">
-                          To connect Laravel, you first need to download and install our integration package on your store.
+                          To connect Laravel, you first need to download and
+                          install our integration package on your store.
                         </p>
                       </div>
                     </div>
                     <Link
-                      href={platforms.find(p => p.id === selectedPlatform)!.downloadUrl!}
+                      href={
+                        platforms.find((p) => p.id === selectedPlatform)!
+                          .downloadUrl!
+                      }
                       className="text-[10px] font-black uppercase tracking-tighter bg-primary text-primary-foreground px-4 py-2 rounded flex items-center justify-center gap-2 hover:opacity-90 transition-all self-start"
                     >
-                      Go to Download & Instructions <ArrowUpRight className="w-3 h-3" />
+                      Go to Download & Instructions{" "}
+                      <ArrowUpRight className="w-3 h-3" />
                     </Link>
                   </div>
                 )}
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Store Base URL</label>
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                      Store Base URL
+                    </label>
                     <div className="relative group">
-                       <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                        <input
-                          {...register("baseUrl")}
-                          type="url"
-                          placeholder="https://yourstore.com"
-                          className={cn(
-                            "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
-                            errors.baseUrl && "border-destructive focus:ring-destructive/20"
-                          )}
-                        />
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                      <input
+                        {...register("baseUrl")}
+                        type="url"
+                        placeholder="https://yourstore.com"
+                        className={cn(
+                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                          errors.baseUrl &&
+                            "border-destructive focus:ring-destructive/20",
+                        )}
+                      />
                     </div>
-                    {errors.baseUrl && <p className="text-xs text-destructive font-bold">{errors.baseUrl.message}</p>}
+                    {errors.baseUrl && (
+                      <p className="text-xs text-destructive font-bold">
+                        {errors.baseUrl.message}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">Secure API Token (Optional)</label>
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                      Secure API Token (Optional)
+                    </label>
                     <div className="relative group">
-                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                        <input
-                          {...register("apiToken")}
-                          type="password"
-                          placeholder="Your PricePilot secret key"
-                          className={cn(
-                            "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
-                            errors.apiToken && "border-destructive focus:ring-destructive/20"
-                          )}
-                        />
+                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                      <input
+                        {...register("apiToken")}
+                        type="password"
+                        placeholder="Your PricePilot secret key"
+                        className={cn(
+                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                          errors.apiToken &&
+                            "border-destructive focus:ring-destructive/20",
+                        )}
+                      />
                     </div>
-                    {errors.apiToken && <p className="text-xs text-destructive font-bold">{errors.apiToken.message}</p>}
+                    {errors.apiToken && (
+                      <p className="text-xs text-destructive font-bold">
+                        {errors.apiToken.message}
+                      </p>
+                    )}
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-start gap-2.5 mt-2">
-                       <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                       <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
-                         This must match the API token configured in your store&apos;s integration settings or .env file (e.g., PRICEPILOT_API_TOKEN for Laravel).
-                       </p>
+                      <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
+                        This must match the API token configured in your
+                        store&apos;s integration settings or .env file (e.g.,
+                        PRICEPILOT_API_TOKEN for Laravel).
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -386,10 +471,14 @@ export default function ConnectionsPage() {
                     disabled={loading}
                     className="flex-1 bg-primary text-primary-foreground font-bold py-2.5 rounded-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]"
                   >
-                    {loading ? <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> : <>
-                       <Zap className="w-4 h-4 fill-current" />
-                       Verify & Connect
-                    </>}
+                    {loading ? (
+                      <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 fill-current" />
+                        Verify & Connect
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -403,39 +492,50 @@ export default function ConnectionsPage() {
                   </button>
                 </div>
               </form>
-               )}
-            </div>
+            )}
+          </div>
 
-           <div className="space-y-6 pt-2">
-              <div className="flex items-start gap-3">
-                 <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                    <Shield className="w-4 h-4" />
-                 </div>
-                 <div className="space-y-1">
-                    <p className="text-sm font-bold">Secure Authentication</p>
-                    <p className="text-[12px] text-muted-foreground leading-snug">All connection tokens are encrypted with industry standard AES-256 protocols.</p>
-                 </div>
+          <div className="space-y-6 pt-2">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <Shield className="w-4 h-4" />
               </div>
-              <div className="flex items-start gap-3">
-                 <div className="w-8 h-8 rounded-md bg-success/10 flex items-center justify-center text-success shrink-0">
-                    <Zap className="w-4 h-4" />
-                 </div>
-                 <div className="space-y-1">
-                    <p className="text-sm font-bold">Live Data Streaming</p>
-                    <p className="text-[12px] text-muted-foreground leading-snug">Once connected, your product catalog synchronizes automatically in the background.</p>
-                 </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold">Secure Authentication</p>
+                <p className="text-[12px] text-muted-foreground leading-snug">
+                  All connection tokens are encrypted with industry standard
+                  AES-256 protocols.
+                </p>
               </div>
-           </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-md bg-success/10 flex items-center justify-center text-success shrink-0">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold">Live Data Streaming</p>
+                <p className="text-[12px] text-muted-foreground leading-snug">
+                  Once connected, your product catalog synchronizes
+                  automatically in the background.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {connections.map((conn: any) => (
-            <div key={conn.id} className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all flex flex-col justify-between h-full">
+            <div
+              key={conn.id}
+              className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all flex flex-col justify-between h-full"
+            >
               <div>
                 <div className="flex items-start justify-between mb-6">
                   <div className="w-12 h-12 rounded-md bg-muted border border-border flex items-center justify-center p-2 relative">
                     {(() => {
-                      const platform = platforms.find(p => p.id === conn.platform);
+                      const platform = platforms.find(
+                        (p) => p.id === conn.platform,
+                      );
                       return platform ? (
                         <Image
                           src={platform.icon}
@@ -451,7 +551,9 @@ export default function ConnectionsPage() {
                   </div>
                   <div className="flex items-center gap-1.5 px-2 py-0.5 bg-success/10 border border-success/20 rounded-full">
                     <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                    <span className="text-[9px] font-bold text-success tracking-widest uppercase">{conn.status}</span>
+                    <span className="text-[9px] font-bold text-success tracking-widest uppercase">
+                      {conn.status}
+                    </span>
                   </div>
                 </div>
 
@@ -462,31 +564,39 @@ export default function ConnectionsPage() {
                     <ExternalLink className="w-3 h-3" />
                   </p>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Products:</span>
-                    <span className="text-sm font-bold text-primary">{conn.products || 0}</span>
+                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">
+                      Products:
+                    </span>
+                    <span className="text-sm font-bold text-primary">
+                      {conn.products || 0}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <div className="mt-8 pt-4 border-t border-border flex items-center justify-between">
                 <div className="flex flex-col">
-                  <span className="text-[9px] font-bold uppercase text-muted-foreground tracking-widest">Last Activity</span>
-                  <span className="text-[11px] font-semibold text-foreground">{conn.lastSync}</span>
+                  <span className="text-[9px] font-bold uppercase text-muted-foreground tracking-widest">
+                    Last Activity
+                  </span>
+                  <span className="text-[11px] font-semibold text-foreground">
+                    {conn.lastSync}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
-                   <button
-                     onClick={() => handleSyncConnection(conn.id)}
-                     className="p-2 hover:bg-primary/10 hover:text-primary rounded-md transition-all"
-                     title="Sync Products"
-                   >
-                      <Zap className="w-4 h-4" />
-                   </button>
-                   <button
-                     onClick={() => handleDeleteConnection(conn.id)}
-                     className="p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all"
-                   >
-                      <Trash2 className="w-4 h-4" />
-                   </button>
+                  <button
+                    onClick={() => handleSyncConnection(conn.id)}
+                    className="p-2 hover:bg-primary/10 hover:text-primary rounded-md transition-all"
+                    title="Sync Products"
+                  >
+                    <Zap className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteConnection(conn.id)}
+                    className="p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -494,16 +604,18 @@ export default function ConnectionsPage() {
 
           {connections.length < limits.storeLimit && (
             <button
-               onClick={() => setIsAdding(true)}
-               className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-[220px]"
+              onClick={() => setIsAdding(true)}
+              className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-[220px]"
             >
-               <div className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
-                  <Plus className="w-5 h-5" />
-               </div>
-               <div className="space-y-0.5">
-                  <p className="text-base font-bold">Add New Store</p>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Integrate platform</p>
-               </div>
+              <div className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
+                <Plus className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-base font-bold">Add New Store</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                  Integrate platform
+                </p>
+              </div>
             </button>
           )}
         </div>

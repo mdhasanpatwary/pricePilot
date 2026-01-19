@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../auth/[...nextauth]/route";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
         matchesAsUser: {
           include: {
             competitorProduct: {
-              include: { site: true }
-            }
-          }
-        }
-      }
+              include: { site: true },
+            },
+          },
+        },
+      },
     });
 
     // Prepare CSV header
@@ -42,24 +42,24 @@ export async function GET(req: NextRequest) {
       "Stock Level",
       "Competitor Price",
       "Competitor Site",
-      "Last Updated"
+      "Last Updated",
     ];
 
     interface ProductWithStock {
-       id: string;
-       sku: string | null;
-       title: string;
-       currentPrice: any;
-       currency: string;
-       brand: string | null;
-       model: string | null;
-       inStock: boolean;
-       stockLevel: number | null;
-       matchesAsUser: any[];
-       updatedAt: Date;
+      id: string;
+      sku: string | null;
+      title: string;
+      currentPrice: any;
+      currency: string;
+      brand: string | null;
+      model: string | null;
+      inStock: boolean;
+      stockLevel: number | null;
+      matchesAsUser: any[];
+      updatedAt: Date;
     }
 
-    const rows = (products as unknown as ProductWithStock[]).map(p => {
+    const rows = (products as unknown as ProductWithStock[]).map((p) => {
       const bestMatch = p.matchesAsUser[0];
       return [
         p.id,
@@ -73,24 +73,26 @@ export async function GET(req: NextRequest) {
         p.stockLevel ?? "",
         bestMatch?.competitorProduct.currentPrice ?? "",
         bestMatch?.competitorProduct.site?.baseUrl ?? "",
-        p.updatedAt.toISOString()
+        p.updatedAt.toISOString(),
       ];
     });
 
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => row.join(","))
+      ...rows.map((row) => row.join(",")),
     ].join("\n");
 
     return new NextResponse(csvContent, {
       headers: {
         "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="pricepilot-products-${new Date().toISOString().split('T')[0]}.csv"`,
+        "Content-Disposition": `attachment; filename="pricepilot-products-${new Date().toISOString().split("T")[0]}.csv"`,
       },
     });
-
   } catch (error) {
     console.error("Export error:", error);
-    return NextResponse.json({ error: "Failed to export products" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to export products" },
+      { status: 500 },
+    );
   }
 }

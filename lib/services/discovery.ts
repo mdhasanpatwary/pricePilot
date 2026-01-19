@@ -1,13 +1,18 @@
 import { ScraperService } from "./scraper";
 import { prisma } from "@/lib/prisma";
-import { MatchType } from "@prisma/client";
 
 export class DiscoveryService {
   /**
    * Discover and match products on a competitor site for a tenant
    */
-  static async discoverForSite(tenantId: string, siteId: string) {
-    console.log(`[DiscoveryService] Starting discovery for tenant ${tenantId} on site ${siteId}`);
+  static async discoverForSite(
+    tenantId: string,
+    siteId: string,
+    syncSessionStart: Date,
+  ) {
+    console.log(
+      `[DiscoveryService] Starting discovery for tenant ${tenantId} on site ${siteId}`,
+    );
 
     const site = await prisma.site.findUnique({ where: { id: siteId } });
     if (!site) throw new Error("Site not found");
@@ -21,34 +26,28 @@ export class DiscoveryService {
     });
 
     if (userProducts.length === 0) {
-      console.log("[DiscoveryService] No user products found. Skipping discovery.");
+      console.log(
+        "[DiscoveryService] No user products found. Skipping discovery.",
+      );
       return 0;
     }
 
-    // Initialize progress
+    // Initialize progress (Do NOT reset syncStartedAt here, preserve the session ID)
     await prisma.site.update({
       where: { id: siteId },
       data: {
         syncTotal: userProducts.length,
         syncProcessed: 0,
         syncLastAction: "Mapping terminal signals...",
-        syncStartedAt: new Date()
-      }
+      },
     });
 
     await prisma.syncLog.create({
       data: {
         siteId,
-        message: `🔬 DISCOVERY PHASE: Scanning ${userProducts.length} products across competitor catalog...`,
-        level: "INFO"
-      }
-    });
-    await prisma.syncLog.create({
-      data: {
-        siteId,
-        message: `🧠 Neural matching algorithm activated. Preparing semantic analysis...`,
-        level: "INFO"
-      }
+        message: `🔬 DISCOVERY PHASE: Scanning ${userProducts.length} products ...`,
+        level: "INFO",
+      },
     });
 
     const scraper = new ScraperService();
@@ -58,35 +57,48 @@ export class DiscoveryService {
     for (const up of userProducts) {
       processedCount++;
 
-      // Check for manual stop
+      // Check for manual stop OR session invalidation (zombie killer)
       const currentStatus = await prisma.site.findUnique({
         where: { id: siteId },
-        select: { isSyncing: true }
+        select: { isSyncing: true, syncStartedAt: true },
       });
-      if (!currentStatus?.isSyncing) break;
+
+      // If syncing stopped OR the start time changed (meaning a NEW session started), abort this old one.
+      if (
+        !currentStatus?.isSyncing ||
+        currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()
+      ) {
+        console.log(
+          `[DiscoveryService] Aborting discovery session (Zombie process detected).`,
+        );
+        break;
+      }
 
       // Update progress every product (or every few)
       await prisma.site.update({
         where: { id: siteId },
         data: {
           syncProcessed: processedCount,
-          syncLastAction: `Searching: ${up.title.substring(0, 30)}...`
-        }
+          syncLastAction: `Searching: ${up.title.substring(0, 30)}...`,
+        },
       });
+
+      // Extract site name for clearer logs
+      const siteName = new URL(site.baseUrl).hostname.replace("www.", "");
 
       await prisma.syncLog.create({
         data: {
           siteId,
-          message: `🔎 [${processedCount}/${userProducts.length}] Searching: "${up.title.substring(0, 40)}${up.title.length > 40 ? '...' : ''}"`,
-          level: "INFO"
-        }
+          message: `🔎 [${siteName}] [${processedCount}/${userProducts.length}] Searching: "${up.title.substring(0, 30)}..."`,
+          level: "INFO",
+        },
       });
       // Skip if we already have a match for this product on this site
       const existingMatch = await prisma.productMatch.findFirst({
         where: {
           userProductId: up.id,
-          competitorProduct: { siteId: site.id }
-        }
+          competitorProduct: { siteId: site.id },
+        },
       });
 
       if (existingMatch) continue;
@@ -96,7 +108,11 @@ export class DiscoveryService {
 
       if (result) {
         await prisma.syncLog.create({
-          data: { siteId, message: `✅ MATCH CONFIRMED: "${up.title.substring(0, 35)}..." → ৳${result.price} (${result.brand || 'Unknown'})`, level: "SUCCESS" }
+          data: {
+            siteId,
+            message: `✅ MATCH CONFIRMED: "${up.title.substring(0, 35)}..." → ৳${result.price} (${result.brand || "Unknown"})`,
+            level: "SUCCESS",
+          },
         });
         // Create the product in our DB for this competitor
         const compProduct = await prisma.product.create({
@@ -112,7 +128,7 @@ export class DiscoveryService {
             inStock: result.inStock,
             currency: result.currency || "USD",
             lastCrawledAt: new Date(),
-          }
+          },
         });
 
         // Create the match record
@@ -121,8 +137,8 @@ export class DiscoveryService {
             userProductId: up.id,
             competitorProductId: compProduct.id,
             matchType: "AUTO_SKU", // Default to SKU-like auto match
-            confidenceScore: 0.90, // Initial confidence
-          }
+            confidenceScore: 0.9, // Initial confidence
+          },
         });
 
         // Record price history
@@ -130,7 +146,7 @@ export class DiscoveryService {
           data: {
             productId: compProduct.id,
             price: result.price,
-          }
+          },
         });
 
         discoveredCount++;

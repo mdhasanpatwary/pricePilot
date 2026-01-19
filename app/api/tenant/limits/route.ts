@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
         storeLimit: true,
         competitorLimit: true,
         planType: true,
-      }
+      },
     });
 
     if (!tenant) {
@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(tenant);
   } catch (error) {
     console.error("Failed to fetch tenant limits:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

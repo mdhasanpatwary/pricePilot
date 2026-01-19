@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { LogicType, UpdateStatus } from "@prisma/client";
+import { LogicType } from "@prisma/client";
 
 export class UpdateExecutionService {
   /**
@@ -9,7 +9,7 @@ export class UpdateExecutionService {
     productIds: string[],
     logicType: LogicType,
     value: number,
-    minPrice?: number
+    minPrice?: number,
   ) {
     const results = [];
 
@@ -20,14 +20,16 @@ export class UpdateExecutionService {
           site: true,
           matchesAsUser: {
             include: { competitorProduct: true },
-            take: 1
-          }
+            take: 1,
+          },
         },
       });
 
       if (!product || product.matchesAsUser.length === 0) continue;
 
-      const competitorPrice = Number(product.matchesAsUser[0].competitorProduct.currentPrice);
+      const competitorPrice = Number(
+        product.matchesAsUser[0].competitorProduct.currentPrice,
+      );
       const oldPrice = Number(product.currentPrice);
       let newPrice = oldPrice;
 
@@ -46,7 +48,9 @@ export class UpdateExecutionService {
       try {
         // 3. Call External API (Mocked)
         // In production: await fetch(`${product.site.baseUrl}/update_price`, { method: 'POST', body: JSON.stringify({ sku: product.sku, price: newPrice }) })
-        console.log(`Updating ${product.sku} on ${product.site.baseUrl}: ${oldPrice} -> ${newPrice}`);
+        console.log(
+          `Updating ${product.sku} on ${product.site.baseUrl}: ${oldPrice} -> ${newPrice}`,
+        );
 
         // 4. Update local DB
         await prisma.product.update({
@@ -84,8 +88,8 @@ export class UpdateExecutionService {
 
     return {
       total: productIds.length,
-      success: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length,
+      success: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
     };
   }
 }

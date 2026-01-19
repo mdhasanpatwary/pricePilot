@@ -7,7 +7,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
  * GET /api/admin/tenants
  * Fetch all tenants with their limits and stats
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session || !session.user.isSuperAdmin) {
@@ -20,18 +20,18 @@ export async function GET(req: NextRequest) {
         _count: {
           select: {
             sites: true,
-            products: true
-          }
+            products: true,
+          },
         },
         users: {
           take: 1,
-          select: { email: true }
-        }
+          select: { email: true },
+        },
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
     });
 
-    const formattedTenants = tenants.map(t => ({
+    const formattedTenants = tenants.map((t) => ({
       id: t.id,
       name: t.companyName,
       email: t.users[0]?.email || "No Admin",
@@ -48,24 +48,31 @@ export async function GET(req: NextRequest) {
     // In a real scenario, we'd do a more complex query to count sites by type
     // but for now, we'll fetch the specific site counts
     const siteCounts = await prisma.site.groupBy({
-      by: ['tenantId', 'type'],
-      _count: true
+      by: ["tenantId", "type"],
+      _count: true,
     });
 
-    const result = formattedTenants.map(t => {
-      const stores = siteCounts.find(s => s.tenantId === t.id && s.type === 'USER')?._count || 0;
-      const competitors = siteCounts.find(s => s.tenantId === t.id && s.type === 'COMPETITOR')?._count || 0;
+    const result = formattedTenants.map((t) => {
+      const stores =
+        siteCounts.find((s) => s.tenantId === t.id && s.type === "USER")
+          ?._count || 0;
+      const competitors =
+        siteCounts.find((s) => s.tenantId === t.id && s.type === "COMPETITOR")
+          ?._count || 0;
       return {
         ...t,
         activeStores: stores,
-        activeCompetitors: competitors
+        activeCompetitors: competitors,
       };
     });
 
     return NextResponse.json(result);
   } catch (error) {
     console.error("Failed to fetch tenants:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }
 
@@ -85,21 +92,29 @@ export async function PATCH(req: NextRequest) {
     const { id, storeLimit, competitorLimit, planType } = body;
 
     if (!id) {
-      return NextResponse.json({ error: "Tenant ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Tenant ID is required" },
+        { status: 400 },
+      );
     }
 
     const updatedTenant = await prisma.tenant.update({
       where: { id },
       data: {
         ...(storeLimit !== undefined && { storeLimit: parseInt(storeLimit) }),
-        ...(competitorLimit !== undefined && { competitorLimit: parseInt(competitorLimit) }),
+        ...(competitorLimit !== undefined && {
+          competitorLimit: parseInt(competitorLimit),
+        }),
         ...(planType !== undefined && { planType }),
-      }
+      },
     });
 
     return NextResponse.json(updatedTenant);
   } catch (error) {
     console.error("Failed to update tenant:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

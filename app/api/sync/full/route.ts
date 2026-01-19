@@ -8,7 +8,7 @@ import { withRateLimit } from "@/lib/middleware/ratelimit";
  * POST /api/sync/full
  * Trigger a full competitive sync: Scrape -> Rules -> Update Store
  */
-async function handleFullSync(req: NextRequest) {
+async function handleFullSync(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -25,7 +25,7 @@ async function handleFullSync(req: NextRequest) {
     console.error("Full sync failed:", error);
     return NextResponse.json(
       { error: "Full sync orchestration failed" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

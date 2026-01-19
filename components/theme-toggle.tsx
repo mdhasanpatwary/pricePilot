@@ -1,12 +1,12 @@
 "use client";
 
-import { Moon, Sun, Monitor } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -31,19 +31,27 @@ export function ThemeToggle() {
         "group relative flex items-center justify-center w-10 h-10 rounded-xl",
         "bg-muted/40 backdrop-blur-md border border-border shadow-sm",
         "transition-all duration-300 hover:border-primary/40 hover:bg-muted/60",
-        "active:scale-95 overflow-hidden"
+        "active:scale-95 overflow-hidden",
       )}
       aria-label="Toggle theme"
     >
       <div className="relative w-5 h-5 transition-all duration-500 transform group-hover:rotate-12">
-        <Sun className={cn(
-          "w-5 h-5 absolute inset-0 transition-all duration-500 transform",
-          resolvedTheme === "dark" ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100 text-primary"
-        )} />
-        <Moon className={cn(
-          "w-5 h-5 absolute inset-0 transition-all duration-500 transform",
-          resolvedTheme === "dark" ? "rotate-0 scale-100 opacity-100 text-primary" : "-rotate-90 scale-0 opacity-0"
-        )} />
+        <Sun
+          className={cn(
+            "w-5 h-5 absolute inset-0 transition-all duration-500 transform",
+            resolvedTheme === "dark"
+              ? "rotate-90 scale-0 opacity-0"
+              : "rotate-0 scale-100 opacity-100 text-primary",
+          )}
+        />
+        <Moon
+          className={cn(
+            "w-5 h-5 absolute inset-0 transition-all duration-500 transform",
+            resolvedTheme === "dark"
+              ? "rotate-0 scale-100 opacity-100 text-primary"
+              : "-rotate-90 scale-0 opacity-0",
+          )}
+        />
       </div>
 
       {/* Decorative background glow */}

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/route";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
         if ((userSite as any)?.currency) {
           currency = (userSite as any).currency;
         } else {
-          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+          });
           currency = (tenant as any)?.currency || "USD";
         }
       }
@@ -43,6 +45,9 @@ export async function GET(req: NextRequest) {
     const products = await prisma.product.findMany({
       where: {
         tenantId,
+        site: {
+          type: "USER",
+        },
       },
       include: {
         site: true,
@@ -66,6 +71,8 @@ export async function GET(req: NextRequest) {
       atRisk: 0,
       optimal: 0,
       parity: 0,
+      competitorOos: 0,
+      notFound: 0,
     };
 
     interface ProductWithStock {
@@ -75,52 +82,91 @@ export async function GET(req: NextRequest) {
       currentPrice: any;
       inStock: boolean;
       stockLevel: number | null;
+      category: string | null;
+      brand: string | null;
+      model: string | null;
+      site: { baseUrl: string };
       matchesAsUser: any[];
       updatedAt: Date;
     }
 
     // Map to the format expected by the frontend
-    const formattedProducts = (products as unknown as ProductWithStock[]).map((product) => {
-      const bestMatch = product.matchesAsUser[0];
-      const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : null;
-      const yourPrice = parseFloat(product.currentPrice.toString());
+    const formattedProducts = (products as unknown as ProductWithStock[]).map(
+      (product) => {
+        // Process all matches
+        const allMatches = product.matchesAsUser.map((m) => {
+          const urlObj = new URL(m.competitorProduct.site.baseUrl);
+          return {
+            siteName: urlObj.hostname.replace("www.", ""),
+            url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+            price: parseFloat(m.competitorProduct.currentPrice.toString()),
+            inStock:
+              m.competitorProduct.inStock &&
+              parseFloat(m.competitorProduct.currentPrice.toString()) > 0,
+          };
+        });
 
-      let diff = 0;
-      let status = "NEUTRAL";
+        const bestMatch = product.matchesAsUser[0];
+        let rawCompPrice = bestMatch
+          ? parseFloat(bestMatch.competitorProduct.currentPrice.toString())
+          : null;
+        const compInStock = bestMatch
+          ? bestMatch.competitorProduct.inStock &&
+            rawCompPrice !== null &&
+            rawCompPrice > 0
+          : false;
+        const compPrice =
+          rawCompPrice !== null && rawCompPrice > 0 ? rawCompPrice : null;
+        const yourPrice = parseFloat(product.currentPrice.toString());
 
-      if (compPrice !== null) {
-        diff = compPrice - yourPrice;
-        if (yourPrice > compPrice) {
-          status = "RED";
-          stats.atRisk++;
-        } else if (yourPrice < compPrice) {
-          status = "GREEN";
-          stats.optimal++;
-        } else {
-          status = "NEUTRAL";
-          stats.parity++;
+        let diff = 0;
+        let status = "NEUTRAL";
+
+        if (!bestMatch) {
+          status = "NOT_FOUND";
+        } else if (compPrice !== null && compInStock) {
+          diff = compPrice - yourPrice;
+          if (diff < 0) status = "RED";
+          else if (diff > 0) status = "GREEN";
+        } else if (bestMatch && (!compInStock || compPrice === null)) {
+          status = "COMP_OOS";
         }
-      } else {
-        // If no match, we don't count it as parity, optimal, or risk.
-        // Or maybe default to parity?
-        // User didn't specify, but usually unmatched = neutral or ignored in stats.
-        // Keeping it as neutral/parity for stats but distinguishing in UI.
-        stats.parity++;
-      }
 
-      return {
-        id: product.id,
-        sku: product.sku || "N/A",
-        title: product.title,
-        yourPrice,
-        compPrice: compPrice, // Can be null
-        diff,
-        status,
-        match: bestMatch?.competitorProduct.site?.baseUrl || null,
-        stock: product.inStock ? (product.stockLevel || 24) : 0,
-        inStock: product.inStock,
-      };
-    });
+        // Stats aggregation
+        if (status === "RED") {
+          stats.atRisk++;
+        } else if (status === "GREEN") {
+          stats.optimal++;
+        } else if (status === "NEUTRAL") {
+          stats.parity++;
+        } else if (status === "COMP_OOS") {
+          stats.competitorOos++;
+        } else if (status === "NOT_FOUND") {
+          stats.notFound++;
+        }
+
+        return {
+          id: product.id,
+          sku: product.sku || "N/A",
+          title: product.title,
+          yourPrice,
+          compPrice,
+          diff,
+          status,
+          match: bestMatch?.competitorProduct.site?.baseUrl || null,
+          stock: product.inStock ? product.stockLevel : 0,
+          inStock: product.inStock,
+          compInStock,
+          category: product.category || "Uncategorized",
+          brand: product.brand || "Generic",
+          model: product.model || "N/A",
+          siteName: product.site?.baseUrl
+            ? new URL(product.site.baseUrl).hostname.replace("www.", "")
+            : "Unknown",
+          allMatches,
+        };
+      },
+    );
 
     return NextResponse.json({
       products: formattedProducts,
@@ -129,6 +175,9 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching products:", error);
-    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch products" },
+      { status: 500 },
+    );
   }
 }

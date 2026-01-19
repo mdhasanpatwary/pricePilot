@@ -1,4 +1,4 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, Page } from "playwright";
 
 interface ScrapedProduct {
   title: string;
@@ -11,6 +11,28 @@ interface ScrapedProduct {
   inStock: boolean;
 }
 
+// Domain-specific search URL builders
+const SEARCH_STRATEGIES: Record<
+  string,
+  (baseUrl: string, query: string) => string
+> = {
+  // StarTech: /product/search?search=QUERY
+  "startech.com.bd": (baseUrl, query) =>
+    `${baseUrl.replace(/\/$/, "")}/product/search?search=${encodeURIComponent(query)}`,
+
+  // Ryans: /search?q=QUERY (uses + for spaces)
+  "ryans.com": (baseUrl, query) =>
+    `${baseUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query).replace(/%20/g, "+")}`,
+
+  // Ryans Alias
+  "ryanscomputers.com": (baseUrl, query) =>
+    `${baseUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query).replace(/%20/g, "+")}`,
+};
+
+// Default Fallback: /search?q=QUERY
+const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
+  `${baseUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}`;
+
 export class ScraperService {
   private browser: Browser | null = null;
   private proxies: string[] = [];
@@ -19,8 +41,13 @@ export class ScraperService {
   constructor() {
     const proxyEnv = process.env.SCRAPER_PROXIES;
     if (proxyEnv) {
-      this.proxies = proxyEnv.split(',').map(p => p.trim()).filter(Boolean);
-      console.log(`[ScraperService] Initialized with ${this.proxies.length} proxies.`);
+      this.proxies = proxyEnv
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      console.log(
+        `[ScraperService] Initialized with ${this.proxies.length} proxies.`,
+      );
     }
   }
 
@@ -41,8 +68,9 @@ export class ScraperService {
     if (!this.browser) {
       this.browser = await chromium.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
       });
+      // Context will set user agent
     }
   }
 
@@ -63,7 +91,10 @@ export class ScraperService {
     await this.init();
 
     const proxyUrl = this.getNextProxy();
-    const contextOptions: Parameters<Browser['newContext']>[0] = {};
+    const contextOptions: Parameters<Browser["newContext"]>[0] = {
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    };
 
     if (proxyUrl) {
       contextOptions.proxy = { server: proxyUrl };
@@ -76,8 +107,8 @@ export class ScraperService {
     try {
       // Navigate with timeout
       await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000
+        waitUntil: "domcontentloaded",
+        timeout: 30000,
       });
 
       // Wait for common e-commerce elements
@@ -101,11 +132,10 @@ export class ScraperService {
         return { ...cssData, url };
       }
 
-      if (process.env.NODE_ENV !== 'test') {
+      if (process.env.NODE_ENV !== "test") {
         console.warn(`Failed to scrape product from ${url}`);
       }
       return null;
-
     } catch (error) {
       console.error(`Error scraping ${url}:`, error);
       return null;
@@ -118,14 +148,21 @@ export class ScraperService {
   /**
    * Extract product data from JSON-LD structured data
    */
-  private async extractFromJsonLd(page: Page): Promise<Omit<ScrapedProduct, 'url'> | null> {
+  private async extractFromJsonLd(
+    page: Page,
+  ): Promise<Omit<ScrapedProduct, "url"> | null> {
     try {
       const jsonLd = await page.evaluate(() => {
-        const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+        const scripts = Array.from(
+          document.querySelectorAll('script[type="application/ld+json"]'),
+        );
         for (const script of scripts) {
           try {
-            const data = JSON.parse(script.textContent || '');
-            if (data['@type'] === 'Product' || data['@type']?.includes('Product')) {
+            const data = JSON.parse(script.textContent || "");
+            if (
+              data["@type"] === "Product" ||
+              data["@type"]?.includes("Product")
+            ) {
               return data;
             }
           } catch (e) {
@@ -138,21 +175,23 @@ export class ScraperService {
       if (!jsonLd) return null;
 
       const price = parseFloat(
-        jsonLd.offers?.price ||
-        jsonLd.offers?.[0]?.price ||
-        '0'
+        jsonLd.offers?.price || jsonLd.offers?.[0]?.price || "0",
       );
 
       return {
-        title: jsonLd.name || '',
+        title: jsonLd.name || "",
         price,
-        currency: jsonLd.offers?.priceCurrency || jsonLd.offers?.[0]?.priceCurrency || 'USD',
+        currency:
+          jsonLd.offers?.priceCurrency ||
+          jsonLd.offers?.[0]?.priceCurrency ||
+          "USD",
         sku: jsonLd.sku || jsonLd.gtin || undefined,
         brand: jsonLd.brand?.name || jsonLd.brand || undefined,
         model: jsonLd.model || undefined,
-        inStock: jsonLd.offers?.availability?.includes('InStock') ||
-                jsonLd.offers?.[0]?.availability?.includes('InStock') ||
-                true,
+        inStock:
+          jsonLd.offers?.availability?.includes("InStock") ||
+          jsonLd.offers?.[0]?.availability?.includes("InStock") ||
+          true,
       };
     } catch (error) {
       return null;
@@ -162,20 +201,26 @@ export class ScraperService {
   /**
    * Extract product data from OpenGraph meta tags
    */
-  private async extractFromOpenGraph(page: Page): Promise<Omit<ScrapedProduct, 'url'> | null> {
+  private async extractFromOpenGraph(
+    page: Page,
+  ): Promise<Omit<ScrapedProduct, "url"> | null> {
     try {
       const ogData = await page.evaluate(() => {
         const getMeta = (property: string) => {
           const meta = document.querySelector(`meta[property="${property}"]`);
-          return meta?.getAttribute('content') || '';
+          return meta?.getAttribute("content") || "";
         };
 
         return {
-          title: getMeta('og:title') || getMeta('product:title'),
-          price: getMeta('product:price:amount') || getMeta('og:price:amount'),
-          currency: getMeta('product:price:currency') || getMeta('og:price:currency'),
-          brand: getMeta('product:brand'),
-          availability: getMeta('og:availability') || getMeta('product:availability') || getMeta('product:availability:status'),
+          title: getMeta("og:title") || getMeta("product:title"),
+          price: getMeta("product:price:amount") || getMeta("og:price:amount"),
+          currency:
+            getMeta("product:price:currency") || getMeta("og:price:currency"),
+          brand: getMeta("product:brand"),
+          availability:
+            getMeta("og:availability") ||
+            getMeta("product:availability") ||
+            getMeta("product:availability:status"),
         };
       });
 
@@ -184,9 +229,14 @@ export class ScraperService {
       return {
         title: ogData.title,
         price: parseFloat(ogData.price),
-        currency: ogData.currency || 'USD',
+        currency: ogData.currency || "USD",
         brand: ogData.brand || undefined,
-        inStock: ogData.availability !== 'oos' && ogData.availability !== 'out of stock' && ogData.availability !== 'instock' ? true : ogData.availability === 'instock',
+        inStock:
+          ogData.availability !== "oos" &&
+          ogData.availability !== "out of stock" &&
+          ogData.availability !== "instock"
+            ? true
+            : ogData.availability === "instock",
       };
     } catch (error) {
       return null;
@@ -196,34 +246,45 @@ export class ScraperService {
   /**
    * Extract product data using common CSS selectors
    */
-  private async extractFromSelectors(page: Page): Promise<Omit<ScrapedProduct, 'url'> | null> {
+  private async extractFromSelectors(
+    page: Page,
+  ): Promise<Omit<ScrapedProduct, "url"> | null> {
     try {
       const data = await page.evaluate(() => {
         // Common title selectors
         const titleSelectors = [
           'h1[itemprop="name"]',
-          'h1.product-title',
-          'h1.product-name',
-          '.product-title h1',
-          'h1',
+          "h1.product-title",
+          "h1.product-name",
+          ".product-title h1",
+          "h1",
         ];
 
         // Common price selectors
         const priceSelectors = [
           '[itemprop="price"]',
-          '.price',
-          '.product-price',
-          '.current-price',
-          'span.price',
-          '.price-value',
+          ".price",
+          ".product-price",
+          ".current-price",
+          "span.price",
+          ".price-value",
+          ".p-item-price", // Startech
+          ".special-price", // Ryans sometimes
+          ".regular-price",
+          "#price-special",
         ];
 
         // Common stock selectors
         const oosSelectors = [
-          '.out-of-stock',
-          '.sold-out',
-          '.unavailable',
-          '.stock-out',
+          ".out-of-stock",
+          ".sold-out",
+          ".unavailable",
+          ".stock-out",
+          ".stock-status",
+          ".discontinued",
+          ".upcoming",
+          ".text-discontinued", // Startech specific
+          ".p-item-stock", // Generic
         ];
 
         const getTextContent = (selectors: string[]) => {
@@ -233,13 +294,33 @@ export class ScraperService {
               return el.textContent.trim();
             }
           }
-          return '';
+          return "";
         };
+
+        const stockText = getTextContent(oosSelectors).toLowerCase();
+        const oosKeywords = [
+          "out of stock",
+          "sold out",
+          "discontinued",
+          "upcoming",
+          "not available",
+          "stock out",
+        ];
+        const isActuallyOos =
+          oosKeywords.some((kw) => stockText.includes(kw)) ||
+          oosSelectors.some((s) => {
+            const el = document.querySelector(s);
+            return (
+              el &&
+              (el.classList.contains("out-of-stock") ||
+                el.classList.contains("discontinued"))
+            );
+          });
 
         return {
           title: getTextContent(titleSelectors),
           priceText: getTextContent(priceSelectors),
-          isOos: oosSelectors.some(s => document.querySelector(s) !== null),
+          isOos: isActuallyOos,
         };
       });
 
@@ -247,15 +328,16 @@ export class ScraperService {
 
       // Extract numeric price from text
       const priceMatch = data.priceText.match(/[\d,]+\.?\d*/);
-      if (!priceMatch) return null;
-
-      const price = parseFloat(priceMatch[0].replace(/,/g, ''));
+      let price = 0;
+      if (priceMatch) {
+        price = parseFloat(priceMatch[0].replace(/,/g, ""));
+      }
 
       return {
         title: data.title,
-        price,
-        currency: 'USD', // Default assumption
-        inStock: !data.isOos,
+        price: price > 0 ? price : 0, // Keep as 0, but route will handle null
+        currency: "USD", // Default assumption
+        inStock: !data.isOos && price > 0,
       };
     } catch (error) {
       return null;
@@ -277,7 +359,7 @@ export class ScraperService {
       }
 
       // Rate limiting: wait between requests
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     return results;
@@ -290,24 +372,24 @@ export class ScraperService {
    * Sanitize search query to improve match rates
    */
   private sanitizeQuery(query: string): string {
-    if (!query) return '';
+    if (!query) return "";
 
     // 1. Decode common HTML entities
     let cleaned = query
       .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
       .replace(/&apos;/g, "'")
       .replace(/&#39;/g, "'");
 
     // 2. Remove special characters that often confuse search engines
     // Keeping alphanumeric, spaces, dots, and hyphens
     // Removing quotes, parentheses, brackets, etc.
-    cleaned = cleaned.replace(/["'(){}\[\]]/g, ' ');
+    cleaned = cleaned.replace(/["'(){}\[\]]/g, " ");
 
     // 3. Replace multiple spaces with single space and trim
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
 
     return cleaned;
   }
@@ -315,86 +397,138 @@ export class ScraperService {
   /**
    * Attempt to find and scrape a product on a site using a search query
    */
-  async searchAndScrape(baseUrl: string, query: string): Promise<ScrapedProduct | null> {
+  async searchAndScrape(
+    baseUrl: string,
+    query: string,
+  ): Promise<ScrapedProduct | null> {
     await this.init();
-    const context = await this.browser!.newContext();
+    const context = await this.browser!.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    });
     const page = await context.newPage();
 
     try {
+      // 0. Clean retry flags from the search term
+      const actualQuery = query.replace("__RETRY__", "").trim();
+
       // 1. Sanitize query
-      const cleanQuery = this.sanitizeQuery(query);
-      console.log(`[ScraperService] Original query: "${query}" -> Sanitized: "${cleanQuery}"`);
+      const cleanQuery = this.sanitizeQuery(actualQuery);
+      console.log(
+        `[ScraperService] Original query: "${query}" -> Sanitized: "${cleanQuery}"`,
+      );
 
-      // 2. Build search URL based on site-specific patterns
+      // 2. Resolve Search Strategy
       const hostname = new URL(baseUrl).hostname.toLowerCase();
-      let searchUrl: string;
 
-      if (hostname.includes('startech.com.bd')) {
-        // Startech uses: /product/search?search=QUERY
-        searchUrl = `${baseUrl.replace(/\/$/, '')}/product/search?search=${encodeURIComponent(cleanQuery)}`;
-      } else if (hostname.includes('ryans.com')) {
-        // Ryans uses: /search?q=QUERY
-        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(cleanQuery)}`;
-      } else {
-        // Default fallback pattern
-        searchUrl = `${baseUrl.replace(/\/$/, '')}/search?q=${encodeURIComponent(cleanQuery)}`;
-      }
+      // Find matching strategy by checking if hostname contains the key
+      const strategyKey = Object.keys(SEARCH_STRATEGIES).find((domain) =>
+        hostname.includes(domain),
+      );
+      const buildUrl = strategyKey
+        ? SEARCH_STRATEGIES[strategyKey]
+        : DEFAULT_STRATEGY;
 
-      console.log(`[ScraperService] Searching: ${searchUrl}`);
+      const searchUrl = buildUrl(baseUrl, cleanQuery);
 
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-      await page.waitForTimeout(2000);
+      console.log(
+        `[ScraperService] Searching: ${searchUrl} (Strategy: ${strategyKey || "Default"})`,
+      );
 
-      // 3. Look for links that might be products (heuristics)
-      const productLink = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('a'));
-        // Filter for links that might be product pages
-        const potentialProducts = links.filter(a => {
-          const href = a.href.toLowerCase();
-          const text = a.textContent?.toLowerCase() || '';
-
-          // CRITICAL: Exclude search pages, pagination, and sorting parameters
-          if (href.includes('/search') ||
-              href.includes('route=product/search') ||
-              href.includes('search=') ||
-              href.includes('sort=') ||
-              href.includes('limit=') ||
-              href.includes('page=') ||
-              href.includes('javascript:')) {
-            return false;
-          }
-
-          // Heuristic: URL contains 'product' or 'item' or the text is long and matches query-like words
-          // Startech URLs are often just /product-name or /category/product-name
-          // so we can't rely strictly on /product/ being in the path.
-          // Instead, we rely on the exclusion above and length checks.
-
-          // Specific to Startech/Opencart: Product links usually are inside .product-thumb or .p-item
-          const isInsideProductCard = a.closest('.product-thumb') || a.closest('.p-item') || a.closest('.product-item');
-
-          if (isInsideProductCard) return true;
-
-          // General fallback
-          return (href.includes('/product/') || href.includes('/p/') || href.includes('/item/')) &&
-                 text.length > 10;
-        });
-
-        return potentialProducts[0]?.href || null;
+      // Ryans/Startech are heavy on JS, use networkidle if possible or longer wait
+      await page.goto(searchUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 30000,
       });
 
+      // Wait for results to render (critical for CSR sites)
+      await page.waitForTimeout(5000);
+
+      // 3. Look for links that might be products (heuristics)
+      let productLink = await this.evaluateProductLink(page);
+
+      // --- NEW: Google Search Fallback ---
+      if (!productLink) {
+        console.log(
+          `[ScraperService] No direct results. Attempting Deep Search via Google...`,
+        );
+        const googleQuery = `site:${hostname} ${cleanQuery}`;
+        const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(googleQuery)}`;
+
+        try {
+          await page.goto(googleSearchUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+          });
+          await page.waitForTimeout(3000); // Wait for Google results
+
+          productLink = await page.evaluate((targetHost) => {
+            const links = Array.from(document.querySelectorAll("a"));
+            // Look for links that point to the competitor site and aren't search/cache links
+            const matches = links.filter((a) => {
+              const href = a.href.toLowerCase();
+              return (
+                href.includes(targetHost) &&
+                !href.includes("google.com") &&
+                !href.includes("webcache.googleusercontent.com") &&
+                !href.includes("/search?")
+              );
+            });
+            return matches[0]?.href || null;
+          }, hostname);
+        } catch (e) {
+          console.error(`[ScraperService] Google fallback failed:`, e);
+        }
+      }
+
       if (productLink) {
-        console.log(`[ScraperService] Found potential match: ${productLink}`);
+        console.log(`[ScraperService] Found match: ${productLink}`);
         return await this.scrapeProductPage(productLink);
       }
 
       // Fallback Strategy: If no match found and query is long, try simplifying
-      const words = cleanQuery.split(' ');
-      if (words.length > 4 && !query.includes('__RETRY__')) {
-        const simpleQuery = words.slice(0, 4).join(' ');
-        console.log(`[ScraperService] No identification with full title. Retrying with simplified: "${simpleQuery}"`);
+      // If we are already in a retry loop (indicated by __RETRY__), don't recurse infinitely
+      if (!query.includes("__RETRY__") && cleanQuery.split(" ").length > 3) {
+        // Strategy A: Smart Simplification (Brand + Model + Key Spec)
+        // Remove filler words to focus on the core product identity
+        const stopWords = [
+          "with",
+          "graphics",
+          "processor",
+          "edition",
+          "gaming",
+          "desktop",
+          "casing",
+          "monitor",
+          "series",
+          "feature",
+          "rgb",
+          "tower",
+        ];
+        const words = cleanQuery.split(" ");
+        const coreWords = words.filter(
+          (w) => !stopWords.includes(w.toLowerCase()) && w.length > 2,
+        );
 
-        // Add a flag to prevent infinite loops (though the length check should suffice)
-        return this.searchAndScrape(baseUrl, simpleQuery + '__RETRY__');
+        // Take up to 5 core words
+        const smartQuery = coreWords.slice(0, 5).join(" ");
+
+        if (smartQuery !== cleanQuery && smartQuery.length > 5) {
+          console.log(
+            `[ScraperService] No identification with full title. Retrying with smart simplified: "${smartQuery}"`,
+          );
+          return this.searchAndScrape(baseUrl, smartQuery + "__RETRY__");
+        }
+
+        // Strategy B: Brute Force Truncation (First 3-4 words)
+        // Only if Strategy A didn't change much or failed (we could chain these but let's stick to one good retry for now)
+        if (words.length > 4) {
+          const simpleQuery = words.slice(0, 4).join(" ");
+          console.log(
+            `[ScraperService] No identification with full title. Retrying with simple truncation: "${simpleQuery}"`,
+          );
+          return this.searchAndScrape(baseUrl, simpleQuery + "__RETRY__");
+        }
       }
 
       return null;
@@ -407,6 +541,49 @@ export class ScraperService {
     }
   }
 
+  /**
+   * Helper to identify product links on a results page
+   */
+  private async evaluateProductLink(page: Page): Promise<string | null> {
+    return await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll("a"));
+      const potentialProducts = links.filter((a) => {
+        const href = a.href.toLowerCase();
+        const text = a.textContent?.toLowerCase() || "";
+
+        if (
+          href.includes("search?q=") ||
+          href.includes("route=product/search") ||
+          href.includes("search=") ||
+          href.includes("sort=") ||
+          href.includes("limit=") ||
+          href.includes("page=") ||
+          href.includes("javascript:")
+        ) {
+          return false;
+        }
+
+        const isStartechCard =
+          a.closest(".product-thumb") ||
+          a.closest(".p-item") ||
+          a.closest(".product-item");
+        const isRyansCard =
+          a.closest(".product-box") || a.closest(".card-body");
+
+        if (isStartechCard || isRyansCard) return true;
+
+        return (
+          (href.includes("/product/") ||
+            href.includes("/p/") ||
+            href.includes("/item/")) &&
+          text.length > 10
+        );
+      });
+
+      return potentialProducts[0]?.href || null;
+    });
+  }
+
   // Helper to handle the magic retry suffix transparently if needed,
   // currently we just strip it in sanitizeQuery or handle it in the recursive call logic.
   // Actually, sanitizeQuery will strip the underscores if we aren't careful,
@@ -415,4 +592,3 @@ export class ScraperService {
   // But to be safe, let's just use the words length check logic and valid recursion.
   // We'll strip the flag in sanitizeQuery if it exists to keep the search clean.
 }
-

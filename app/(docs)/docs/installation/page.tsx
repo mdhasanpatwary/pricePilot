@@ -1,15 +1,35 @@
 import Callout from "@/components/docs/callout";
-import { Terminal, Puzzle, Globe, Shield, CheckCircle2, ArrowRight, Layers } from "lucide-react";
+import { Puzzle, Globe, CheckCircle2, ArrowRight, Layers } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 export default function InstallationPage() {
   const platforms = [
-    { name: "Laravel", href: "/docs/laravel", icon: "/icons/platforms/laravel.png", status: "Official" },
-    { name: "Shopify", href: "/docs/shopify", icon: "/icons/platforms/shopify.svg", status: "Beta" },
-    { name: "WooCommerce", href: "/docs/woocommerce", icon: "/icons/platforms/woocommerce.svg", status: "Soon" },
-    { name: "Magento", href: "/docs/magento", icon: "/icons/platforms/magento.png", status: "Soon" },
+    {
+      name: "Laravel",
+      href: "/docs/laravel",
+      icon: "/icons/platforms/laravel.png",
+      status: "Official",
+    },
+    {
+      name: "Shopify",
+      href: "/docs/shopify",
+      icon: "/icons/platforms/shopify.svg",
+      status: "Beta",
+    },
+    {
+      name: "WooCommerce",
+      href: "/docs/woocommerce",
+      icon: "/icons/platforms/woocommerce.svg",
+      status: "Soon",
+    },
+    {
+      name: "Magento",
+      href: "/docs/magento",
+      icon: "/icons/platforms/magento.png",
+      status: "Soon",
+    },
   ];
 
   return (
@@ -23,7 +43,8 @@ export default function InstallationPage() {
           Installation
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-          Connect PricePilot to your store using our official integrations or our flexible REST API.
+          Connect PricePilot to your store using our official integrations or
+          our flexible REST API.
         </p>
       </div>
 
@@ -38,17 +59,22 @@ export default function InstallationPage() {
               <div className="p-2.5 bg-muted text-muted-foreground rounded-md">
                 <Puzzle className="w-5 h-5" />
               </div>
-              <h4 className="text-base font-bold tracking-tight">Official Plugins</h4>
+              <h4 className="text-base font-bold tracking-tight">
+                Official Plugins
+              </h4>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Recommended for standard e-commerce builds. Plug-and-play synchronization with zero configuration.
+              Recommended for standard e-commerce builds. Plug-and-play
+              synchronization with zero configuration.
             </p>
             <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                <CheckCircle2 className="w-3.5 h-3.5 text-success/70" /> Auto-updates
+                <CheckCircle2 className="w-3.5 h-3.5 text-success/70" />{" "}
+                Auto-updates
               </div>
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                <CheckCircle2 className="w-3.5 h-3.5 text-success/70" /> High Perf
+                <CheckCircle2 className="w-3.5 h-3.5 text-success/70" /> High
+                Perf
               </div>
             </div>
           </div>
@@ -58,17 +84,20 @@ export default function InstallationPage() {
               <div className="p-2.5 bg-muted text-muted-foreground rounded-md">
                 <Globe className="w-5 h-5" />
               </div>
-              <h4 className="text-base font-bold tracking-tight">Technical API</h4>
+              <h4 className="text-base font-bold tracking-tight">
+                Technical API
+              </h4>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              For custom frameworks and enterprise headless setups. Full control over data flows and event handling.
+              For custom frameworks and enterprise headless setups. Full control
+              over data flows and event handling.
             </p>
             <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                 Native REST
+                Native REST
               </div>
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                 GraphQL Soon
+                GraphQL Soon
               </div>
             </div>
           </div>
@@ -77,7 +106,9 @@ export default function InstallationPage() {
 
       {/* platform grid */}
       <section className="space-y-8 pt-6">
-        <h2 className="text-2xl font-bold tracking-tight">Supported Platforms</h2>
+        <h2 className="text-2xl font-bold tracking-tight">
+          Supported Platforms
+        </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {platforms.map((p) => (
             <Link
@@ -95,11 +126,16 @@ export default function InstallationPage() {
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-bold text-foreground">{p.name}</p>
-                <p className={cn(
-                  "text-[9px] font-bold uppercase tracking-widest italic",
-                  p.status === "Official" ? "text-primary/60" :
-                  p.status === "Beta" ? "text-amber-600/60" : "text-muted-foreground/40"
-                )}>
+                <p
+                  className={cn(
+                    "text-[9px] font-bold uppercase tracking-widest italic",
+                    p.status === "Official"
+                      ? "text-primary/60"
+                      : p.status === "Beta"
+                        ? "text-amber-600/60"
+                        : "text-muted-foreground/40",
+                  )}
+                >
                   {p.status}
                 </p>
               </div>
@@ -109,16 +145,30 @@ export default function InstallationPage() {
       </section>
 
       <Callout type="info">
-        Using a custom framework? Start with our <Link href="/docs/api/auth" className="font-bold underline decoration-primary/30">API Authentication</Link> guide.
+        Using a custom framework? Start with our{" "}
+        <Link
+          href="/docs/api/auth"
+          className="font-bold underline decoration-primary/30"
+        >
+          API Authentication
+        </Link>{" "}
+        guide.
       </Callout>
 
       {/* footer */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-10 border-t border-border mt-20">
-        <Link href="/docs/quickstart" className="flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+        <Link
+          href="/docs/quickstart"
+          className="flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowRight className="w-3.5 h-3.5 rotate-180" /> Back to Quick Start
         </Link>
-        <Link href="/docs/laravel" className="flex items-center gap-2 text-xs font-bold text-primary group">
-          Integration Details <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+        <Link
+          href="/docs/laravel"
+          className="flex items-center gap-2 text-xs font-bold text-primary group"
+        >
+          Integration Details{" "}
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
         </Link>
       </div>
     </div>

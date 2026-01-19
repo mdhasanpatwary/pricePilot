@@ -1,11 +1,20 @@
 import Link from "next/link";
-import { BookOpen, Rocket, Puzzle, Code, ArrowRight, Zap, Shield, Activity } from "lucide-react";
+import {
+  Rocket,
+  Puzzle,
+  Code,
+  ArrowRight,
+  Zap,
+  Shield,
+  Activity,
+} from "lucide-react";
 
 export default function DocsLandingPage() {
   const categories = [
     {
       title: "Getting Started",
-      description: "Learn how to set up PricePilot and connect your first store in minutes.",
+      description:
+        "Learn how to set up PricePilot and connect your first store in minutes.",
       icon: Rocket,
       href: "/docs/quickstart",
       borderColor: "border-primary/20",
@@ -13,7 +22,8 @@ export default function DocsLandingPage() {
     },
     {
       title: "Integrations",
-      description: "Step-by-step guides for Laravel, Shopify, WooCommerce, and more.",
+      description:
+        "Step-by-step guides for Laravel, Shopify, WooCommerce, and more.",
       icon: Puzzle,
       href: "/docs/laravel",
       borderColor: "border-border",
@@ -21,7 +31,8 @@ export default function DocsLandingPage() {
     },
     {
       title: "API Reference",
-      description: "Complete documentation for our REST API endpoints and webhooks.",
+      description:
+        "Complete documentation for our REST API endpoints and webhooks.",
       icon: Code,
       href: "/docs/api/endpoints",
       borderColor: "border-border",
@@ -32,17 +43,20 @@ export default function DocsLandingPage() {
   const features = [
     {
       title: "Product Sync",
-      description: "Sync your catalog across multiple platforms with automated reconciliation.",
+      description:
+        "Sync your catalog across multiple platforms with automated reconciliation.",
       icon: Activity,
     },
     {
       title: "Dynamic Pricing",
-      description: "React to competitor changes instantly with customizable pricing rules.",
+      description:
+        "React to competitor changes instantly with customizable pricing rules.",
       icon: Zap,
     },
     {
       title: "Secure Bridge",
-      description: "Protect your store data with encrypted tokens and secure webhooks.",
+      description:
+        "Protect your store data with encrypted tokens and secure webhooks.",
       icon: Shield,
     },
   ];
@@ -55,7 +69,8 @@ export default function DocsLandingPage() {
           Documentation
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-          Complete guides and technical references for the PricePilot e-commerce optimization engine.
+          Complete guides and technical references for the PricePilot e-commerce
+          optimization engine.
         </p>
       </div>
 
@@ -86,8 +101,12 @@ export default function DocsLandingPage() {
       {/* Core Concepts */}
       <div className="space-y-10">
         <div className="space-y-2">
-          <h2 className="text-2xl font-bold tracking-tight">Platform Overview</h2>
-          <p className="text-sm text-muted-foreground">The core pillars of the PricePilot engine.</p>
+          <h2 className="text-2xl font-bold tracking-tight">
+            Platform Overview
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            The core pillars of the PricePilot engine.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
@@ -95,7 +114,9 @@ export default function DocsLandingPage() {
             <div key={feature.title} className="space-y-3">
               <div className="flex items-center gap-2.5 text-foreground">
                 <feature.icon className="w-4 h-4" />
-                <h4 className="text-sm font-bold tracking-tight">{feature.title}</h4>
+                <h4 className="text-sm font-bold tracking-tight">
+                  {feature.title}
+                </h4>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed italic">
                 {feature.description}
@@ -108,16 +129,25 @@ export default function DocsLandingPage() {
       {/* Help Section */}
       <div className="p-8 rounded-lg border border-border bg-muted/20 space-y-6">
         <div className="space-y-2">
-          <h4 className="text-base font-bold text-foreground">Missing something?</h4>
+          <h4 className="text-base font-bold text-foreground">
+            Missing something?
+          </h4>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-            Our technical support team is available to help with custom integrations and platform-specific deployments.
+            Our technical support team is available to help with custom
+            integrations and platform-specific deployments.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link href="/support" className="px-4 py-2 bg-foreground text-background text-xs font-bold rounded-md hover:opacity-90 transition-opacity">
+          <Link
+            href="/support"
+            className="px-4 py-2 bg-foreground text-background text-xs font-bold rounded-md hover:opacity-90 transition-opacity"
+          >
             Contact Support
           </Link>
-          <Link href="/community" className="px-4 py-2 border border-border text-foreground text-xs font-bold rounded-md hover:bg-muted/50 transition-colors">
+          <Link
+            href="/community"
+            className="px-4 py-2 border border-border text-foreground text-xs font-bold rounded-md hover:bg-muted/50 transition-colors"
+          >
             Developer Community
           </Link>
         </div>

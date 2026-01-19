@@ -72,6 +72,7 @@ model Product {
   sku                 String?
   url                 String?
   title               String
+  category            String?
   brand               String?
   model               String?
   currentPrice        Decimal          @db.Decimal(10, 2)

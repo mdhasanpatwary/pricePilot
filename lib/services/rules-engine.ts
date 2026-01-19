@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { PricingRule, StrategyType } from "@prisma/client";
+import { PricingRule } from "@prisma/client";
 import { WebhookService } from "./webhook";
 
 interface PriceRecommendation {
@@ -15,7 +15,7 @@ export class RulesEngine {
    * Evaluate all active pricing rules for a tenant
    */
   static async evaluateAllRules(
-    tenantId: string
+    tenantId: string,
   ): Promise<PriceRecommendation[]> {
     // Get all active pricing rules from database
     const rules = await prisma.pricingRule.findMany({
@@ -66,7 +66,7 @@ export class RulesEngine {
       sku: string | null;
       title: string;
     },
-    rules: PricingRule[]
+    rules: PricingRule[],
   ): Promise<PriceRecommendation | null> {
     const currentPrice = parseFloat(product.currentPrice.toString());
 
@@ -76,12 +76,19 @@ export class RulesEngine {
       return null; // No competitor data to compare
     }
 
-    const competitorPrice = parseFloat(bestMatch.competitorProduct.currentPrice.toString());
+    const competitorPrice = parseFloat(
+      bestMatch.competitorProduct.currentPrice.toString(),
+    );
     const competitorIsOutOfStock = !bestMatch.competitorProduct.inStock;
 
     // Apply rules in priority order
     for (const rule of rules) {
-      const result = this.applyRule(rule, currentPrice, competitorPrice, competitorIsOutOfStock);
+      const result = this.applyRule(
+        rule,
+        currentPrice,
+        competitorPrice,
+        competitorIsOutOfStock,
+      );
 
       if (result) {
         return {
@@ -104,7 +111,7 @@ export class RulesEngine {
     rule: PricingRule,
     currentPrice: number,
     competitorPrice: number,
-    competitorIsOutOfStock: boolean = false
+    competitorIsOutOfStock: boolean = false,
   ): { price: number; reason: string } | null {
     switch (rule.strategy as any) {
       case "UNDERCUT":
@@ -195,7 +202,7 @@ export class RulesEngine {
    * Execute price changes for approved recommendations
    */
   static async executePriceChanges(
-    recommendations: PriceRecommendation[]
+    recommendations: PriceRecommendation[],
   ): Promise<{ updated: number; failed: number }> {
     let updated = 0;
     let failed = 0;
@@ -226,12 +233,12 @@ export class RulesEngine {
           oldPrice: rec.currentPrice,
           newPrice: rec.recommendedPrice,
           reason: rec.reason,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
 
         updated++;
       } catch (error) {
-        if (process.env.NODE_ENV !== 'test') {
+        if (process.env.NODE_ENV !== "test") {
           console.error(`Failed to update product ${rec.productId}:`, error);
         }
         failed++;

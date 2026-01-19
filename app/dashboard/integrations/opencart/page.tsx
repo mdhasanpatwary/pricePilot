@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Download, CheckCircle2, FileCode, Terminal, ExternalLink, BookOpen, Zap, Shield, Package, Layout } from "lucide-react";
+import {
+  Download,
+  CheckCircle2,
+  ExternalLink,
+  Zap,
+  Shield,
+  Layout,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export default function OpenCartIntegrationPage() {
@@ -44,12 +51,19 @@ export default function OpenCartIntegrationPage() {
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <a href="/dashboard/connections" className="text-sm font-medium text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
+              <a
+                href="/dashboard/connections"
+                className="text-sm font-medium text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+              >
                 &larr; Back to Connections
               </a>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">OpenCart Integration</h1>
-            <p className="text-muted-foreground">Connect your OpenCart store to PricePilot</p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              OpenCart Integration
+            </h1>
+            <p className="text-muted-foreground">
+              Connect your OpenCart store to PricePilot
+            </p>
           </div>
         </div>
       </div>
@@ -57,7 +71,9 @@ export default function OpenCartIntegrationPage() {
       {/* Version Badge */}
       <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-full">
         <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-        <span className="text-xs font-bold text-primary uppercase tracking-widest">Latest Version: v1.0.0</span>
+        <span className="text-xs font-bold text-primary uppercase tracking-widest">
+          Latest Version: v1.0.0
+        </span>
       </div>
 
       {/* Main Content Grid */}
@@ -69,7 +85,8 @@ export default function OpenCartIntegrationPage() {
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Download Extension</h2>
               <p className="text-sm text-muted-foreground">
-                Get the official PricePilot OpenCart extension. Standard .ocmod.zip format for easy installation.
+                Get the official PricePilot OpenCart extension. Standard
+                .ocmod.zip format for easy installation.
               </p>
             </div>
 
@@ -102,7 +119,8 @@ export default function OpenCartIntegrationPage() {
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Installation Steps</h2>
               <p className="text-sm text-muted-foreground">
-                Follow these simple steps to integrate PricePilot with your OpenCart store
+                Follow these simple steps to integrate PricePilot with your
+                OpenCart store
               </p>
             </div>
 
@@ -115,7 +133,9 @@ export default function OpenCartIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Download OCMOD Package</h3>
                   <p className="text-xs text-muted-foreground">
-                    Download the <code className="bg-muted px-1 rounded">.ocmod.zip</code> extension above. Do not extract it.
+                    Download the{" "}
+                    <code className="bg-muted px-1 rounded">.ocmod.zip</code>{" "}
+                    extension above. Do not extract it.
                   </p>
                 </div>
               </div>
@@ -126,9 +146,13 @@ export default function OpenCartIntegrationPage() {
                   2
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm">Upload via Extension Installer</h3>
+                  <h3 className="font-bold text-sm">
+                    Upload via Extension Installer
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    In your OpenCart Admin, go to <b>Extensions &rarr; Installer</b> and upload the downloaded zip file.
+                    In your OpenCart Admin, go to{" "}
+                    <b>Extensions &rarr; Installer</b> and upload the downloaded
+                    zip file.
                   </p>
                 </div>
               </div>
@@ -141,7 +165,8 @@ export default function OpenCartIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Refresh Modifications</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to <b>Extensions &rarr; Modifications</b> and click the <b>Refresh</b> button (top right) to apply changes.
+                    Go to <b>Extensions &rarr; Modifications</b> and click the{" "}
+                    <b>Refresh</b> button (top right) to apply changes.
                   </p>
                 </div>
               </div>
@@ -154,7 +179,9 @@ export default function OpenCartIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Configure Module</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to <b>PricePilot</b> in your sidebar (or Extensions &rarr; Modules &rarr; PricePilot). Enable the status and copy your <b>API Token</b>.
+                    Go to <b>PricePilot</b> in your sidebar (or Extensions
+                    &rarr; Modules &rarr; PricePilot). Enable the status and
+                    copy your <b>API Token</b>.
                   </p>
                 </div>
               </div>
@@ -165,9 +192,12 @@ export default function OpenCartIntegrationPage() {
                   5
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm text-success">Connect Your Store</h3>
+                  <h3 className="font-bold text-sm text-success">
+                    Connect Your Store
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Now go back to the PricePilot Dashboard and use your store URL and the API token to finalize the connection.
+                    Now go back to the PricePilot Dashboard and use your store
+                    URL and the API token to finalize the connection.
                   </p>
                   <a
                     href="/dashboard/connections"
@@ -189,7 +219,9 @@ export default function OpenCartIntegrationPage() {
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">OpenCart Support</p>
-                  <p className="text-xs text-muted-foreground">Version 3.0.x.x and 4.x</p>
+                  <p className="text-xs text-muted-foreground">
+                    Version 3.0.x.x and 4.x
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
@@ -203,7 +235,9 @@ export default function OpenCartIntegrationPage() {
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">Security</p>
-                  <p className="text-xs text-muted-foreground">Token-based authentication</p>
+                  <p className="text-xs text-muted-foreground">
+                    Token-based authentication
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
@@ -253,7 +287,8 @@ export default function OpenCartIntegrationPage() {
           <div className="bg-primary/5 border border-primary/10 rounded-lg p-6 space-y-3">
             <h3 className="font-bold text-sm">Need Help?</h3>
             <p className="text-xs text-muted-foreground">
-              Our support team is here to help you get started with the OpenCart integration.
+              Our support team is here to help you get started with the OpenCart
+              integration.
             </p>
             <a
               href="mailto:support@pricepilot.com"
@@ -274,10 +309,11 @@ export default function OpenCartIntegrationPage() {
         <div className="space-y-2">
           <h2 className="text-2xl font-bold">Ready to Connect?</h2>
           <p className="text-muted-foreground max-w-md mx-auto">
-            Once you have installed the extension and have your API token, you are ready to link your store.
+            Once you have installed the extension and have your API token, you
+            are ready to link your store.
           </p>
         </div>
-        <a 
+        <a
           href="/dashboard/connections"
           className="bg-primary text-primary-foreground px-8 py-3 rounded-full font-bold hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20"
         >

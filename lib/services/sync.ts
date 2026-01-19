@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { Product, Site, PlatformType } from "@prisma/client";
+import { Product, Site } from "@prisma/client";
 import axios from "axios";
 
 interface ExternalProduct {
   external_id: string;
   sku: string | null;
   title: string;
+  category?: string | null;
   price: number;
   brand: string | null;
   model: string | null;
@@ -27,7 +28,9 @@ export class SyncService {
 
     // 1. Fetch products from external platform
     if (!site.apiToken) {
-      console.log(`[SyncService] No API token for ${site.baseUrl}, skipping fetch.`);
+      console.log(
+        `[SyncService] No API token for ${site.baseUrl}, skipping fetch.`,
+      );
       return { count: 0, siteName: site.baseUrl };
     }
 
@@ -45,13 +48,14 @@ export class SyncService {
       const existingProduct = await prisma.product.findFirst({
         where: {
           siteId: site.id,
-          externalId: extProd.external_id
-        }
+          externalId: extProd.external_id,
+        },
       });
 
       let product;
       const productData = {
         title: extProd.title,
+        category: extProd.category,
         currentPrice: extProd.price,
         sku: extProd.sku,
         model: extProd.model,
@@ -63,7 +67,7 @@ export class SyncService {
       if (existingProduct) {
         product = await prisma.product.update({
           where: { id: existingProduct.id },
-          data: productData
+          data: productData,
         });
       } else {
         product = await prisma.product.create({
@@ -73,7 +77,7 @@ export class SyncService {
             tenantId: site.tenantId,
             externalId: extProd.external_id,
             currency: "USD",
-          }
+          },
         });
       }
 
@@ -103,13 +107,16 @@ export class SyncService {
   /**
    * Fetch products from OpenCart API
    */
-  private static async fetchFromOpenCart(site: Site): Promise<ExternalProduct[]> {
+  private static async fetchFromOpenCart(
+    site: Site,
+  ): Promise<ExternalProduct[]> {
     interface OpenCartProduct {
       product_id?: string | number;
       id?: string | number;
       sku?: string;
       name?: string;
       title?: string;
+      category?: string;
       price?: string;
       special?: string;
       manufacturer?: string;
@@ -123,7 +130,7 @@ export class SyncService {
         `${site.baseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`,
         {
           timeout: 30000,
-        }
+        },
       );
 
       // Expected OpenCart response format:
@@ -134,10 +141,11 @@ export class SyncService {
         external_id: p.product_id?.toString() || p.id?.toString() || "",
         sku: p.sku || null,
         title: p.name || p.title || "Unknown Product",
+        category: p.category || null,
         price: parseFloat(p.price || p.special || "0"),
         brand: p.manufacturer || null,
         model: p.model || null,
-        in_stock: p.quantity > 0 || p.stock_status === 'In Stock',
+        in_stock: p.quantity > 0 || p.stock_status === "In Stock",
       }));
     } catch (error) {
       console.error(`OpenCart API error for ${site.baseUrl}:`, error);
@@ -145,8 +153,24 @@ export class SyncService {
       // Fallback to mock data for development
       console.log(`Using mock data for OpenCart: ${site.baseUrl}`);
       return [
-        { external_id: "oc_1", sku: "NIKE-AM-270", title: "Nike Air Max 270", price: 150.00, brand: "Nike", model: "270", in_stock: true },
-        { external_id: "oc_2", sku: "ADIDAS-UB-22", title: "Adidas Ultraboost 22", price: 180.00, brand: "Adidas", model: "22", in_stock: false },
+        {
+          external_id: "oc_1",
+          sku: "NIKE-AM-270",
+          title: "Nike Air Max 270",
+          price: 150.0,
+          brand: "Nike",
+          model: "270",
+          in_stock: true,
+        },
+        {
+          external_id: "oc_2",
+          sku: "ADIDAS-UB-22",
+          title: "Adidas Ultraboost 22",
+          price: 180.0,
+          brand: "Adidas",
+          model: "22",
+          in_stock: false,
+        },
       ];
     }
   }
@@ -154,12 +178,15 @@ export class SyncService {
   /**
    * Fetch products from Laravel API
    */
-  private static async fetchFromLaravel(site: Site): Promise<ExternalProduct[]> {
+  private static async fetchFromLaravel(
+    site: Site,
+  ): Promise<ExternalProduct[]> {
     interface LaravelProduct {
       id?: string | number;
       sku?: string;
       name?: string;
       title?: string;
+      category?: string;
       price?: string;
       brand?: string;
       model?: string;
@@ -167,25 +194,24 @@ export class SyncService {
     }
 
     try {
-      const response = await axios.get(
-        `${site.baseUrl}/api/pricepilot/sync`,
-        {
-          headers: {
-            'X-PricePilot-Token': site.apiToken,
-            'Accept': "application/json",
-          },
-          timeout: 30000,
-        }
-      );
+      const response = await axios.get(`${site.baseUrl}/api/pricepilot/sync`, {
+        headers: {
+          "X-PricePilot-Token": site.apiToken,
+          Accept: "application/json",
+        },
+        timeout: 30000,
+      });
 
       // Expected Laravel response format:
       // { data: [{ id, sku, name, price, brand, model }] }
-      const products: LaravelProduct[] = response.data.data || response.data || [];
+      const products: LaravelProduct[] =
+        response.data.data || response.data || [];
 
       return products.map((p) => ({
         external_id: p.id?.toString() || "",
         sku: p.sku || null,
         title: p.name || p.title || "Unknown Product",
+        category: p.category || null,
         price: parseFloat(p.price || "0"),
         brand: p.brand || null,
         model: p.model || null,
@@ -197,7 +223,15 @@ export class SyncService {
       // Fallback to mock data for development
       console.log(`Using mock data for Laravel: ${site.baseUrl}`);
       return [
-        { external_id: "lv_1", sku: "PUMA-RS-X", title: "Puma RS-X", price: 110.00, brand: "Puma", model: "RS-X", in_stock: true },
+        {
+          external_id: "lv_1",
+          sku: "PUMA-RS-X",
+          title: "Puma RS-X",
+          price: 110.0,
+          brand: "Puma",
+          model: "RS-X",
+          in_stock: true,
+        },
       ];
     }
   }
@@ -214,33 +248,54 @@ export class SyncService {
     if (!site) throw new Error("Site not found");
 
     if (!site.apiToken) {
-      console.log(`[SyncService] No API token for ${site.baseUrl}, skipping push.`);
+      console.log(
+        `[SyncService] No API token for ${site.baseUrl}, skipping push.`,
+      );
       return { success: true, updated: 0 };
     }
 
-    const productsToUpdate = site.products.filter(p => p.externalId);
+    const productsToUpdate = site.products.filter((p) => p.externalId);
 
-    console.log(`[SyncService] Pushing ${productsToUpdate.length} price updates to ${site.platform}`);
-
-    const results = await Promise.all(
-      productsToUpdate.map(async (product) => {
-        try {
-          if (site.platform === "OPENCART") {
-            return await this.updateOpenCartPrice(site, product);
-          } else if (site.platform === "LARAVEL") {
-            return await this.updateLaravelPrice(site, product);
-          }
-          return null;
-        } catch (error) {
-          console.error(`Failed to update price for product ${product.id}:`, error);
-          return null;
-        }
-      })
+    console.log(
+      `[SyncService] Pushing ${productsToUpdate.length} price updates to ${site.platform}`,
     );
+
+    const results: (boolean | null)[] = [];
+    const BATCH_SIZE = 5;
+
+    for (let i = 0; i < productsToUpdate.length; i += BATCH_SIZE) {
+      const batch = productsToUpdate.slice(i, i + BATCH_SIZE);
+
+      const batchResults = await Promise.all(
+        batch.map(async (product) => {
+          try {
+            if (site.platform === "OPENCART") {
+              return await this.updateOpenCartPrice(site, product);
+            } else if (site.platform === "LARAVEL") {
+              return await this.updateLaravelPrice(site, product);
+            }
+            return null;
+          } catch (error) {
+            console.error(
+              `Failed to update price for product ${product.id}:`,
+              error,
+            );
+            return null;
+          }
+        }),
+      );
+
+      results.push(...batchResults);
+
+      // Add a small delay between batches to respect server limits
+      if (i + BATCH_SIZE < productsToUpdate.length) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
 
     return {
       success: true,
-      updated: results.filter(r => r !== null).length,
+      updated: results.filter((r) => r !== null).length,
     };
   }
 
@@ -253,15 +308,31 @@ export class SyncService {
     const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${site.apiToken}`;
 
     try {
-      await axios.post(url, {
-        product_id: product.externalId,
-        price: product.currentPrice.toString(),
-      }, {
-        timeout: 10000,
-      });
+      await axios.post(
+        url,
+        {
+          product_id: product.externalId,
+          price: product.currentPrice.toString(),
+        },
+        {
+          timeout: 10000,
+        },
+      );
       return true;
     } catch (error) {
-      console.error(`OpenCart Update Error for ${product.id}:`, error);
+      if (
+        axios.isAxiosError(error) &&
+        (error.response?.status === 508 || error.response?.status === 429)
+      ) {
+        console.warn(
+          `[SyncService] OpenCart Rate Limit/Loop Warning (Status ${error.response.status}). Retrying skipped for ${product.id}`,
+        );
+      } else {
+        console.error(
+          `OpenCart Update Error for ${product.id}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
       return false;
     }
   }
@@ -273,16 +344,20 @@ export class SyncService {
     const url = `${site.baseUrl}/api/pricepilot/update`;
 
     try {
-      await axios.post(url, {
-        product_id: product.externalId,
-        price: product.currentPrice.toString(),
-      }, {
-        headers: {
-          'X-PricePilot-Token': site.apiToken,
-          'Accept': "application/json"
+      await axios.post(
+        url,
+        {
+          product_id: product.externalId,
+          price: product.currentPrice.toString(),
         },
-        timeout: 10000,
-      });
+        {
+          headers: {
+            "X-PricePilot-Token": site.apiToken,
+            Accept: "application/json",
+          },
+          timeout: 10000,
+        },
+      );
       return true;
     } catch (error) {
       console.error(`Laravel Update Error for ${product.id}:`, error);

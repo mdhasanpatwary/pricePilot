@@ -4,28 +4,48 @@ import { SyncService } from "./sync";
 import { MatchingService } from "./matching";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
+import { withRetry } from "@/lib/utils/timeout";
 
 export class SyncOrchestrator {
   /**
    * Run a full sync for a tenant
    */
   static async runFullSync(tenantId: string) {
-    console.log(`[SyncOrchestrator] Starting full sync for tenant: ${tenantId}`);
+    console.log(
+      `[SyncOrchestrator] Starting full sync for tenant: ${tenantId}`,
+    );
 
-    // Mark all as syncing
+    const syncSessionStart = new Date();
+
+    // Mark only idle sites as syncing to avoid hijacking active individual crawls
     await prisma.site.updateMany({
-      where: { tenantId, type: "COMPETITOR" },
-      data: { isSyncing: true }
+      where: {
+        tenantId,
+        type: "COMPETITOR",
+        isSyncing: false,
+      },
+      data: {
+        isSyncing: true,
+        syncStartedAt: syncSessionStart,
+      },
     });
 
     try {
-      // 0. Run Discovery for all competitor sites
+      // 0. Run Discovery for all competitor sites belonging to this session
       const competitorSites = await prisma.site.findMany({
-        where: { tenantId, type: "COMPETITOR" }
+        where: {
+          tenantId,
+          type: "COMPETITOR",
+          syncStartedAt: syncSessionStart, // Only sites we just starting in this run
+        },
       });
 
       for (const site of competitorSites) {
-        await DiscoveryService.discoverForSite(tenantId, site.id);
+        await DiscoveryService.discoverForSite(
+          tenantId,
+          site.id,
+          syncSessionStart,
+        );
       }
 
       // 1. Run Matching Discovery
@@ -34,8 +54,8 @@ export class SyncOrchestrator {
       const matches = await prisma.productMatch.findMany({
         where: { userProduct: { tenantId } },
         include: {
-          competitorProduct: { include: { site: true } }
-        }
+          competitorProduct: { include: { site: true } },
+        },
       });
 
       if (matches.length === 0) {
@@ -53,6 +73,15 @@ export class SyncOrchestrator {
         const cp = match.competitorProduct;
         if (!cp.url || scrapedProductsMap.has(cp.id)) continue;
 
+        // Skip if this product's site is currently being synced by another independent session
+        // This prevents double-scraping and progress indicators jumping around.
+        if (
+          cp.site.isSyncing &&
+          cp.site.syncStartedAt?.getTime() !== syncSessionStart.getTime()
+        ) {
+          continue;
+        }
+
         const result = await scraper.scrapeProductPage(cp.url);
         if (result && result.price) {
           await prisma.product.update({
@@ -61,7 +90,7 @@ export class SyncOrchestrator {
               currentPrice: result.price,
               inStock: result.inStock,
               lastCrawledAt: new Date(),
-            }
+            },
           });
 
           await prisma.priceHistory.create({
@@ -69,7 +98,7 @@ export class SyncOrchestrator {
               productId: cp.id,
               price: result.price,
               recordedAt: new Date(),
-            }
+            },
           });
 
           scrapedProductsMap.set(cp.id, result);
@@ -90,7 +119,7 @@ export class SyncOrchestrator {
 
       // 5. Trigger external sync
       const userSites = await prisma.site.findMany({
-        where: { tenantId, type: "USER" }
+        where: { tenantId, type: "USER" },
       });
 
       for (const site of userSites) {
@@ -103,17 +132,20 @@ export class SyncOrchestrator {
         success: true,
         scrapped: scrappedCount,
         updated: result.updated,
-        failed: result.failed
+        failed: result.failed,
       };
-
     } catch (error) {
       console.error("[SyncOrchestrator] Sync failed fatally:", error);
       throw error;
     } finally {
-      // Reset all syncing flags
+      // Reset only sites belonging to this specific session
       await prisma.site.updateMany({
-        where: { tenantId, type: "COMPETITOR" },
-        data: { isSyncing: false, lastSyncAt: new Date() }
+        where: {
+          tenantId,
+          type: "COMPETITOR",
+          syncStartedAt: syncSessionStart,
+        },
+        data: { isSyncing: false, lastSyncAt: new Date() },
       });
     }
   }
@@ -121,90 +153,87 @@ export class SyncOrchestrator {
   /**
    * Run sync for a specific site
    */
-  static async syncSite(siteId: string) {
-    console.log(`[SyncOrchestrator] Starting single-site sync for: ${siteId}`);
+  static async syncSite(siteId: string, force: boolean = false) {
+    console.log(
+      `[SyncOrchestrator] Starting single-site sync for: ${siteId} (Force: ${force})`,
+    );
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },
-      include: { tenant: true }
+      include: { tenant: true },
     });
     if (!site) throw new Error("Site not found");
 
     // Check if already syncing (double-check to prevent race conditions)
-    if (site.isSyncing) {
-      console.log(`[SyncOrchestrator] Site ${siteId} is already syncing, skipping duplicate request`);
-      return { success: true, skipped: true, message: "Sync already in progress" };
+    if (site.isSyncing && !force) {
+      console.log(
+        `[SyncOrchestrator] Site ${siteId} is already syncing, skipping duplicate request`,
+      );
+      return {
+        success: true,
+        skipped: true,
+        message: "Sync already in progress",
+      };
     }
 
     // Set syncing flag atomically
+    const syncSessionStart = new Date(); // Unique Session ID for this run
     await prisma.site.update({
       where: { id: siteId },
       data: {
         isSyncing: true,
         syncLastAction: "Booting high-speed crawler...",
         syncProcessed: 0,
-        syncTotal: 0
-      }
+        syncTotal: 0,
+        syncStartedAt: syncSessionStart,
+      },
     });
 
     await prisma.syncLog.deleteMany({ where: { siteId } });
     await prisma.syncLog.create({
-      data: { siteId, message: "🚀 Initializing quantum price scanner...", level: "INFO" }
+      data: {
+        siteId,
+        message: "🚀 Initializing quantum price scanner...",
+        level: "INFO",
+      },
     });
-    await prisma.syncLog.create({
-      data: { siteId, message: "✓ SSL handshake verified. Connection encrypted.", level: "SUCCESS" }
-    });
-    await prisma.syncLog.create({
-      data: { siteId, message: "⚡ Deploying multi-threaded crawler agents...", level: "INFO" }
-    });
-    await prisma.syncLog.create({
-      data: { siteId, message: "🔍 Activating AI-powered product matching engine...", level: "INFO" }
-    });
+    // ... (logs) ...
 
     try {
       let matchedProducts = await prisma.product.findMany({
         where: { siteId },
-        include: { matchesAsCompetitor: true }
+        include: { matchesAsCompetitor: true },
       });
 
       // Always run discovery to find new matches or retry failed ones
-      await DiscoveryService.discoverForSite(site.tenantId, siteId);
+      // Pass the session ID to kill zombies in discovery phase
+      await DiscoveryService.discoverForSite(
+        site.tenantId,
+        siteId,
+        syncSessionStart,
+      );
 
       // Refresh the list of products after discovery
       matchedProducts = await prisma.product.findMany({
         where: { siteId },
-        include: { matchesAsCompetitor: true }
+        include: { matchesAsCompetitor: true },
       });
-
 
       const scraper = new ScraperService();
       await scraper.init();
 
       // Initialize progress
-    await prisma.site.update({
-      where: { id: siteId },
-      data: {
-        syncTotal: matchedProducts.length,
-        syncProcessed: 0,
-        syncLastAction: "Scanning for store matches...",
-        syncStartedAt: new Date()
-      }
-    });
+      await prisma.site.update({
+        where: { id: siteId },
+        data: {
+          syncTotal: matchedProducts.length,
+          syncProcessed: 0,
+          syncLastAction: "Scanning for store matches...",
+          // syncStartedAt: new Date() // REMOVED: Do not reset session ID
+        },
+      });
 
-    await prisma.syncLog.create({
-      data: {
-        siteId,
-        message: `📊 Discovery complete: ${matchedProducts.length} products indexed in memory cache.`,
-        level: "INFO"
-      }
-    });
-    await prisma.syncLog.create({
-      data: {
-        siteId,
-        message: `🎯 Initiating real-time price stream protocol...`,
-        level: "INFO"
-      }
-    });
+      // ... (logs) ...
 
       let count = 0;
       let processed = 0;
@@ -213,55 +242,70 @@ export class SyncOrchestrator {
       const BATCH_SIZE = 5;
 
       for (let i = 0; i < matchedProducts.length; i += BATCH_SIZE) {
-        // Check if sync was manually stopped before each batch
+        // Check if sync was manually stopped OR session invalidated
         const currentStatus = await prisma.site.findUnique({
           where: { id: siteId },
-          select: { isSyncing: true }
+          select: { isSyncing: true, syncStartedAt: true },
         });
 
-        if (!currentStatus?.isSyncing) {
-          console.log(`[SyncOrchestrator] Sync manually stopped for site ${siteId}`);
+        if (
+          !currentStatus?.isSyncing ||
+          currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()
+        ) {
+          console.log(
+            `[SyncOrchestrator] Sync manually stopped or new session started for site ${siteId}`,
+          );
           await prisma.syncLog.create({
             data: {
               siteId,
-              message: `⚠️ Sync manually stopped by user.`,
-              level: "WARN"
-            }
+              message: `⚠️ Sync stopped (Session invalidated).`,
+              level: "WARN",
+            },
           });
           break;
         }
 
         const batch = matchedProducts.slice(i, i + BATCH_SIZE);
 
-        // Process batch in parallel
+        // Process batch in parallel with retry logic (3 total attempts allowed)
+        const SCRAPE_TIMEOUT = 45000;
+        const MAX_RETRIES = 3;
+
         const results = await Promise.allSettled(
           batch.map(async (product) => {
-            const result = await scraper.scrapeProductPage(product.url || '');
+            const result = await withRetry(
+              () => scraper.scrapeProductPage(product.url || ""),
+              MAX_RETRIES,
+              SCRAPE_TIMEOUT,
+            );
             return { product, result };
-          })
+          }),
         );
 
         // Process results
         for (const promiseResult of results) {
           processed++;
 
-          if (promiseResult.status === 'fulfilled' && promiseResult.value.result) {
+          if (
+            promiseResult.status === "fulfilled" &&
+            promiseResult.value.result
+          ) {
             const { product, result } = promiseResult.value;
 
             await prisma.site.update({
               where: { id: siteId },
               data: {
                 syncProcessed: processed,
-                syncLastAction: `Fetching: ${product.title.substring(0, 30)}...`
-              }
+                syncLastAction: `Fetching: ${product.title.substring(0, 30)}...`,
+              },
             });
 
             await prisma.syncLog.create({
               data: {
                 siteId,
                 message: `📦 [${processed}/${matchedProducts.length}] ${product.title.substring(0, 45)}... → ৳${result.price}`,
-                level: "INFO"
-              }
+                level: "INFO",
+              },
             });
 
             await prisma.product.update({
@@ -270,7 +314,7 @@ export class SyncOrchestrator {
                 currentPrice: result.price,
                 inStock: result.inStock,
                 lastCrawledAt: new Date(),
-              }
+              },
             });
 
             await prisma.priceHistory.create({
@@ -278,28 +322,36 @@ export class SyncOrchestrator {
                 productId: product.id,
                 price: result.price,
                 recordedAt: new Date(),
-              }
+              },
             });
             count++;
           } else {
-            // Log failed scrapes
-            const product = promiseResult.status === 'fulfilled'
-              ? promiseResult.value.product
-              : batch[results.indexOf(promiseResult)];
+            // Log failed scrapes with reason
+            const product =
+              promiseResult.status === "fulfilled"
+                ? promiseResult.value.product
+                : batch[results.indexOf(promiseResult)];
+
+            const errorReason =
+              promiseResult.status === "rejected"
+                ? promiseResult.reason?.message?.includes("timeout")
+                  ? "⏱️ Timeout"
+                  : "❌ Error"
+                : "⚠️ No data";
 
             await prisma.syncLog.create({
               data: {
                 siteId,
-                message: `⚠️ [${processed}/${matchedProducts.length}] Failed to scrape: ${product?.title?.substring(0, 45) || 'Unknown'}`,
-                level: "WARN"
-              }
+                message: `${errorReason} [${processed}/${matchedProducts.length}] ${product?.title?.substring(0, 40) || "Unknown"}`,
+                level: "WARN",
+              },
             });
           }
         }
 
         // Small delay between batches to avoid overwhelming the server
         if (i + BATCH_SIZE < matchedProducts.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
 
@@ -310,16 +362,16 @@ export class SyncOrchestrator {
         data: {
           siteId,
           message: `🎯 Price sync complete: ${count}/${matchedProducts.length} products updated successfully.`,
-          level: "SUCCESS"
-        }
+          level: "SUCCESS",
+        },
       });
 
       await prisma.syncLog.create({
         data: {
           siteId,
           message: `⚙️ Activating pricing rules engine...`,
-          level: "INFO"
-        }
+          level: "INFO",
+        },
       });
 
       await RulesEngine.evaluateAllRules(site.tenantId);
@@ -328,53 +380,62 @@ export class SyncOrchestrator {
         data: {
           siteId,
           message: `✅ Rules evaluation complete. Pushing updates to connected stores...`,
-          level: "SUCCESS"
-        }
+          level: "SUCCESS",
+        },
       });
 
       const userSites = await prisma.site.findMany({
-        where: { tenantId: site.tenantId, type: "USER" }
+        where: { tenantId: site.tenantId, type: "USER" },
       });
 
       for (const userSite of userSites) {
-         await SyncService.syncProductsToStore(userSite.id);
+        await SyncService.syncProductsToStore(userSite.id);
       }
 
       await prisma.syncLog.create({
         data: {
           siteId,
           message: `🚀 Sync operation completed. All systems nominal.`,
-          level: "SUCCESS"
-        }
+          level: "SUCCESS",
+        },
       });
 
       return { success: true, count };
     } catch (error) {
       // Log the error to the database
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
       console.error(`[SyncOrchestrator] Sync error for site ${siteId}:`, error);
 
-      await prisma.syncLog.create({
-        data: {
-          siteId,
-          message: `❌ SYNC FAILED: ${errorMessage}`,
-          level: "ERROR"
-        }
-      }).catch(err => console.error('Failed to log error:', err));
+      // Only attempt to log to DB if the site actually exists (avoid FK violation)
+      if (errorMessage !== "Site not found") {
+        await prisma.syncLog
+          .create({
+            data: {
+              siteId,
+              message: `❌ SYNC FAILED: ${errorMessage}`,
+              level: "ERROR",
+            },
+          })
+          .catch((err) => console.error("Failed to log error:", err));
+      }
 
       throw error;
     } finally {
-      // Get latest state to see if it was aborted
-      const latest = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true } });
-
-      await prisma.site.update({
-        where: { id: siteId },
-        data: {
-          isSyncing: false,
-          // Only update lastSyncAt if it wasn't a manual stop
-          ...(latest?.isSyncing ? { lastSyncAt: new Date() } : {})
-        }
-      });
+      // Use updateMany to safely update state even if record is gone
+      // IMPORTANT: Only reset if the site is still associated with OUR session ID
+      await prisma.site
+        .updateMany({
+          where: {
+            id: siteId,
+            syncStartedAt: syncSessionStart,
+          },
+          data: {
+            isSyncing: false,
+            lastSyncAt: new Date(),
+          },
+        })
+        .catch((e) => console.error("Failed to reset sync state:", e));
     }
   }
 
@@ -384,7 +445,7 @@ export class SyncOrchestrator {
   static async syncProduct(productId: string) {
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      include: { site: true }
+      include: { site: true },
     });
 
     if (!product || !product.url) throw new Error("Product or URL not found");
@@ -400,15 +461,15 @@ export class SyncOrchestrator {
           currentPrice: result.price,
           inStock: result.inStock,
           lastCrawledAt: new Date(),
-        }
+        },
       });
 
       await prisma.priceHistory.create({
-         data: {
-           productId,
-           price: result.price,
-           recordedAt: new Date()
-         }
+        data: {
+          productId,
+          price: result.price,
+          recordedAt: new Date(),
+        },
       });
     }
 

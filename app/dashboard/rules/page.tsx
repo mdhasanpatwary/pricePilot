@@ -7,13 +7,12 @@ import {
   Trash2,
   Save,
   GripVertical,
-  ChevronRight,
   Info,
   Zap,
   ShieldCheck,
   Target,
   Percent,
-  Calculator
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -25,7 +24,13 @@ const ruleSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Rule name is required"),
   description: z.string(),
-  strategy: z.enum(["UNDERCUT", "MATCH", "MARGIN_LOCK", "THRESHOLD", "PERCENTAGE"]),
+  strategy: z.enum([
+    "UNDERCUT",
+    "MATCH",
+    "MARGIN_LOCK",
+    "THRESHOLD",
+    "PERCENTAGE",
+  ]),
   parameter: z.number().min(0, "Value must be positive"),
   priority: z.number().int().min(1, "Priority must be at least 1"),
   isActive: z.boolean(),
@@ -53,8 +58,6 @@ export default function PricingRulesPage() {
     register,
     handleSubmit,
     reset,
-    setValue,
-    watch,
     formState: { errors },
   } = useForm<RuleFormValues>({
     resolver: zodResolver(ruleSchema),
@@ -108,7 +111,7 @@ export default function PricingRulesPage() {
           strategy: "UNDERCUT",
           parameter: 1,
           priority: rules.length + 1,
-          isActive: true
+          isActive: true,
         });
         fetchRules();
       } else {
@@ -160,12 +163,18 @@ export default function PricingRulesPage() {
 
   const getStrategyIcon = (strategy: string) => {
     switch (strategy) {
-      case "UNDERCUT": return Zap;
-      case "MATCH": return Target;
-      case "MARGIN_LOCK": return ShieldCheck;
-      case "THRESHOLD": return Calculator;
-      case "PERCENTAGE": return Percent;
-      default: return Settings2;
+      case "UNDERCUT":
+        return Zap;
+      case "MATCH":
+        return Target;
+      case "MARGIN_LOCK":
+        return ShieldCheck;
+      case "THRESHOLD":
+        return Calculator;
+      case "PERCENTAGE":
+        return Percent;
+      default:
+        return Settings2;
     }
   };
 
@@ -173,8 +182,12 @@ export default function PricingRulesPage() {
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Pricing Engine</h1>
-          <p className="text-muted-foreground mt-1 text-lg">Define how your prices adjust relative to competitors.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Pricing Engine
+          </h1>
+          <p className="text-muted-foreground mt-1 text-lg">
+            Define how your prices adjust relative to competitors.
+          </p>
         </div>
         {!isAdding && !editingId && (
           <button
@@ -193,28 +206,39 @@ export default function PricingRulesPage() {
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Settings2 className="w-6 h-6 text-primary" />
             </div>
-            <h2 className="text-xl font-bold">{editingId ? "Edit Rule" : "New Pricing Rule"}</h2>
+            <h2 className="text-xl font-bold">
+              {editingId ? "Edit Rule" : "New Pricing Rule"}
+            </h2>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Rule Name</label>
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Rule Name
+                  </label>
                   <input
                     {...register("name")}
                     type="text"
                     className={cn(
                       "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
-                      errors.name && "border-destructive focus:ring-destructive/50"
+                      errors.name &&
+                        "border-destructive focus:ring-destructive/50",
                     )}
                     placeholder="e.g. Aggressive Undercut"
                   />
-                  {errors.name && <p className="text-xs text-destructive font-bold">{errors.name.message}</p>}
+                  {errors.name && (
+                    <p className="text-xs text-destructive font-bold">
+                      {errors.name.message}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Description</label>
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Description
+                  </label>
                   <textarea
                     {...register("description")}
                     className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all h-24 resize-none"
@@ -225,7 +249,9 @@ export default function PricingRulesPage() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Strategy Type</label>
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Strategy Type
+                  </label>
                   <select
                     {...register("strategy")}
                     className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
@@ -240,29 +266,43 @@ export default function PricingRulesPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Value</label>
+                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                      Value
+                    </label>
                     <input
                       {...register("parameter", { valueAsNumber: true })}
                       type="number"
                       step="any"
                       className={cn(
                         "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
-                        errors.parameter && "border-destructive focus:ring-destructive/50"
+                        errors.parameter &&
+                          "border-destructive focus:ring-destructive/50",
                       )}
                     />
-                    {errors.parameter && <p className="text-xs text-destructive font-bold">{errors.parameter.message}</p>}
+                    {errors.parameter && (
+                      <p className="text-xs text-destructive font-bold">
+                        {errors.parameter.message}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Priority</label>
+                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                      Priority
+                    </label>
                     <input
                       {...register("priority", { valueAsNumber: true })}
                       type="number"
                       className={cn(
                         "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
-                        errors.priority && "border-destructive focus:ring-destructive/50"
+                        errors.priority &&
+                          "border-destructive focus:ring-destructive/50",
                       )}
                     />
-                    {errors.priority && <p className="text-xs text-destructive font-bold">{errors.priority.message}</p>}
+                    {errors.priority && (
+                      <p className="text-xs text-destructive font-bold">
+                        {errors.priority.message}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -294,8 +334,11 @@ export default function PricingRulesPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-24 bg-muted/20 animate-pulse rounded-xl border border-border/50" />
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-24 bg-muted/20 animate-pulse rounded-xl border border-border/50"
+            />
           ))}
         </div>
       ) : rules.length === 0 && !isAdding ? (
@@ -305,7 +348,8 @@ export default function PricingRulesPage() {
           </div>
           <h3 className="text-xl font-bold">No pricing rules defined</h3>
           <p className="text-muted-foreground max-w-sm mt-2">
-            Create your first strategy to start automating your competitive pricing edge.
+            Create your first strategy to start automating your competitive
+            pricing edge.
           </p>
           <button
             onClick={() => setIsAdding(true)}
@@ -317,14 +361,14 @@ export default function PricingRulesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {rules.map((rule, index) => {
+          {rules.map((rule, _index) => {
             const Icon = getStrategyIcon(rule.strategy);
             return (
               <div
                 key={rule.id}
                 className={cn(
                   "group relative bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-all flex items-center justify-between shadow-sm hover:shadow-md",
-                  !rule.isActive && "opacity-60 grayscale"
+                  !rule.isActive && "opacity-60 grayscale",
                 )}
               >
                 <div className="flex items-center gap-6">
@@ -332,10 +376,14 @@ export default function PricingRulesPage() {
                     <div className="cursor-grab text-muted-foreground/30 hover:text-muted-foreground transition-all">
                       <GripVertical className="w-5 h-5" />
                     </div>
-                    <div className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center border transition-all",
-                      rule.isActive ? "bg-primary/10 border-primary/20 text-primary" : "bg-muted border-border text-muted-foreground"
-                    )}>
+                    <div
+                      className={cn(
+                        "w-12 h-12 rounded-xl flex items-center justify-center border transition-all",
+                        rule.isActive
+                          ? "bg-primary/10 border-primary/20 text-primary"
+                          : "bg-muted border-border text-muted-foreground",
+                      )}
+                    >
                       <Icon className="w-6 h-6" />
                     </div>
                   </div>
@@ -347,19 +395,25 @@ export default function PricingRulesPage() {
                         P{rule.priority}
                       </span>
                     </div>
-                    <p className="text-muted-foreground text-sm line-clamp-1 max-w-md">{rule.description || "Active automation strategy"}</p>
+                    <p className="text-muted-foreground text-sm line-clamp-1 max-w-md">
+                      {rule.description || "Active automation strategy"}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-10">
                   <div className="hidden lg:flex flex-col items-end">
-                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest mb-1">Impact</span>
+                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest mb-1">
+                      Impact
+                    </span>
                     <span className="text-sm font-bold flex items-center gap-1.5 text-foreground">
                       {rule.strategy === "UNDERCUT" && `- $${rule.parameter}`}
                       {rule.strategy === "PERCENTAGE" && `- ${rule.parameter}%`}
                       {rule.strategy === "MATCH" && `0.00 Difference`}
-                      {rule.strategy === "MARGIN_LOCK" && `Min ${rule.parameter}% Buffer`}
-                      {rule.strategy === "THRESHOLD" && `>${rule.parameter} Trigger`}
+                      {rule.strategy === "MARGIN_LOCK" &&
+                        `Min ${rule.parameter}% Buffer`}
+                      {rule.strategy === "THRESHOLD" &&
+                        `>${rule.parameter} Trigger`}
                     </span>
                   </div>
 
@@ -370,7 +424,7 @@ export default function PricingRulesPage() {
                         "px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all border",
                         rule.isActive
                           ? "bg-success/10 text-success border-success/20 hover:bg-success/20"
-                          : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                          : "bg-muted text-muted-foreground border-border hover:bg-muted/80",
                       )}
                     >
                       {rule.isActive ? "Active" : "Paused"}
@@ -397,7 +451,10 @@ export default function PricingRulesPage() {
 
           <div className="p-4 bg-muted/30 border border-dashed border-border rounded-xl flex items-center justify-center gap-2 text-muted-foreground">
             <Info className="w-4 h-4" />
-            <p className="text-xs font-medium">Rules are executed sequentially by priority. Lower number = Higher priority.</p>
+            <p className="text-xs font-medium">
+              Rules are executed sequentially by priority. Lower number = Higher
+              priority.
+            </p>
           </div>
         </div>
       )}

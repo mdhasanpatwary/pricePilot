@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
-import { SyncService } from "@/lib/services/sync";
 
 /**
  * GET /api/integrations
  * Fetch all connected sites for the authenticated tenant
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -49,7 +48,7 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching integrations:", error);
     return NextResponse.json(
       { error: "Failed to fetch integrations" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -75,7 +74,7 @@ export async function POST(req: NextRequest) {
     if (!platform || !baseUrl) {
       return NextResponse.json(
         { error: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -85,13 +84,13 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json(
         { error: "Invalid URL format" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Fetch tenant limits
     const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId }
+      where: { id: tenantId },
     });
 
     if (!tenant) {
@@ -102,14 +101,16 @@ export async function POST(req: NextRequest) {
     const existingCount = await prisma.site.count({
       where: {
         tenantId,
-        type: "USER"
-      }
+        type: "USER",
+      },
     });
 
     if (existingCount >= tenant.storeLimit) {
       return NextResponse.json(
-        { error: `Site integration limit reached (${tenant.storeLimit}). Please upgrade your plan or contact support to add more stores.` },
-        { status: 403 }
+        {
+          error: `Site integration limit reached (${tenant.storeLimit}). Please upgrade your plan or contact support to add more stores.`,
+        },
+        { status: 403 },
       );
     }
 
@@ -124,18 +125,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      id: site.id,
-      platform: site.platform,
-      type: site.type,
-      url: site.baseUrl,
-      status: "CONNECTED",
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        id: site.id,
+        platform: site.platform,
+        type: site.type,
+        url: site.baseUrl,
+        status: "CONNECTED",
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Error creating integration:", error);
     return NextResponse.json(
       { error: "Failed to create integration" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -158,10 +162,7 @@ export async function DELETE(req: NextRequest) {
     const siteId = url.searchParams.get("id");
 
     if (!siteId) {
-      return NextResponse.json(
-        { error: "Site ID required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Site ID required" }, { status: 400 });
     }
 
     // Verify ownership
@@ -173,10 +174,7 @@ export async function DELETE(req: NextRequest) {
     });
 
     if (!site) {
-      return NextResponse.json(
-        { error: "Site not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
     // Delete the site (cascade will handle related products)
@@ -189,7 +187,7 @@ export async function DELETE(req: NextRequest) {
     console.error("Error deleting integration:", error);
     return NextResponse.json(
       { error: "Failed to delete integration" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

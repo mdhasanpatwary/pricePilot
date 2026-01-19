@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
  * GET /api/analytics/summary
  * Real-time dashboard statistics aggregated from the database
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -24,10 +24,7 @@ export async function GET(req: NextRequest) {
       // Prefer the USER Site currency (most recently synced or created)
       const userSite = await prisma.site.findFirst({
         where: { tenantId, type: "USER" },
-        orderBy: [
-          { lastSyncAt: "desc" },
-          { createdAt: "desc" },
-        ],
+        orderBy: [{ lastSyncAt: "desc" }, { createdAt: "desc" }],
       });
       if ((userSite as any)?.currency) {
         currency = (userSite as any).currency;
@@ -40,7 +37,9 @@ export async function GET(req: NextRequest) {
         if (anyUserProduct?.currency) {
           currency = anyUserProduct.currency;
         } else {
-          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+          });
           currency = (tenant as any)?.currency || "USD";
         }
       }
@@ -87,9 +86,10 @@ export async function GET(req: NextRequest) {
       return sum + (compPrice - userPrice); // Positive = we're cheaper
     }, 0);
 
-    const marketEdge = matches.length > 0
-      ? Number((totalDifference / matches.length).toFixed(2))
-      : 0;
+    const marketEdge =
+      matches.length > 0
+        ? Number((totalDifference / matches.length).toFixed(2))
+        : 0;
 
     // 5. Position Summary
     const cheapestCount = matches.filter((m) => {
@@ -121,7 +121,8 @@ export async function GET(req: NextRequest) {
       },
       positionSummary: {
         cheapest: cheapestCount,
-        nearCheapest: matches.length - cheapestCount - neutralCount - expensiveCount,
+        nearCheapest:
+          matches.length - cheapestCount - neutralCount - expensiveCount,
         neutral: neutralCount,
         expensive: expensiveCount,
       },
@@ -130,7 +131,7 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching analytics summary:", error);
     return NextResponse.json(
       { error: "Failed to fetch analytics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

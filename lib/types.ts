@@ -3,18 +3,31 @@ export interface Product {
   sku: string;
   title: string;
   yourPrice: number;
-  compPrice: number;
+  compPrice: number | null;
   diff: number;
   status: string;
   match: string;
-  stock: number;
+  stock: number | null;
   inStock: boolean;
+  compInStock?: boolean;
+  category: string;
+  brand: string;
+  model: string;
+  siteName: string;
+  allMatches: {
+    siteName: string;
+    url: string;
+    price: number;
+    inStock: boolean;
+  }[];
 }
 
 export interface Stats {
   atRisk: number;
   optimal: number;
   parity: number;
+  competitorOos: number;
+  notFound: number;
 }
 
 export interface Competitor {

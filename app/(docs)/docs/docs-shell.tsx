@@ -4,17 +4,14 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
-  ChevronRight,
   BookOpen,
-  Terminal,
   Puzzle,
   Zap,
-  Shield,
   Code,
   HelpCircle,
   Menu,
   X,
-  Search
+  Search,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -82,27 +79,49 @@ export default function DocsLayoutShell({
         <div className="container flex h-14 items-center justify-between max-w-[1400px] mx-auto px-4 md:px-6">
           <div className="flex items-center gap-4 md:gap-8">
             <Link href="/" className="flex items-center space-x-2.5">
-              <span className="font-bold tracking-tight text-foreground uppercase border-r border-border pr-2.5 mr-0.5">PricePilot</span>
-              <span className="text-xs font-semibold text-muted-foreground pt-0.5">Docs</span>
+              <span className="font-bold tracking-tight text-foreground uppercase border-r border-border pr-2.5 mr-0.5">
+                PricePilot
+              </span>
+              <span className="text-xs font-semibold text-muted-foreground pt-0.5">
+                Docs
+              </span>
             </Link>
 
             <div className="hidden lg:flex items-center border border-border bg-muted/30 rounded-md px-3 py-1.5 w-64 group hover:bg-muted/50 transition-colors">
               <Search className="w-3.5 h-3.5 text-muted-foreground mr-2" />
-              <span className="text-xs text-muted-foreground">Search documentation...</span>
-              <span className="ml-auto text-[10px] text-muted-foreground/50 border border-border rounded px-1">⌘K</span>
+              <span className="text-xs text-muted-foreground">
+                Search documentation...
+              </span>
+              <span className="ml-auto text-[10px] text-muted-foreground/50 border border-border rounded px-1">
+                ⌘K
+              </span>
             </div>
           </div>
 
           <div className="flex items-center gap-5">
             <nav className="hidden md:flex items-center gap-6">
-              <Link href="/dashboard" className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">Dashboard</Link>
-              <Link href="/support" className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">Support</Link>
+              <Link
+                href="/dashboard"
+                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/support"
+                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Support
+              </Link>
             </nav>
             <button
               className="md:hidden p-2 text-muted-foreground hover:text-primary"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isMobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -110,10 +129,12 @@ export default function DocsLayoutShell({
 
       <div className="flex flex-1 container max-w-[1400px] mx-auto px-4 md:px-6">
         {/* Sidebar */}
-        <aside className={cn(
-          "fixed inset-0 top-14 z-30 flex-shrink-0 w-64 border-r border-border bg-background transition-transform md:sticky md:block md:translate-x-0 overflow-y-auto pt-8 pb-10 pr-4",
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        )}>
+        <aside
+          className={cn(
+            "fixed inset-0 top-14 z-30 flex-shrink-0 w-64 border-r border-border bg-background transition-transform md:sticky md:block md:translate-x-0 overflow-y-auto pt-8 pb-10 pr-4",
+            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+          )}
+        >
           <nav className="space-y-7">
             {sidebarLinks.map((section) => (
               <div key={section.title} className="space-y-2">
@@ -138,7 +159,7 @@ export default function DocsLayoutShell({
                           ? "bg-muted text-primary"
                           : item.badge
                             ? "text-muted-foreground/30 cursor-not-allowed"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -165,12 +186,22 @@ export default function DocsLayoutShell({
         {/* Right Sidebar (Table of Contents) */}
         <aside className="hidden xl:block w-56 flex-shrink-0 py-10 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-l border-border pl-6">
           <div className="space-y-4">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70">On this page</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70">
+              On this page
+            </p>
             <div className="space-y-1.5 text-[13px] font-medium text-muted-foreground">
-              <p className="text-primary border-l border-primary pl-3 py-0.5">Introduction</p>
-              <p className="pl-3 py-0.5 hover:text-foreground transition-colors cursor-pointer border-l border-transparent">Platform Overview</p>
-              <p className="pl-3 py-0.5 hover:text-foreground transition-colors cursor-pointer border-l border-transparent">Key Concepts</p>
-              <p className="pl-3 py-0.5 hover:text-foreground transition-colors cursor-pointer border-l border-transparent">Architecture</p>
+              <p className="text-primary border-l border-primary pl-3 py-0.5">
+                Introduction
+              </p>
+              <p className="pl-3 py-0.5 hover:text-foreground transition-colors cursor-pointer border-l border-transparent">
+                Platform Overview
+              </p>
+              <p className="pl-3 py-0.5 hover:text-foreground transition-colors cursor-pointer border-l border-transparent">
+                Key Concepts
+              </p>
+              <p className="pl-3 py-0.5 hover:text-foreground transition-colors cursor-pointer border-l border-transparent">
+                Architecture
+              </p>
             </div>
           </div>
         </aside>

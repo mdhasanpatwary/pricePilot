@@ -1,5 +1,6 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { NextResponse } from "next/server";
 
 /**
  * Rate limiting configuration for API routes
@@ -21,7 +22,7 @@ const redis =
 export const rateLimiters = {
   // Strict rate limit for authentication endpoints (prevent brute force)
   auth: new Ratelimit({
-    redis: redis || undefined,
+    redis: redis as any,
     limiter: Ratelimit.slidingWindow(5, "15 m"), // 5 requests per 15 minutes
     analytics: true,
     prefix: "@upstash/ratelimit/auth",
@@ -29,7 +30,7 @@ export const rateLimiters = {
 
   // Moderate rate limit for general API endpoints
   api: new Ratelimit({
-    redis: redis || undefined,
+    redis: redis as any,
     limiter: Ratelimit.slidingWindow(100, "1 m"), // 100 requests per minute
     analytics: true,
     prefix: "@upstash/ratelimit/api",
@@ -37,7 +38,7 @@ export const rateLimiters = {
 
   // Higher rate limit for read-only operations
   read: new Ratelimit({
-    redis: redis || undefined,
+    redis: redis as any,
     limiter: Ratelimit.slidingWindow(200, "1 m"), // 200 requests per minute
     analytics: true,
     prefix: "@upstash/ratelimit/read",
@@ -45,7 +46,7 @@ export const rateLimiters = {
 
   // Lower rate limit for write operations (POST, PUT, DELETE)
   write: new Ratelimit({
-    redis: redis || undefined,
+    redis: redis as any,
     limiter: Ratelimit.slidingWindow(30, "1 m"), // 30 requests per minute
     analytics: true,
     prefix: "@upstash/ratelimit/write",
@@ -53,7 +54,7 @@ export const rateLimiters = {
 
   // Very strict rate limit for sync operations (resource-intensive)
   sync: new Ratelimit({
-    redis: redis || undefined,
+    redis: redis as any,
     limiter: Ratelimit.slidingWindow(5, "5 m"), // 5 requests per 5 minutes
     analytics: true,
     prefix: "@upstash/ratelimit/sync",
@@ -61,7 +62,7 @@ export const rateLimiters = {
 
   // Strict rate limit for import/export operations
   importExport: new Ratelimit({
-    redis: redis || undefined,
+    redis: redis as any,
     limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
     analytics: true,
     prefix: "@upstash/ratelimit/import-export",
@@ -74,7 +75,7 @@ export const rateLimiters = {
  */
 export function getRateLimitIdentifier(
   request: Request,
-  userId?: string | null
+  userId?: string | null,
 ): string {
   // Use user ID if authenticated (more accurate than IP)
   if (userId) {
@@ -83,7 +84,9 @@ export function getRateLimitIdentifier(
 
   // Fallback to IP address for unauthenticated requests
   const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(",")[0] : request.headers.get("x-real-ip") || "unknown";
+  const ip = forwarded
+    ? forwarded.split(",")[0]
+    : request.headers.get("x-real-ip") || "unknown";
 
   return `ip:${ip}`;
 }
@@ -93,8 +96,13 @@ export function getRateLimitIdentifier(
  */
 export async function checkRateLimit(
   limiter: Ratelimit,
-  identifier: string
-): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
+  identifier: string,
+): Promise<{
+  success: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+}> {
   const result = await limiter.limit(identifier);
 
   return {
@@ -111,9 +119,9 @@ export async function checkRateLimit(
 export function createRateLimitResponse(
   limit: number,
   remaining: number,
-  reset: number
-): Response {
-  return new Response(
+  reset: number,
+): NextResponse {
+  return new NextResponse(
     JSON.stringify({
       error: "Too Many Requests",
       message: "Rate limit exceeded. Please try again later.",
@@ -128,6 +136,6 @@ export function createRateLimitResponse(
         "X-RateLimit-Reset": reset.toString(),
         "Retry-After": Math.ceil((reset - Date.now()) / 1000).toString(),
       },
-    }
+    },
   );
 }

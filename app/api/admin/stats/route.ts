@@ -7,7 +7,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
  * GET /api/admin/stats
  * Fetch platform-wide statistics for the Super Admin
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session || !session.user.isSuperAdmin) {
@@ -19,11 +19,15 @@ export async function GET(req: NextRequest) {
     const productCount = await prisma.product.count();
 
     // Calculate simulated MRR based on plans (Mock logic for now but using real counts)
-    const proTenants = await prisma.tenant.count({ where: { planType: "PRO" } });
-    const basicTenants = await prisma.tenant.count({ where: { planType: "BASIC" } });
+    const proTenants = await prisma.tenant.count({
+      where: { planType: "PRO" },
+    });
+    const basicTenants = await prisma.tenant.count({
+      where: { planType: "BASIC" },
+    });
 
     // PRO = $199, BASIC = $49 (Example pricing)
-    const mrr = (proTenants * 199) + (basicTenants * 49);
+    const mrr = proTenants * 199 + basicTenants * 49;
 
     // Get recent tenants
     const recentTenants = await prisma.tenant.findMany({
@@ -31,17 +35,17 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
       include: {
         users: { take: 1 },
-        _count: { select: { products: true } }
-      }
+        _count: { select: { products: true } },
+      },
     });
 
-    const formattedTenants = recentTenants.map(t => ({
+    const formattedTenants = recentTenants.map((t) => ({
       name: t.companyName,
       email: t.users[0]?.email || "No Admin",
       plan: t.planType,
       status: "ACTIVE", // Placeholder
       joined: t.createdAt.toLocaleDateString(),
-      products: t._count.products
+      products: t._count.products,
     }));
 
     return NextResponse.json({
@@ -49,12 +53,15 @@ export async function GET(req: NextRequest) {
         tenants: tenantCount,
         mrr: `$${mrr.toLocaleString()}`,
         scrapes: productCount * 12, // Simulation: products * check frequency
-        health: "99.8%"
+        health: "99.8%",
       },
-      recentTenants: formattedTenants
+      recentTenants: formattedTenants,
     });
   } catch (error) {
     console.error("Failed to fetch admin stats:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

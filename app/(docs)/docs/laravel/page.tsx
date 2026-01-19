@@ -1,6 +1,6 @@
 import CodeBlock from "@/components/docs/code-block";
 import Callout from "@/components/docs/callout";
-import { Terminal, Download, Zap, Shield, Link2, BookOpen, Check, Puzzle, Activity } from "lucide-react";
+import { Download, BookOpen, Check, Puzzle, Activity } from "lucide-react";
 import Link from "next/link";
 
 export default function LaravelDocsPage() {
@@ -15,7 +15,8 @@ export default function LaravelDocsPage() {
           Laravel Integration
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-          Integrate your Laravel application with PricePilot for automated inventory syncing and dynamic pricing updates.
+          Integrate your Laravel application with PricePilot for automated
+          inventory syncing and dynamic pricing updates.
         </p>
       </div>
 
@@ -31,8 +32,12 @@ export default function LaravelDocsPage() {
             <Download className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-sm font-bold text-foreground group-hover:underline">Download Package</p>
-            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight italic">v1.0.0 • ZIP Archive</p>
+            <p className="text-sm font-bold text-foreground group-hover:underline">
+              Download Package
+            </p>
+            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight italic">
+              v1.0.0 • ZIP Archive
+            </p>
           </div>
         </Link>
         <div className="flex items-center gap-4 p-5 rounded-lg border border-border bg-card">
@@ -41,7 +46,9 @@ export default function LaravelDocsPage() {
           </div>
           <div>
             <p className="text-sm font-bold text-foreground">API Reference</p>
-            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">Technical Spec</p>
+            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
+              Technical Spec
+            </p>
           </div>
         </div>
       </div>
@@ -54,9 +61,12 @@ export default function LaravelDocsPage() {
             "PHP 8.2 or higher",
             "Laravel 10.x or 11.x",
             "PricePilot Account & API Token",
-            "Composer dependency manager"
+            "Composer dependency manager",
           ].map((item, i) => (
-            <div key={i} className="flex items-center gap-3 text-sm text-muted-foreground">
+            <div
+              key={i}
+              className="flex items-center gap-3 text-sm text-muted-foreground"
+            >
               <div className="w-1 h-1 rounded-full bg-border" />
               {item}
             </div>
@@ -68,11 +78,18 @@ export default function LaravelDocsPage() {
       <section className="space-y-6 pt-6">
         <div className="space-y-2">
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3">
-            <span className="text-muted-foreground/20 font-black italic">01.</span>
+            <span className="text-muted-foreground/20 font-black italic">
+              01.
+            </span>
             Installation
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-            Currently, the PricePilot client is distributed as a local package. Extract the contents into your project&apos;s <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs text-foreground font-bold">packages/pricepilot-laravel</code> directory.
+            Currently, the PricePilot client is distributed as a local package.
+            Extract the contents into your project&apos;s{" "}
+            <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs text-foreground font-bold">
+              packages/pricepilot-laravel
+            </code>{" "}
+            directory.
           </p>
         </div>
 
@@ -81,7 +98,10 @@ export default function LaravelDocsPage() {
         </Callout>
 
         <div className="space-y-3">
-          <p className="text-sm font-medium text-foreground">1. Define the local repository in <code className="font-mono text-xs opacity-70">composer.json</code>:</p>
+          <p className="text-sm font-medium text-foreground">
+            1. Define the local repository in{" "}
+            <code className="font-mono text-xs opacity-70">composer.json</code>:
+          </p>
           <CodeBlock
             filename="composer.json"
             language="json"
@@ -98,7 +118,9 @@ export default function LaravelDocsPage() {
         </div>
 
         <div className="space-y-3 pt-2">
-          <p className="text-sm font-medium text-foreground">2. Install the package via Composer:</p>
+          <p className="text-sm font-medium text-foreground">
+            2. Install the package via Composer:
+          </p>
           <CodeBlock
             language="bash"
             code="composer require pricepilot/laravel-client"
@@ -110,20 +132,22 @@ export default function LaravelDocsPage() {
       <section className="space-y-6 pt-10">
         <div className="space-y-2">
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3">
-            <span className="text-muted-foreground/20 font-black italic">02.</span>
+            <span className="text-muted-foreground/20 font-black italic">
+              02.
+            </span>
             Initial Setup
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-            Register the service provider and publish the configuration files to your application.
+            Register the service provider and publish the configuration files to
+            your application.
           </p>
         </div>
-        <CodeBlock
-          language="bash"
-          code="php artisan pricepilot:install"
-        />
+        <CodeBlock language="bash" code="php artisan pricepilot:install" />
 
         <Callout type="warning" title="Security Requirement">
-          Always store your API tokens in <code className="font-mono text-xs">.env</code>. Never commit raw tokens to your version control system.
+          Always store your API tokens in{" "}
+          <code className="font-mono text-xs">.env</code>. Never commit raw
+          tokens to your version control system.
         </Callout>
       </section>
 
@@ -131,11 +155,14 @@ export default function LaravelDocsPage() {
       <section className="space-y-6 pt-10">
         <div className="space-y-2">
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3">
-            <span className="text-muted-foreground/20 font-black italic">03.</span>
+            <span className="text-muted-foreground/20 font-black italic">
+              03.
+            </span>
             Environment Config
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Configure your store credentials in the <code className="font-mono text-xs font-bold">.env</code> file.
+            Configure your store credentials in the{" "}
+            <code className="font-mono text-xs font-bold">.env</code> file.
           </p>
         </div>
         <CodeBlock
@@ -157,10 +184,13 @@ PRICEPILOT_ROUTE_PREFIX=pricepilot/v1`}
         <div className="p-8 rounded-lg border border-border bg-card space-y-4 shadow-sm">
           <div className="flex items-center gap-3 text-foreground">
             <Activity className="w-4 h-4 text-success" />
-            <h4 className="text-base font-bold tracking-tight">Verify Connectivity</h4>
+            <h4 className="text-base font-bold tracking-tight">
+              Verify Connectivity
+            </h4>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Run a health check against your store API to ensure PricePilot can reach your integration.
+            Run a health check against your store API to ensure PricePilot can
+            reach your integration.
           </p>
           <CodeBlock
             language="bash"
@@ -173,7 +203,9 @@ PRICEPILOT_ROUTE_PREFIX=pricepilot/v1`}
       <div className="p-10 rounded-lg bg-muted/20 border border-border flex flex-col md:flex-row items-center justify-between gap-8 mt-20">
         <div className="space-y-2 text-center md:text-left">
           <h4 className="text-xl font-bold tracking-tight">Next Steps</h4>
-          <p className="text-sm text-muted-foreground font-medium">Head back to the dashboard to finalize your store connection.</p>
+          <p className="text-sm text-muted-foreground font-medium">
+            Head back to the dashboard to finalize your store connection.
+          </p>
         </div>
         <Link
           href="/dashboard/connections"
