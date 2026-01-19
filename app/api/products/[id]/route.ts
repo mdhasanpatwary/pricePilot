@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function DELETE(
+async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -40,4 +41,11 @@ export async function DELETE(
       { status: 500 },
     );
   }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  return withRateLimit(req, "write", (r) => handleDELETE(r, context));
 }

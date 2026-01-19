@@ -11,6 +11,15 @@ jest.mock("@/app/api/auth/[...nextauth]/route", () => ({
   authOptions: {},
 }));
 
+// Mock Rate Limiter Middleware
+jest.mock("@/lib/middleware/ratelimit", () => ({
+  withRateLimit: jest
+    .fn()
+    .mockImplementation((req, _type, handler) => handler(req)),
+  getRateLimiterType: jest.fn(),
+  createRateLimitResponse: jest.fn(),
+}));
+
 // Mock Next.js Request/Response
 jest.mock("next/server", () => ({
   NextRequest: jest.fn().mockImplementation((url, options) => ({

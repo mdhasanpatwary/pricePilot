@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { RulesEngine } from "@/lib/services/rules-engine";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * POST /api/pricing/evaluate
  * Evaluate all pricing rules and get recommendations
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -42,7 +43,11 @@ export async function POST(req: NextRequest) {
     console.error("Error evaluating pricing rules:", error);
     return NextResponse.json(
       { error: "Failed to evaluate pricing rules" },
-      { status: 500 }
+      { status: 500 },
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
 }

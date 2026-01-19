@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/rules
  * Fetch all pricing rules for the tenant
  */
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -36,7 +37,7 @@ export async function GET(_req: NextRequest) {
  * POST /api/rules
  * Create a new pricing rule
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
  * PUT /api/rules
  * Update an existing pricing rule
  */
-export async function PUT(req: NextRequest) {
+async function handlePUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -127,7 +128,7 @@ export async function PUT(req: NextRequest) {
  * DELETE /api/rules
  * Delete a pricing rule
  */
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -164,4 +165,20 @@ export async function DELETE(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
+}
+
+export async function PUT(req: NextRequest) {
+  return withRateLimit(req, "write", handlePUT);
+}
+
+export async function DELETE(req: NextRequest) {
+  return withRateLimit(req, "write", handleDELETE);
 }

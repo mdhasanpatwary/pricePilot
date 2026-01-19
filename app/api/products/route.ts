@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/route";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -180,4 +181,8 @@ export async function GET(_req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
 }

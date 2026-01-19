@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/integrations
  * Fetch all connected sites for the authenticated tenant
  */
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -57,7 +58,7 @@ export async function GET(_req: NextRequest) {
  * POST /api/integrations
  * Create a new site connection
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
  * DELETE /api/integrations/[id]
  * Remove a site connection
  */
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -190,4 +191,16 @@ export async function DELETE(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
+}
+
+export async function DELETE(req: NextRequest) {
+  return withRateLimit(req, "write", handleDELETE);
 }

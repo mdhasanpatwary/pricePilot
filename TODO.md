@@ -11,8 +11,8 @@
 ### Security & Compliance
 - [x] **Rate Limiting**: Implement API rate limiting (e.g., `@upstash/ratelimit`) to prevent abuse and DDoS
   - ✅ Implemented with @upstash/ratelimit
-  - ✅ Applied to auth, sync, import/export endpoints
-  - ⚠️ Apply to remaining API routes (see lib/ratelimit.ts for examples)
+  - ✅ Applied to all API routes (Auth, Sync, Analytics, Products, Admin, etc.)
+
 - [ ] **Input Sanitization**: Add comprehensive input validation/sanitization for all user inputs (XSS, SQL injection prevention)
 - [ ] **Security Headers**: Configure Next.js security headers (CSP, HSTS, X-Frame-Options, etc.)
 - [ ] **CSRF Protection**: Implement CSRF tokens for state-changing operations
@@ -163,7 +163,8 @@ Before public launch, ensure:
 - [x] Pricing rules engine
 - [x] Dashboard analytics
 - [ ] Email notifications (P1)
-- [ ] Rate limiting and security hardening (P0)
+- [x] Rate limiting (P0)
+- [ ] Security hardening (Sanitization, Headers) (P0)
 - [ ] Legal pages (P1)
 - [ ] Production error monitoring (P0)
 - [ ] Database backups (P0)

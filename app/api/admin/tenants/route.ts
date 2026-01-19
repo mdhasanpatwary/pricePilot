@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/admin/tenants
  * Fetch all tenants with their limits and stats
  */
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session || !session.user.isSuperAdmin) {
@@ -80,7 +81,7 @@ export async function GET(_req: NextRequest) {
  * PATCH /api/admin/tenants
  * Update tenant limits or plan
  */
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session || !session.user.isSuperAdmin) {
@@ -117,4 +118,12 @@ export async function PATCH(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
+}
+
+export async function PATCH(req: NextRequest) {
+  return withRateLimit(req, "write", handlePATCH);
 }

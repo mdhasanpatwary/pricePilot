@@ -3,12 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { formatDistanceToNow } from "date-fns";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/analytics/logs
  * Real execution logs from PriceUpdateLog table
  */
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -51,4 +52,8 @@ export async function GET(_req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
 }

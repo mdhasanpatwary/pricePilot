@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -102,4 +103,11 @@ export async function POST(
       { status: 400 },
     );
   }
+}
+
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  return withRateLimit(req, "write", (r) => handlePOST(r, context));
 }

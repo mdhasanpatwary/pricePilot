@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/analytics/history
  * Price history data for dashboard charts
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -49,14 +50,18 @@ export async function GET(req: NextRequest) {
           id: true,
           site: {
             select: {
-              type: true
-            }
-          }
+              type: true,
+            },
+          },
         },
       });
 
-      const userProductIds = allProducts.filter(p => p.site.type === "USER").map(p => p.id);
-      const rivalProductIds = allProducts.filter(p => p.site.type === "COMPETITOR").map(p => p.id);
+      const userProductIds = allProducts
+        .filter((p) => p.site.type === "USER")
+        .map((p) => p.id);
+      const rivalProductIds = allProducts
+        .filter((p) => p.site.type === "COMPETITOR")
+        .map((p) => p.id);
 
       const history = await prisma.priceHistory.findMany({
         where: {
@@ -85,21 +90,29 @@ export async function GET(req: NextRequest) {
         if (!acc[date]) {
           acc[date] = {
             user: { total: 0, count: 0 },
-            rivals: { total: 0, count: 0 }
+            rivals: { total: 0, count: 0 },
           };
         }
 
-        const type = isUser ? 'user' : 'rivals';
+        const type = isUser ? "user" : "rivals";
         acc[date][type].total += parseFloat(h.price.toString());
         acc[date][type].count += 1;
         return acc;
       }, {} as GroupedData);
 
-      const chartData = Object.entries(grouped).map(([date, data]) => ({
-        name: date.split("-").slice(1).reverse().join(" "), // "15 Jan" format
-        index: data.user.count > 0 ? Math.round(data.user.total / data.user.count) : null,
-        rivals: data.rivals.count > 0 ? Math.round(data.rivals.total / data.rivals.count) : null,
-      })).filter(d => d.index !== null || d.rivals !== null);
+      const chartData = Object.entries(grouped)
+        .map(([date, data]) => ({
+          name: date.split("-").slice(1).reverse().join(" "), // "15 Jan" format
+          index:
+            data.user.count > 0
+              ? Math.round(data.user.total / data.user.count)
+              : null,
+          rivals:
+            data.rivals.count > 0
+              ? Math.round(data.rivals.total / data.rivals.count)
+              : null,
+        }))
+        .filter((d) => d.index !== null || d.rivals !== null);
 
       return NextResponse.json(chartData);
     }
@@ -107,7 +120,11 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching price history:", error);
     return NextResponse.json(
       { error: "Failed to fetch price history" },
-      { status: 500 }
+      { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
 }

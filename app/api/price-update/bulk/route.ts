@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { UpdateExecutionService } from "@/lib/services/execution";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -14,26 +15,36 @@ export async function POST(req: NextRequest) {
     const { product_ids, logic_type, value, min_price } = await req.json();
 
     if (!product_ids || !Array.isArray(product_ids)) {
-      return NextResponse.json({ error: "Product IDs array is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Product IDs array is required" },
+        { status: 400 },
+      );
     }
 
     const result = await UpdateExecutionService.executeBulkUpdate(
       product_ids,
       logic_type,
       value,
-      min_price
+      min_price,
     );
 
     return NextResponse.json({
       message: "Price updates completed",
-      ...result
+      ...result,
     });
   } catch (error) {
     const err = error as Error;
     console.error("Execution error:", err);
-    return NextResponse.json({
-      error: "Failed to execute price updates",
-      details: err.message
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to execute price updates",
+        details: err.message,
+      },
+      { status: 500 },
+    );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
 }

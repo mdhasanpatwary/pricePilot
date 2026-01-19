@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -14,19 +15,29 @@ export async function POST(req: NextRequest) {
     const { siteId } = await req.json();
 
     if (!siteId) {
-      return NextResponse.json({ error: "Site ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Site ID is required" },
+        { status: 400 },
+      );
     }
 
-    // To "stop" a sync, we simply flip the flag. 
+    // To "stop" a sync, we simply flip the flag.
     // The SyncOrchestrator check this flag on every iteration and will terminate.
     await prisma.site.update({
       where: { id: siteId, tenantId: session.user.tenantId },
-      data: { isSyncing: false }
+      data: { isSyncing: false },
     });
 
-    return NextResponse.json({ success: true, message: "Stop signal sent to crawler" });
+    return NextResponse.json({
+      success: true,
+      message: "Stop signal sent to crawler",
+    });
   } catch (error) {
     console.error("Error stopping sync:", error);
     return NextResponse.json({ error: "Failed to stop sync" }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "sync", handlePOST);
 }
