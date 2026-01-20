@@ -51,6 +51,10 @@
 - [ ] **Error Boundaries**: React error boundaries with graceful fallback UI
 - [ ] **Pagination**: Implement server-side pagination for large product lists (currently loads all)
 - [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
+- [x] **Password Show/Hide Toggle**: User-friendly toggle for password visibility in Login, Register, Settings, and Connections forms.
+- [x] **Favicon**: Added generic branded favicon (icon.png) to project.
+- [x] **Product Table Images**: Display product images in reports table, removed SKU column, and simplified stock status display.
+- [x] **Zero Price Handling**: Handled 0 price as "N/A" or "Unavailable" to account for "Up Coming" items properly.
 
 ### Legal & Support
 - [ ] **Legal Pages**: Create `/privacy`, `/terms`, `/cookies`, and `/acceptable-use` pages

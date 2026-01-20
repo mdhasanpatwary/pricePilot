@@ -14,6 +14,8 @@ import {
   Globe,
   Download,
   ArrowUpRight,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -63,6 +65,7 @@ type ConnectionFormValues = z.infer<typeof connectionSchema>;
 
 export default function ConnectionsPage() {
   const [isAdding, setIsAdding] = useState(false);
+  const [showApiToken, setShowApiToken] = useState(false);
   const [loading, setLoading] = useState(false);
   const [connections, setConnections] = useState<any[]>([]);
   const [_isLoadingConnections, setIsLoadingConnections] = useState(true);
@@ -440,14 +443,25 @@ export default function ConnectionsPage() {
                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                       <input
                         {...register("apiToken")}
-                        type="password"
+                        type={showApiToken ? "text" : "password"}
                         placeholder="Your PricePilot secret key"
                         className={cn(
-                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-10 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
                           errors.apiToken &&
                             "border-destructive focus:ring-destructive/20",
                         )}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiToken(!showApiToken)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showApiToken ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                     {errors.apiToken && (
                       <p className="text-xs text-destructive font-bold">

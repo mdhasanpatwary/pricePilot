@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import {
   Search,
@@ -600,7 +601,7 @@ export default function PriceReportPage() {
                     <span>SL</span>
                   </div>
                 </th>
-                <th className="py-4 px-6 min-w-[320px]">Product / SKU</th>
+                <th className="py-4 px-6 min-w-[320px]">Product</th>
                 <th className="py-4 px-6">Your Price</th>
                 <th className="py-4 px-6 text-center bg-primary/5 text-primary">
                   {cleanName(refCompetitor)}
@@ -665,46 +666,64 @@ export default function PriceReportPage() {
                       </div>
                     </td>
                     <td className="py-4 px-6">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-foreground group-hover:text-primary transition-colors text-[13px] font-semibold leading-tight">
-                            {item.title}
-                          </div>
-                          {item.url && (
-                             <a
-                               href={item.url}
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               onClick={(e) => e.stopPropagation()}
-                               className="text-muted-foreground/40 hover:text-primary transition-colors"
-                             >
-                               <ExternalLink className="w-3 h-3" />
-                             </a>
+                      <div className="flex items-center gap-4">
+                        <div className="relative w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted border border-border">
+                          {item.image ? (
+                            <Image
+                              src={item.image}
+                              alt={item.title}
+                              fill
+                              className="object-cover"
+                              sizes="48px"
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-muted-foreground">
+                              <Zap className="w-5 h-5 opacity-20" />
+                            </div>
                           )}
                         </div>
-                        <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight flex items-center gap-1.5 mt-1">
-                          <span className="opacity-50">SKU:</span>{" "}
-                          {item.sku || "N/A"}
-                          <div className="w-1 h-1 rounded-full bg-border" />
-                          <span
-                            className={
-                              item.inStock
-                                ? "text-success/70"
-                                : "text-danger/70"
-                            }
-                          >
-                            {item.inStock
-                              ? item.stock !== null
-                                ? `${item.stock} in Stock`
-                                : "In Stock"
-                              : "Stock Out"}
-                          </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-foreground group-hover:text-primary transition-colors text-[13px] font-semibold leading-tight line-clamp-2">
+                              {item.title}
+                            </div>
+                            {item.url && (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-muted-foreground/40 hover:text-primary transition-colors shrink-0"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight flex items-center gap-1.5 mt-1">
+                            <span
+                              className={
+                                item.inStock && item.yourPrice > 0
+                                  ? "text-success/70"
+                                  : "text-danger/70"
+                              }
+                            >
+                              {item.inStock && item.yourPrice > 0
+                                ? "In Stock"
+                                : "Unavailable"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td className="py-4 px-6">
                       <span className="font-semibold text-foreground">
-                        {formatCurrency(item.yourPrice, currency)}
+                        {item.yourPrice > 0 ? (
+                          formatCurrency(item.yourPrice, currency)
+                        ) : (
+                          <span className="text-muted-foreground/50 text-xs font-normal italic">
+                            N/A
+                          </span>
+                        )}
                       </span>
                     </td>
 
@@ -724,7 +743,7 @@ export default function PriceReportPage() {
                           <div className="flex flex-col items-center">
                             {!match.inStock ? (
                               <span className="text-[10px] font-bold text-danger/60 uppercase">
-                                Stock Out
+                                Unavailable
                               </span>
                             ) : (
                               <span className="font-bold text-primary">

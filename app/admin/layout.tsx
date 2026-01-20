@@ -24,6 +24,8 @@ import {
   CalendarClock,
   HeartPulse,
   Microscope,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -40,13 +42,21 @@ const adminMenuItems = [
       { label: "System Status", href: "/admin/scrapers", icon: Database },
       { label: "Engine Health", href: "/admin/health", icon: HeartPulse },
       { label: "Live Monitor", href: "/admin/monitor", icon: RefreshCw },
-      { label: "Profiles & Proxy", href: "/admin/scraper-profiles", icon: Settings },
+      {
+        label: "Profiles & Proxy",
+        href: "/admin/scraper-profiles",
+        icon: Settings,
+      },
       { label: "Engine Playground", href: "/admin/playground", icon: Bug },
     ],
   },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
   { icon: ActivitySquare, label: "Diagnostics", href: "/admin/diagnostics" },
-  { icon: Settings2, label: "Business Setup (Logic)", href: "/admin/business-setup" },
+  {
+    icon: Settings2,
+    label: "Business Setup (Logic)",
+    href: "/admin/business-setup",
+  },
   { icon: CalendarClock, label: "Task Scheduler", href: "/admin/scheduler" },
 ];
 
@@ -67,10 +77,13 @@ function AdminSidebar({
   // Auto-expand menus that contain the active path
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpandedMenus(prev => {
+    setExpandedMenus((prev) => {
       const toAdd: string[] = [];
-      adminMenuItems.forEach(item => {
-        if (item.children?.some(child => pathname === child.href) && !prev.includes(item.label)) {
+      adminMenuItems.forEach((item) => {
+        if (
+          item.children?.some((child) => pathname === child.href) &&
+          !prev.includes(item.label)
+        ) {
           toAdd.push(item.label);
         }
       });
@@ -79,10 +92,8 @@ function AdminSidebar({
   }, [pathname]);
 
   const toggleMenu = (label: string) => {
-    setExpandedMenus(prev =>
-      prev.includes(label)
-        ? prev.filter(l => l !== label)
-        : [...prev, label]
+    setExpandedMenus((prev) =>
+      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label],
     );
   };
 
@@ -108,7 +119,9 @@ function AdminSidebar({
         </div>
         {adminMenuItems.map((item) => {
           const hasChildren = item.children && item.children.length > 0;
-          const isChildActive = hasChildren && item.children!.some(child => pathname === child.href);
+          const isChildActive =
+            hasChildren &&
+            item.children!.some((child) => pathname === child.href);
           const isExpanded = expandedMenus.includes(item.label);
 
           return (
@@ -125,13 +138,32 @@ function AdminSidebar({
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <item.icon className={cn("w-4 h-4", isChildActive ? "text-foreground" : "text-muted-foreground")} />
+                      <item.icon
+                        className={cn(
+                          "w-4 h-4",
+                          isChildActive
+                            ? "text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      />
                       <span>{item.label}</span>
                     </div>
-                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", isExpanded ? "rotate-0" : "-rotate-90")} />
+                    <ChevronDown
+                      className={cn(
+                        "w-3.5 h-3.5 transition-transform duration-200",
+                        isExpanded ? "rotate-0" : "-rotate-90",
+                      )}
+                    />
                   </button>
 
-                  <div className={cn("pl-9 pr-2 space-y-1 overflow-hidden transition-all duration-300", isExpanded ? "max-h-64 opacity-100 mt-1" : "max-h-0 opacity-0")}>
+                  <div
+                    className={cn(
+                      "pl-9 pr-2 space-y-1 overflow-hidden transition-all duration-300",
+                      isExpanded
+                        ? "max-h-64 opacity-100 mt-1"
+                        : "max-h-0 opacity-0",
+                    )}
+                  >
                     {item.children!.map((child) => (
                       <Link
                         key={child.href}
@@ -223,6 +255,7 @@ export default function AdminLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [adminCode, setAdminCode] = useState("");
+  const [showAdminCode, setShowAdminCode] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState("");
 
@@ -310,17 +343,30 @@ export default function AdminLayout({
 
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="space-y-1">
-              <input
-                type="password"
-                value={adminCode}
-                onChange={(e) => setAdminCode(e.target.value)}
-                placeholder="••••••••••••"
-                className={cn(
-                  "w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md py-2 px-3 text-center text-sm font-medium outline-none focus:border-zinc-400 transition-all placeholder:text-zinc-300",
-                  error && "border-red-300 focus:border-red-300",
-                )}
-                autoFocus
-              />
+              <div className="relative">
+                <input
+                  type={showAdminCode ? "text" : "password"}
+                  value={adminCode}
+                  onChange={(e) => setAdminCode(e.target.value)}
+                  placeholder="••••••••••••"
+                  className={cn(
+                    "w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md py-2 pl-3 pr-10 text-center text-sm font-medium outline-none focus:border-zinc-400 transition-all placeholder:text-zinc-300",
+                    error && "border-red-300 focus:border-red-300",
+                  )}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminCode(!showAdminCode)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  {showAdminCode ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
               {error && (
                 <p className="text-xs text-red-600 text-center">{error}</p>
               )}

@@ -2,6 +2,7 @@ export interface Product {
   id: string;
   sku: string;
   title: string;
+  image?: string | null;
   yourPrice: number;
   compPrice: number | null;
   diff: number;

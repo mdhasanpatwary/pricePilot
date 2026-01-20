@@ -16,6 +16,8 @@ import {
   Code2,
   Trash2,
   Plus,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,9 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [detectedCurrency, setDetectedCurrency] = useState<string>("USD");
   const [isLoadingCurrency, setIsLoadingCurrency] = useState<boolean>(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const {
     register: registerGeneral,
@@ -358,15 +363,30 @@ export default function SettingsPage() {
                       <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                         Current Password
                       </label>
-                      <input
-                        {...registerSecurity("currentPassword")}
-                        type="password"
-                        className={cn(
-                          "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
-                          errorsSecurity.currentPassword &&
-                            "border-destructive focus:ring-destructive/20",
-                        )}
-                      />
+                      <div className="relative">
+                        <input
+                          {...registerSecurity("currentPassword")}
+                          type={showCurrentPassword ? "text" : "password"}
+                          className={cn(
+                            "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm pr-10",
+                            errorsSecurity.currentPassword &&
+                              "border-destructive focus:ring-destructive/20",
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowCurrentPassword(!showCurrentPassword)
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showCurrentPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                       {errorsSecurity.currentPassword && (
                         <p className="text-xs text-destructive font-bold">
                           {errorsSecurity.currentPassword.message}
@@ -378,15 +398,28 @@ export default function SettingsPage() {
                         <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                           New Password
                         </label>
-                        <input
-                          {...registerSecurity("newPassword")}
-                          type="password"
-                          className={cn(
-                            "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
-                            errorsSecurity.newPassword &&
-                              "border-destructive focus:ring-destructive/20",
-                          )}
-                        />
+                        <div className="relative">
+                          <input
+                            {...registerSecurity("newPassword")}
+                            type={showNewPassword ? "text" : "password"}
+                            className={cn(
+                              "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm pr-10",
+                              errorsSecurity.newPassword &&
+                                "border-destructive focus:ring-destructive/20",
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {showNewPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                         {errorsSecurity.newPassword && (
                           <p className="text-xs text-destructive font-bold">
                             {errorsSecurity.newPassword.message}
@@ -397,15 +430,30 @@ export default function SettingsPage() {
                         <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                           Confirm Password
                         </label>
-                        <input
-                          {...registerSecurity("confirmPassword")}
-                          type="password"
-                          className={cn(
-                            "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
-                            errorsSecurity.confirmPassword &&
-                              "border-destructive focus:ring-destructive/20",
-                          )}
-                        />
+                        <div className="relative">
+                          <input
+                            {...registerSecurity("confirmPassword")}
+                            type={showConfirmPassword ? "text" : "password"}
+                            className={cn(
+                              "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm pr-10",
+                              errorsSecurity.confirmPassword &&
+                                "border-destructive focus:ring-destructive/20",
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowConfirmPassword(!showConfirmPassword)
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                         {errorsSecurity.confirmPassword && (
                           <p className="text-xs text-destructive font-bold">
                             {errorsSecurity.confirmPassword.message}

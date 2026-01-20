@@ -4,7 +4,16 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Shield, Lock, Mail, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import {
+  Shield,
+  Lock,
+  Mail,
+  ArrowRight,
+  Loader2,
+  Sparkles,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -20,6 +29,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   const {
@@ -62,26 +72,32 @@ export default function LoginPage() {
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-white/5 rounded-full blur-[100px] animate-pulse-soft delay-700" />
 
         <div className="relative z-10 space-y-8 max-w-lg text-white">
-           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest backdrop-blur-sm">
-             <Sparkles className="w-3.5 h-3.5 fill-current" />
-             Strategic Pricing
-           </div>
-           <h2 className="text-6xl font-black leading-none tracking-tight">Scale your profit while you sleep.</h2>
-           <p className="text-white/70 text-lg leading-relaxed font-light">
-             Join thousands of modern merchants who are winning the market war with
-             automated intelligence and real-time execution.
-           </p>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest backdrop-blur-sm">
+            <Sparkles className="w-3.5 h-3.5 fill-current" />
+            Strategic Pricing
+          </div>
+          <h2 className="text-6xl font-black leading-none tracking-tight">
+            Scale your profit while you sleep.
+          </h2>
+          <p className="text-white/70 text-lg leading-relaxed font-light">
+            Join thousands of modern merchants who are winning the market war
+            with automated intelligence and real-time execution.
+          </p>
 
-           <div className="pt-10 flex items-center gap-12 border-t border-white/10">
-              <div className="space-y-1">
-                 <p className="text-3xl font-black tracking-tight">82%</p>
-                 <p className="text-white/60 text-xs uppercase font-bold tracking-widest">Efficiency boost</p>
-              </div>
-              <div className="space-y-1">
-                 <p className="text-3xl font-black tracking-tight">12X</p>
-                 <p className="text-white/60 text-xs uppercase font-bold tracking-widest">Product velocity</p>
-              </div>
-           </div>
+          <div className="pt-10 flex items-center gap-12 border-t border-white/10">
+            <div className="space-y-1">
+              <p className="text-3xl font-black tracking-tight">82%</p>
+              <p className="text-white/60 text-xs uppercase font-bold tracking-widest">
+                Efficiency boost
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-black tracking-tight">12X</p>
+              <p className="text-white/60 text-xs uppercase font-bold tracking-widest">
+                Product velocity
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -90,14 +106,18 @@ export default function LoginPage() {
         <div className="absolute top-8 left-8 lg:hidden">
           <div className="flex items-center gap-2">
             <Shield className="w-6 h-6 text-primary" />
-            <span className="text-xl font-bold tracking-tighter">PricePilot</span>
+            <span className="text-xl font-bold tracking-tighter">
+              PricePilot
+            </span>
           </div>
         </div>
 
         <div className="w-full max-w-sm space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="space-y-2">
             <h1 className="text-4xl font-black tracking-tight">Login.</h1>
-            <p className="text-muted-foreground font-medium">Welcome back to your command center.</p>
+            <p className="text-muted-foreground font-medium">
+              Welcome back to your command center.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -110,7 +130,9 @@ export default function LoginPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">Email</label>
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                  Email
+                </label>
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <input
@@ -118,31 +140,57 @@ export default function LoginPage() {
                     type="email"
                     className={cn(
                       "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
-                      errors.email && "border-destructive focus:ring-destructive/10"
+                      errors.email &&
+                        "border-destructive focus:ring-destructive/10",
                     )}
                     placeholder="name@company.com"
                   />
                 </div>
-                {errors.email && <p className="text-xs text-destructive font-bold ml-1">{errors.email.message}</p>}
+                {errors.email && (
+                  <p className="text-xs text-destructive font-bold ml-1">
+                    {errors.email.message}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between ml-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Password</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Password
+                  </label>
                 </div>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <input
                     {...register("password")}
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     className={cn(
-                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
-                      errors.password && "border-destructive focus:ring-destructive/10"
+                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      errors.password &&
+                        "border-destructive focus:ring-destructive/10",
                     )}
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
-                {errors.password && <p className="text-xs text-destructive font-bold ml-1">{errors.password.message}</p>}
+                {errors.password && (
+                  <p className="text-xs text-destructive font-bold ml-1">
+                    {errors.password.message}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -163,12 +211,15 @@ export default function LoginPage() {
           </form>
 
           <div className="pt-8 space-y-4 border-t border-border">
-             <p className="text-center text-sm text-muted-foreground font-medium">
-                Don&apos;t have an account?{" "}
-                <Link href="/auth/register" className="text-foreground hover:text-primary transition-colors font-bold border-b border-foreground hover:border-primary">
-                  Sign up
-                </Link>
-             </p>
+            <p className="text-center text-sm text-muted-foreground font-medium">
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/auth/register"
+                className="text-foreground hover:text-primary transition-colors font-bold border-b border-foreground hover:border-primary"
+              >
+                Sign up
+              </Link>
+            </p>
           </div>
         </div>
       </div>

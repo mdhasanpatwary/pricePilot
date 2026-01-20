@@ -11,7 +11,7 @@ import {
   Target,
   Zap,
   Package,
-  Users
+  Users,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
@@ -64,18 +64,23 @@ export default function MatchApprovalPage() {
     }
   };
 
-  const handleAction = async (matchId: string, action: 'APPROVE' | 'REJECT') => {
+  const handleAction = async (
+    matchId: string,
+    action: "APPROVE" | "REJECT",
+  ) => {
     setProcessingId(matchId);
     try {
       const res = await fetch("/api/matching", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchId, action })
+        body: JSON.stringify({ matchId, action }),
       });
 
       if (res.ok) {
-        setMatches(prev => prev.filter(m => m.id !== matchId));
-        toast.success(action === 'APPROVE' ? "Match confirmed" : "Match rejected");
+        setMatches((prev) => prev.filter((m) => m.id !== matchId));
+        toast.success(
+          action === "APPROVE" ? "Match confirmed" : "Match rejected",
+        );
       }
     } catch (error) {
       toast.error("Failed to process request");
@@ -88,7 +93,9 @@ export default function MatchApprovalPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
         <Loader2 className="w-10 h-10 animate-spin text-primary opacity-20" />
-        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest animate-pulse">Scanning Matches...</p>
+        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest animate-pulse">
+          Scanning Matches...
+        </p>
       </div>
     );
   }
@@ -99,7 +106,8 @@ export default function MatchApprovalPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Match Approval</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Review and confirm products identified by the automated matching engine.
+            Review and confirm products identified by the automated matching
+            engine.
           </p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 rounded-full border border-primary/10">
@@ -119,22 +127,24 @@ export default function MatchApprovalPage() {
             {/* User Product side */}
             <div className="flex-1 p-6 border-b lg:border-b-0 lg:border-r border-border bg-muted/5">
               <div className="flex items-center justify-between mb-4">
-                 <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-primary/10 rounded-md">
-                        <Package className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Your Product</span>
-                    {match.product.url && (
-                      <a
-                        href={match.product.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-all"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                 </div>
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-primary/10 rounded-md">
+                    <Package className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Your Product
+                  </span>
+                  {match.product.url && (
+                    <a
+                      href={match.product.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-all"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
               </div>
               <div className="flex gap-4">
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted/30 flex-shrink-0 flex items-center justify-center relative">
@@ -155,45 +165,61 @@ export default function MatchApprovalPage() {
                 </h3>
               </div>
               <div className="mt-4 flex items-center justify-end">
-                 <div className="text-right">
-                    <p className="text-lg font-black text-primary">{formatCurrency(match.product.price, 'USD')}</p>
-                 </div>
+                <div className="text-right">
+                  <p className="text-lg font-black text-primary">
+                    {match.product.price > 0 ? (
+                      formatCurrency(match.product.price, "USD")
+                    ) : (
+                      <span className="text-muted-foreground text-sm font-normal italic">
+                        N/A
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* Match Indicator */}
             <div className="flex flex-col items-center justify-center p-4 lg:p-0 lg:w-32 bg-muted/20 relative">
-               <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border hidden lg:block -translate-x-1/2" />
-               <div className="z-10 flex flex-col items-center gap-2">
-                  <div className={cn(
+              <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border hidden lg:block -translate-x-1/2" />
+              <div className="z-10 flex flex-col items-center gap-2">
+                <div
+                  className={cn(
                     "w-12 h-12 rounded-full border-4 border-card flex items-center justify-center font-black text-xs shadow-lg",
-                    match.confidence > 80 ? "bg-emerald-500 text-white" : "bg-orange-500 text-white"
-                  )}>
-                    {Math.round(match.confidence)}%
-                  </div>
-                  <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Confidence</span>
-               </div>
+                    match.confidence > 80
+                      ? "bg-emerald-500 text-white"
+                      : "bg-orange-500 text-white",
+                  )}
+                >
+                  {Math.round(match.confidence)}%
+                </div>
+                <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">
+                  Confidence
+                </span>
+              </div>
             </div>
 
             {/* Competitor Product side */}
             <div className="flex-1 p-6 bg-muted/5 overflow-hidden">
-               <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-orange-100 dark:bg-orange-900/20 rounded-md">
-                        <Zap className="w-3.5 h-3.5 text-orange-600" />
-                    </div>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Matched on {match.competitor.siteName}</span>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-orange-100 dark:bg-orange-900/20 rounded-md">
+                    <Zap className="w-3.5 h-3.5 text-orange-600" />
                   </div>
-                  <a
-                    href={match.competitor.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-all"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-               </div>
-               <div className="flex gap-4">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Matched on {match.competitor.siteName}
+                  </span>
+                </div>
+                <a
+                  href={match.competitor.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+              <div className="flex gap-4">
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted/30 flex-shrink-0 flex items-center justify-center relative">
                   {match.competitor.image ? (
                     <Image
@@ -207,33 +233,55 @@ export default function MatchApprovalPage() {
                     <Users className="w-6 h-6 text-muted-foreground opacity-20" />
                   )}
                 </div>
-                  <h3 className="font-bold text-sm leading-snug line-clamp-2 min-h-[40px] text-foreground/80 flex-1">{match.competitor.title}</h3>
-               </div>
-               <div className="mt-4 flex items-center justify-end">
-                 <div className="text-right">
-                    <p className="text-lg font-black text-foreground/80">{formatCurrency(match.competitor.price, 'USD')}</p>
-                 </div>
+                <h3 className="font-bold text-sm leading-snug line-clamp-2 min-h-[40px] text-foreground/80 flex-1">
+                  {match.competitor.title}
+                </h3>
+              </div>
+              <div className="mt-4 flex items-center justify-end">
+                <div className="text-right">
+                  <p className="text-lg font-black text-foreground/80">
+                    {match.competitor.price > 0 ? (
+                      formatCurrency(match.competitor.price, "USD")
+                    ) : (
+                      <span className="text-muted-foreground text-sm font-normal italic">
+                        N/A
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* Actions */}
             <div className="bg-card border-t lg:border-t-0 lg:border-l border-border p-6 flex lg:flex-col gap-3 justify-center">
-               <button
-                 onClick={() => handleAction(match.id, 'APPROVE')}
-                 disabled={!!processingId}
-                 className="flex-1 lg:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-               >
-                 {processingId === match.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                 <span className="text-xs uppercase tracking-widest font-black">Approve</span>
-               </button>
-               <button
-                 onClick={() => handleAction(match.id, 'REJECT')}
-                 disabled={!!processingId}
-                 className="flex-1 lg:flex-initial flex items-center justify-center gap-2 bg-secondary hover:bg-destructive hover:text-destructive-foreground text-foreground font-bold py-2 px-6 rounded-lg transition-all active:scale-95 border border-border disabled:opacity-50"
-               >
-                 {processingId === match.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                 <span className="text-xs uppercase tracking-widest font-black">Reject</span>
-               </button>
+              <button
+                onClick={() => handleAction(match.id, "APPROVE")}
+                disabled={!!processingId}
+                className="flex-1 lg:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+              >
+                {processingId === match.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                <span className="text-xs uppercase tracking-widest font-black">
+                  Approve
+                </span>
+              </button>
+              <button
+                onClick={() => handleAction(match.id, "REJECT")}
+                disabled={!!processingId}
+                className="flex-1 lg:flex-initial flex items-center justify-center gap-2 bg-secondary hover:bg-destructive hover:text-destructive-foreground text-foreground font-bold py-2 px-6 rounded-lg transition-all active:scale-95 border border-border disabled:opacity-50"
+              >
+                {processingId === match.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <X className="w-4 h-4" />
+                )}
+                <span className="text-xs uppercase tracking-widest font-black">
+                  Reject
+                </span>
+              </button>
             </div>
           </div>
         ))}
@@ -245,7 +293,8 @@ export default function MatchApprovalPage() {
             </div>
             <h3 className="text-xl font-bold">All caught up!</h3>
             <p className="text-muted-foreground text-sm max-w-xs text-center mt-2 font-medium">
-              No pending matches require your review at this time. Our engine is working in the background.
+              No pending matches require your review at this time. Our engine is
+              working in the background.
             </p>
           </div>
         )}
