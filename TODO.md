@@ -86,7 +86,7 @@
 - [x] **Connectivity Diagnostics**: One-click system check for Store APIs, database, and scraper proxy health.
 - [x] **Task Scheduler Manager**: Interface to view, pause, and manually trigger cron jobs (Price checks, Reports).
 - [x] **Competitor Health Dashboard**: Track scraping success/failure rates per site to identify bot-detection or layout shifts.
-- [ ] **Entity Audit Search**: Global search to find all logs (syncs, errors, rule triggers) for a specific SKU or Product ID.
+- [x] **Entity Audit Search**: Global search to find all logs (syncs, errors, rule triggers) for a specific SKU or Product ID.
 - [ ] **Scraper Profile Management**: Settings to rotate User-Agents, Proxies, and delay patterns to avoid anti-bot blocks.
 
 ---

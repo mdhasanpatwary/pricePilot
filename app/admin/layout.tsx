@@ -22,6 +22,7 @@ import {
   ActivitySquare,
   CalendarClock,
   HeartPulse,
+  Microscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -31,6 +32,7 @@ const adminMenuItems = [
   { icon: Building2, label: "Tenants (Merchants)", href: "/admin/tenants" },
   { icon: Database, label: "Scraper Status", href: "/admin/scrapers" },
   { icon: HeartPulse, label: "Scraper Health", href: "/admin/health" },
+  { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
   { icon: RefreshCw, label: "Live Sync Monitor", href: "/admin/monitor" },
   { icon: ActivitySquare, label: "Diagnostics", href: "/admin/diagnostics" },
   { icon: Bug, label: "Playground", href: "/admin/playground" },
