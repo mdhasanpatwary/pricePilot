@@ -152,6 +152,16 @@ export default function ProductDetailDrawer({
                   <p className="text-[10px] font-bold text-primary/40 uppercase tracking-tighter">
                     Connected Store Sync Active
                   </p>
+                  {product.url && (
+                    <a
+                      href={product.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 uppercase tracking-tighter mt-2"
+                    >
+                      View on your store <ArrowUpRight className="w-2.5 h-2.5" />
+                    </a>
+                  )}
                 </div>
 
                 {product.allMatches && product.allMatches.length > 0 ? (

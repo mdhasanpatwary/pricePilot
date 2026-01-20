@@ -9,6 +9,7 @@ interface ScrapedProduct {
   model?: string;
   url: string;
   inStock: boolean;
+  imageUrl?: string;
 }
 
 // Domain-specific search URL builders
@@ -192,6 +193,7 @@ export class ScraperService {
           jsonLd.offers?.availability?.includes("InStock") ||
           jsonLd.offers?.[0]?.availability?.includes("InStock") ||
           true,
+        imageUrl: jsonLd.image?.[0] || jsonLd.image || undefined,
       };
     } catch (error) {
       return null;
@@ -221,6 +223,7 @@ export class ScraperService {
             getMeta("og:availability") ||
             getMeta("product:availability") ||
             getMeta("product:availability:status"),
+          image: getMeta("og:image") || getMeta("product:image"),
         };
       });
 
@@ -237,6 +240,7 @@ export class ScraperService {
           ogData.availability !== "instock"
             ? true
             : ogData.availability === "instock",
+        imageUrl: ogData.image || undefined,
       };
     } catch (error) {
       return null;
@@ -287,6 +291,17 @@ export class ScraperService {
           ".p-item-stock", // Generic
         ];
 
+        // Common image selectors
+        const imageSelectors = [
+          'img[itemprop="image"]',
+          ".product-image img",
+          ".product-gallery img",
+          ".main-image img",
+          "#main-image",
+          ".main-product-image img",
+          ".product-main-image img",
+        ];
+
         const getTextContent = (selectors: string[]) => {
           for (const selector of selectors) {
             const el = document.querySelector(selector);
@@ -317,10 +332,36 @@ export class ScraperService {
             );
           });
 
+        const imageSrc = (() => {
+          for (const selector of imageSelectors) {
+            const el = document.querySelector(selector) as HTMLImageElement;
+            if (el) {
+              const src = el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.src;
+              if (src && !src.includes('placeholder') && !src.startsWith('data:')) {
+                return src;
+              }
+            }
+          }
+          // Fallback: search for any image in a product container that looks like a main image
+          const possibleContainers = ['.product-image', '.product-gallery', '.main-image', 'main', 'article'];
+          for (const containerSelector of possibleContainers) {
+             const container = document.querySelector(containerSelector);
+             if (container) {
+                const images = Array.from(container.querySelectorAll('img'));
+                for (const img of images) {
+                   const src = img.getAttribute('data-src') || img.src;
+                   if (src && img.width > 200 && !src.includes('placeholder')) return src;
+                }
+             }
+          }
+          return undefined;
+        })();
+
         return {
           title: getTextContent(titleSelectors),
           priceText: getTextContent(priceSelectors),
           isOos: isActuallyOos,
+          imageUrl: imageSrc,
         };
       });
 
@@ -330,7 +371,7 @@ export class ScraperService {
       const priceMatch = data.priceText.match(/[\d,]+\.?\d*/);
       let price = 0;
       if (priceMatch) {
-        price = parseFloat(priceMatch[0].replace(/,/g, ""));
+        price = parseFloat(priceMatch[0].replace(/[^0-9.]/g, ""));
       }
 
       return {
@@ -338,6 +379,7 @@ export class ScraperService {
         price: price > 0 ? price : 0, // Keep as 0, but route will handle null
         currency: "USD", // Default assumption
         inStock: !data.isOos && price > 0,
+        imageUrl: data.imageUrl,
       };
     } catch (error) {
       return null;

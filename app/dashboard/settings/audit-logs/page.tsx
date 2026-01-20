@@ -1,0 +1,179 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import {
+  History,
+  User,
+  CheckCircle2,
+  XCircle,
+  Search,
+  Filter,
+  Loader2,
+  FileText
+} from "lucide-react";
+import { format } from "date-fns";
+
+interface AuditLog {
+  id: string;
+  userId: string;
+  userEmail: string;
+  action: string;
+  entityId: string;
+  details: string;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export default function AuditLogsPage() {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch("/api/audit-logs");
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data);
+      }
+    } catch (error) {
+      console.error("Failed to load logs", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredLogs = logs.filter(log =>
+    log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.details.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getActionBadge = (action: string) => {
+    if (action.includes("APPROVE")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+          <CheckCircle2 className="w-3 h-3" />
+          Approved
+        </span>
+      );
+    }
+    if (action.includes("REJECT")) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-[10px] font-bold uppercase tracking-wider">
+          <XCircle className="w-3 h-3" />
+          Rejected
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider">
+        <History className="w-3 h-3" />
+        {action.replace("_", " ")}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <Loader2 className="w-10 h-10 animate-spin text-primary opacity-20" />
+        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest animate-pulse">Loading History...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Track user activity and match confirmations across your organization.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-border">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by user, action..."
+            className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-bold bg-background hover:bg-muted transition-all">
+          <Filter className="w-4 h-4" />
+          Filter
+        </button>
+      </div>
+
+      <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b border-border">
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">User</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Action</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Details</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {filteredLogs.map((log) => (
+                <tr key={log.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">{log.userEmail.split('@')[0]}</span>
+                        <span className="text-[10px] text-muted-foreground">{log.userEmail}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {getActionBadge(log.action)}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="max-w-xs truncate text-xs font-medium text-muted-foreground">
+                       {log.details ? JSON.parse(log.details).matchId || log.details : 'N/A'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex flex-col items-end">
+                      <span className="text-[11px] font-bold uppercase tracking-tight">
+                        {format(new Date(log.createdAt), "MMM dd, yyyy")}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {format(new Date(log.createdAt), "HH:mm:ss")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredLogs.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-20 text-center">
+                    <div className="flex flex-col items-center justify-center grayscale opacity-30">
+                       <FileText className="w-12 h-12 mb-4" />
+                       <p className="text-sm font-bold uppercase tracking-widest">No history recorded yet</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

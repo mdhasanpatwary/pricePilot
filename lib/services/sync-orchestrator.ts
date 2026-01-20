@@ -98,9 +98,16 @@ export class SyncOrchestrator {
             data: {
               currentPrice: result.price,
               inStock: result.inStock,
+              imageUrl: result.imageUrl || (cp as any).imageUrl,
               lastCrawledAt: new Date(),
-            },
+            } as any,
           });
+
+          if (result.imageUrl) {
+            console.log(`[Sync] Saved image for ${cp.title}: ${result.imageUrl.substring(0, 50)}...`);
+          } else {
+            console.log(`[Sync] No image found for ${cp.title}`);
+          }
 
           await prisma.priceHistory.create({
             data: {
@@ -331,8 +338,9 @@ export class SyncOrchestrator {
               data: {
                 currentPrice: result.price,
                 inStock: result.inStock,
+                imageUrl: result.imageUrl || (product as any).imageUrl,
                 lastCrawledAt: new Date(),
-              },
+              } as any,
             });
 
             await prisma.priceHistory.create({
@@ -478,8 +486,9 @@ export class SyncOrchestrator {
         data: {
           currentPrice: result.price,
           inStock: result.inStock,
+          imageUrl: result.imageUrl || (product as any).imageUrl,
           lastCrawledAt: new Date(),
-        },
+        } as any,
       });
 
       await prisma.priceHistory.create({

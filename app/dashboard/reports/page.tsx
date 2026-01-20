@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Eye,
   Trash2,
+  ExternalLink,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
@@ -665,8 +666,21 @@ export default function PriceReportPage() {
                     </td>
                     <td className="py-4 px-6">
                       <div>
-                        <div className="text-foreground group-hover:text-primary transition-colors text-[13px] font-semibold leading-tight">
-                          {item.title}
+                        <div className="flex items-center gap-2">
+                          <div className="text-foreground group-hover:text-primary transition-colors text-[13px] font-semibold leading-tight">
+                            {item.title}
+                          </div>
+                          {item.url && (
+                             <a
+                               href={item.url}
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               onClick={(e) => e.stopPropagation()}
+                               className="text-muted-foreground/40 hover:text-primary transition-colors"
+                             >
+                               <ExternalLink className="w-3 h-3" />
+                             </a>
+                          )}
                         </div>
                         <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight flex items-center gap-1.5 mt-1">
                           <span className="opacity-50">SKU:</span>{" "}

@@ -10,16 +10,17 @@ model Tenant {
   id              String        @id @default(uuid())
   companyName     String
   planType        PlanType      @default(BASIC)
-  currency        String        @default("USD")
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   competitorLimit Int           @default(3)
   storeLimit      Int           @default(1)
+  currency        String        @default("USD")
   pricingRules    PricingRule[]
   products        Product[]
   sites           Site[]
   users           User[]
   webhooks        Webhook[]
+  auditLogs       TenantAuditLog[]
 }
 
 model User {
@@ -35,24 +36,24 @@ model User {
 }
 
 model Site {
-  id         String       @id @default(uuid())
-  tenantId   String
-  type       SiteType
-  platform   PlatformType @default(GENERIC)
-  baseUrl    String
-  currency   String       @default("USD")
-  apiToken   String?
+  id             String       @id @default(uuid())
+  tenantId       String
+  type           SiteType
+  platform       PlatformType @default(GENERIC)
+  baseUrl        String
+  apiToken       String?
   lastSyncAt     DateTime?
-  isSyncing      Boolean      @default(false)
-  syncTotal      Int          @default(0)
-  syncProcessed  Int          @default(0)
-  syncLastAction String?
-  syncStartedAt  DateTime?
   createdAt      DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  products   Product[]
-  syncLogs   SyncLog[]
-  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+  updatedAt      DateTime     @updatedAt
+  isSyncing      Boolean      @default(false)
+  syncProcessed  Int          @default(0)
+  syncStartedAt  DateTime?
+  syncTotal      Int          @default(0)
+  syncLastAction String?
+  currency       String       @default("USD")
+  products       Product[]
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  syncLogs       SyncLog[]
 }
 
 model SyncLog {
@@ -72,7 +73,6 @@ model Product {
   sku                 String?
   url                 String?
   title               String
-  category            String?
   brand               String?
   model               String?
   currentPrice        Decimal          @db.Decimal(10, 2)
@@ -82,6 +82,8 @@ model Product {
   stockLevel          Int?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
+  category            String?
+  imageUrl            String?
   priceHistory        PriceHistory[]
   updateLogs          PriceUpdateLog[]
   site                Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -156,13 +158,28 @@ model Webhook {
 model SystemConfig {
   id          String   @id @default(uuid())
   key         String   @unique
-  value       String   @db.Text
+  value       String
   description String?
-  type        String   @default("string") // string, number, boolean, json
+  type        String   @default("string")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
+model TenantAuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  userEmail String
+  action    String   // e.g., "APPROVE_MATCH", "REJECT_MATCH"
+  entityId  String   // e.g., the match ID
+  details   String?  // JSON string for extra info
+  ipAddress String?
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+}
 
 enum PlanType {
   BASIC

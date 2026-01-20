@@ -14,7 +14,7 @@ async function handleGET(_req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    // Determine currency from user's integrated products first, then tenant, else USD
+    // Determine currency
     let currency = "USD";
     try {
       const anyUserProduct = await prisma.product.findFirst({
@@ -25,13 +25,12 @@ async function handleGET(_req: NextRequest) {
       if (anyUserProduct?.currency) {
         currency = anyUserProduct.currency;
       } else {
-        // Prefer USER site currency if available
         const userSite = await prisma.site.findFirst({
           where: { tenantId, type: "USER" },
           orderBy: { createdAt: "desc" },
         });
-        if ((userSite as any)?.currency) {
-          currency = (userSite as any).currency;
+        if (userSite?.currency) {
+          currency = userSite.currency;
         } else {
           const tenant = await prisma.tenant.findUnique({
             where: { id: tenantId },
@@ -40,7 +39,7 @@ async function handleGET(_req: NextRequest) {
         }
       }
     } catch (e) {
-      // keep default USD on any error
+      // keep default USD
     }
 
     const products = await prisma.product.findMany({
@@ -76,98 +75,78 @@ async function handleGET(_req: NextRequest) {
       notFound: 0,
     };
 
-    interface ProductWithStock {
-      id: string;
-      sku: string | null;
-      title: string;
-      currentPrice: any;
-      inStock: boolean;
-      stockLevel: number | null;
-      category: string | null;
-      brand: string | null;
-      model: string | null;
-      site: { baseUrl: string };
-      matchesAsUser: any[];
-      updatedAt: Date;
-    }
-
     // Map to the format expected by the frontend
-    const formattedProducts = (products as unknown as ProductWithStock[]).map(
-      (product) => {
-        // Process all matches
-        const allMatches = product.matchesAsUser.map((m) => {
+    const formattedProducts = products.map((product) => {
+      const allMatches = product.matchesAsUser.map((m) => {
+        let siteName = "Unknown";
+        try {
           const urlObj = new URL(m.competitorProduct.site.baseUrl);
-          return {
-            siteName: urlObj.hostname.replace("www.", ""),
-            url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
-            price: parseFloat(m.competitorProduct.currentPrice.toString()),
-            inStock:
-              m.competitorProduct.inStock &&
-              parseFloat(m.competitorProduct.currentPrice.toString()) > 0,
-          };
-        });
-
-        const bestMatch = product.matchesAsUser[0];
-        let rawCompPrice = bestMatch
-          ? parseFloat(bestMatch.competitorProduct.currentPrice.toString())
-          : null;
-        const compInStock = bestMatch
-          ? bestMatch.competitorProduct.inStock &&
-            rawCompPrice !== null &&
-            rawCompPrice > 0
-          : false;
-        const compPrice =
-          rawCompPrice !== null && rawCompPrice > 0 ? rawCompPrice : null;
-        const yourPrice = parseFloat(product.currentPrice.toString());
-
-        let diff = 0;
-        let status = "NEUTRAL";
-
-        if (!bestMatch) {
-          status = "NOT_FOUND";
-        } else if (compPrice !== null && compInStock) {
-          diff = compPrice - yourPrice;
-          if (diff < 0) status = "RED";
-          else if (diff > 0) status = "GREEN";
-        } else if (bestMatch && (!compInStock || compPrice === null)) {
-          status = "COMP_OOS";
-        }
-
-        // Stats aggregation
-        if (status === "RED") {
-          stats.atRisk++;
-        } else if (status === "GREEN") {
-          stats.optimal++;
-        } else if (status === "NEUTRAL") {
-          stats.parity++;
-        } else if (status === "COMP_OOS") {
-          stats.competitorOos++;
-        } else if (status === "NOT_FOUND") {
-          stats.notFound++;
-        }
+          siteName = urlObj.hostname.replace("www.", "");
+        } catch (e) {}
 
         return {
-          id: product.id,
-          sku: product.sku || "N/A",
-          title: product.title,
-          yourPrice,
-          compPrice,
-          diff,
-          status,
-          match: bestMatch?.competitorProduct.site?.baseUrl || null,
-          stock: product.inStock ? product.stockLevel : 0,
-          inStock: product.inStock,
-          compInStock,
-          category: product.category || "Uncategorized",
-          brand: product.brand || "Generic",
-          model: product.model || "N/A",
-          siteName: product.site?.baseUrl
-            ? new URL(product.site.baseUrl).hostname.replace("www.", "")
-            : "Unknown",
-          allMatches,
+          id: m.id,
+          siteName,
+          url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+          price: parseFloat(m.competitorProduct.currentPrice.toString()),
+          image: (m.competitorProduct as any).imageUrl,
+          inStock: m.competitorProduct.inStock && parseFloat(m.competitorProduct.currentPrice.toString()) > 0,
         };
-      },
-    );
+      });
+
+      const bestMatch = product.matchesAsUser[0];
+      const yourPrice = parseFloat(product.currentPrice.toString());
+
+      let compPrice: number | null = null;
+      let compInStock = false;
+      let diff = 0;
+      let status = "NEUTRAL";
+
+      if (bestMatch) {
+         compPrice = parseFloat(bestMatch.competitorProduct.currentPrice.toString());
+         compInStock = bestMatch.competitorProduct.inStock && compPrice > 0;
+
+         if (compInStock) {
+            diff = compPrice - yourPrice;
+            if (diff < 0) status = "RED";
+            else if (diff > 0) status = "GREEN";
+         } else {
+            status = "COMP_OOS";
+         }
+      } else {
+         status = "NOT_FOUND";
+      }
+
+      // Stats aggregation
+      if (status === "RED") stats.atRisk++;
+      else if (status === "GREEN") stats.optimal++;
+      else if (status === "NEUTRAL") stats.parity++;
+      else if (status === "COMP_OOS") stats.competitorOos++;
+      else if (status === "NOT_FOUND") stats.notFound++;
+
+      return {
+        id: product.id,
+        sku: product.sku || "N/A",
+        title: product.title,
+        image: (product as any).imageUrl,
+        yourPrice,
+        compPrice,
+        diff,
+        status,
+        match: bestMatch?.competitorProduct.site?.baseUrl || null,
+        stock: product.inStock ? (product.stockLevel || 0) : 0,
+        inStock: product.inStock,
+        compInStock,
+        category: product.category || "Uncategorized",
+        brand: product.brand || "Generic",
+        model: product.model || "N/A",
+        siteName: product.site?.baseUrl
+          ? new URL(product.site.baseUrl).hostname.replace("www.", "")
+          : "Unknown",
+        url: product.url,
+        allMatches,
+      };
+    });
 
     return NextResponse.json({
       products: formattedProducts,
@@ -176,10 +155,7 @@ async function handleGET(_req: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching products:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch products" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }
 

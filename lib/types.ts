@@ -14,6 +14,7 @@ export interface Product {
   brand: string;
   model: string;
   siteName: string;
+  url?: string | null;
   allMatches: {
     siteName: string;
     url: string;

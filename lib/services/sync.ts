@@ -11,7 +11,9 @@ interface ExternalProduct {
   brand: string | null;
   model: string | null;
   in_stock: boolean;
+  image?: string;
   id?: string;
+  url: string | null;
 }
 
 export class SyncService {
@@ -60,7 +62,8 @@ export class SyncService {
         sku: extProd.sku,
         model: extProd.model,
         brand: extProd.brand,
-        // inStock: extProd.in_stock,
+        imageUrl: extProd.image,
+        url: extProd.url,
         lastCrawledAt: new Date(),
       };
 
@@ -121,6 +124,7 @@ export class SyncService {
       special?: string;
       manufacturer?: string;
       model?: string;
+      image?: string;
       quantity: number;
       stock_status: string;
     }
@@ -146,6 +150,8 @@ export class SyncService {
         brand: p.manufacturer || null,
         model: p.model || null,
         in_stock: p.quantity > 0 || p.stock_status === "In Stock",
+        image: p.image || undefined,
+        url: `${site.baseUrl.replace(/\/$/, "")}/index.php?route=product/product&product_id=${p.product_id || p.id}`,
       }));
     } catch (error) {
       console.error(`OpenCart API error for ${site.baseUrl}:`, error);
@@ -161,6 +167,7 @@ export class SyncService {
           brand: "Nike",
           model: "270",
           in_stock: true,
+          url: "https://demo.opencart.com/index.php?route=product/product&product_id=1",
         },
         {
           external_id: "oc_2",
@@ -170,6 +177,7 @@ export class SyncService {
           brand: "Adidas",
           model: "22",
           in_stock: false,
+          url: "https://demo.opencart.com/index.php?route=product/product&product_id=2",
         },
       ];
     }
@@ -190,6 +198,7 @@ export class SyncService {
       price?: string;
       brand?: string;
       model?: string;
+      image?: string;
       in_stock?: boolean;
     }
 
@@ -216,6 +225,8 @@ export class SyncService {
         brand: p.brand || null,
         model: p.model || null,
         in_stock: p.in_stock ?? true,
+        image: p.image || undefined,
+        url: (p as any).url || null,
       }));
     } catch (error) {
       console.error(`Laravel API error for ${site.baseUrl}:`, error);
@@ -231,6 +242,7 @@ export class SyncService {
           brand: "Puma",
           model: "RS-X",
           in_stock: true,
+          url: "https://demo.laravel.com/products/puma-rs-x",
         },
       ];
     }

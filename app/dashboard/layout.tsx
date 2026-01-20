@@ -12,7 +12,9 @@ import {
   LogOut,
   ShieldCheck,
   Globe,
-  X
+  X,
+  CheckCircle2,
+  History as HistoryIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
@@ -21,9 +23,11 @@ import Header from "@/components/header";
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Package, label: "Products", href: "/dashboard/reports" },
+  { icon: CheckCircle2, label: "Match Approval", href: "/dashboard/matching" },
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
   { icon: LineChart, label: "Pricing Rules", href: "/dashboard/rules" },
+  { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/settings/audit-logs" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 

@@ -35,12 +35,15 @@
 ## 🟠 HIGH PRIORITY - Feature Completeness (P1)
 
 ### Core Features
-- [ ] **Alert System**: Email and Slack/webhook notifications for competitor price changes
+- [ ] **Alert Center**: Email and Slack/webhook notifications for competitor price changes. Set custom thresholds and frequency.
+- [ ] **Match Approval Workflow**: UI to review, approve, or reject automated product matches with side-by-side verification.
+- [ ] **Market Intelligence Dashboard**: Historical price tracking, market share analysis, and pricing elasticity trends.
 - [ ] **Notification Center**: In-app notification system for sync status, rule executions, errors
 - [ ] **Scheduled Reports**: Automated email reports (daily/weekly summaries) with data export
 - [ ] **Bulk Operations**: Enhanced bulk update UI with preview, validation, and rollback capability
 - [ ] **Product Filtering**: Advanced filtering (price range, status, competitor, date ranges)
 - [ ] **Export Scheduling**: Schedule automated CSV/Excel exports to cloud storage (S3, Google Drive)
+- [ ] **Tenant Activity Audit**: Track internal actions (rule changes, product deletions) for accountability within merchant teams.
 
 ### User Experience
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery

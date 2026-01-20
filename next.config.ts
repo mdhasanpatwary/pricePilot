@@ -9,9 +9,21 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'ui-avatars.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  },
+  // Optimize for Vercel deployment
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
   },
 };
 
