@@ -5,13 +5,22 @@ import { MatchingService } from "./matching";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/utils/timeout";
+import { SystemConfigService } from "@/lib/config";
+
 
 export class SyncOrchestrator {
   /**
    * Run a full sync for a tenant
    */
   static async runFullSync(tenantId: string) {
+    const isKilled = await SystemConfigService.get("SYNC_MASTER_KILL_SWITCH", false);
+    if (isKilled) {
+      console.warn("[SyncOrchestrator] Full sync aborted: Master Kill Switch is ON.");
+      return { success: false, message: "Sync globally disabled" };
+    }
+
     console.log(
+
       `[SyncOrchestrator] Starting full sync for tenant: ${tenantId}`,
     );
 
@@ -154,7 +163,14 @@ export class SyncOrchestrator {
    * Run sync for a specific site
    */
   static async syncSite(siteId: string, force: boolean = false) {
+    const isKilled = await SystemConfigService.get("SYNC_MASTER_KILL_SWITCH", false);
+    if (isKilled) {
+      console.warn("[SyncOrchestrator] Site sync aborted: Master Kill Switch is ON.");
+      return { success: false, message: "Sync globally disabled" };
+    }
+
     console.log(
+
       `[SyncOrchestrator] Starting single-site sync for: ${siteId} (Force: ${force})`,
     );
 
@@ -239,7 +255,8 @@ export class SyncOrchestrator {
       let processed = 0;
 
       // Process in batches for better performance
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = await SystemConfigService.get("SCRAPER_BATCH_SIZE", 5);
+
 
       for (let i = 0; i < matchedProducts.length; i += BATCH_SIZE) {
         // Check if sync was manually stopped OR session invalidated
@@ -267,9 +284,10 @@ export class SyncOrchestrator {
 
         const batch = matchedProducts.slice(i, i + BATCH_SIZE);
 
-        // Process batch in parallel with retry logic (3 total attempts allowed)
-        const SCRAPE_TIMEOUT = 45000;
-        const MAX_RETRIES = 3;
+        // Process batch in parallel with retry logic
+        const SCRAPE_TIMEOUT = await SystemConfigService.get("SCRAPER_TIMEOUT", 45000);
+        const MAX_RETRIES = await SystemConfigService.get("SCRAPER_MAX_RETRIES", 3);
+
 
         const results = await Promise.allSettled(
           batch.map(async (product) => {

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { MatchType } from "@prisma/client";
 import { compareTwoStrings } from "string-similarity";
+import { SystemConfigService } from "@/lib/config";
 
 interface LiteProduct {
   id: string;
@@ -15,9 +16,11 @@ interface LiteProduct {
  * Uses multi-pass strategy: SKU → Brand/Model → Semantic Similarity
  */
 export class MatchingService {
-  private static readonly SIMILARITY_THRESHOLD = 0.65; // 65% similarity required
-  private static readonly HIGH_CONFIDENCE = 0.9;
-  private static readonly MEDIUM_CONFIDENCE = 0.75;
+  // These will be loaded dynamically in runMatching
+  private static SIMILARITY_THRESHOLD = 0.65;
+  private static HIGH_CONFIDENCE = 0.9;
+  private static MEDIUM_CONFIDENCE = 0.75;
+
 
   // Common e-commerce noise to strip during matching
   private static readonly NOISE_WORDS = [
@@ -58,6 +61,11 @@ export class MatchingService {
    * Run matching logic for a specific tenant
    */
   static async runMatching(tenantId: string) {
+    // Load dynamic thresholds
+    this.SIMILARITY_THRESHOLD = await SystemConfigService.get("MATCHING_SIMILARITY_THRESHOLD", 0.65);
+    this.HIGH_CONFIDENCE = 0.9; // We keep these as internal logic constants unless requested otherwise
+    this.MEDIUM_CONFIDENCE = 0.75;
+
     // 1. Get all user products that don't have matches yet
     const userProducts = await prisma.product.findMany({
       where: {

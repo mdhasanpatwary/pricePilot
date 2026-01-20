@@ -153,6 +153,17 @@ model Webhook {
   @@index([tenantId])
 }
 
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  type        String   @default("string") // string, number, boolean, json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
 enum PlanType {
   BASIC
   PREMIUM
