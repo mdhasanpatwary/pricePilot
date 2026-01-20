@@ -20,6 +20,7 @@ import {
   Bug,
   RefreshCw,
   ActivitySquare,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -32,6 +33,7 @@ const adminMenuItems = [
   { icon: ActivitySquare, label: "Diagnostics", href: "/admin/diagnostics" },
   { icon: Bug, label: "Playground", href: "/admin/playground" },
   { icon: Globe, label: "Global Config", href: "/admin/config" },
+  { icon: CalendarClock, label: "Task Scheduler", href: "/admin/scheduler" },
   { icon: Settings, label: "System Settings", href: "/admin/settings" },
 ];
 
