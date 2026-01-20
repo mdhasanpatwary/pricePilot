@@ -17,6 +17,7 @@ import {
   Menu,
   ArrowLeft,
   FileText,
+  Bug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -25,6 +26,7 @@ const adminMenuItems = [
   { icon: Activity, label: "Platform Overview", href: "/admin" },
   { icon: Building2, label: "Tenants (Merchants)", href: "/admin/tenants" },
   { icon: Database, label: "Scraper Status", href: "/admin/scrapers" },
+  { icon: Bug, label: "Playground", href: "/admin/playground" },
   { icon: Globe, label: "Global Config", href: "/admin/config" },
   { icon: Settings, label: "System Settings", href: "/admin/settings" },
 ];

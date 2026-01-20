@@ -103,6 +103,16 @@ export async function checkRateLimit(
   remaining: number;
   reset: number;
 }> {
+  // If Redis is not configured, skip rate limiting (development mode)
+  if (!redis) {
+    return {
+      success: true,
+      limit: 1000,
+      remaining: 999,
+      reset: Date.now(),
+    };
+  }
+
   const result = await limiter.limit(identifier);
 
   return {
