@@ -23,6 +23,7 @@ import {
   CalendarClock,
   HeartPulse,
   Microscope,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -34,6 +35,7 @@ const adminMenuItems = [
   { icon: HeartPulse, label: "Scraper Health", href: "/admin/health" },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
   { icon: RefreshCw, label: "Live Sync Monitor", href: "/admin/monitor" },
+  { icon: Settings2, label: "Scraper Profiles", href: "/admin/scraper-profiles" },
   { icon: ActivitySquare, label: "Diagnostics", href: "/admin/diagnostics" },
   { icon: Bug, label: "Playground", href: "/admin/playground" },
   { icon: Globe, label: "Global Config", href: "/admin/config" },

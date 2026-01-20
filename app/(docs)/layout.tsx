@@ -1,7 +1,5 @@
-import { Inter } from "next/font/google";
+import "@fontsource/inter";
 import "@/app/globals.css";
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata = {
   title: "PricePilot Documentation",
@@ -15,7 +13,7 @@ export default function DocsLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth">
-      <body className={`${inter.variable} font-sans bg-background text-foreground antialiased selection:bg-primary/10 selection:text-primary`}>
+      <body className="font-sans bg-background text-foreground antialiased selection:bg-primary/10 selection:text-primary">
         <div className="flex min-h-screen">
           {children}
         </div>
