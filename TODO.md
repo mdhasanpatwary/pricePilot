@@ -83,7 +83,7 @@
 ### 🛠️ System Tools & Engine
 - [x] **Scraper Playground**: UI to test direct scraping from a URL to debug selector/layout changes.
 - [x] **Live Sync Monitor**: Real-time dashboard showing the status and verbose logs of active sync sessions.
-- [ ] **Connectivity Diagnostics**: One-click system check for Store APIs, database, and scraper proxy health.
+- [x] **Connectivity Diagnostics**: One-click system check for Store APIs, database, and scraper proxy health.
 - [ ] **Task Scheduler Manager**: Interface to view, pause, and manually trigger cron jobs (Price checks, Reports).
 - [ ] **Competitor Health Dashboard**: Track scraping success/failure rates per site to identify bot-detection or layout shifts.
 - [ ] **Entity Audit Search**: Global search to find all logs (syncs, errors, rule triggers) for a specific SKU or Product ID.
