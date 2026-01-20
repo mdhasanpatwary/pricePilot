@@ -7,7 +7,7 @@ jest.mock("next-auth", () => ({
 }));
 
 // Mock authOptions to avoid ESM issues
-jest.mock("@/app/api/auth/[...nextauth]/route", () => ({
+jest.mock("@/lib/auth", () => ({
   authOptions: {},
 }));
 

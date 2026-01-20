@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SyncService } from "@/lib/services/sync";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 async function handlePOST(req: NextRequest) {

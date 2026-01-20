@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import {
   TrendingDown,
@@ -9,6 +9,7 @@ import {
   Activity,
   ChevronRight,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { cn, formatCurrency } from "@/lib/utils";
 import AnnouncementBanner from "@/components/announcement-banner";
 import {
@@ -22,7 +23,10 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 
-export default function DashboardOverview() {
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const impersonateId = searchParams.get("tenantId");
+
   const [stats, setStats] = useState({
     totalSKUs: "0",
     activeRivals: "0",
@@ -42,16 +46,11 @@ export default function DashboardOverview() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  useEffect(() => {
-    fetchAnalytics();
-    fetchRecentLogs();
-    fetchHistory();
-  }, []);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/analytics/summary");
+      const url = `/api/analytics/summary${impersonateId ? `?tenantId=${impersonateId}` : ""}`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setStats({
@@ -70,11 +69,12 @@ export default function DashboardOverview() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [impersonateId]);
 
-  const fetchRecentLogs = async () => {
+  const fetchRecentLogs = useCallback(async () => {
     try {
-      const res = await fetch("/api/analytics/logs");
+      const url = `/api/analytics/logs${impersonateId ? `?tenantId=${impersonateId}` : ""}`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setRecentLogs(data);
@@ -82,11 +82,13 @@ export default function DashboardOverview() {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [impersonateId]);
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch("/api/analytics/history?days=30");
+      const base = "/api/analytics/history?days=30";
+      const url = impersonateId ? `${base}&tenantId=${impersonateId}` : base;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setChartData(data);
@@ -94,7 +96,13 @@ export default function DashboardOverview() {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [impersonateId]);
+
+  useEffect(() => {
+    fetchAnalytics();
+    fetchRecentLogs();
+    fetchHistory();
+  }, [fetchAnalytics, fetchRecentLogs, fetchHistory]);
 
   const handleRunSync = async () => {
     setIsSyncing(true);
@@ -455,5 +463,13 @@ export default function DashboardOverview() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DashboardOverview() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[400px] animate-pulse text-muted-foreground uppercase text-[10px] font-black tracking-widest">Loading Analytics...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }

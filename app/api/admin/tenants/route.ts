@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
@@ -28,6 +28,11 @@ async function handleGET(_req: NextRequest) {
           take: 1,
           select: { email: true },
         },
+        sites: {
+          where: { type: "USER" },
+          take: 1,
+          select: { baseUrl: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -42,8 +47,9 @@ async function handleGET(_req: NextRequest) {
       products: t._count.products,
       storeLimit: t.storeLimit,
       competitorLimit: t.competitorLimit,
+      storeUrl: t.sites[0]?.baseUrl || null,
       // Calculate current usage
-      activeStores: 0, // We'll need another query or more complex include to separate types
+      activeStores: 0,
     }));
 
     // In a real scenario, we'd do a more complex query to count sites by type
@@ -120,10 +126,98 @@ async function handlePATCH(req: NextRequest) {
   }
 }
 
+/**
+ * POST /api/admin/tenants
+ * Create a new tenant
+ */
+async function handlePOST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { name, planType, storeLimit, competitorLimit } = body;
+
+    if (!name) {
+      return NextResponse.json(
+        { error: "Company name is required" },
+        { status: 400 },
+      );
+    }
+
+    const newTenant = await prisma.tenant.create({
+      data: {
+        companyName: name,
+        planType: planType || "BASIC",
+        storeLimit: storeLimit ? parseInt(storeLimit) : 1,
+        competitorLimit: competitorLimit ? parseInt(competitorLimit) : 3,
+      },
+    });
+
+    return NextResponse.json(newTenant, { status: 201 });
+  } catch (error) {
+    console.error("Failed to create tenant:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * DELETE /api/admin/tenants
+ * Delete a tenant
+ */
+async function handleDELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Tenant ID is required" },
+        { status: 400 },
+      );
+    }
+
+    // Note: Due to foreign key constraints, we should ideally handle cascade deletes
+    // or restrict deletion if dependencies exist. Prisma schema has some onDelete: Cascade
+    // but not for all relations.
+    await prisma.tenant.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete tenant:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
+}
+
 export async function GET(req: NextRequest) {
   return withRateLimit(req, "read", handleGET);
 }
 
 export async function PATCH(req: NextRequest) {
   return withRateLimit(req, "write", handlePATCH);
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
+}
+
+export async function DELETE(req: NextRequest) {
+  return withRateLimit(req, "write", handleDELETE);
 }

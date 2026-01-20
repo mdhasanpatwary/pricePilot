@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 
@@ -15,7 +15,16 @@ async function handleGET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = session.user.tenantId;
+  // Allow super admins to impersonate a tenant
+  const searchParams = req.nextUrl.searchParams;
+  const impersonateId = searchParams.get("tenantId");
+  const tenantId = (session.user.isSuperAdmin && impersonateId)
+    ? impersonateId
+    : session.user.tenantId;
+
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant context not found" }, { status: 400 });
+  }
   const url = new URL(req.url);
   const productId = url.searchParams.get("productId");
   const days = parseInt(url.searchParams.get("days") || "7");

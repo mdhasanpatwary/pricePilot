@@ -12,6 +12,8 @@ import {
   LogOut,
   X,
   Lock,
+  ChevronDown,
+  Settings,
   Activity,
   Menu,
   ArrowLeft,
@@ -30,13 +32,20 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const adminMenuItems = [
   { icon: Activity, label: "Platform Overview", href: "/admin" },
   { icon: Building2, label: "Tenants (Merchants)", href: "/admin/tenants" },
-  { icon: Database, label: "Scraper Status", href: "/admin/scrapers" },
-  { icon: HeartPulse, label: "Scraper Health", href: "/admin/health" },
+  {
+    icon: Database,
+    label: "Scraping Engine",
+    href: "/admin/scrapers", // Default link if clicked
+    children: [
+      { label: "System Status", href: "/admin/scrapers", icon: Database },
+      { label: "Engine Health", href: "/admin/health", icon: HeartPulse },
+      { label: "Live Monitor", href: "/admin/monitor", icon: RefreshCw },
+      { label: "Profiles & Proxy", href: "/admin/scraper-profiles", icon: Settings },
+      { label: "Engine Playground", href: "/admin/playground", icon: Bug },
+    ],
+  },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
-  { icon: RefreshCw, label: "Live Sync Monitor", href: "/admin/monitor" },
-  { icon: Settings2, label: "Scraper Profiles", href: "/admin/scraper-profiles" },
   { icon: ActivitySquare, label: "Diagnostics", href: "/admin/diagnostics" },
-  { icon: Bug, label: "Playground", href: "/admin/playground" },
   { icon: Settings2, label: "Business Setup (Logic)", href: "/admin/business-setup" },
   { icon: CalendarClock, label: "Task Scheduler", href: "/admin/scheduler" },
 ];
@@ -53,6 +62,30 @@ function AdminSidebar({
   pathname: string;
   onClose?: () => void;
 }) {
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+
+  // Auto-expand menus that contain the active path
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpandedMenus(prev => {
+      const toAdd: string[] = [];
+      adminMenuItems.forEach(item => {
+        if (item.children?.some(child => pathname === child.href) && !prev.includes(item.label)) {
+          toAdd.push(item.label);
+        }
+      });
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+  }, [pathname]);
+
+  const toggleMenu = (label: string) => {
+    setExpandedMenus(prev =>
+      prev.includes(label)
+        ? prev.filter(l => l !== label)
+        : [...prev, label]
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-card">
       <div className="h-16 px-6 flex items-center border-b border-border">
@@ -73,29 +106,74 @@ function AdminSidebar({
         <div className="mb-2 px-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Platform
         </div>
-        {adminMenuItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onClose}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
-              pathname === item.href
-                ? "bg-muted text-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            )}
-          >
-            <item.icon
-              className={cn(
-                "w-4 h-4",
-                pathname === item.href
-                  ? "text-foreground"
-                  : "text-muted-foreground",
+        {adminMenuItems.map((item) => {
+          const hasChildren = item.children && item.children.length > 0;
+          const isChildActive = hasChildren && item.children!.some(child => pathname === child.href);
+          const isExpanded = expandedMenus.includes(item.label);
+
+          return (
+            <div key={item.label} className="space-y-1">
+              {hasChildren ? (
+                <>
+                  <button
+                    onClick={() => toggleMenu(item.label)}
+                    className={cn(
+                      "flex items-center justify-between w-full px-3 py-2 rounded-md transition-colors text-sm",
+                      isChildActive
+                        ? "bg-muted/30 text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className={cn("w-4 h-4", isChildActive ? "text-foreground" : "text-muted-foreground")} />
+                      <span>{item.label}</span>
+                    </div>
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", isExpanded ? "rotate-0" : "-rotate-90")} />
+                  </button>
+
+                  <div className={cn("pl-9 pr-2 space-y-1 overflow-hidden transition-all duration-300", isExpanded ? "max-h-64 opacity-100 mt-1" : "max-h-0 opacity-0")}>
+                    {item.children!.map((child) => (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={onClose}
+                        className={cn(
+                          "block px-3 py-1.5 rounded-md transition-colors text-xs",
+                          pathname === child.href
+                            ? "bg-primary/10 text-primary font-bold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                        )}
+                      >
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <Link
+                  href={item.href!}
+                  onClick={onClose}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                    pathname === item.href
+                      ? "bg-muted text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "w-4 h-4",
+                      pathname === item.href
+                        ? "text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  />
+                  <span>{item.label}</span>
+                </Link>
               )}
-            />
-            <span>{item.label}</span>
-          </Link>
-        ))}
+            </div>
+          );
+        })}
 
         <div className="mt-6 mb-2 px-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Quick Links
