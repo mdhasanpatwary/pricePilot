@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { Product, Site } from "@prisma/client";
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import {
+  openCartProductSchema,
+  laravelProductSchema,
+} from "@/lib/validation/schemas";
 
 interface ExternalProduct {
   external_id: string;
@@ -185,14 +189,43 @@ export class SyncService {
 
       // Expected OpenCart response format:
       // { products: [{ product_id, sku, name, price, manufacturer, model }] }
-      const products: OpenCartProduct[] = response.data.products || [];
+      const rawProducts = response.data.products || [];
+      const validProducts: OpenCartProduct[] = [];
 
-      return products.map((p) => ({
+      for (const item of rawProducts) {
+        const result = openCartProductSchema.safeParse(item);
+        if (result.success) {
+          validProducts.push({
+            ...result.data,
+            // Ensure derived properties are available for mapping
+            product_id: result.data.product_id,
+            id: result.data.id,
+            sku: result.data.sku || undefined,
+            name: result.data.name,
+            title: result.data.title,
+            category: result.data.category || undefined,
+            price: result.data.price?.toString(),
+            special: result.data.special?.toString() || undefined,
+            manufacturer: result.data.manufacturer || undefined,
+            model: result.data.model || undefined,
+            image: result.data.image || undefined,
+            quantity: result.data.quantity,
+            stock_status: result.data.stock_status || "",
+          });
+        } else {
+          console.warn(
+            `[SyncService] Skipping invalid OpenCart product for ${site.baseUrl}:`,
+            result.error.flatten(),
+          );
+        }
+      }
+
+      return validProducts.map((p) => ({
         external_id: p.product_id?.toString() || p.id?.toString() || "",
         sku: p.sku || null,
         title: p.name || p.title || "Unknown Product",
         category: p.category || null,
-        price: parseFloat(p.price || p.special || "0"),
+        price: parseFloat((p.price || p.special || "0").toString()),
         brand: p.manufacturer || null,
         model: p.model || null,
         in_stock: p.quantity > 0 || p.stock_status === "In Stock",
@@ -263,15 +296,39 @@ export class SyncService {
 
       // Expected Laravel response format:
       // { data: [{ id, sku, name, price, brand, model }] }
-      const products: LaravelProduct[] =
-        response.data.data || response.data || [];
+      const rawProducts = response.data.data || response.data || [];
+      const validProducts: LaravelProduct[] = [];
 
-      return products.map((p) => ({
+      for (const item of rawProducts) {
+        const result = laravelProductSchema.safeParse(item);
+        if (result.success) {
+          validProducts.push({
+            ...result.data,
+            id: result.data.id,
+            sku: result.data.sku || undefined,
+            name: result.data.name,
+            title: result.data.title,
+            category: result.data.category || undefined,
+            price: result.data.price?.toString(),
+            brand: result.data.brand || undefined,
+            model: result.data.model || undefined,
+            image: result.data.image || undefined,
+            in_stock: result.data.in_stock,
+          });
+        } else {
+          console.warn(
+            `[SyncService] Skipping invalid Laravel product for ${site.baseUrl}:`,
+            result.error.flatten(),
+          );
+        }
+      }
+
+      return validProducts.map((p) => ({
         external_id: p.id?.toString() || "",
         sku: p.sku || null,
         title: p.name || p.title || "Unknown Product",
         category: p.category || null,
-        price: parseFloat(p.price || "0"),
+        price: parseFloat((p.price || "0").toString()),
         brand: p.brand || null,
         model: p.model || null,
         in_stock: p.in_stock ?? true,

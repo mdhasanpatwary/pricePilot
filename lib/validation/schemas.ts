@@ -443,6 +443,39 @@ export const dateRangeSchema = z
   );
 
 // ============================================================================
+// EXTERNAL PRODUCT DATA VALIDATION
+// ============================================================================
+
+export const openCartProductSchema = z.object({
+  product_id: z.union([z.string(), z.number()]).optional(),
+  id: z.union([z.string(), z.number()]).optional(),
+  sku: z.string().optional().nullable(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  category: z.string().optional().nullable(),
+  price: z.union([z.string(), z.number()]).optional(),
+  special: z.union([z.string(), z.number()]).optional().nullable(),
+  manufacturer: z.string().optional().nullable(),
+  model: z.string().optional().nullable(),
+  image: z.string().optional().nullable(),
+  quantity: z.union([z.string(), z.number()]).transform((val) => Number(val)),
+  stock_status: z.string().optional().nullable(),
+});
+
+export const laravelProductSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  sku: z.string().optional().nullable(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  category: z.string().optional().nullable(),
+  price: z.union([z.string(), z.number()]).optional(),
+  brand: z.string().optional().nullable(),
+  model: z.string().optional().nullable(),
+  image: z.string().optional().nullable(),
+  in_stock: z.boolean().optional(),
+});
+
+// ============================================================================
 // EXPORT TYPES
 // ============================================================================
 
@@ -464,3 +497,5 @@ export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 export type SystemConfigInput = z.infer<typeof systemConfigSchema>;
 export type SearchQueryInput = z.infer<typeof searchQuerySchema>;
 export type DateRangeInput = z.infer<typeof dateRangeSchema>;
+export type OpenCartProduct = z.infer<typeof openCartProductSchema>;
+export type LaravelProduct = z.infer<typeof laravelProductSchema>;
