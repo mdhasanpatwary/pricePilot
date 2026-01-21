@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { z } from "zod";
+import {
+  validateParams,
+  validationErrorResponse,
+  uuidSchema,
+} from "@/lib/validation";
 
 async function handleDELETE(
   _req: NextRequest,
@@ -12,7 +18,17 @@ async function handleDELETE(
   if (!session?.user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const rawParams = await params;
+  const paramValidation = validateParams(
+    rawParams,
+    z.object({ id: uuidSchema }),
+  );
+
+  if (!paramValidation.success) {
+    return validationErrorResponse(paramValidation);
+  }
+
+  const { id } = paramValidation.data!;
   const tenantId = session.user.tenantId;
 
   try {

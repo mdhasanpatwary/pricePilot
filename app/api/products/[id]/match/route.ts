@@ -3,6 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { z } from "zod";
+import {
+  validateBody,
+  validateParams,
+  validationErrorResponse,
+  manualMatchSchema,
+  uuidSchema,
+} from "@/lib/validation";
 
 async function handlePOST(
   req: NextRequest,
@@ -12,10 +20,25 @@ async function handlePOST(
   if (!session?.user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { url } = await req.json();
-  const { id: productId } = await params;
-
   try {
+    // Validate Params
+    const rawParams = await params;
+    const paramValidation = validateParams(
+      rawParams,
+      z.object({ id: uuidSchema }),
+    );
+    if (!paramValidation.success) {
+      return validationErrorResponse(paramValidation);
+    }
+    const { id: productId } = paramValidation.data!;
+
+    // Validate Body
+    const validation = await validateBody(req, manualMatchSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+    const { url } = validation.data!;
+
     const origin = new URL(url).origin;
 
     // 1. Ensure competitor site exists

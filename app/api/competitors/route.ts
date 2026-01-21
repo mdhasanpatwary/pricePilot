@@ -4,6 +4,11 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  createCompetitorSchema,
+} from "@/lib/validation";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -123,11 +128,14 @@ async function handlePOST(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const { url } = await req.json();
+    // Validate and sanitize input
+    const validation = await validateBody(req, createCompetitorSchema);
 
-    if (!url) {
-      return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { url } = validation.data!;
 
     // Fetch tenant limits
     const tenant = await prisma.tenant.findUnique({

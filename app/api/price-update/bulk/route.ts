@@ -3,6 +3,11 @@ import { UpdateExecutionService } from "@/lib/services/execution";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  bulkPriceUpdateExecutionSchema,
+} from "@/lib/validation";
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -12,14 +17,13 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const { product_ids, logic_type, value, min_price } = await req.json();
+    const validation = await validateBody(req, bulkPriceUpdateExecutionSchema);
 
-    if (!product_ids || !Array.isArray(product_ids)) {
-      return NextResponse.json(
-        { error: "Product IDs array is required" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { product_ids, logic_type, value, min_price } = validation.data!;
 
     const result = await UpdateExecutionService.executeBulkUpdate(
       product_ids,

@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  createIntegrationSchema,
+} from "@/lib/validation";
 
 /**
  * GET /api/integrations
@@ -68,26 +73,14 @@ async function handlePOST(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const body = await req.json();
-    const { platform, baseUrl, apiToken, type } = body;
+    // Validate and sanitize input
+    const validation = await validateBody(req, createIntegrationSchema);
 
-    // Validation
-    if (!platform || !baseUrl) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
 
-    // Validate URL format
-    try {
-      new URL(baseUrl);
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid URL format" },
-        { status: 400 },
-      );
-    }
+    const { platform, baseUrl, apiToken, type } = validation.data!;
 
     // Fetch tenant limits
     const tenant = await prisma.tenant.findUnique({

@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  matchApprovalSchema,
+} from "@/lib/validation";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -45,8 +50,15 @@ async function handleGET(_req: NextRequest) {
 
     const formattedMatches = products.flatMap((product) =>
       product.matchesAsUser
-        .filter(m => m.matchType !== "MANUAL") // Only show auto matches for review
+        .filter((m) => m.matchType !== "MANUAL") // Only show auto matches for review
         .map((m) => {
+          let siteName = "Unknown";
+          try {
+            siteName = new URL(
+              m.competitorProduct.site.baseUrl,
+            ).hostname.replace("www.", "");
+          } catch (e) {}
+
           return {
             id: m.id,
             confidence: parseFloat(m.confidenceScore.toString()),
@@ -68,34 +80,42 @@ async function handleGET(_req: NextRequest) {
               url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
               image: (m.competitorProduct as any).imageUrl,
               site: m.competitorProduct.site.baseUrl,
-              siteName: new URL(m.competitorProduct.site.baseUrl).hostname.replace("www.", ""),
-            }
+              siteName,
+            },
           };
-        })
+        }),
     );
 
     return NextResponse.json(formattedMatches);
   } catch (error) {
     console.error("Match fetch error:", error);
-    return NextResponse.json({ error: "Failed to fetch matches" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch matches" },
+      { status: 500 },
+    );
   }
 }
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { matchId, action } = await req.json();
+    const validation = await validateBody(req, matchApprovalSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+    const { matchId, action } = validation.data!;
 
     if (action === "APPROVE") {
       await prisma.productMatch.update({
         where: { id: matchId },
-        data: { matchType: "MANUAL" }
+        data: { matchType: "MANUAL" },
       });
     } else if (action === "REJECT") {
       await prisma.productMatch.delete({
-        where: { id: matchId }
+        where: { id: matchId },
       });
     }
 
@@ -108,8 +128,8 @@ async function handlePOST(req: NextRequest) {
         action: `${action}_MATCH`,
         entityId: matchId,
         ipAddress: req.headers.get("x-forwarded-for") || "unknown",
-        details: JSON.stringify({ matchId, action })
-      }
+        details: JSON.stringify({ matchId, action }),
+      },
     });
 
     return NextResponse.json({ success: true });

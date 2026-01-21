@@ -2,17 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  registerSchema,
+} from "@/lib/validation";
 
 async function handleRegister(req: NextRequest) {
   try {
-    const { email, password, companyName } = await req.json();
+    // Validate and sanitize input
+    const validation = await validateBody(req, registerSchema);
 
-    if (!email || !password || !companyName) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { email, password, companyName } = validation.data!;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -22,12 +27,12 @@ async function handleRegister(req: NextRequest) {
     if (existingUser) {
       return NextResponse.json(
         { error: "User with this email already exists" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Hash password with strong cost factor
+    const passwordHash = await bcrypt.hash(password, 12);
 
     // Create Tenant and User in a transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -51,13 +56,13 @@ async function handleRegister(req: NextRequest) {
 
     return NextResponse.json(
       { message: "User registered successfully", userId: result.user.id },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(
       { error: "An unexpected error occurred" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

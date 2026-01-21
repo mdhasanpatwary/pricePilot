@@ -1,5 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  systemConfigSchema,
+} from "@/lib/validation";
 
 // Default configuration values
 const DEFAULT_CONFIGS = [
@@ -41,7 +49,13 @@ const DEFAULT_CONFIGS = [
   },
 ];
 
-export async function GET() {
+async function handleGET(_req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const configs = await prisma.systemConfig.findMany({
       orderBy: { key: "asc" },
@@ -67,9 +81,21 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { key, value } = await req.json();
+    const validation = await validateBody(req, systemConfigSchema);
+
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { key, value } = validation.data!;
 
     const config = await prisma.systemConfig.upsert({
       where: { key },
@@ -84,4 +110,12 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
 }

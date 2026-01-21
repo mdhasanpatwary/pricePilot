@@ -3,6 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  createPricingRuleSchema,
+  updatePricingRuleSchema,
+} from "@/lib/validation";
 
 /**
  * GET /api/rules
@@ -47,15 +53,15 @@ async function handlePOST(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const body = await req.json();
-    const { name, strategy, parameter, priority, isActive, description } = body;
+    // Validate and sanitize input
+    const validation = await validateBody(req, createPricingRuleSchema);
 
-    if (!name || !strategy || parameter === undefined) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { name, strategy, parameter, priority, isActive, description } =
+      validation.data!;
 
     const rule = await prisma.pricingRule.create({
       data: {
@@ -93,12 +99,14 @@ async function handlePUT(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const body = await req.json();
-    const { id, ...updateData } = body;
+    // Validate and sanitize input
+    const validation = await validateBody(req, updatePricingRuleSchema);
 
-    if (!id) {
-      return NextResponse.json({ error: "Rule ID required" }, { status: 400 });
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { id, ...updateData } = validation.data!;
 
     // Verify ownership
     const existingRule = await prisma.pricingRule.findFirst({

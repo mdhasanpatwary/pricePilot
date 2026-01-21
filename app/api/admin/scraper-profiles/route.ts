@@ -1,6 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  scraperConfigSchema,
+} from "@/lib/validation";
 
 const CONFIG_FILE = path.join(process.cwd(), "scraper-config.json");
 
@@ -52,22 +60,44 @@ async function writeConfig(config: ScraperConfig) {
   await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
-export async function GET() {
+async function handleGET(_req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const config = await readConfig();
   return NextResponse.json(config);
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const body = await req.json();
+    const validation = await validateBody(req, scraperConfigSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
     const currentConfig = await readConfig();
-    const newConfig = { ...currentConfig, ...body };
-    await writeConfig(newConfig);
+    const newConfig = { ...currentConfig, ...validation.data! };
+    await writeConfig(newConfig as ScraperConfig);
     return NextResponse.json({ success: true, config: newConfig });
   } catch (error) {
     return NextResponse.json(
       { error: "Failed to save configuration" },
-      { status: 500 }
+      { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "write", handlePOST);
 }

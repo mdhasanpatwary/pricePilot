@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { z } from "zod";
+import {
+  validateBody,
+  validateQuery,
+  validationErrorResponse,
+  createTenantSchema,
+  updateTenantSchema,
+  uuidSchema,
+} from "@/lib/validation";
 
 /**
  * GET /api/admin/tenants
@@ -95,22 +104,20 @@ async function handlePATCH(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const { id, storeLimit, competitorLimit, planType } = body;
+    const validation = await validateBody(req, updateTenantSchema);
 
-    if (!id) {
-      return NextResponse.json(
-        { error: "Tenant ID is required" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { id, storeLimit, competitorLimit, planType } = validation.data!;
 
     const updatedTenant = await prisma.tenant.update({
       where: { id },
       data: {
-        ...(storeLimit !== undefined && { storeLimit: parseInt(storeLimit) }),
+        ...(storeLimit !== undefined && { storeLimit: storeLimit }),
         ...(competitorLimit !== undefined && {
-          competitorLimit: parseInt(competitorLimit),
+          competitorLimit: competitorLimit,
         }),
         ...(planType !== undefined && { planType }),
       },
@@ -138,22 +145,20 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const { name, planType, storeLimit, competitorLimit } = body;
+    const validation = await validateBody(req, createTenantSchema);
 
-    if (!name) {
-      return NextResponse.json(
-        { error: "Company name is required" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { name, planType, storeLimit, competitorLimit } = validation.data!;
 
     const newTenant = await prisma.tenant.create({
       data: {
         companyName: name,
         planType: planType || "BASIC",
-        storeLimit: storeLimit ? parseInt(storeLimit) : 1,
-        competitorLimit: competitorLimit ? parseInt(competitorLimit) : 3,
+        storeLimit: storeLimit,
+        competitorLimit: competitorLimit,
       },
     });
 
@@ -179,15 +184,13 @@ async function handleDELETE(req: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+    const paramValidation = validateQuery(req, z.object({ id: uuidSchema }));
 
-    if (!id) {
-      return NextResponse.json(
-        { error: "Tenant ID is required" },
-        { status: 400 },
-      );
+    if (!paramValidation.success) {
+      return validationErrorResponse(paramValidation);
     }
+
+    const { id } = paramValidation.data!;
 
     // Note: Due to foreign key constraints, we should ideally handle cascade deletes
     // or restrict deletion if dependencies exist. Prisma schema has some onDelete: Cascade

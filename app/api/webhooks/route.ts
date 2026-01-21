@@ -3,6 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { z } from "zod";
+import {
+  validateBody,
+  validateQuery,
+  validationErrorResponse,
+  createWebhookSchema,
+  uuidSchema,
+} from "@/lib/validation";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -38,11 +46,13 @@ async function handlePOST(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const { url, secret } = await req.json();
+    const validation = await validateBody(req, createWebhookSchema);
 
-    if (!url || !url.startsWith("http")) {
-      return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { url, secret } = validation.data!;
 
     const webhook = await prisma.webhook.create({
       data: {
@@ -69,14 +79,25 @@ async function handleDELETE(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get("id");
+  const paramValidation = validateQuery(req, z.object({ id: uuidSchema }));
 
-  if (!id) {
-    return NextResponse.json({ error: "ID required" }, { status: 400 });
+  if (!paramValidation.success) {
+    return validationErrorResponse(paramValidation);
   }
 
+  const { id } = paramValidation.data!;
+
   try {
+    // Verify ownership before delete if not already handled by DB constraints or logic
+    // Actually, we should check if this webhook belongs to the tenant
+    const webhook = await prisma.webhook.findUnique({
+      where: { id },
+    });
+
+    if (!webhook || webhook.tenantId !== session.user.tenantId) {
+      return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
+    }
+
     await prisma.webhook.delete({
       where: { id },
     });
