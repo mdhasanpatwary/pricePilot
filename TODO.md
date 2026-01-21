@@ -42,7 +42,7 @@
 
 ### Edge Cases to Address
 - [ ] **Large Dataset Handling**: Memory optimization for tenants with 10,000+ products
-- [ ] **Network Failures**: Graceful degradation when external store APIs are unreachable
+- [x] **Network Failures**: Graceful degradation when external store APIs are unreachable
 - [ ] **Invalid Product Data**: Handle malformed/missing product data from external stores gracefully
 
 ---
