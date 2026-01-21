@@ -28,8 +28,7 @@
 - [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
 
 ### Infrastructure & Security
-- [x] **Queue System**: Implement job queue (BullMQ/Bull) for async tasks (syncs, notifications, reports)
-- [ ] **Runbook**: Operations runbook for common incidents, scaling procedures, and disaster recovery
+- [x] **Runbook**: Operations runbook for common incidents, scaling procedures, and disaster recovery
 
 ## 🎯 MVP COMPLETION CHECKLIST
 
