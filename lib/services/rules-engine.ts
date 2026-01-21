@@ -29,27 +29,48 @@ export class RulesEngine {
       },
     });
 
-    // Get all user products with their matches
-    const products = await prisma.product.findMany({
-      where: {
-        tenantId,
-        site: { type: "USER" },
-      },
-      include: {
-        matchesAsUser: {
-          include: {
-            competitorProduct: true,
-          },
-        },
-      },
-    });
+    // Batched processing to handle large datasets (Memory Optimization)
+    let processedCount = 0;
+    const BATCH_SIZE = 100;
 
     const recommendations: PriceRecommendation[] = [];
 
-    for (const product of products) {
-      const recommendation = await this.evaluateProduct(product, rules);
-      if (recommendation) {
-        recommendations.push(recommendation);
+    while (true) {
+      // Get batch of user products with their matches
+      const products = await prisma.product.findMany({
+        where: {
+          tenantId,
+          site: { type: "USER" },
+        },
+        include: {
+          matchesAsUser: {
+            include: {
+              competitorProduct: true,
+            },
+          },
+        },
+        take: BATCH_SIZE,
+        skip: processedCount,
+      });
+
+      if (products.length === 0) {
+        break; // No more products to process
+      }
+
+      for (const product of products) {
+        const recommendation = await this.evaluateProduct(product, rules);
+        if (recommendation) {
+          recommendations.push(recommendation);
+        }
+      }
+
+      processedCount += products.length;
+
+      // Safety break for extremely large datasets during dev/testing
+      // In production, this might be handled by a queue worker instead
+      if (processedCount > 50000) {
+        console.warn(`[RulesEngine] Processed 50k products, stopping safely.`);
+        break;
       }
     }
 
