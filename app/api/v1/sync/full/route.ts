@@ -20,6 +20,10 @@ async function handleFullSync(_req: NextRequest) {
   try {
     const result = await SyncOrchestrator.runFullSync(tenantId);
 
+    if ((result as any).skipped) {
+      return NextResponse.json(result, { status: 409 });
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     console.error("Full sync failed:", error);

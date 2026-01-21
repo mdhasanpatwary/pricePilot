@@ -52,6 +52,9 @@ jest.mock("@/lib/prisma", () => ({
     tenant: {
       findUnique: jest.fn(),
     },
+    tenantAuditLog: {
+      create: jest.fn(),
+    },
   },
 }));
 

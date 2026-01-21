@@ -7,27 +7,33 @@ import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/utils/timeout";
 import { SystemConfigService } from "@/lib/config";
 
-
 export class SyncOrchestrator {
   /**
    * Run a full sync for a tenant
    */
   static async runFullSync(tenantId: string) {
-    const isKilled = await SystemConfigService.get("SYNC_MASTER_KILL_SWITCH", false);
+    const isKilled = await SystemConfigService.get(
+      "SYNC_MASTER_KILL_SWITCH",
+      false,
+    );
     if (isKilled) {
-      console.warn("[SyncOrchestrator] Full sync aborted: Master Kill Switch is ON.");
+      console.warn(
+        "[SyncOrchestrator] Full sync aborted: Master Kill Switch is ON.",
+      );
       return { success: false, message: "Sync globally disabled" };
     }
 
     console.log(
-
       `[SyncOrchestrator] Starting full sync for tenant: ${tenantId}`,
     );
 
     const syncSessionStart = new Date();
+    console.log(
+      `[SyncOrchestrator] Attempting to acquire sync locks for tenant ${tenantId}`,
+    );
 
     // Mark only idle sites as syncing to avoid hijacking active individual crawls
-    await prisma.site.updateMany({
+    const lockResult = await prisma.site.updateMany({
       where: {
         tenantId,
         type: "COMPETITOR",
@@ -38,6 +44,38 @@ export class SyncOrchestrator {
         syncStartedAt: syncSessionStart,
       },
     });
+
+    if (lockResult.count === 0) {
+      // Check if it's because all are syncing or if they just don't exist
+      const totalCompetitors = await prisma.site.count({
+        where: { tenantId, type: "COMPETITOR" },
+      });
+
+      if (totalCompetitors === 0) {
+        console.log(
+          `[SyncOrchestrator] No competitor sites found for tenant ${tenantId}.`,
+        );
+        return {
+          success: true,
+          message:
+            "No competitor sites found. Add some competitors to start syncing.",
+          skipped: true,
+        };
+      }
+
+      console.log(
+        `[SyncOrchestrator] All ${totalCompetitors} competitor sites for tenant ${tenantId} are already syncing.`,
+      );
+      return {
+        success: true,
+        message: "Full sync already in progress for all sites",
+        skipped: true,
+      };
+    }
+
+    console.log(
+      `[SyncOrchestrator] Acquired locks for ${lockResult.count} sites.`,
+    );
 
     try {
       // 0. Run Discovery for all competitor sites belonging to this session
@@ -104,7 +142,9 @@ export class SyncOrchestrator {
           });
 
           if (result.imageUrl) {
-            console.log(`[Sync] Saved image for ${cp.title}: ${result.imageUrl.substring(0, 50)}...`);
+            console.log(
+              `[Sync] Saved image for ${cp.title}: ${result.imageUrl.substring(0, 50)}...`,
+            );
           } else {
             console.log(`[Sync] No image found for ${cp.title}`);
           }
@@ -170,14 +210,18 @@ export class SyncOrchestrator {
    * Run sync for a specific site
    */
   static async syncSite(siteId: string, force: boolean = false) {
-    const isKilled = await SystemConfigService.get("SYNC_MASTER_KILL_SWITCH", false);
+    const isKilled = await SystemConfigService.get(
+      "SYNC_MASTER_KILL_SWITCH",
+      false,
+    );
     if (isKilled) {
-      console.warn("[SyncOrchestrator] Site sync aborted: Master Kill Switch is ON.");
+      console.warn(
+        "[SyncOrchestrator] Site sync aborted: Master Kill Switch is ON.",
+      );
       return { success: false, message: "Sync globally disabled" };
     }
 
     console.log(
-
       `[SyncOrchestrator] Starting single-site sync for: ${siteId} (Force: ${force})`,
     );
 
@@ -187,22 +231,15 @@ export class SyncOrchestrator {
     });
     if (!site) throw new Error("Site not found");
 
-    // Check if already syncing (double-check to prevent race conditions)
-    if (site.isSyncing && !force) {
-      console.log(
-        `[SyncOrchestrator] Site ${siteId} is already syncing, skipping duplicate request`,
-      );
-      return {
-        success: true,
-        skipped: true,
-        message: "Sync already in progress",
-      };
-    }
-
-    // Set syncing flag atomically
+    // Set syncing flag atomically to prevent race conditions
     const syncSessionStart = new Date(); // Unique Session ID for this run
-    await prisma.site.update({
-      where: { id: siteId },
+
+    // ATOMIC LOCK ACQUISITION
+    const updateResult = await prisma.site.updateMany({
+      where: {
+        id: siteId,
+        isSyncing: force ? undefined : false, // If forcing, we don't care about current state
+      },
       data: {
         isSyncing: true,
         syncLastAction: "Booting high-speed crawler...",
@@ -211,6 +248,17 @@ export class SyncOrchestrator {
         syncStartedAt: syncSessionStart,
       },
     });
+
+    if (updateResult.count === 0 && !force) {
+      console.log(
+        `[SyncOrchestrator] Site ${siteId} is already syncing or record missing, skipping duplicate request`,
+      );
+      return {
+        success: true,
+        skipped: true,
+        message: "Sync already in progress",
+      };
+    }
 
     await prisma.syncLog.deleteMany({ where: { siteId } });
     await prisma.syncLog.create({
@@ -264,7 +312,6 @@ export class SyncOrchestrator {
       // Process in batches for better performance
       const BATCH_SIZE = await SystemConfigService.get("SCRAPER_BATCH_SIZE", 5);
 
-
       for (let i = 0; i < matchedProducts.length; i += BATCH_SIZE) {
         // Check if sync was manually stopped OR session invalidated
         const currentStatus = await prisma.site.findUnique({
@@ -292,9 +339,14 @@ export class SyncOrchestrator {
         const batch = matchedProducts.slice(i, i + BATCH_SIZE);
 
         // Process batch in parallel with retry logic
-        const SCRAPE_TIMEOUT = await SystemConfigService.get("SCRAPER_TIMEOUT", 45000);
-        const MAX_RETRIES = await SystemConfigService.get("SCRAPER_MAX_RETRIES", 3);
-
+        const SCRAPE_TIMEOUT = await SystemConfigService.get(
+          "SCRAPER_TIMEOUT",
+          45000,
+        );
+        const MAX_RETRIES = await SystemConfigService.get(
+          "SCRAPER_MAX_RETRIES",
+          3,
+        );
 
         const results = await Promise.allSettled(
           batch.map(async (product) => {

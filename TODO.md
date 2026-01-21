@@ -24,12 +24,9 @@
 - [ ] **Notification Center**: In-app notification system for sync status, rule executions, errors
 - [ ] **Scheduled Reports**: Automated email reports (daily/weekly summaries) with data export
 - [ ] **Bulk Operations**: Enhanced bulk update UI with preview, validation, and rollback capability
-- [ ] **Activity Log UI**: Create a dashboard page for merchants to view their organizational audit logs (currently only accessible via API).
-- [ ] **Role-Based UI Hardening**: Dynamically hide/disable UI elements based on the authenticated user's role (Admin vs Editor vs Viewer).
 
 ### User Experience
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery
-- [ ] **Loading States**: Skeleton loaders and progressive loading for better perceived performance
 - [ ] **Error Boundaries**: React error boundaries with graceful fallback UI
 - [ ] **Pagination**: Implement server-side pagination for large product lists (currently loads all)
 - [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
@@ -48,7 +45,7 @@
 ## 📊 KNOWN ISSUES & BUGS
 
 ### Edge Cases to Address
-- [ ] **Concurrent Sync Prevention**: Race condition handling for simultaneous sync requests (partially implemented)
+- [x] **Concurrent Sync Prevention**: Atomic locking and race condition handling for simultaneous sync requests.
 - [ ] **Large Dataset Handling**: Memory optimization for tenants with 10,000+ products
 - [ ] **Network Failures**: Graceful degradation when external store APIs are unreachable
 - [ ] **Invalid Product Data**: Handle malformed/missing product data from external stores gracefully

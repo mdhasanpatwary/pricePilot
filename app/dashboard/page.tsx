@@ -117,6 +117,9 @@ function DashboardContent() {
           { id },
         );
         fetchAnalytics();
+      } else if (res.status === 409) {
+        const data = await res.json();
+        toast.error(data.message || "Sync already in progress", { id });
       } else {
         toast.error("Sync failed", { id });
       }
