@@ -19,9 +19,8 @@
 
 ### Core Features
 - [ ] **Alert Center**: Email and Slack/webhook notifications for competitor price changes. Set custom thresholds and frequency.
-- [ ] **Market Intelligence Dashboard**: Historical price tracking, market share analysis, and pricing elasticity trends.
+- [x] **Market Intelligence Dashboard**: Historical price tracking, market share analysis, and pricing elasticity trends.
 - [ ] **Scheduled Reports**: Automated email reports (daily/weekly summaries) with data export
-- [ ] **Bulk Operations**: Enhanced bulk update UI with preview, validation, and rollback capability
 
 ### User Experience
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery

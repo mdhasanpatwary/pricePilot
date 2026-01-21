@@ -23,6 +23,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
 import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
+import { useDebounce, searchItems } from "@/lib/hooks/useSearch";
 
 import { Product } from "@/lib/types";
 
@@ -31,7 +32,7 @@ export default function PriceReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [currency, setCurrency] = useState<string>("USD");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, debouncedSearch, setSearch] = useDebounce("", 300);
   const [filterSegment, setFilterSegment] = useState<string>("ALL");
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
@@ -86,63 +87,53 @@ export default function PriceReportPage() {
     }
   };
 
-  const filteredData = data.filter((item) => {
-    const matchesSearch =
-      (item.title?.toLowerCase() || "").includes(search.toLowerCase()) ||
-      (item.sku?.toLowerCase() || "").includes(search.toLowerCase());
+  const filteredData = useMemo(() => {
+    let result = data;
 
-    const matchesCategory =
-      filterCategory === "ALL" || item.category === filterCategory;
-    const matchesStock =
-      filterStock === "ALL" ||
-      (filterStock === "INSTOCK" ? item.inStock : !item.inStock);
-    const matchesBrand = filterBrand === "ALL" || item.brand === filterBrand;
-    const matchesSite = filterSite === "ALL" || item.siteName === filterSite;
+    // 1. Search (Debounced)
+    if (debouncedSearch) {
+      result = searchItems(result, debouncedSearch, [
+        "title",
+        "sku",
+        "category",
+        "brand",
+      ]);
+    }
 
-    if (filterSegment === "ALL")
+    // 2. Filters
+    return result.filter((item) => {
+      const matchesCategory =
+        filterCategory === "ALL" || item.category === filterCategory;
+      const matchesStock =
+        filterStock === "ALL" ||
+        (filterStock === "INSTOCK" ? item.inStock : !item.inStock);
+      const matchesBrand = filterBrand === "ALL" || item.brand === filterBrand;
+      const matchesSite = filterSite === "ALL" || item.siteName === filterSite;
+
+      // Smart Segments
+      let matchesSegment = true;
+      if (filterSegment === "CHEAPEST") matchesSegment = item.isCheapest;
+      if (filterSegment === "EXPENSIVE") matchesSegment = item.isMostExpensive;
+      if (filterSegment === "OPPORTUNITY")
+        matchesSegment = item.priceDifference !== 0;
+
       return (
-        matchesSearch &&
         matchesCategory &&
         matchesStock &&
         matchesBrand &&
-        matchesSite
+        matchesSite &&
+        matchesSegment
       );
-
-    const segmentMap: Record<string, string> = {
-      CHEAPEST: "GREEN",
-      EXPENSIVE: "RED",
-      MATCHED: "NEUTRAL",
-      OOS: "COMP_OOS",
-      NOT_FOUND: "NOT_FOUND",
-    };
-
-    let effectiveStatus = item.status;
-
-    if (refCompetitor !== "BEST") {
-      const match = item.allMatches?.find((m) => m.siteName === refCompetitor);
-      if (match) {
-        if (!match.inStock) {
-          effectiveStatus = "COMP_OOS";
-        } else {
-          const diff = match.price - item.yourPrice;
-          if (diff < 0) effectiveStatus = "RED";
-          else if (diff > 0) effectiveStatus = "GREEN";
-          else effectiveStatus = "NEUTRAL";
-        }
-      } else {
-        effectiveStatus = "NOT_FOUND";
-      }
-    }
-
-    return (
-      matchesSearch &&
-      matchesCategory &&
-      matchesStock &&
-      matchesBrand &&
-      matchesSite &&
-      effectiveStatus === segmentMap[filterSegment]
-    );
-  });
+    });
+  }, [
+    data,
+    debouncedSearch,
+    filterCategory,
+    filterStock,
+    filterBrand,
+    filterSite,
+    filterSegment,
+  ]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
