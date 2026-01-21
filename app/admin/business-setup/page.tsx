@@ -107,6 +107,14 @@ export default function BusinessSetupPage() {
       icon: Database,
       items: configs.filter((c) => c.key.startsWith("BACKUP")),
     },
+    {
+      id: "retention",
+      title: "Data Retention & Compliance",
+      description:
+        "Define GDPR-compliant data purge policies for history and logs.",
+      icon: ShieldCheck,
+      items: configs.filter((c) => c.key.startsWith("RETENTION")),
+    },
   ];
 
   if (loading) {

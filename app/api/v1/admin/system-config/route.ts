@@ -55,6 +55,37 @@ const DEFAULT_CONFIGS = [
       "Cloud destination (Google Drive Link) for automated system snapshots.",
     type: "string",
   },
+  {
+    key: "RETENTION_PRICE_HISTORY_DAYS",
+    value: "90",
+    description: "Number of days to keep price history records.",
+    type: "number",
+  },
+  {
+    key: "RETENTION_SYNC_LOG_DAYS",
+    value: "14",
+    description: "Number of days to keep sync console logs.",
+    type: "number",
+  },
+  {
+    key: "RETENTION_AUDIT_LOG_DAYS",
+    value: "365",
+    description: "Number of days to keep tenant audit logs (GDPR).",
+    type: "number",
+  },
+  {
+    key: "RETENTION_NOTIFICATION_DAYS",
+    value: "60",
+    description: "Number of days to keep user notifications.",
+    type: "number",
+  },
+  {
+    key: "RETENTION_BULK_SNAPSHOT_DAYS",
+    value: "30",
+    description:
+      "Number of days to keep bulk operation snapshots for rollback.",
+    type: "number",
+  },
 ];
 
 async function handleGET(_req: NextRequest) {

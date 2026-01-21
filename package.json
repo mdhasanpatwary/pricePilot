@@ -16,6 +16,7 @@
     "worker": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
     "worker:dev": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
     "backup": "ts-node -r tsconfig-paths/register scripts/backup-db.ts",
+    "retention": "ts-node -r tsconfig-paths/register scripts/data-retention.ts",
     "prepare": "husky"
   },
   "dependencies": {

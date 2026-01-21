@@ -9,8 +9,7 @@
 ## 🔴 CRITICAL - Production Readiness (P0)
 
 ### Data Protection & Reliability
-- [x] **Database Backups**: Automated daily backups with point-in-time recovery capability
-- [ ] **Data Retention Policies**: Implement data archival and deletion policies (GDPR compliance)
+- [x] **Data Retention Policies**: Implement data archival and deletion policies (GDPR compliance)
 - [ ] **Transaction Safety**: Add retry logic and idempotency keys for critical operations
 
 ---
