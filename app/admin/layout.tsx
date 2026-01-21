@@ -34,6 +34,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const adminMenuItems = [
   { icon: Activity, label: "Platform Overview", href: "/admin" },
   { icon: Building2, label: "Tenants (Merchants)", href: "/admin/tenants" },
+  { icon: ShieldCheck, label: "Users Management", href: "/admin/users" },
   {
     icon: Database,
     label: "Scraping Engine",

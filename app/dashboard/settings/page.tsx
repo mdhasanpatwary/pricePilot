@@ -18,6 +18,9 @@ import {
   Plus,
   Eye,
   EyeOff,
+  Users,
+  UserPlus,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -55,6 +58,17 @@ export default function SettingsPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberForm, setMemberForm] = useState({
+    name: "",
+    email: "",
+    role: "VIEWER",
+    password: "",
+  });
 
   const {
     register: registerGeneral,
@@ -135,12 +149,47 @@ export default function SettingsPage() {
       } else {
         toast.error(result.error || "Failed to update password");
       }
-    } catch (e) {
-      toast.error("A network error occurred");
     } finally {
       setIsSaving(false);
     }
   };
+
+  const fetchSessions = async () => {
+    setIsLoadingSessions(true);
+    try {
+      const res = await fetch("/api/v1/tenant/sessions");
+      if (res.ok) {
+        setActiveSessions(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    if (!confirm("Are you sure you want to log out this device?")) return;
+    try {
+      const res = await fetch(`/api/v1/tenant/sessions?id=${sessionId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Session revoked");
+        fetchSessions();
+      } else {
+        toast.error("Failed to revoke session");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "security") {
+      fetchSessions();
+    }
+  }, [activeTab]);
 
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [showAddWebhook, setShowAddWebhook] = useState(false);
@@ -209,8 +258,73 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchTeam = async () => {
+    setIsLoadingTeam(true);
+    try {
+      const res = await fetch("/api/v1/tenant/team");
+      if (res.ok) {
+        setTeamMembers(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingTeam(false);
+    }
+  };
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/v1/tenant/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(memberForm),
+      });
+
+      if (res.ok) {
+        toast.success("Team member added");
+        setMemberForm({ name: "", email: "", role: "VIEWER", password: "" });
+        setShowAddMember(false);
+        fetchTeam();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to add member");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteMember = async (id: string) => {
+    if (!confirm("Remove this team member?")) return;
+    try {
+      const res = await fetch(`/api/v1/tenant/team?id=${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Member removed");
+        fetchTeam();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to remove member");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "team") {
+      fetchTeam();
+    }
+  }, [activeTab]);
+
   const tabs = [
     { id: "general", label: "General", icon: User },
+    { id: "team", label: "Team", icon: Users },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "security", label: "Security", icon: Lock },
     { id: "developers", label: "Developers", icon: Code2 },
@@ -506,6 +620,78 @@ export default function SettingsPage() {
                   </button>
                 </div>
 
+                <div className="space-y-4 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold">Active Sessions</h3>
+                    {isLoadingSessions && (
+                      <span className="text-[10px] text-muted-foreground animate-pulse">
+                        Refreshing...
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    You can have up to 5 concurrent sessions. Devices used over
+                    24 hours ago are automatically logged out.
+                  </p>
+
+                  <div className="space-y-3">
+                    {activeSessions.map((s) => (
+                      <div
+                        key={s.id}
+                        className={cn(
+                          "p-3 rounded-lg border flex items-center justify-between transition-all",
+                          s.isCurrent
+                            ? "bg-primary/5 border-primary/20"
+                            : "bg-muted/10 border-border",
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={cn(
+                              "p-1.5 rounded bg-background border border-border",
+                              s.isCurrent
+                                ? "text-primary"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            <Smartphone className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[12px] font-bold">
+                                {s.ipAddress || "Unknown IP"}
+                              </p>
+                              {s.isCurrent && (
+                                <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">
+                                  Current
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              Last used:{" "}
+                              {new Date(s.lastUsedAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {!s.isCurrent && (
+                          <button
+                            type="button"
+                            onClick={() => handleRevokeSession(s.id)}
+                            className="text-[10px] font-bold text-destructive hover:underline"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {activeSessions.length === 0 && !isLoadingSessions && (
+                      <p className="text-center py-4 text-xs text-muted-foreground italic">
+                        No active sessions found.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-border">
                   <button
                     type="submit"
@@ -516,6 +702,194 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
+            )}
+            {activeTab === "team" && (
+              <div className="space-y-8 animate-in slide-in-from-bottom-2">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">Team Members</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Manage your employees and their access levels.
+                      </p>
+                    </div>
+                    {session?.user?.role === "ADMIN" && (
+                      <button
+                        onClick={() => setShowAddMember(true)}
+                        className="flex items-center gap-2 p-2 px-3 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all text-xs font-bold shadow-sm"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        <span>Add Member</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    {isLoadingTeam ? (
+                      <div className="text-center py-10 border border-dashed border-border rounded-lg bg-muted/5 animate-pulse">
+                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">Loading team members...</p>
+                      </div>
+                    ) : teamMembers.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed border-border rounded-lg text-muted-foreground bg-muted/5">
+                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">No team members found.</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3">
+                        {teamMembers.map((member) => (
+                          <div
+                            key={member.id}
+                            className="p-3.5 rounded-lg border border-border bg-muted/5 flex items-center justify-between group transition-all hover:bg-muted/10"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-background border border-border flex items-center justify-center relative">
+                                <User className="w-4 h-4 text-muted-foreground" />
+                                {member.role === "ADMIN" && (
+                                  <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground p-0.5 rounded-full ring-2 ring-background">
+                                    <ShieldCheck className="w-2.5 h-2.5" />
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-[13px] font-bold">
+                                  {member.name || "Unnamed Member"}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] text-muted-foreground font-medium">
+                                    {member.email}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded",
+                                      member.role === "ADMIN"
+                                        ? "bg-primary/10 text-primary"
+                                        : member.role === "EDITOR"
+                                          ? "bg-amber-500/10 text-amber-600"
+                                          : "bg-muted text-muted-foreground",
+                                    )}
+                                  >
+                                    {member.role}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            {session?.user?.role === "ADMIN" &&
+                              member.id !== session.user.id && (
+                                <button
+                                  onClick={() => handleDeleteMember(member.id)}
+                                  className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {showAddMember && (
+                  <div className="p-6 rounded-xl border border-primary/20 bg-primary/5 space-y-4 animate-in fade-in zoom-in-95 shadow-sm">
+                    <h4 className="text-sm font-bold">Invite New Employee</h4>
+                    <form onSubmit={handleAddMember} className="grid gap-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                            Full Name
+                          </label>
+                          <input
+                            required
+                            value={memberForm.name}
+                            onChange={(e) =>
+                              setMemberForm({
+                                ...memberForm,
+                                name: e.target.value,
+                              })
+                            }
+                            placeholder="John Doe"
+                            className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-medium"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                            Email Address
+                          </label>
+                          <input
+                            required
+                            type="email"
+                            value={memberForm.email}
+                            onChange={(e) =>
+                              setMemberForm({
+                                ...memberForm,
+                                email: e.target.value,
+                              })
+                            }
+                            placeholder="john@example.com"
+                            className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-medium"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                            Password
+                          </label>
+                          <input
+                            required
+                            type="password"
+                            value={memberForm.password}
+                            onChange={(e) =>
+                              setMemberForm({
+                                ...memberForm,
+                                password: e.target.value,
+                              })
+                            }
+                            placeholder="••••••••"
+                            className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-medium"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                            Role
+                          </label>
+                          <select
+                            value={memberForm.role}
+                            onChange={(e) =>
+                              setMemberForm({
+                                ...memberForm,
+                                role: e.target.value,
+                              })
+                            }
+                            className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-bold"
+                          >
+                            <option value="VIEWER">Viewer (Read Only)</option>
+                            <option value="EDITOR">Editor (Manage Data)</option>
+                            <option value="ADMIN">Admin (Full Control)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 pt-2">
+                        <button
+                          type="submit"
+                          disabled={isSaving}
+                          className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-2.5 rounded-md hover:opacity-90 transition-all shadow-sm"
+                        >
+                          {isSaving ? "Adding..." : "Add Member"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddMember(false)}
+                          className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-2.5 rounded-md border border-border hover:bg-muted transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+              </div>
             )}
 
             {activeTab === "developers" && (

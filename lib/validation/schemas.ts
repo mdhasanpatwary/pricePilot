@@ -399,6 +399,20 @@ export const scraperConfigSchema = z.object({
     .optional(),
 });
 
+export const addUserSchema = z.object({
+  email: emailSchema,
+  name: sanitizedStringSchema,
+  role: z.enum(["ADMIN", "VIEWER", "EDITOR"]).default("VIEWER"),
+  password: passwordSchema,
+});
+
+export const updateUserSchema = z.object({
+  id: uuidSchema,
+  name: sanitizedStringSchema.optional(),
+  role: z.enum(["ADMIN", "VIEWER", "EDITOR"]).optional(),
+  password: passwordSchema.optional(),
+});
+
 // ============================================================================
 // SEARCH & FILTER SCHEMAS
 // ============================================================================

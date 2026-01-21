@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Globe,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -279,7 +280,10 @@ export default function TenantsPage() {
                   Allocation (Limit)
                 </th>
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">
-                  Current Usage
+                  Usage
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Logins
                 </th>
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">
                   Plan
@@ -401,6 +405,30 @@ export default function TenantsPage() {
                               width: `${Math.min((tenant.activeCompetitors / tenant.competitorLimit) * 100, 100)}%`,
                             }}
                           />
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className={cn(
+                              "w-2 h-2 rounded-full",
+                              tenant.activeSessions > 0
+                                ? "bg-success animate-pulse"
+                                : "bg-muted",
+                            )}
+                          />
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            {tenant.activeSessions || 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                          <Smartphone className="w-2.5 h-2.5" />
+                          <span>Active Devices</span>
                         </div>
                       </div>
                     </div>

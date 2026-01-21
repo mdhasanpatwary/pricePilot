@@ -35,8 +35,7 @@ async function handleGET(_req: NextRequest) {
           },
         },
         users: {
-          take: 1,
-          select: { email: true },
+          select: { id: true, email: true },
         },
         sites: {
           where: { type: "USER" },
@@ -69,6 +68,12 @@ async function handleGET(_req: NextRequest) {
       _count: true,
     });
 
+    // Fetch session counts for all users of these tenants
+    const sessionCounts = await (prisma as any).session.groupBy({
+      by: ["userId"],
+      _count: true,
+    });
+
     const result = formattedTenants.map((t) => {
       const stores =
         siteCounts.find((s) => s.tenantId === t.id && s.type === "USER")
@@ -76,10 +81,22 @@ async function handleGET(_req: NextRequest) {
       const competitors =
         siteCounts.find((s) => s.tenantId === t.id && s.type === "COMPETITOR")
           ?._count || 0;
+
+      // Find all users for this tenant and sum their sessions
+      const tenantUserIds =
+        tenants
+          .find((tenant) => tenant.id === t.id)
+          ?.users.map((u) => (u as any).id) || [];
+
+      const sessionCount = sessionCounts
+        .filter((s: any) => tenantUserIds.includes(s.userId))
+        .reduce((sum: number, s: any) => sum + s._count, 0);
+
       return {
         ...t,
         activeStores: stores,
         activeCompetitors: competitors,
+        activeSessions: sessionCount,
       };
     });
 
