@@ -23,7 +23,10 @@
 - [ ] **Email Verification**: Require email verification on registration before account activation
 - [ ] **Password Reset Flow**: Implement secure password reset with time-limited tokens
 - [ ] **Session Management**: Add session timeout, concurrent session limits, and device management
-- [ ] **API Versioning**: Introduce API versioning (`/api/v1/`) for backward compatibility
+- [x] **API Versioning**: Introduce API versioning (`/api/v1/`) for backward compatibility
+  - ✅ All API routes moved to `app/api/v1/`
+  - ✅ Implemented transparent rewrites in `next.config.ts` for backward compatibility
+  - ✅ Updated frontend calls to use `/api/v1/` explicitly where applicable
 - [ ] **Audit Logging**: Comprehensive audit trail for all sensitive operations (admin actions, price changes, data exports)
 
 ### Data Protection & Reliability

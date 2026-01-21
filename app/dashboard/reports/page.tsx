@@ -52,7 +52,7 @@ export default function PriceReportPage() {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/products");
+      const res = await fetch("/api/v1/products");
       const result = await res.json();
       if (res.ok) {
         setData(result.products);
@@ -71,7 +71,7 @@ export default function PriceReportPage() {
     if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
 
     try {
-      const res = await fetch(`/api/products/${id}`, {
+      const res = await fetch(`/api/v1/products/${id}`, {
         method: "DELETE",
       });
 
@@ -249,7 +249,7 @@ export default function PriceReportPage() {
   };
 
   const handleExport = () => {
-    window.location.href = "/api/exports/products";
+    window.location.href = "/api/v1/exports/products";
     toast.success("Preparing your CSV export...");
   };
 
@@ -262,7 +262,7 @@ export default function PriceReportPage() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/imports/products", {
+      const res = await fetch("/api/v1/imports/products", {
         method: "POST",
         body: formData,
       });

@@ -1,7 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Download, CheckCircle2, FileCode, Terminal, ExternalLink, BookOpen, Zap, Shield, Package } from "lucide-react";
+import {
+  Download,
+  CheckCircle2,
+  FileCode,
+  Terminal,
+  ExternalLink,
+  BookOpen,
+  Zap,
+  Shield,
+  Package,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export default function LaravelIntegrationPage() {
@@ -10,7 +20,7 @@ export default function LaravelIntegrationPage() {
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      const response = await fetch("/api/downloads/laravel");
+      const response = await fetch("/api/v1/downloads/laravel");
 
       if (!response.ok) {
         throw new Error("Download failed");
@@ -44,12 +54,19 @@ export default function LaravelIntegrationPage() {
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <a href="/dashboard/connections" className="text-sm font-medium text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
+              <a
+                href="/dashboard/connections"
+                className="text-sm font-medium text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+              >
                 &larr; Back to Connections
               </a>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Laravel Integration</h1>
-            <p className="text-muted-foreground">Connect your Laravel e-commerce store to PricePilot</p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Laravel Integration
+            </h1>
+            <p className="text-muted-foreground">
+              Connect your Laravel e-commerce store to PricePilot
+            </p>
           </div>
         </div>
       </div>
@@ -57,7 +74,9 @@ export default function LaravelIntegrationPage() {
       {/* Version Badge */}
       <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-full">
         <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-        <span className="text-xs font-bold text-primary uppercase tracking-widest">Latest Version: v1.0.0</span>
+        <span className="text-xs font-bold text-primary uppercase tracking-widest">
+          Latest Version: v1.0.0
+        </span>
       </div>
 
       {/* Main Content Grid */}
@@ -69,7 +88,8 @@ export default function LaravelIntegrationPage() {
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Download Package</h2>
               <p className="text-sm text-muted-foreground">
-                Get the official PricePilot Laravel integration package. No Composer required!
+                Get the official PricePilot Laravel integration package. No
+                Composer required!
               </p>
             </div>
 
@@ -102,7 +122,8 @@ export default function LaravelIntegrationPage() {
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Installation Steps</h2>
               <p className="text-sm text-muted-foreground">
-                Follow these simple steps to integrate PricePilot with your Laravel store
+                Follow these simple steps to integrate PricePilot with your
+                Laravel store
               </p>
             </div>
 
@@ -115,7 +136,8 @@ export default function LaravelIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Download & Extract</h3>
                   <p className="text-xs text-muted-foreground">
-                    Download the package above and extract it to your Laravel project directory
+                    Download the package above and extract it to your Laravel
+                    project directory
                   </p>
                 </div>
               </div>
@@ -126,13 +148,16 @@ export default function LaravelIntegrationPage() {
                   2
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm">Run Installation Command</h3>
+                  <h3 className="font-bold text-sm">
+                    Run Installation Command
+                  </h3>
                   <div className="bg-muted/50 border border-border rounded-md p-3 font-mono text-xs flex items-center justify-between group">
                     <code>php artisan pricepilot:install</code>
                     <Terminal className="w-4 h-4 text-muted-foreground" />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    This command will automatically configure everything and generate a secure API token
+                    This command will automatically configure everything and
+                    generate a secure API token
                   </p>
                 </div>
               </div>
@@ -145,7 +170,8 @@ export default function LaravelIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Copy Your API Token</h3>
                   <p className="text-xs text-muted-foreground">
-                    The installation command will display your API token. Copy it for the next step.
+                    The installation command will display your API token. Copy
+                    it for the next step.
                   </p>
                 </div>
               </div>
@@ -158,7 +184,9 @@ export default function LaravelIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Connect Your Store</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to <b>Integrations &rarr; Connect Store</b>, select <b>Laravel</b>, then enter your store URL and the API token you copied.
+                    Go to <b>Integrations &rarr; Connect Store</b>, select{" "}
+                    <b>Laravel</b>, then enter your store URL and the API token
+                    you copied.
                   </p>
                   <a
                     href="/dashboard/connections"
@@ -176,9 +204,13 @@ export default function LaravelIntegrationPage() {
                   5
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm text-success">Verify Connection</h3>
+                  <h3 className="font-bold text-sm text-success">
+                    Verify Connection
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Click &quot;Connect Store&quot; on the connections page. PricePilot will verify your token and start syncing your products.
+                    Click &quot;Connect Store&quot; on the connections page.
+                    PricePilot will verify your token and start syncing your
+                    products.
                   </p>
                 </div>
               </div>
@@ -193,28 +225,36 @@ export default function LaravelIntegrationPage() {
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">PHP 8.0+</p>
-                  <p className="text-xs text-muted-foreground">PHP 8.0, 8.1, 8.2, or 8.3</p>
+                  <p className="text-xs text-muted-foreground">
+                    PHP 8.0, 8.1, 8.2, or 8.3
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">Laravel 9+</p>
-                  <p className="text-xs text-muted-foreground">Laravel 9, 10, or 11</p>
+                  <p className="text-xs text-muted-foreground">
+                    Laravel 9, 10, or 11
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">Database</p>
-                  <p className="text-xs text-muted-foreground">MySQL, PostgreSQL, or SQLite</p>
+                  <p className="text-xs text-muted-foreground">
+                    MySQL, PostgreSQL, or SQLite
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-semibold">HTTPS</p>
-                  <p className="text-xs text-muted-foreground">Required for production</p>
+                  <p className="text-xs text-muted-foreground">
+                    Required for production
+                  </p>
                 </div>
               </div>
             </div>
@@ -275,7 +315,9 @@ export default function LaravelIntegrationPage() {
               >
                 <div className="flex items-center gap-3">
                   <FileCode className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">Quick Start Guide</span>
+                  <span className="text-sm font-semibold">
+                    Quick Start Guide
+                  </span>
                 </div>
                 <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </a>
@@ -286,7 +328,9 @@ export default function LaravelIntegrationPage() {
               >
                 <div className="flex items-center gap-3">
                   <FileCode className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">Full Documentation</span>
+                  <span className="text-sm font-semibold">
+                    Full Documentation
+                  </span>
                 </div>
                 <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </a>
@@ -297,7 +341,9 @@ export default function LaravelIntegrationPage() {
               >
                 <div className="flex items-center gap-3">
                   <FileCode className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">Integration Flow</span>
+                  <span className="text-sm font-semibold">
+                    Integration Flow
+                  </span>
                 </div>
                 <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </a>
@@ -308,7 +354,8 @@ export default function LaravelIntegrationPage() {
           <div className="bg-primary/5 border border-primary/10 rounded-lg p-6 space-y-3">
             <h3 className="font-bold text-sm">Need Help?</h3>
             <p className="text-xs text-muted-foreground">
-              Our support team is here to help you get started with the Laravel integration.
+              Our support team is here to help you get started with the Laravel
+              integration.
             </p>
             <a
               href="mailto:support@pricepilot.com"
@@ -329,10 +376,11 @@ export default function LaravelIntegrationPage() {
         <div className="space-y-2">
           <h2 className="text-2xl font-bold">Ready to Connect?</h2>
           <p className="text-muted-foreground max-w-md mx-auto">
-            Once you have installed the package and have your API token, you are ready to link your store.
+            Once you have installed the package and have your API token, you are
+            ready to link your store.
           </p>
         </div>
-        <a 
+        <a
           href="/dashboard/connections"
           className="bg-primary text-primary-foreground px-8 py-3 rounded-full font-bold hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20"
         >

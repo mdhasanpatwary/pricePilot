@@ -9,7 +9,7 @@ import {
   Search,
   Filter,
   Loader2,
-  FileText
+  FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -35,7 +35,7 @@ export default function AuditLogsPage() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch("/api/audit-logs");
+      const res = await fetch("/api/v1/audit-logs");
       if (res.ok) {
         const data = await res.json();
         setLogs(data);
@@ -47,10 +47,11 @@ export default function AuditLogsPage() {
     }
   };
 
-  const filteredLogs = logs.filter(log =>
-    log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.details.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredLogs = logs.filter(
+    (log) =>
+      log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      log.details.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const getActionBadge = (action: string) => {
@@ -82,7 +83,9 @@ export default function AuditLogsPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
         <Loader2 className="w-10 h-10 animate-spin text-primary opacity-20" />
-        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest animate-pulse">Loading History...</p>
+        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest animate-pulse">
+          Loading History...
+        </p>
       </div>
     );
   }
@@ -93,7 +96,8 @@ export default function AuditLogsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Track user activity and match confirmations across your organization.
+            Track user activity and match confirmations across your
+            organization.
           </p>
         </div>
       </div>
@@ -120,32 +124,47 @@ export default function AuditLogsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
-                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">User</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Action</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">Details</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">Date</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                  User
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                  Action
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                  Details
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">
+                  Date
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {filteredLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-muted/20 transition-colors">
+                <tr
+                  key={log.id}
+                  className="hover:bg-muted/20 transition-colors"
+                >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                         <User className="w-4 h-4" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold">{log.userEmail.split('@')[0]}</span>
-                        <span className="text-[10px] text-muted-foreground">{log.userEmail}</span>
+                        <span className="text-sm font-bold">
+                          {log.userEmail.split("@")[0]}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {log.userEmail}
+                        </span>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    {getActionBadge(log.action)}
-                  </td>
+                  <td className="px-6 py-4">{getActionBadge(log.action)}</td>
                   <td className="px-6 py-4">
                     <div className="max-w-xs truncate text-xs font-medium text-muted-foreground">
-                       {log.details ? JSON.parse(log.details).matchId || log.details : 'N/A'}
+                      {log.details
+                        ? JSON.parse(log.details).matchId || log.details
+                        : "N/A"}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -164,8 +183,10 @@ export default function AuditLogsPage() {
                 <tr>
                   <td colSpan={4} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center grayscale opacity-30">
-                       <FileText className="w-12 h-12 mb-4" />
-                       <p className="text-sm font-bold uppercase tracking-widest">No history recorded yet</p>
+                      <FileText className="w-12 h-12 mb-4" />
+                      <p className="text-sm font-bold uppercase tracking-widest">
+                        No history recorded yet
+                      </p>
                     </div>
                   </td>
                 </tr>

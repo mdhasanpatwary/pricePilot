@@ -45,7 +45,7 @@ export default function DiagnosticsPage() {
     setData(null);
 
     try {
-      const res = await fetch("/api/admin/diagnostics", {
+      const res = await fetch("/api/v1/admin/diagnostics", {
         method: "POST",
       });
 
@@ -69,7 +69,9 @@ export default function DiagnosticsPage() {
       case "failed":
         return <XCircle className="w-5 h-5 text-red-500" />;
       default:
-        return <div className="w-5 h-5 rounded-full border-2 border-muted border-t-transparent animate-spin" />;
+        return (
+          <div className="w-5 h-5 rounded-full border-2 border-muted border-t-transparent animate-spin" />
+        );
     }
   };
 
@@ -90,9 +92,12 @@ export default function DiagnosticsPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">System Diagnostics</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            System Diagnostics
+          </h1>
           <p className="text-muted-foreground">
-            Run a comprehensive health check on system components and connectivity.
+            Run a comprehensive health check on system components and
+            connectivity.
           </p>
         </div>
         <button
@@ -173,7 +178,8 @@ export default function DiagnosticsPage() {
           />
 
           <div className="md:col-span-2 text-center text-xs text-muted-foreground mt-4">
-             Last check performed at {new Date(data.timestamp).toLocaleString()} • Duration: {data.duration}ms
+            Last check performed at {new Date(data.timestamp).toLocaleString()}{" "}
+            • Duration: {data.duration}ms
           </div>
         </div>
       )}
@@ -213,7 +219,7 @@ function StatusCard({
       </div>
       <div
         className={`px-3 py-2 rounded-md text-sm font-medium border ${getStatusColor(
-          result.status
+          result.status,
         )}`}
       >
         {result.message}

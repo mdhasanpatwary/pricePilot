@@ -83,7 +83,7 @@ export default function SettingsPage() {
     const fetchCurrency = async () => {
       setIsLoadingCurrency(true);
       try {
-        const res = await fetch("/api/analytics/summary");
+        const res = await fetch("/api/v1/analytics/summary");
         if (res.ok) {
           const data = await res.json();
           if (data?.stats?.currency) setDetectedCurrency(data.stats.currency);
@@ -137,7 +137,7 @@ export default function SettingsPage() {
 
   const fetchWebhooks = async () => {
     try {
-      const res = await fetch("/api/webhooks");
+      const res = await fetch("/api/v1/webhooks");
       if (res.ok) {
         setWebhooks(await res.json());
       }
@@ -153,7 +153,7 @@ export default function SettingsPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/webhooks", {
+      const res = await fetch("/api/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: newWebhookUrl, secret: newWebhookSecret }),
@@ -179,7 +179,9 @@ export default function SettingsPage() {
     if (!confirm("Are you sure? This endpoint will no longer receive updates."))
       return;
     try {
-      const res = await fetch(`/api/webhooks?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/v1/webhooks?id=${id}`, {
+        method: "DELETE",
+      });
       if (res.ok) {
         toast.success("Webhook removed");
         fetchWebhooks();
@@ -751,12 +753,15 @@ export default function SettingsPage() {
                             return;
                           setIsSaving(true);
                           try {
-                            const res = await fetch("/api/tenant/maintenance", {
-                              method: "POST",
-                              body: JSON.stringify({
-                                action: "CLEAN_MARKET_DATA",
-                              }),
-                            });
+                            const res = await fetch(
+                              "/api/v1/tenant/maintenance",
+                              {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  action: "CLEAN_MARKET_DATA",
+                                }),
+                              },
+                            );
                             const data = await res.json();
                             if (res.ok) toast.success(data.message);
                             else toast.error(data.error);
@@ -791,12 +796,15 @@ export default function SettingsPage() {
                         onClick={async () => {
                           setIsSaving(true);
                           try {
-                            const res = await fetch("/api/tenant/maintenance", {
-                              method: "POST",
-                              body: JSON.stringify({
-                                action: "CLEAR_SYNC_LOCKS",
-                              }),
-                            });
+                            const res = await fetch(
+                              "/api/v1/tenant/maintenance",
+                              {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  action: "CLEAR_SYNC_LOCKS",
+                                }),
+                              },
+                            );
                             const data = await res.json();
                             if (res.ok) toast.success(data.message);
                             else toast.error(data.error);
@@ -839,10 +847,13 @@ export default function SettingsPage() {
                             return;
                           setIsSaving(true);
                           try {
-                            const res = await fetch("/api/tenant/maintenance", {
-                              method: "POST",
-                              body: JSON.stringify({ action: "RESET_ALL" }),
-                            });
+                            const res = await fetch(
+                              "/api/v1/tenant/maintenance",
+                              {
+                                method: "POST",
+                                body: JSON.stringify({ action: "RESET_ALL" }),
+                              },
+                            );
                             const data = await res.json();
                             if (res.ok) toast.success(data.message);
                             else toast.error(data.error);

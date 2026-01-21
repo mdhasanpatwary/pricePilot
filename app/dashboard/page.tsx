@@ -49,7 +49,7 @@ function DashboardContent() {
   const fetchAnalytics = useCallback(async () => {
     setIsLoading(true);
     try {
-      const url = `/api/analytics/summary${impersonateId ? `?tenantId=${impersonateId}` : ""}`;
+      const url = `/api/v1/analytics/summary${impersonateId ? `?tenantId=${impersonateId}` : ""}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -73,7 +73,7 @@ function DashboardContent() {
 
   const fetchRecentLogs = useCallback(async () => {
     try {
-      const url = `/api/analytics/logs${impersonateId ? `?tenantId=${impersonateId}` : ""}`;
+      const url = `/api/v1/analytics/logs${impersonateId ? `?tenantId=${impersonateId}` : ""}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -86,7 +86,7 @@ function DashboardContent() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const base = "/api/analytics/history?days=30";
+      const base = "/api/v1/analytics/history?days=30";
       const url = impersonateId ? `${base}&tenantId=${impersonateId}` : base;
       const res = await fetch(url);
       if (res.ok) {
@@ -108,7 +108,7 @@ function DashboardContent() {
     setIsSyncing(true);
     const id = toast.loading("Syncing market data...");
     try {
-      const res = await fetch("/api/sync/full", { method: "POST" });
+      const res = await fetch("/api/v1/sync/full", { method: "POST" });
       if (res.ok) {
         const result = await res.json();
         toast.success(
@@ -468,7 +468,13 @@ function DashboardContent() {
 
 export default function DashboardOverview() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-[400px] animate-pulse text-muted-foreground uppercase text-[10px] font-black tracking-widest">Loading Analytics...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px] animate-pulse text-muted-foreground uppercase text-[10px] font-black tracking-widest">
+          Loading Analytics...
+        </div>
+      }
+    >
       <DashboardContent />
     </Suspense>
   );

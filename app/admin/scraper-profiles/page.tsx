@@ -36,7 +36,7 @@ export default function ScraperProfilesPage() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/scraper-profiles");
+      const res = await fetch("/api/v1/admin/scraper-profiles");
       if (res.ok) setConfig(await res.json());
     } catch (error) {
       console.error("Failed to load config", error);
@@ -53,7 +53,7 @@ export default function ScraperProfilesPage() {
     if (!config) return;
     setSaving(true);
     try {
-      await fetch("/api/admin/scraper-profiles", {
+      await fetch("/api/v1/admin/scraper-profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
@@ -105,7 +105,9 @@ export default function ScraperProfilesPage() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Scraper Profiles</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Scraper Profiles
+          </h1>
           <p className="text-muted-foreground">
             Manage anti-bot evasion strategies, proxies, and request behaviors.
           </p>
@@ -115,7 +117,11 @@ export default function ScraperProfilesPage() {
           disabled={saving}
           className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
         >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
           Save Changes
         </button>
       </div>
@@ -129,42 +135,55 @@ export default function ScraperProfilesPage() {
             </div>
             <div>
               <h2 className="font-semibold text-lg">Proxy Rotation</h2>
-              <p className="text-sm text-muted-foreground">Manage IP pool for scraping</p>
+              <p className="text-sm text-muted-foreground">
+                Manage IP pool for scraping
+              </p>
             </div>
           </div>
 
           <div className="space-y-4">
-             <div className="flex gap-2">
-               <input
-                 value={newProxy}
-                 onChange={(e) => setNewProxy(e.target.value)}
-                 placeholder="http://user:pass@ip:port"
-                 className="flex-1 px-3 py-2 border rounded-md text-sm font-mono"
-                 onKeyDown={(e) => e.key === 'Enter' && addProxy()}
-               />
-               <button onClick={addProxy} className="p-2 bg-secondary hover:bg-secondary/80 rounded-md">
-                 <Plus className="w-4 h-4" />
-               </button>
-             </div>
+            <div className="flex gap-2">
+              <input
+                value={newProxy}
+                onChange={(e) => setNewProxy(e.target.value)}
+                placeholder="http://user:pass@ip:port"
+                className="flex-1 px-3 py-2 border rounded-md text-sm font-mono"
+                onKeyDown={(e) => e.key === "Enter" && addProxy()}
+              />
+              <button
+                onClick={addProxy}
+                className="p-2 bg-secondary hover:bg-secondary/80 rounded-md"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
 
-             <div className="h-[200px] overflow-y-auto border rounded-md divide-y">
-                {config.proxies.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-muted-foreground italic">No proxies configured (Direct Mode)</div>
-                ) : (
-                  config.proxies.map((proxy, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-2 text-xs font-mono group hover:bg-muted/50">
-                      <span className="truncate max-w-[80%]">{proxy}</span>
-                      <button onClick={() => removeProxy(idx)} className="text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))
-                )}
-             </div>
-             <p className="text-xs text-muted-foreground">
-               <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
-               {config.proxies.length} proxies active
-             </p>
+            <div className="h-[200px] overflow-y-auto border rounded-md divide-y">
+              {config.proxies.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground italic">
+                  No proxies configured (Direct Mode)
+                </div>
+              ) : (
+                config.proxies.map((proxy, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center p-2 text-xs font-mono group hover:bg-muted/50"
+                  >
+                    <span className="truncate max-w-[80%]">{proxy}</span>
+                    <button
+                      onClick={() => removeProxy(idx)}
+                      className="text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
+              {config.proxies.length} proxies active
+            </p>
           </div>
         </div>
 
@@ -176,38 +195,50 @@ export default function ScraperProfilesPage() {
             </div>
             <div>
               <h2 className="font-semibold text-lg">User Agents</h2>
-              <p className="text-sm text-muted-foreground">Browser fingerprints to rotate</p>
+              <p className="text-sm text-muted-foreground">
+                Browser fingerprints to rotate
+              </p>
             </div>
           </div>
 
           <div className="space-y-4">
-             <div className="flex gap-2">
-               <input
-                 value={newUA}
-                 onChange={(e) => setNewUA(e.target.value)}
-                 placeholder="Mozilla/5.0..."
-                 className="flex-1 px-3 py-2 border rounded-md text-sm font-mono"
-                 onKeyDown={(e) => e.key === 'Enter' && addUA()}
-               />
-               <button onClick={addUA} className="p-2 bg-secondary hover:bg-secondary/80 rounded-md">
-                 <Plus className="w-4 h-4" />
-               </button>
-             </div>
+            <div className="flex gap-2">
+              <input
+                value={newUA}
+                onChange={(e) => setNewUA(e.target.value)}
+                placeholder="Mozilla/5.0..."
+                className="flex-1 px-3 py-2 border rounded-md text-sm font-mono"
+                onKeyDown={(e) => e.key === "Enter" && addUA()}
+              />
+              <button
+                onClick={addUA}
+                className="p-2 bg-secondary hover:bg-secondary/80 rounded-md"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
 
-             <div className="h-[200px] overflow-y-auto border rounded-md divide-y">
-                {config.userAgents.map((ua, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-2 text-xs font-mono group hover:bg-muted/50">
-                    <span className="truncate max-w-[85%]">{ua}</span>
-                    <button onClick={() => removeUA(idx)} className="text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-             </div>
-             <p className="text-xs text-muted-foreground">
-               <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
-               System randomly selects from these {config.userAgents.length} agents
-             </p>
+            <div className="h-[200px] overflow-y-auto border rounded-md divide-y">
+              {config.userAgents.map((ua, idx) => (
+                <div
+                  key={idx}
+                  className="flex justify-between items-center p-2 text-xs font-mono group hover:bg-muted/50"
+                >
+                  <span className="truncate max-w-[85%]">{ua}</span>
+                  <button
+                    onClick={() => removeUA(idx)}
+                    className="text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <CheckCircle2 className="w-3 h-3 inline mr-1 text-green-500" />
+              System randomly selects from these {config.userAgents.length}{" "}
+              agents
+            </p>
           </div>
         </div>
 
@@ -219,32 +250,45 @@ export default function ScraperProfilesPage() {
             </div>
             <div>
               <h2 className="font-semibold text-lg">Timing & Delays</h2>
-              <p className="text-sm text-muted-foreground">Randomized delays between actions</p>
+              <p className="text-sm text-muted-foreground">
+                Randomized delays between actions
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-2">
-               <label className="text-sm font-medium">Min Delay (ms)</label>
-               <input
-                 type="number"
-                 value={config.delay.min}
-                 onChange={(e) => setConfig({ ...config, delay: { ...config.delay, min: parseInt(e.target.value) } })}
-                 className="w-full px-3 py-2 border rounded-md"
-               />
-             </div>
-             <div className="space-y-2">
-               <label className="text-sm font-medium">Max Delay (ms)</label>
-               <input
-                 type="number"
-                 value={config.delay.max}
-                 onChange={(e) => setConfig({ ...config, delay: { ...config.delay, max: parseInt(e.target.value) } })}
-                 className="w-full px-3 py-2 border rounded-md"
-               />
-             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Min Delay (ms)</label>
+              <input
+                type="number"
+                value={config.delay.min}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    delay: { ...config.delay, min: parseInt(e.target.value) },
+                  })
+                }
+                className="w-full px-3 py-2 border rounded-md"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Max Delay (ms)</label>
+              <input
+                type="number"
+                value={config.delay.max}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    delay: { ...config.delay, max: parseInt(e.target.value) },
+                  })
+                }
+                className="w-full px-3 py-2 border rounded-md"
+              />
+            </div>
           </div>
           <p className="text-xs text-muted-foreground bg-muted p-3 rounded-md">
-            ⚠️ Increasing delays helps avoid blocks but slows down sync speed considerably.
+            ⚠️ Increasing delays helps avoid blocks but slows down sync speed
+            considerably.
           </p>
         </div>
 
@@ -256,38 +300,59 @@ export default function ScraperProfilesPage() {
             </div>
             <div>
               <h2 className="font-semibold text-lg">Stealth Mode</h2>
-              <p className="text-sm text-muted-foreground">Browser automation settings</p>
+              <p className="text-sm text-muted-foreground">
+                Browser automation settings
+              </p>
             </div>
           </div>
 
           <div className="space-y-4">
-             <div className="flex items-center justify-between p-3 border rounded-md">
-               <div>
-                  <p className="font-medium text-sm">Headless Mode</p>
-                  <p className="text-xs text-muted-foreground">Run browser without UI (Faster)</p>
-               </div>
-               <input
-                 type="checkbox"
-                 checked={config.bypasses.headless}
-                 onChange={(e) => setConfig({ ...config, bypasses: { ...config.bypasses, headless: e.target.checked } })}
-                 className="h-5 w-5"
-               />
-             </div>
-             <div className="flex items-center justify-between p-3 border rounded-md">
-               <div>
-                  <p className="font-medium text-sm">Puppeteer Stealth Plugin</p>
-                  <p className="text-xs text-muted-foreground">Masks automation signals</p>
-               </div>
-               <input
-                 type="checkbox"
-                 checked={config.bypasses.useStealthPlugin}
-                 onChange={(e) => setConfig({ ...config, bypasses: { ...config.bypasses, useStealthPlugin: e.target.checked } })}
-                 className="h-5 w-5"
-               />
-             </div>
+            <div className="flex items-center justify-between p-3 border rounded-md">
+              <div>
+                <p className="font-medium text-sm">Headless Mode</p>
+                <p className="text-xs text-muted-foreground">
+                  Run browser without UI (Faster)
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={config.bypasses.headless}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    bypasses: {
+                      ...config.bypasses,
+                      headless: e.target.checked,
+                    },
+                  })
+                }
+                className="h-5 w-5"
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 border rounded-md">
+              <div>
+                <p className="font-medium text-sm">Puppeteer Stealth Plugin</p>
+                <p className="text-xs text-muted-foreground">
+                  Masks automation signals
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={config.bypasses.useStealthPlugin}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    bypasses: {
+                      ...config.bypasses,
+                      useStealthPlugin: e.target.checked,
+                    },
+                  })
+                }
+                className="h-5 w-5"
+              />
+            </div>
           </div>
         </div>
-
       </div>
     </div>
   );

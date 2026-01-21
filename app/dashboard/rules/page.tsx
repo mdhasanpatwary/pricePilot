@@ -76,7 +76,7 @@ export default function PricingRulesPage() {
   const fetchRules = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/rules");
+      const res = await fetch("/api/v1/rules");
       if (res.ok) {
         const data = await res.json();
         setRules(data);
@@ -95,7 +95,7 @@ export default function PricingRulesPage() {
       const method = editingId ? "PUT" : "POST";
       const payload = editingId ? { ...data, id: editingId } : data;
 
-      const res = await fetch("/api/rules", {
+      const res = await fetch("/api/v1/rules", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -133,7 +133,7 @@ export default function PricingRulesPage() {
     if (!confirm("Are you sure you want to delete this rule?")) return;
 
     try {
-      const res = await fetch(`/api/rules?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/v1/rules?id=${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Rule deleted");
         fetchRules();
@@ -147,7 +147,7 @@ export default function PricingRulesPage() {
 
   const toggleStatus = async (rule: Rule) => {
     try {
-      const res = await fetch("/api/rules", {
+      const res = await fetch("/api/v1/rules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...rule, isActive: !rule.isActive }),

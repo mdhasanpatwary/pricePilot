@@ -17,7 +17,7 @@ export default function OpenCartIntegrationPage() {
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      const response = await fetch("/api/downloads/opencart");
+      const response = await fetch("/api/v1/downloads/opencart");
 
       if (!response.ok) {
         throw new Error("Download failed");

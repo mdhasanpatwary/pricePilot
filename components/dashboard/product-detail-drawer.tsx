@@ -60,7 +60,7 @@ export default function ProductDetailDrawer({
     if (!matchUrl || !product) return;
     setIsLinking(true);
     try {
-      const res = await fetch(`/api/products/${product.id}/match`, {
+      const res = await fetch(`/api/v1/products/${product.id}/match`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: matchUrl }),
@@ -159,7 +159,8 @@ export default function ProductDetailDrawer({
                       rel="noopener noreferrer"
                       className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 uppercase tracking-tighter mt-2"
                     >
-                      View on your store <ArrowUpRight className="w-2.5 h-2.5" />
+                      View on your store{" "}
+                      <ArrowUpRight className="w-2.5 h-2.5" />
                     </a>
                   )}
                 </div>

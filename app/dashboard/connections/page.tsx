@@ -102,7 +102,7 @@ export default function ConnectionsPage() {
   const fetchConnections = async () => {
     setIsLoadingConnections(true);
     try {
-      const res = await fetch("/api/integrations");
+      const res = await fetch("/api/v1/integrations");
       if (res.ok) {
         const data = await res.json();
         setConnections(data);
@@ -119,7 +119,7 @@ export default function ConnectionsPage() {
   const onSubmit = async (data: ConnectionFormValues) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/integrations", {
+      const res = await fetch("/api/v1/integrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -138,7 +138,7 @@ export default function ConnectionsPage() {
         // Start polling for progress
         const pollInterval = setInterval(async () => {
           try {
-            const pollRes = await fetch("/api/integrations");
+            const pollRes = await fetch("/api/v1/integrations");
             if (pollRes.ok) {
               const currentSites = await pollRes.json();
               const currentSite = currentSites.find(
@@ -160,7 +160,7 @@ export default function ConnectionsPage() {
 
         // Trigger the actual sync
         try {
-          const syncRes = await fetch("/api/integrations/sync", {
+          const syncRes = await fetch("/api/v1/integrations/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ siteId }),
@@ -200,7 +200,7 @@ export default function ConnectionsPage() {
     if (!confirm("Are you sure you want to remove this connection?")) return;
 
     try {
-      const res = await fetch(`/api/integrations?id=${id}`, {
+      const res = await fetch(`/api/v1/integrations?id=${id}`, {
         method: "DELETE",
       });
 
@@ -225,7 +225,7 @@ export default function ConnectionsPage() {
   const handleSyncConnection = async (siteId: string) => {
     const toastId = toast.loading("Syncing store products...");
     try {
-      const res = await fetch("/api/integrations/sync", {
+      const res = await fetch("/api/v1/integrations/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siteId }),
@@ -247,7 +247,7 @@ export default function ConnectionsPage() {
 
   const fetchLimits = async () => {
     try {
-      const res = await fetch("/api/tenant/limits");
+      const res = await fetch("/api/v1/tenant/limits");
       if (res.ok) {
         const data = await res.json();
         setLimits(data);

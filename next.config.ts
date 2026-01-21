@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "2mb",
     },
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path((?!v1/).*)",
+        destination: "/api/v1/:path",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

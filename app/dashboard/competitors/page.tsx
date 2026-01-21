@@ -57,7 +57,7 @@ export default function CompetitorsPage() {
   const fetchCompetitors = useCallback(async (silent = false) => {
     if (!silent) setIsDataLoading(true);
     try {
-      const res = await fetch("/api/competitors");
+      const res = await fetch("/api/v1/competitors");
       if (res.ok) {
         const data = await res.json();
         setCompetitors(data);
@@ -92,7 +92,7 @@ export default function CompetitorsPage() {
   const onSubmit = async (data: CompetitorFormValues) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/competitors", {
+      const res = await fetch("/api/v1/competitors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -139,7 +139,7 @@ export default function CompetitorsPage() {
 
     try {
       // 2. Trigger the sync (runs in background on server)
-      const res = await fetch("/api/competitors/sync", {
+      const res = await fetch("/api/v1/competitors/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siteId: id }),
@@ -173,7 +173,7 @@ export default function CompetitorsPage() {
 
   const handleStopSync = async (id: string) => {
     try {
-      const res = await fetch("/api/competitors/sync/stop", {
+      const res = await fetch("/api/v1/competitors/sync/stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siteId: id }),
@@ -215,7 +215,7 @@ export default function CompetitorsPage() {
       return;
 
     try {
-      const res = await fetch(`/api/competitors?id=${id}`, {
+      const res = await fetch(`/api/v1/competitors?id=${id}`, {
         method: "DELETE",
       });
 
@@ -239,7 +239,7 @@ export default function CompetitorsPage() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/imports/competitors", {
+      const res = await fetch("/api/v1/imports/competitors", {
         method: "POST",
         body: formData,
       });
@@ -266,7 +266,7 @@ export default function CompetitorsPage() {
 
   const fetchLimits = useCallback(async () => {
     try {
-      const res = await fetch("/api/tenant/limits");
+      const res = await fetch("/api/v1/tenant/limits");
       if (res.ok) {
         const data = await res.json();
         setLimits(data);
@@ -297,7 +297,7 @@ export default function CompetitorsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              window.location.href = "/api/exports/competitors";
+              window.location.href = "/api/v1/exports/competitors";
               toast.success("Downloading competitor list...");
             }}
             className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2"

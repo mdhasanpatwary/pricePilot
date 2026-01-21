@@ -52,7 +52,7 @@ export default function MatchApprovalPage() {
 
   const fetchMatches = async () => {
     try {
-      const res = await fetch("/api/matching");
+      const res = await fetch("/api/v1/matching");
       if (res.ok) {
         const data = await res.json();
         setMatches(data);
@@ -70,7 +70,7 @@ export default function MatchApprovalPage() {
   ) => {
     setProcessingId(matchId);
     try {
-      const res = await fetch("/api/matching", {
+      const res = await fetch("/api/v1/matching", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ matchId, action }),
@@ -150,7 +150,7 @@ export default function MatchApprovalPage() {
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted/30 flex-shrink-0 flex items-center justify-center relative">
                   {match.product.image ? (
                     <Image
-                      src={`/api/proxy-image?url=${encodeURIComponent(match.product.image)}`}
+                      src={`/api/v1/proxy-image?url=${encodeURIComponent(match.product.image)}`}
                       alt={match.product.title}
                       fill
                       className="object-contain mix-blend-multiply"
@@ -223,7 +223,7 @@ export default function MatchApprovalPage() {
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted/30 flex-shrink-0 flex items-center justify-center relative">
                   {match.competitor.image ? (
                     <Image
-                      src={`/api/proxy-image?url=${encodeURIComponent(match.competitor.image)}`}
+                      src={`/api/v1/proxy-image?url=${encodeURIComponent(match.competitor.image)}`}
                       alt={match.competitor.title}
                       fill
                       className="object-contain mix-blend-multiply"
