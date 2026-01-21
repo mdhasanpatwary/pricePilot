@@ -22,6 +22,9 @@ export interface Product {
     price: number;
     inStock: boolean;
   }[];
+  isCheapest?: boolean;
+  isMostExpensive?: boolean;
+  priceDifference?: number;
 }
 
 export interface Stats {

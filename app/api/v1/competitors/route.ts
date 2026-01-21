@@ -187,7 +187,7 @@ async function handlePOST(req: NextRequest) {
     // Trigger auto-fetch immediately in background (with slight delay for DB propagation)
     setTimeout(() => {
       // Pass true to force sync even though isSyncing is already true
-      SyncOrchestrator.syncSite(site.id, true).catch((error) => {
+      SyncOrchestrator.processSiteSync(site.id, true).catch((error) => {
         console.error(
           `[API] Auto-fetch failed for new site ${site.id}:`,
           error,

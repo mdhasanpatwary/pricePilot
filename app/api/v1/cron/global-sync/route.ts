@@ -13,7 +13,6 @@ export async function GET() {
   // }
 
   console.log("[Cron] Starting Global Price Sync");
-  let updatedCount = 0;
   let errorsCount = 0;
 
   try {
@@ -28,10 +27,7 @@ export async function GET() {
     for (const tenant of tenants) {
       try {
         console.log(`[Cron] Syncing tenant: ${tenant.companyName}`);
-        const result = await SyncOrchestrator.runFullSync(tenant.id);
-        if (result.success) {
-          updatedCount += result.updated || 0;
-        }
+        await SyncOrchestrator.dispatchFullSync(tenant.id);
       } catch (e) {
         console.error(`[Cron] Failed to sync tenant ${tenant.companyName}:`, e);
         errorsCount++;
@@ -40,10 +36,9 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      message: "Global sync completed",
+      message: "Global sync dispatched to workers",
       stats: {
-        tenantsProcessed: tenants.length,
-        itemsUpdated: updatedCount,
+        tenantsQueued: tenants.length,
         errors: errorsCount,
       },
     });

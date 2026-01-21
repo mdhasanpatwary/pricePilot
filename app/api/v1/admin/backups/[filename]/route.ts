@@ -11,7 +11,7 @@ const BACKUP_DIR = path.join(process.cwd(), "backups");
  */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { filename: string } },
+  { params }: { params: Promise<{ filename: string }> },
 ) {
   const session = await getServerSession(authOptions);
 
@@ -19,7 +19,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { filename } = params;
+  const { filename } = await params;
 
   if (
     !filename ||
@@ -64,7 +64,7 @@ export async function GET(
  */
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { filename: string } },
+  { params }: { params: Promise<{ filename: string }> },
 ) {
   const session = await getServerSession(authOptions);
 
@@ -72,7 +72,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { filename } = params;
+  const { filename } = await params;
 
   if (
     !filename ||

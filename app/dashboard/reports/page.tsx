@@ -112,10 +112,11 @@ export default function PriceReportPage() {
 
       // Smart Segments
       let matchesSegment = true;
-      if (filterSegment === "CHEAPEST") matchesSegment = item.isCheapest;
-      if (filterSegment === "EXPENSIVE") matchesSegment = item.isMostExpensive;
+      if (filterSegment === "CHEAPEST") matchesSegment = !!item.isCheapest;
+      if (filterSegment === "EXPENSIVE")
+        matchesSegment = !!item.isMostExpensive;
       if (filterSegment === "OPPORTUNITY")
-        matchesSegment = item.priceDifference !== 0;
+        matchesSegment = (item.priceDifference ?? 0) !== 0;
 
       return (
         matchesCategory &&

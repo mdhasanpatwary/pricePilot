@@ -94,7 +94,7 @@ async function runTaskLogic(taskId: string) {
         const tenants = await prisma.tenant.findMany({ select: { id: true } });
         for (const tenant of tenants) {
           try {
-            await SyncOrchestrator.runFullSync(tenant.id);
+            await SyncOrchestrator.dispatchFullSync(tenant.id);
           } catch (e) {
             console.error(`Failed to sync tenant ${tenant.id}`, e);
           }

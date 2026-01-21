@@ -48,7 +48,9 @@ async function handleSync(req: NextRequest) {
 
     // Run sync in background (don't await)
     // This prevents API timeout and allows the frontend to poll for progress
-    SyncOrchestrator.syncSite(siteId).catch((error) => {
+    // Run sync in background (don't await)
+    // This prevents API timeout and allows the frontend to poll for progress
+    SyncOrchestrator.dispatchSiteSync(siteId).catch((error) => {
       console.error(`[API] Background sync failed for site ${siteId}:`, error);
     });
 
