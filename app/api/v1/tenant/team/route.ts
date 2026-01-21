@@ -17,26 +17,46 @@ import { recordAuditLog, getIpAddress } from "@/lib/audit";
  * GET /api/v1/tenant/team
  * List all team members for the current tenant
  */
-async function getTeamMembers() {
+async function getTeamMembers(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const members = await (prisma as any).user.findMany({
-    where: { tenantId: session.user.tenantId },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      createdAt: true,
-      emailVerified: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+  const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
+  const skip = (page - 1) * limit;
 
-  return NextResponse.json(members);
+  const [members, totalCount] = await Promise.all([
+    (prisma as any).user.findMany({
+      where: { tenantId: session.user.tenantId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        emailVerified: true,
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    (prisma as any).user.count({
+      where: { tenantId: session.user.tenantId },
+    }),
+  ]);
+
+  return NextResponse.json({
+    data: members,
+    meta: {
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+      limit,
+    },
+  });
 }
 
 /**

@@ -27,19 +27,36 @@ const menuItems = [
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
   { icon: LineChart, label: "Pricing Rules", href: "/dashboard/rules" },
-  { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/settings/audit-logs" },
+  { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/activity" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 
+import { useSession } from "next-auth/react";
+
 function Sidebar({
   pathname,
-  onClose
+  onClose,
 }: {
   pathname: string;
-  onClose?: () => void
+  onClose?: () => void;
 }) {
+  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const tenantId = searchParams.get("tenantId");
+
+  const filteredMenuItems = menuItems.filter((item) => {
+    // Only admins can see Activity Logs, Rules, and Competitors
+    if (session?.user?.role !== "ADMIN") {
+      if (
+        item.href === "/dashboard/activity" ||
+        item.href === "/dashboard/rules" ||
+        item.href === "/dashboard/competitors"
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -64,9 +81,13 @@ function Sidebar({
       </div>
 
       <nav className="flex-1 px-3 space-y-1 mt-4 overflow-y-auto">
-        <p className="px-3 text-[10px] font-semibold uppercase text-muted-foreground/60 tracking-wider mb-2">Main Menu</p>
-        {menuItems.map((item) => {
-          const href = tenantId ? `${item.href}?tenantId=${tenantId}` : item.href;
+        <p className="px-3 text-[10px] font-semibold uppercase text-muted-foreground/60 tracking-wider mb-2">
+          Main Menu
+        </p>
+        {filteredMenuItems.map((item) => {
+          const href = tenantId
+            ? `${item.href}?tenantId=${tenantId}`
+            : item.href;
           return (
             <Link
               key={item.href}
@@ -76,13 +97,17 @@ function Sidebar({
                 "flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium",
                 pathname === item.href
                   ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >
-              <item.icon className={cn(
-                "w-4 h-4",
-                pathname === item.href ? "text-primary" : "text-muted-foreground"
-              )} />
+              <item.icon
+                className={cn(
+                  "w-4 h-4",
+                  pathname === item.href
+                    ? "text-primary"
+                    : "text-muted-foreground",
+                )}
+              />
               <span>{item.label}</span>
             </Link>
           );
@@ -114,8 +139,10 @@ export default function DashboardLayout({
     <div className="flex h-screen bg-background text-foreground">
       {/* Sidebar - Desktop */}
       <aside className="w-64 border-r border-border hidden lg:flex flex-col bg-card">
-        <Suspense fallback={<div className="w-64 bg-card h-full animate-pulse" />}>
-           <Sidebar pathname={pathname} />
+        <Suspense
+          fallback={<div className="w-64 bg-card h-full animate-pulse" />}
+        >
+          <Sidebar pathname={pathname} />
         </Suspense>
       </aside>
 
@@ -128,12 +155,19 @@ export default function DashboardLayout({
       )}
 
       {/* Sidebar - Mobile Drawer */}
-      <aside className={cn(
-        "fixed inset-y-0 left-0 w-64 bg-card border-r border-border z-[110] lg:hidden transition-transform duration-300 ease-in-out flex flex-col",
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
-        <Suspense fallback={<div className="w-64 bg-card h-full animate-pulse" />}>
-           <Sidebar pathname={pathname} onClose={() => setIsSidebarOpen(false)} />
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 w-64 bg-card border-r border-border z-[110] lg:hidden transition-transform duration-300 ease-in-out flex flex-col",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <Suspense
+          fallback={<div className="w-64 bg-card h-full animate-pulse" />}
+        >
+          <Sidebar
+            pathname={pathname}
+            onClose={() => setIsSidebarOpen(false)}
+          />
         </Suspense>
       </aside>
 
@@ -141,9 +175,7 @@ export default function DashboardLayout({
       <div className="flex-1 flex flex-col min-w-0">
         <Header onMenuClick={() => setIsSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto p-6 lg:p-10">
-          <div className="max-w-6xl mx-auto">
-            {children}
-          </div>
+          <div className="max-w-6xl mx-auto">{children}</div>
         </main>
       </div>
     </div>

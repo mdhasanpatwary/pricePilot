@@ -23,17 +23,27 @@ async function handleGET(_req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const users = await (prisma as any).user.findMany({
-    include: {
-      tenant: {
-        select: { companyName: true },
+  const { searchParams } = new URL(_req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+  const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
+  const skip = (page - 1) * limit;
+
+  const [users, totalCount] = await Promise.all([
+    (prisma as any).user.findMany({
+      include: {
+        tenant: {
+          select: { companyName: true },
+        },
+        _count: {
+          select: { sessions: true },
+        },
       },
-      _count: {
-        select: { sessions: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    (prisma as any).user.count(),
+  ]);
 
   const formattedUsers = users.map((u: any) => ({
     id: u.id,
@@ -47,7 +57,15 @@ async function handleGET(_req: NextRequest) {
     isSuperAdmin: u.isSuperAdmin,
   }));
 
-  return NextResponse.json(formattedUsers);
+  return NextResponse.json({
+    data: formattedUsers,
+    meta: {
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+      limit,
+    },
+  });
 }
 
 /**

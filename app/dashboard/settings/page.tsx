@@ -20,8 +20,8 @@ import {
   EyeOff,
   Users,
   UserPlus,
-  ShieldCheck,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -261,12 +261,13 @@ export default function SettingsPage() {
   const fetchTeam = async () => {
     setIsLoadingTeam(true);
     try {
-      const res = await fetch("/api/v1/tenant/team");
+      const res = await fetch("/api/v1/tenant/team?page=1&limit=50");
       if (res.ok) {
-        setTeamMembers(await res.json());
+        const data = await res.json();
+        setTeamMembers(data.data);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      toast.error("Failed to load team members");
     } finally {
       setIsLoadingTeam(false);
     }
@@ -330,7 +331,13 @@ export default function SettingsPage() {
     { id: "developers", label: "Developers", icon: Code2 },
     { id: "billing", label: "Billing", icon: CreditCard },
     { id: "system", label: "System", icon: Database },
-  ];
+  ].filter((tab) => {
+    // Only admins can see Team, Developers, and System tabs
+    if (session?.user?.role !== "ADMIN") {
+      return !["team", "developers", "system"].includes(tab.id);
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -726,63 +733,82 @@ export default function SettingsPage() {
 
                   <div className="space-y-4">
                     {isLoadingTeam ? (
-                      <div className="text-center py-10 border border-dashed border-border rounded-lg bg-muted/5 animate-pulse">
-                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                        <p className="text-sm">Loading team members...</p>
+                      <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between p-3 border border-border/50 rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Skeleton className="w-8 h-8 rounded-full" />
+                              <div className="flex flex-col gap-2">
+                                <Skeleton className="h-3 w-20" />
+                                <Skeleton className="h-2 w-32" />
+                              </div>
+                            </div>
+                            <Skeleton className="h-5 w-16 rounded-full" />
+                          </div>
+                        ))}
                       </div>
                     ) : teamMembers.length === 0 ? (
-                      <div className="text-center py-10 border border-dashed border-border rounded-lg text-muted-foreground bg-muted/5">
-                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                        <p className="text-sm">No team members found.</p>
+                      <div className="text-center py-10 grayscale opacity-40">
+                        <Users className="w-10 h-10 mx-auto mb-3" />
+                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                          No members invited yet
+                        </p>
                       </div>
                     ) : (
-                      <div className="grid gap-3">
+                      <div className="space-y-3">
                         {teamMembers.map((member) => (
                           <div
                             key={member.id}
-                            className="p-3.5 rounded-lg border border-border bg-muted/5 flex items-center justify-between group transition-all hover:bg-muted/10"
+                            className="flex items-center justify-between p-3 border border-border/30 rounded-lg hover:bg-muted/10 transition-colors"
                           >
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-background border border-border flex items-center justify-center relative">
-                                <User className="w-4 h-4 text-muted-foreground" />
-                                {member.role === "ADMIN" && (
-                                  <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground p-0.5 rounded-full ring-2 ring-background">
-                                    <ShieldCheck className="w-2.5 h-2.5" />
-                                  </div>
-                                )}
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">
+                                {member.name?.[0] ||
+                                  member.email[0].toUpperCase()}
                               </div>
-                              <div>
-                                <p className="text-[13px] font-bold">
-                                  {member.name || "Unnamed Member"}
-                                </p>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[10px] text-muted-foreground font-medium">
-                                    {member.email}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded",
-                                      member.role === "ADMIN"
-                                        ? "bg-primary/10 text-primary"
-                                        : member.role === "EDITOR"
-                                          ? "bg-amber-500/10 text-amber-600"
-                                          : "bg-muted text-muted-foreground",
-                                    )}
-                                  >
-                                    {member.role}
-                                  </span>
-                                </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold">
+                                  {member.name || member.email.split("@")[0]}
+                                  {member.id === session?.user?.id && (
+                                    <span className="ml-2 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-black uppercase">
+                                      You
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {member.email}
+                                </span>
                               </div>
                             </div>
-                            {session?.user?.role === "ADMIN" &&
-                              member.id !== session.user.id && (
-                                <button
-                                  onClick={() => handleDeleteMember(member.id)}
-                                  className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={cn(
+                                  "text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter",
+                                  member.role === "ADMIN"
+                                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                    : member.role === "EDITOR"
+                                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                      : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900/30 dark:text-zinc-400",
+                                )}
+                              >
+                                {member.role}
+                              </span>
+                              {session?.user?.role === "ADMIN" &&
+                                member.id !== session?.user?.id && (
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteMember(member.id)
+                                    }
+                                    className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
+                                    title="Remove member"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -902,12 +928,14 @@ export default function SettingsPage() {
                         Receive real-time notifications when prices change.
                       </p>
                     </div>
-                    <button
-                      onClick={() => setShowAddWebhook(true)}
-                      className="p-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    {session?.user?.role === "ADMIN" && (
+                      <button
+                        onClick={() => setShowAddWebhook(true)}
+                        className="p-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   <div className="space-y-4">

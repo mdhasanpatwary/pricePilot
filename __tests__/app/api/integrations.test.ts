@@ -1,5 +1,5 @@
 // Removed unused NextRequest import
-import { GET, POST, DELETE } from "@/app/api/integrations/route";
+import { GET, POST, DELETE } from "@/app/api/v1/integrations/route";
 
 // Mock NextAuth
 jest.mock("next-auth", () => ({
@@ -34,6 +34,7 @@ jest.mock("next/server", () => ({
     json: jest.fn().mockImplementation((data, init) => ({
       status: init?.status || 200,
       json: jest.fn().mockResolvedValue(data),
+      headers: new Map(),
     })),
   },
 }));
@@ -74,8 +75,9 @@ describe("/api/integrations", () => {
       (getServerSession as jest.Mock).mockResolvedValue(null);
 
       const req = {
-        url: "http://localhost:3000/api/integrations",
-        nextUrl: new URL("http://localhost:3000/api/integrations"),
+        url: "http://localhost:3000/api/v1/integrations",
+        nextUrl: new URL("http://localhost:3000/api/v1/integrations"),
+        headers: new Map(),
       } as any;
       const response = await GET(req);
 
@@ -102,8 +104,9 @@ describe("/api/integrations", () => {
       (prisma.site.findMany as jest.Mock).mockResolvedValue(mockSites);
 
       const req = {
-        url: "http://localhost:3000/api/integrations",
-        nextUrl: new URL("http://localhost:3000/api/integrations"),
+        url: "http://localhost:3000/api/v1/integrations",
+        nextUrl: new URL("http://localhost:3000/api/v1/integrations"),
+        headers: new Map(),
       } as any;
       const response = await GET(req);
 
@@ -127,8 +130,9 @@ describe("/api/integrations", () => {
       (getServerSession as jest.Mock).mockResolvedValue(null);
 
       const req = {
-        url: "http://localhost:3000/api/integrations",
+        url: "http://localhost:3000/api/v1/integrations",
         method: "POST",
+        headers: new Map(),
         json: jest.fn().mockResolvedValue({
           platform: "OPENCART",
           baseUrl: "https://mystore.com",
@@ -156,7 +160,7 @@ describe("/api/integrations", () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe("Missing required fields");
+      expect(data.error).toBe("Validation failed");
     });
 
     it("should return 400 if URL is invalid", async () => {
@@ -176,7 +180,7 @@ describe("/api/integrations", () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe("Invalid URL format");
+      expect(data.error).toBe("Validation failed");
     });
 
     it("should create new integration successfully", async () => {
@@ -199,8 +203,9 @@ describe("/api/integrations", () => {
       (prisma.site.create as jest.Mock).mockResolvedValue(mockSite);
 
       const req = {
-        url: "http://localhost:3000/api/integrations",
+        url: "http://localhost:3000/api/v1/integrations",
         method: "POST",
+        headers: new Map([["x-forwarded-for", "127.0.0.1"]]),
         json: jest.fn().mockResolvedValue({
           platform: "OPENCART",
           baseUrl: "https://mystore.com",
@@ -294,9 +299,10 @@ describe("/api/integrations", () => {
       (prisma.site.delete as jest.Mock).mockResolvedValue(mockSite);
 
       const req = {
-        url: "http://localhost:3000/api/integrations?id=site-1",
-        nextUrl: new URL("http://localhost:3000/api/integrations?id=site-1"),
+        url: "http://localhost:3000/api/v1/integrations?id=site-1",
+        nextUrl: new URL("http://localhost:3000/api/v1/integrations?id=site-1"),
         method: "DELETE",
+        headers: new Map([["x-forwarded-for", "127.0.0.1"]]),
       } as any;
 
       const response = await DELETE(req);

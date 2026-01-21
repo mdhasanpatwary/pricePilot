@@ -8,10 +8,11 @@ import {
   XCircle,
   Search,
   Filter,
-  Loader2,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AuditLog {
   id: string;
@@ -33,7 +34,8 @@ export default function AuditLogsPage() {
     fetchLogs();
   }, []);
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/v1/audit-logs");
       if (res.ok) {
@@ -214,11 +216,52 @@ export default function AuditLogsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-primary opacity-20" />
-        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest animate-pulse">
-          Loading History...
-        </p>
+      <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-border">
+          <Skeleton className="h-10 flex-1 max-w-sm" />
+          <Skeleton className="h-10 w-24" />
+        </div>
+
+        <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
+          <div className="p-0">
+            <div className="bg-muted/50 border-b border-border px-6 py-4 grid grid-cols-4 gap-4">
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-3 w-12 justify-self-end" />
+            </div>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="px-6 py-6 border-b border-border/50 grid grid-cols-4 gap-4 items-center"
+              >
+                <div className="flex items-center gap-3">
+                  <Skeleton className="w-8 h-8 rounded-full" />
+                  <div className="flex flex-col gap-2">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-2 w-32" />
+                  </div>
+                </div>
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-2 w-16" />
+                </div>
+                <div className="flex flex-col gap-1 items-end">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-2 w-12" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -226,13 +269,22 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Track user activity and match confirmations across your
-            organization.
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Organization Activity Dashboard
+          </h1>
+          <p className="text-muted-foreground text-sm font-medium">
+            Monitor team actions, rule adjustments, and system events in
+            real-time.
           </p>
         </div>
+        <button
+          onClick={() => fetchLogs(true)}
+          className="p-2 hover:bg-muted border border-border rounded-lg transition-colors group"
+          title="Refresh logs"
+        >
+          <RefreshCw className="w-4 h-4 text-muted-foreground group-active:rotate-180 transition-transform" />
+        </button>
       </div>
 
       <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-border">

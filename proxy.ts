@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyCsrf } from "./lib/security";
 
 /**
- * Combined Middleware for Authentication and Security (CSRF)
+ * Combined Proxy for Authentication and Security (CSRF)
+ * Next.js 16 convention rename from middleware to proxy
  */
 export default withAuth(
-  function middleware(req: NextRequest) {
+  function proxy(req: NextRequest) {
     const { pathname } = req.nextUrl;
 
     // 1. CSRF Protection for state-changing API requests

@@ -8,20 +8,6 @@
 
 ## 🔴 CRITICAL - Production Readiness (P0)
 
-### Security & Compliance
-- [x] **Session Management**: Add session timeout, concurrent session limits, and device management
-  - ✅ Configured 24h session timeout and 1h refresh policy
-  - ✅ Enforced 5 concurrent session limit with auto-revocation of oldest
-  - ✅ Implemented Session Revocation API and revoked check in JWT
-  - ✅ Added "Active Sessions" UI to Dashboard Settings for device management
-- [x] **Email Verification**: Token generation, mock email service, and login enforcement
-- [x] **Password Reset Flow**: Secure token-based reset with history & anti-enumeration
-- [x] **Role-Based Access Control (RBAC)**: Team management (Admin, Editor, Viewer) for tenants
-- [x] **Super Admin Management**: Universal Users Dashboard to monitor & manage every account on the platform
-  - ✅ Cross-tenant user list with real-time session tracking
-  - ✅ Remote password resets and role modifications
-  - ✅ Bulk account auditing and termination capabilities
-
 ### Data Protection & Reliability
 - [ ] **Database Backups**: Automated daily backups with point-in-time recovery capability
 - [ ] **Data Retention Policies**: Implement data archival and deletion policies (GDPR compliance)
@@ -38,7 +24,8 @@
 - [ ] **Notification Center**: In-app notification system for sync status, rule executions, errors
 - [ ] **Scheduled Reports**: Automated email reports (daily/weekly summaries) with data export
 - [ ] **Bulk Operations**: Enhanced bulk update UI with preview, validation, and rollback capability
-- [x] **Tenant Activity Audit**: Track internal actions (rule changes, product deletions) for accountability (Recorded for every action).
+- [ ] **Activity Log UI**: Create a dashboard page for merchants to view their organizational audit logs (currently only accessible via API).
+- [ ] **Role-Based UI Hardening**: Dynamically hide/disable UI elements based on the authenticated user's role (Admin vs Editor vs Viewer).
 
 ### User Experience
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery
@@ -52,9 +39,6 @@
 ## 🧹 TECHNICAL DEBT & MAINTENANCE
 
 ### Infrastructure & Security
-- [x] **Email Verification**: Implemented token-based flow & mock service
-- [x] **Universal RBAC**: Multi-role support (Admin/Editor/Viewer) across all layers
-- [x] **Advanced Session Tracking**: Real-time device monitoring for Super Admins
 - [ ] **Queue System**: Implement job queue (BullMQ/Bull) for async tasks (syncs, notifications, reports)
 - [ ] **Architecture Diagrams**: System architecture documentation with data flow diagrams
 - [ ] **Runbook**: Operations runbook for common incidents, scaling procedures, and disaster recovery
@@ -63,17 +47,16 @@
 
 ## 📊 KNOWN ISSUES & BUGS
 
-### Current Bugs
-- [ ] **Sync Restart Issue**: Fixed - competitor sync auto-restart after completion (RESOLVED)
-- [ ] **Database Cascade**: Fixed - cascade delete rules for related data (RESOLVED)
+### Edge Cases to Address
+- [ ] **Concurrent Sync Prevention**: Race condition handling for simultaneous sync requests (partially implemented)
+- [ ] **Large Dataset Handling**: Memory optimization for tenants with 10,000+ products
+- [ ] **Network Failures**: Graceful degradation when external store APIs are unreachable
+- [ ] **Invalid Product Data**: Handle malformed/missing product data from external stores gracefully
 
 ---
 
 ## 🎯 MVP COMPLETION CHECKLIST
 
-- [x] RBAC & Advanced Session Management (P0)
-- [x] Super Admin Universal User Control (P0)
-- [x] Security Hardening (P0)
 - [ ] Email notifications (P1)
 - [ ] Legal pages (P1)
 - [ ] Database backups (P0)

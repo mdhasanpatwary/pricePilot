@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   ChevronLeft,
@@ -22,6 +22,12 @@ import { toast } from "sonner";
 export default function UsersManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState<any[]>([]);
+  const [meta, setMeta] = useState({
+    totalCount: 0,
+    totalPages: 0,
+    currentPage: 1,
+    limit: 10,
+  });
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -38,30 +44,36 @@ export default function UsersManagementPage() {
     password: "",
   });
 
-  // Pagination
+  // State trigger for pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const fetchUsers = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      else setIsRefreshing(true);
+
+      try {
+        const url = `/api/v1/admin/users?page=${currentPage}&limit=${itemsPerPage}${searchQuery ? `&search=${searchQuery}` : ""}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const result = await res.json();
+          setUsers(result.data);
+          setMeta(result.meta);
+        }
+      } catch (err) {
+        toast.error("Failed to load users");
+      } finally {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [currentPage, searchQuery, itemsPerPage],
+  );
+
   useEffect(() => {
     fetchUsers();
-  }, []);
-
-  const fetchUsers = async (silent = false) => {
-    if (!silent) setLoading(true);
-    else setIsRefreshing(true);
-
-    try {
-      const res = await fetch("/api/v1/admin/users");
-      if (res.ok) {
-        setUsers(await res.json());
-      }
-    } catch (err) {
-      toast.error("Failed to load users");
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
-  };
+  }, [fetchUsers]);
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,19 +125,9 @@ export default function UsersManagementPage() {
     }
   };
 
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      (u.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (u.tenantName || "").toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
-
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage,
-  );
+  // Frontend search filter for instant response (optional, now that we have backend filtering)
+  const paginatedUsers = users;
+  const totalPages = meta.totalPages;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -185,7 +187,7 @@ export default function UsersManagementPage() {
           />
         </div>
         <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-          {filteredUsers.length} Total Accounts
+          {meta.totalCount} Total Accounts
         </div>
       </div>
 
@@ -334,7 +336,7 @@ export default function UsersManagementPage() {
 
         <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-muted/20">
           <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">
-            Showing {paginatedUsers.length} of {filteredUsers.length} Accounts
+            Showing {paginatedUsers.length} of {meta.totalCount} Accounts
           </span>
           <div className="flex items-center gap-2">
             <button
