@@ -9,53 +9,16 @@
 ## 🔴 CRITICAL - Production Readiness (P0)
 
 ### Security & Compliance
-- [x] **Rate Limiting**: Implement API rate limiting (e.g., `@upstash/ratelimit`) to prevent abuse and DDoS
-  - ✅ Implemented with @upstash/ratelimit
-  - ✅ Applied to all API routes (Auth, Sync, Analytics, Products, Admin, etc.)
-
-- [x] **Input Sanitization**: Add comprehensive input validation/sanitization for all user inputs (XSS, SQL injection prevention)
-  - ✅ Implemented with Zod schemas and validation middleware
-  - ✅ Applied to all critical API routes (Auth, Products, Rules, Admin, etc.)
-  - ✅ Detailed system documentation in `docs/INPUT_SANITIZATION.md`
-- [x] **Security Headers**: Configure Next.js security headers (CSP, HSTS, X-Frame-Options, etc.)
-  - ✅ Configured comprehensive security headers in `next.config.ts`
-  - ✅ Implemented CSP, HSTS, X-Frame-Options, and X-Content-Type-Options
-  - ✅ Set Referrer-Policy for privacy and security
-- [x] **CSRF Protection**: Implement CSRF tokens for state-changing operations
-  - ✅ Implemented global `middleware.ts` for automated CSRF verification
-  - ✅ Origin and Referer validation for all state-changing API requests (POST, PUT, DELETE)
-  - ✅ Security logic centralized in `lib/security.ts`
-- [ ] **Password Policy**: Enforce strong password requirements (min length, complexity, password history)
-  - ✅ Enforced strong complexity (Uppercase, Lowercase, Number, Special Char) via Zod
-  - ✅ Minimum length of 8 characters enforced at API level
-  - [ ] Implement password history and rotation policies
 - [ ] **Email Verification**: Require email verification on registration before account activation
 - [ ] **Password Reset Flow**: Implement secure password reset with time-limited tokens
 - [ ] **Session Management**: Add session timeout, concurrent session limits, and device management
-  - ✅ Configured session timeout (24h) and update age (1h) in NextAuth
   - [ ] Implement concurrent session limits (requires custom database adapter logic)
   - [ ] Add device management UI
-- [x] **API Versioning**: Introduce API versioning (`/api/v1/`) for backward compatibility
-  - ✅ All API routes moved to `app/api/v1/`
-  - ✅ Implemented transparent rewrites in `next.config.ts` for backward compatibility
-  - ✅ Updated frontend calls to use `/api/v1/` explicitly where applicable
-- [x] **Audit Logging**: Comprehensive audit trail for all sensitive operations (admin actions, price changes, data exports)
-  - ✅ Created `lib/audit.ts` utility for structured logging
-  - ✅ Implemented across 10+ sensitive API endpoints (Matches, Rules, Bulk Updates, etc.)
-  - ✅ Type-safe audit log retrieval API in `/api/v1/audit-logs`
 
 ### Data Protection & Reliability
 - [ ] **Database Backups**: Automated daily backups with point-in-time recovery capability
 - [ ] **Data Retention Policies**: Implement data archival and deletion policies (GDPR compliance)
 - [ ] **Transaction Safety**: Add retry logic and idempotency keys for critical operations
-- [x] **Error Tracking**: Integrate error monitoring (Sentry/LogRocket) for production debugging
-  - ✅ Created centralized `lib/logger.ts` for unified logging
-  - ✅ Implemented global error boundary in `app/error.tsx`
-  - ✅ Automated API error handling with `withErrorHandling` wrapper
-  - ✅ Standardized error responses with unique error digests for traceability
-- [x] **Health Check Endpoints**: `/api/health` endpoint for load balancer/uptime monitoring
-  - ✅ Created `/api/v1/health` with database connectivity check
-  - ✅ Includes system uptime and timestamp for monitoring tools
 
 ---
 
@@ -78,10 +41,6 @@
 - [ ] **Error Boundaries**: React error boundaries with graceful fallback UI
 - [ ] **Pagination**: Implement server-side pagination for large product lists (currently loads all)
 - [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
-- [x] **Password Show/Hide Toggle**: User-friendly toggle for password visibility in Login, Register, Settings, and Connections forms.
-- [x] **Favicon**: Added generic branded favicon (icon.png) to project.
-- [x] **Product Table Images**: Display product images in reports table, removed SKU column, and simplified stock status display.
-- [x] **Zero Price Handling**: Handled 0 price as "N/A" or "Unavailable" to account for "Up Coming" items properly.
 
 ### Legal & Support
 - [ ] **Legal Pages**: Create `/privacy`, `/terms`, `/cookies`, and `/acceptable-use` pages
@@ -113,15 +72,6 @@
 - [ ] **Troubleshooting Guide**: Common issues, debugging steps, and FAQ for operations team
 - [ ] **Type Safety**: Stricter TypeScript config, eliminate `any` types, add runtime validation (Zod schemas)
 - [ ] **Developer Documentation**: Comprehensive internal documentation for the scraping engine and matching logic.
-
-### 🛠️ System Tools & Engine
-- [x] **Scraper Playground**: UI to test direct scraping from a URL to debug selector/layout changes.
-- [x] **Live Sync Monitor**: Real-time dashboard showing the status and verbose logs of active sync sessions.
-- [x] **Connectivity Diagnostics**: One-click system check for Store APIs, database, and scraper proxy health.
-- [x] **Task Scheduler Manager**: Interface to view, pause, and manually trigger cron jobs (Price checks, Reports).
-- [x] **Competitor Health Dashboard**: Track scraping success/failure rates per site to identify bot-detection or layout shifts.
-- [x] **Entity Audit Search**: Global search to find all logs (syncs, errors, rule triggers) for a specific SKU or Product ID.
-- [x] **Scraper Profile Management**: Settings to rotate User-Agents, Proxies, and delay patterns to avoid anti-bot blocks.
 
 ---
 
@@ -190,14 +140,7 @@
 
 Before public launch, ensure:
 
-- [x] Core authentication and authorization
-- [x] Multi-tenant architecture
-- [x] Competitor tracking and syncing
-- [x] Product matching and discovery
-- [x] Pricing rules engine
-- [x] Dashboard analytics
 - [ ] Email notifications (P1)
-- [x] Rate limiting (P0)
 - [ ] Security hardening (Sanitization, Headers) (P0)
 - [ ] Legal pages (P1)
 - [ ] Production error monitoring (P0)

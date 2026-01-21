@@ -114,14 +114,32 @@ export default function SettingsPage() {
     }, 1000);
   };
 
-  const onSecuritySubmit = (_data: SecurityFormValues) => {
+  const onSecuritySubmit = async (data: SecurityFormValues) => {
     setIsSaving(true);
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Security settings updated");
-      resetSecurity();
+    try {
+      const res = await fetch("/api/v1/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: data.currentPassword,
+          newPassword: data.newPassword,
+          confirmPassword: data.confirmPassword,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        toast.success("Password updated successfully");
+        resetSecurity();
+      } else {
+        toast.error(result.error || "Failed to update password");
+      }
+    } catch (e) {
+      toast.error("A network error occurred");
+    } finally {
       setIsSaving(false);
-    }, 1000);
+    }
   };
 
   const [webhooks, setWebhooks] = useState<any[]>([]);

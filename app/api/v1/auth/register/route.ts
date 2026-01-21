@@ -52,6 +52,14 @@ async function handleRegister(req: NextRequest) {
         },
       });
 
+      // Record initial password history
+      await tx.passwordHistory.create({
+        data: {
+          userId: user.id,
+          passwordHash,
+        },
+      });
+
       return { user, tenant };
     });
 

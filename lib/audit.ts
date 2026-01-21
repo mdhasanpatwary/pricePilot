@@ -23,7 +23,9 @@ export type AuditAction =
   | "CREATE_TENANT"
   | "DELETE_TENANT"
   | "UPDATE_SYSTEM_CONFIG"
-  | "USER_REGISTRATION";
+  | "USER_REGISTRATION"
+  | "CHANGE_PASSWORD"
+  | "PASSWORD_RESET_REQUESTED";
 
 interface AuditLogOptions {
   tenantId: string;
