@@ -9,7 +9,7 @@
 ## 🔴 CRITICAL - Production Readiness (P0)
 
 ### Data Protection & Reliability
-- [ ] **Database Backups**: Automated daily backups with point-in-time recovery capability
+- [x] **Database Backups**: Automated daily backups with point-in-time recovery capability
 - [ ] **Data Retention Policies**: Implement data archival and deletion policies (GDPR compliance)
 - [ ] **Transaction Safety**: Add retry logic and idempotency keys for critical operations
 
@@ -19,7 +19,6 @@
 
 ### Core Features
 - [ ] **Alert Center**: Email and Slack/webhook notifications for competitor price changes. Set custom thresholds and frequency.
-- [x] **Market Intelligence Dashboard**: Historical price tracking, market share analysis, and pricing elasticity trends.
 - [ ] **Scheduled Reports**: Automated email reports (daily/weekly summaries) with data export
 
 ### User Experience
@@ -28,7 +27,6 @@
 ## 🎯 MVP COMPLETION CHECKLIST
 
 - [ ] Email notifications (P1)
-- [ ] Legal pages (P1)
 - [ ] Database backups (P0)
 
 ---

@@ -15,6 +15,7 @@
     "test:load": "jest __tests__/lib/services/scraper.test.ts",
     "worker": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
     "worker:dev": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
+    "backup": "ts-node -r tsconfig-paths/register scripts/backup-db.ts",
     "prepare": "husky"
   },
   "dependencies": {
