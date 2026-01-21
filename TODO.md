@@ -9,12 +9,11 @@
 ## 🔴 CRITICAL - Production Readiness (P0)
 
 ### Security & Compliance
-- [x] **Email Verification**: Require email verification on registration before account activation
-  - ✅ Generated unique verification tokens on registration
-  - ✅ Implemented `lib/mail.ts` for (mock) email delivery
-  - ✅ Created `/api/v1/auth/verify` endpoint for token validation
-  - ✅ Enforced verification check in NextAuth authorization logic
-- [ ] **Password Reset Flow**: Implement secure password reset with time-limited tokens
+- [x] **Password Reset Flow**: Implement secure password reset with time-limited tokens
+  - ✅ Secure hashed tokens (SHA-256) with 1-hour expiry
+  - ✅ Anti-enumeration: Generic success responses for security
+  - ✅ Enforced password history (last 5) on reset
+  - ✅ Fully integrated with `lib/mail.ts` mock service
 - [ ] **Session Management**: Add session timeout, concurrent session limits, and device management
   - [ ] Implement concurrent session limits (requires custom database adapter logic)
   - [ ] Add device management UI
