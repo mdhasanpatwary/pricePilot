@@ -22,3 +22,22 @@ export function formatCurrency(amount: number, currency: string = "USD") {
     return `${sign}${currency} ${abs}`;
   }
 }
+
+export function formatTimeAgo(date: Date | string): string {
+  const now = new Date();
+  const then = new Date(date);
+  const diffSeconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+
+  if (diffSeconds < 60) return "just now";
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return then.toLocaleDateString();
+}

@@ -21,6 +21,7 @@ model Tenant {
   users           User[]
   webhooks        Webhook[]
   auditLogs       TenantAuditLog[]
+  notifications   Notification[]
 }
 
 model User {
@@ -148,9 +149,10 @@ model ProductMatch {
   id                  String    @id @default(uuid())
   userProductId       String
   competitorProductId String
-  matchType           MatchType @default(AUTO_SKU)
-  confidenceScore     Decimal   @db.Decimal(5, 2)
-  createdAt           DateTime  @default(now())
+  matchType           MatchType   @default(AUTO_SKU)
+  confidenceScore     Decimal     @db.Decimal(5, 2)
+  status              MatchStatus @default(PENDING)
+  createdAt           DateTime    @default(now())
   competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
   userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id], onDelete: Cascade)
 }
@@ -212,6 +214,21 @@ model SystemConfig {
   type        String   @default("string")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  type      String   // e.g., "SYNC_SUCCESS", "SYNC_ERROR", "PRICE_ALERT", "SYSTEM"
+  title     String
+  message   String
+  link      String?  // Optional link to relevant dashboard page
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([isRead])
 }
 
 model TenantAuditLog {
@@ -281,4 +298,10 @@ enum StrategyType {
   THRESHOLD
   PERCENTAGE
   INVENTORY_HIKE
+}
+
+enum MatchStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

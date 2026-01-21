@@ -51,19 +51,23 @@ async function handleGET(_req: NextRequest) {
 
     const formattedMatches = products.flatMap((product) =>
       product.matchesAsUser
-        .filter((m) => m.matchType !== "MANUAL") // Only show auto matches for review
+        .filter((m: any) => m.status === "PENDING") // Show only pending review
         .map((m) => {
           let siteName = "Unknown";
           try {
-            siteName = new URL(
-              m.competitorProduct.site.baseUrl,
-            ).hostname.replace("www.", "");
+            siteName = m.competitorProduct.site.baseUrl
+              ? new URL(m.competitorProduct.site.baseUrl).hostname.replace(
+                  "www.",
+                  "",
+                )
+              : "Unknown";
           } catch (e) {}
 
           return {
             id: m.id,
             confidence: parseFloat(m.confidenceScore.toString()),
             matchType: m.matchType,
+            status: (m as any).status,
             product: {
               id: product.id,
               title: product.title,
@@ -110,13 +114,14 @@ async function handlePOST(req: NextRequest) {
     const { matchId, action } = validation.data!;
 
     if (action === "APPROVE") {
-      await prisma.productMatch.update({
+      await (prisma as any).productMatch.update({
         where: { id: matchId },
-        data: { matchType: "MANUAL" },
+        data: { status: "APPROVED" },
       });
     } else if (action === "REJECT") {
-      await prisma.productMatch.delete({
+      await (prisma as any).productMatch.update({
         where: { id: matchId },
+        data: { status: "REJECTED" },
       });
     }
 

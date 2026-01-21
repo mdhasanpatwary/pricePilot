@@ -19,9 +19,8 @@
 
 ### Core Features
 - [ ] **Alert Center**: Email and Slack/webhook notifications for competitor price changes. Set custom thresholds and frequency.
-- [ ] **Match Approval Workflow**: UI to review, approve, or reject automated product matches with side-by-side verification.
 - [ ] **Market Intelligence Dashboard**: Historical price tracking, market share analysis, and pricing elasticity trends.
-- [ ] **Notification Center**: In-app notification system for sync status, rule executions, errors
+- [x] **Notification Center**: In-app notification system for sync status, rule executions, errors
 - [ ] **Scheduled Reports**: Automated email reports (daily/weekly summaries) with data export
 - [ ] **Bulk Operations**: Enhanced bulk update UI with preview, validation, and rollback capability
 
@@ -45,7 +44,6 @@
 ## 📊 KNOWN ISSUES & BUGS
 
 ### Edge Cases to Address
-- [x] **Concurrent Sync Prevention**: Atomic locking and race condition handling for simultaneous sync requests.
 - [ ] **Large Dataset Handling**: Memory optimization for tenants with 10,000+ products
 - [ ] **Network Failures**: Graceful degradation when external store APIs are unreachable
 - [ ] **Invalid Product Data**: Handle malformed/missing product data from external stores gracefully

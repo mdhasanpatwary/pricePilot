@@ -4,6 +4,7 @@ import { SyncService } from "./sync";
 import { MatchingService } from "./matching";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
+import { NotificationService } from "./notification";
 import { withRetry } from "@/lib/utils/timeout";
 import { SystemConfigService } from "@/lib/config";
 
@@ -98,12 +99,15 @@ export class SyncOrchestrator {
       // 1. Run Matching Discovery
       await MatchingService.runMatching(tenantId);
 
-      const matches = await prisma.productMatch.findMany({
-        where: { userProduct: { tenantId } },
+      const matches = (await (prisma.productMatch as any).findMany({
+        where: {
+          userProduct: { tenantId },
+          status: { in: ["PENDING", "APPROVED"] } as any,
+        },
         include: {
           competitorProduct: { include: { site: true } },
         },
-      });
+      })) as any[];
 
       if (matches.length === 0) {
         return { success: true, updated: 0, scrapped: 0 };
@@ -184,14 +188,25 @@ export class SyncOrchestrator {
         }
       }
 
-      return {
+      const finalResult = {
         success: true,
         scrapped: scrappedCount,
         updated: result.updated,
         failed: result.failed,
       };
+
+      await NotificationService.sendSyncSuccess(
+        tenantId,
+        `Sync complete! Scrapped ${scrappedCount} products and updated ${result.updated} store prices.`,
+      );
+
+      return finalResult;
     } catch (error) {
       console.error("[SyncOrchestrator] Sync failed fatally:", error);
+      await NotificationService.sendSyncError(
+        tenantId,
+        `Fatal sync error: ${error instanceof Error ? error.message : "Internal service failure"}`,
+      );
       throw error;
     } finally {
       // Reset only sites belonging to this specific session

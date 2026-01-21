@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PricingRule } from "@prisma/client";
 import { WebhookService } from "./webhook";
+import { NotificationService } from "./notification";
 
 interface PriceRecommendation {
   productId: string;
@@ -235,6 +236,14 @@ export class RulesEngine {
           reason: rec.reason,
           timestamp: new Date().toISOString(),
         });
+
+        // Send Notification
+        await NotificationService.sendPriceAlert(
+          product.tenantId,
+          product.title,
+          rec.currentPrice,
+          rec.recommendedPrice,
+        );
 
         updated++;
       } catch (error) {
