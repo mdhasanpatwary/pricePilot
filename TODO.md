@@ -25,7 +25,6 @@
 
 ### User Experience
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery
-- [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
 
 ## 🎯 MVP COMPLETION CHECKLIST
 

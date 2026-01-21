@@ -22,6 +22,7 @@ model Tenant {
   webhooks        Webhook[]
   auditLogs       TenantAuditLog[]
   notifications   Notification[]
+  bulkSnapshots   BulkOperationSnapshot[]
 }
 
 model User {
@@ -304,4 +305,19 @@ enum MatchStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model BulkOperationSnapshot {
+  id           String   @id @default(uuid())
+  tenantId     String
+  operation    String   // BULK_UPDATE, BULK_DELETE, etc.
+  productCount Int
+  snapshot     String   @db.Text // JSON snapshot of original data
+  changes      String   @db.Text // JSON of what changed
+  rolledBack   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([createdAt])
 }
