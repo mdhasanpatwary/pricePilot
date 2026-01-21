@@ -58,6 +58,18 @@ const adminMenuItems = [
     label: "Business Setup (Logic)",
     href: "/admin/business-setup",
   },
+  {
+    icon: Settings,
+    label: "Maintenance",
+    href: "/admin/maintenance/backups",
+    children: [
+      {
+        label: "Database Backups",
+        href: "/admin/maintenance/backups",
+        icon: Database,
+      },
+    ],
+  },
   { icon: CalendarClock, label: "Task Scheduler", href: "/admin/scheduler" },
 ];
 
