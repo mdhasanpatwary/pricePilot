@@ -13,6 +13,7 @@
     "test:unit": "jest __tests__/lib",
     "test:integration": "jest __tests__/app",
     "test:load": "jest __tests__/lib/services/scraper.test.ts",
+    "worker": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -25,8 +26,10 @@
     "@upstash/redis": "^1.36.1",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.66.5",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.562.0",
     "next": "^16.1.1",
@@ -73,6 +76,7 @@
     "tailwindcss": "^4.1.18",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
     "undici": "^7.18.2"
   },

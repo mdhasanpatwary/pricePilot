@@ -27,13 +27,8 @@
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery
 - [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
 
----
-
-## 🧹 TECHNICAL DEBT & MAINTENANCE
-
 ### Infrastructure & Security
 - [ ] **Queue System**: Implement job queue (BullMQ/Bull) for async tasks (syncs, notifications, reports)
-- [x] **Architecture Diagrams**: System architecture documentation with data flow diagrams
 - [ ] **Runbook**: Operations runbook for common incidents, scaling procedures, and disaster recovery
 
 ## 🎯 MVP COMPLETION CHECKLIST

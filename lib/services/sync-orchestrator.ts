@@ -7,12 +7,53 @@ import { prisma } from "@/lib/prisma";
 import { NotificationService } from "./notification";
 import { withRetry } from "@/lib/utils/timeout";
 import { SystemConfigService } from "@/lib/config";
+import { syncQueue } from "@/lib/queue/client";
+import { QUEUE_NAMES } from "@/lib/queue/types";
 
 export class SyncOrchestrator {
   /**
-   * Run a full sync for a tenant
+   * Dispatch a full sync job to the queue
    */
-  static async runFullSync(tenantId: string) {
+  static async dispatchFullSync(tenantId: string) {
+    // Check if sync is already running to provide immediate feedback (UX)
+    const activeSyncs = await prisma.site.count({
+      where: {
+        tenantId,
+        type: "COMPETITOR",
+        isSyncing: true,
+      },
+    });
+
+    if (activeSyncs > 0) {
+      return {
+        success: true,
+        message: "Full sync already in progress",
+        skipped: true,
+      };
+    }
+
+    await syncQueue.add(QUEUE_NAMES.SYNC, {
+      type: "FULL",
+      tenantId,
+    });
+    return { success: true, message: "Full sync job queued successfully." };
+  }
+
+  /**
+   * Dispatch a single site sync job to the queue
+   */
+  static async dispatchSiteSync(siteId: string) {
+    await syncQueue.add(QUEUE_NAMES.SYNC, {
+      type: "SINGLE",
+      siteId,
+    });
+    return { success: true, message: "Site sync job queued successfully." };
+  }
+
+  /**
+   * Run a full sync for a tenant (Executed by Worker)
+   */
+  static async processFullSync(tenantId: string) {
     const isKilled = await SystemConfigService.get(
       "SYNC_MASTER_KILL_SWITCH",
       false,
@@ -222,9 +263,9 @@ export class SyncOrchestrator {
   }
 
   /**
-   * Run sync for a specific site
+   * Run sync for a specific site (Executed by Worker)
    */
-  static async syncSite(siteId: string, force: boolean = false) {
+  static async processSiteSync(siteId: string, force: boolean = false) {
     const isKilled = await SystemConfigService.get(
       "SYNC_MASTER_KILL_SWITCH",
       false,

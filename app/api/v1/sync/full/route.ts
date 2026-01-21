@@ -18,7 +18,7 @@ async function handleFullSync(_req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const result = await SyncOrchestrator.runFullSync(tenantId);
+    const result = await SyncOrchestrator.dispatchFullSync(tenantId);
 
     if ((result as any).skipped) {
       return NextResponse.json(result, { status: 409 });
