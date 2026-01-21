@@ -8,6 +8,7 @@ import {
   validationErrorResponse,
   matchApprovalSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -120,16 +121,14 @@ async function handlePOST(req: NextRequest) {
     }
 
     // Create Audit Log
-    await (prisma.tenantAuditLog as any).create({
-      data: {
-        tenantId: session.user.tenantId,
-        userId: session.user.id,
-        userEmail: session.user.email,
-        action: `${action}_MATCH`,
-        entityId: matchId,
-        ipAddress: req.headers.get("x-forwarded-for") || "unknown",
-        details: JSON.stringify({ matchId, action }),
-      },
+    await recordAuditLog({
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: `${action}_MATCH`,
+      entityId: matchId,
+      ipAddress: getIpAddress(req),
+      details: { matchId, action },
     });
 
     return NextResponse.json({ success: true });

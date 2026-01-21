@@ -9,6 +9,7 @@ import {
   validationErrorResponse,
   createCompetitorSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -173,6 +174,16 @@ async function handlePOST(req: NextRequest) {
       },
     });
 
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "CREATE_COMPETITOR",
+      entityId: site.id,
+      ipAddress: getIpAddress(req),
+      details: { url },
+    });
+
     // Trigger auto-fetch immediately in background (with slight delay for DB propagation)
     setTimeout(() => {
       // Pass true to force sync even though isSyncing is already true
@@ -215,6 +226,15 @@ async function handleDELETE(req: NextRequest) {
         id,
         tenantId,
       },
+    });
+
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "DELETE_COMPETITOR",
+      entityId: id,
+      ipAddress: getIpAddress(req),
     });
 
     return NextResponse.json({ success: true });

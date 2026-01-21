@@ -8,6 +8,7 @@ import {
   validationErrorResponse,
   bulkPriceUpdateExecutionSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -31,6 +32,21 @@ async function handlePOST(req: NextRequest) {
       value,
       min_price,
     );
+
+    await recordAuditLog({
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "BULK_PRICE_UPDATE",
+      entityId: "SYSTEM",
+      ipAddress: getIpAddress(req),
+      details: {
+        productCount: product_ids.length,
+        logicType: logic_type,
+        value,
+        minPrice: min_price,
+      },
+    });
 
     return NextResponse.json({
       message: "Price updates completed",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import {
   validateBody,
   validationErrorResponse,
@@ -52,6 +53,16 @@ async function handleRegister(req: NextRequest) {
       });
 
       return { user, tenant };
+    });
+
+    await recordAuditLog({
+      tenantId: result.tenant.id,
+      userId: result.user.id,
+      userEmail: result.user.email,
+      action: "USER_REGISTRATION",
+      entityId: result.user.id,
+      ipAddress: getIpAddress(req),
+      details: { companyName, email },
     });
 
     return NextResponse.json(

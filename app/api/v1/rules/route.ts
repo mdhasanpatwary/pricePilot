@@ -9,6 +9,7 @@ import {
   createPricingRuleSchema,
   updatePricingRuleSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 /**
  * GET /api/rules
@@ -75,6 +76,16 @@ async function handlePOST(req: NextRequest) {
       },
     });
 
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "CREATE_PRICING_RULE",
+      entityId: rule.id,
+      ipAddress: getIpAddress(req),
+      details: { name, strategy, parameter },
+    });
+
     return NextResponse.json(rule, { status: 201 });
   } catch (error) {
     console.error("Error creating rule:", error);
@@ -122,6 +133,16 @@ async function handlePUT(req: NextRequest) {
       data: updateData,
     });
 
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "UPDATE_PRICING_RULE",
+      entityId: id,
+      ipAddress: getIpAddress(req),
+      details: updateData,
+    });
+
     return NextResponse.json(updatedRule);
   } catch (error) {
     console.error("Error updating rule:", error);
@@ -163,6 +184,15 @@ async function handleDELETE(req: NextRequest) {
 
     await prisma.pricingRule.delete({
       where: { id },
+    });
+
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "DELETE_PRICING_RULE",
+      entityId: id,
+      ipAddress: getIpAddress(req),
     });
 
     return NextResponse.json({ success: true });

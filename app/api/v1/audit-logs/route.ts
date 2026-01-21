@@ -13,7 +13,7 @@ async function handleGET(_req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const logs = await (prisma.tenantAuditLog as any).findMany({
+    const logs = await prisma.tenantAuditLog.findMany({
       where: {
         tenantId,
       },

@@ -8,6 +8,7 @@ import {
   validationErrorResponse,
   systemConfigSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 // Default configuration values
 const DEFAULT_CONFIGS = [
@@ -101,6 +102,16 @@ async function handlePOST(req: NextRequest) {
       where: { key },
       update: { value: String(value) },
       create: { key, value: String(value) },
+    });
+
+    await recordAuditLog({
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "UPDATE_SYSTEM_CONFIG",
+      entityId: key,
+      ipAddress: getIpAddress(req),
+      details: { key, value },
     });
 
     return NextResponse.json(config);

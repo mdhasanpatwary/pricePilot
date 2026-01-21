@@ -79,6 +79,139 @@ export default function AuditLogsPage() {
     );
   };
 
+  const renderDetails = (log: AuditLog) => {
+    if (!log.details)
+      return (
+        <span className="text-muted-foreground italic text-[10px]">
+          No details available
+        </span>
+      );
+
+    try {
+      const details = JSON.parse(log.details);
+      const action = log.action;
+
+      if (action.includes("MATCH")) {
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold text-foreground">
+              {action === "APPROVE_MATCH"
+                ? "Confirmed match for ID:"
+                : "Rejected match for ID:"}
+            </span>
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-[180px]">
+              {details.matchId || log.entityId}
+            </code>
+          </div>
+        );
+      }
+
+      if (action.includes("PRICING_RULE")) {
+        return (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-foreground">
+                {details.name || "Rule Update"}
+              </span>
+              {details.strategy && (
+                <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-md font-black uppercase">
+                  {details.strategy}
+                </span>
+              )}
+            </div>
+            {details.parameter !== undefined && (
+              <span className="text-[10px] text-muted-foreground">
+                Value:{" "}
+                <span className="font-mono font-bold text-foreground">
+                  {details.parameter}
+                </span>
+              </span>
+            )}
+          </div>
+        );
+      }
+
+      if (action === "BULK_PRICE_UPDATE") {
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-foreground">
+              Updated {details.productCount} products
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-muted-foreground font-medium lowercase">
+                logic: {details.logicType}
+              </span>
+              <span className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-muted-foreground font-medium">
+                val: {details.value}
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      if (action.includes("INTEGRATION") || action.includes("COMPETITOR")) {
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold text-foreground truncate max-w-[200px]">
+              {details.url || details.baseUrl || "System Connection"}
+            </span>
+            {details.platform && (
+              <span className="text-[9px] w-fit px-1.5 py-0.5 bg-primary/5 text-primary rounded-md font-black uppercase tracking-tighter">
+                {details.platform}
+              </span>
+            )}
+          </div>
+        );
+      }
+
+      if (action.includes("EXPORT") || action.includes("IMPORT")) {
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold text-foreground">
+              {action.includes("EXPORT")
+                ? "Generated CSV"
+                : "Processed CSV Upload"}
+            </span>
+            <span className="text-[10px] text-muted-foreground leading-none">
+              {details.count !== undefined
+                ? `${details.count} products exported`
+                : ""}
+              {details.created !== undefined
+                ? `${details.created} created, ${details.updated} updated`
+                : ""}
+            </span>
+          </div>
+        );
+      }
+
+      // Fallback for known ID-based entities
+      if (details.id || details.targetTenantId) {
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold text-foreground uppercase tracking-tighter">
+              Reference ID
+            </span>
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-[150px]">
+              {details.targetTenantId || details.id || log.entityId}
+            </code>
+          </div>
+        );
+      }
+
+      return (
+        <pre className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+          {log.details}
+        </pre>
+      );
+    } catch (e) {
+      return (
+        <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+          {log.details}
+        </span>
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
@@ -131,10 +264,10 @@ export default function AuditLogsPage() {
                   Action
                 </th>
                 <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                  Details
+                  Operation Details
                 </th>
                 <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">
-                  Date
+                  Timestamp
                 </th>
               </tr>
             </thead>
@@ -150,7 +283,7 @@ export default function AuditLogsPage() {
                         <User className="w-4 h-4" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold">
+                        <span className="text-sm font-bold lowercase">
                           {log.userEmail.split("@")[0]}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
@@ -160,13 +293,7 @@ export default function AuditLogsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">{getActionBadge(log.action)}</td>
-                  <td className="px-6 py-4">
-                    <div className="max-w-xs truncate text-xs font-medium text-muted-foreground">
-                      {log.details
-                        ? JSON.parse(log.details).matchId || log.details
-                        : "N/A"}
-                    </div>
-                  </td>
+                  <td className="px-6 py-4">{renderDetails(log)}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex flex-col items-end">
                       <span className="text-[11px] font-bold uppercase tracking-tight">

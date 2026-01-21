@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -81,6 +82,16 @@ export async function GET(_req: NextRequest) {
       headers.join(","),
       ...rows.map((row) => row.join(",")),
     ].join("\n");
+
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "EXPORT_PRODUCTS",
+      entityId: "SYSTEM",
+      ipAddress: getIpAddress(_req),
+      details: { count: products.length },
+    });
 
     return new NextResponse(csvContent, {
       headers: {

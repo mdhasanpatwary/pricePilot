@@ -8,6 +8,7 @@ import {
   validationErrorResponse,
   createIntegrationSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 /**
  * GET /api/integrations
@@ -119,6 +120,16 @@ async function handlePOST(req: NextRequest) {
       },
     });
 
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "CREATE_INTEGRATION",
+      entityId: site.id,
+      ipAddress: getIpAddress(req),
+      details: { platform, baseUrl, type: type || "USER" },
+    });
+
     return NextResponse.json(
       {
         id: site.id,
@@ -174,6 +185,16 @@ async function handleDELETE(req: NextRequest) {
     // Delete the site (cascade will handle related products)
     await prisma.site.delete({
       where: { id: siteId },
+    });
+
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "DELETE_INTEGRATION",
+      entityId: siteId,
+      ipAddress: getIpAddress(req),
+      details: { baseUrl: site.baseUrl },
     });
 
     return NextResponse.json({ success: true });

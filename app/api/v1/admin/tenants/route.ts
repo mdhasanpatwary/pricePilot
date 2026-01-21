@@ -12,6 +12,7 @@ import {
   updateTenantSchema,
   uuidSchema,
 } from "@/lib/validation";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 /**
  * GET /api/admin/tenants
@@ -123,6 +124,16 @@ async function handlePATCH(req: NextRequest) {
       },
     });
 
+    await recordAuditLog({
+      tenantId: session.user.tenantId, // Admin's tenant
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "UPDATE_TENANT",
+      entityId: id,
+      ipAddress: getIpAddress(req),
+      details: { storeLimit, competitorLimit, planType, targetTenantId: id },
+    });
+
     return NextResponse.json(updatedTenant);
   } catch (error) {
     console.error("Failed to update tenant:", error);
@@ -162,6 +173,16 @@ async function handlePOST(req: NextRequest) {
       },
     });
 
+    await recordAuditLog({
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "CREATE_TENANT",
+      entityId: newTenant.id,
+      ipAddress: getIpAddress(req),
+      details: { name, planType, storeLimit, competitorLimit },
+    });
+
     return NextResponse.json(newTenant, { status: 201 });
   } catch (error) {
     console.error("Failed to create tenant:", error);
@@ -197,6 +218,15 @@ async function handleDELETE(req: NextRequest) {
     // but not for all relations.
     await prisma.tenant.delete({
       where: { id },
+    });
+
+    await recordAuditLog({
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "DELETE_TENANT",
+      entityId: id,
+      ipAddress: getIpAddress(req),
     });
 
     return NextResponse.json({ success: true });

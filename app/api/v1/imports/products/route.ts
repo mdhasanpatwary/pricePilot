@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
 async function handleImport(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -108,6 +109,16 @@ async function handleImport(req: NextRequest) {
         updatedCount++;
       }
     }
+
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "IMPORT_PRODUCTS",
+      entityId: "SYSTEM",
+      ipAddress: getIpAddress(req),
+      details: { created: createdCount, updated: updatedCount },
+    });
 
     return NextResponse.json({
       success: true,
