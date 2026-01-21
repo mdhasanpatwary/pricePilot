@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "prisma generate && next dev",
+    "dev": "prisma generate && concurrently \"next dev\" \"npm run worker:dev\"",
     "build": "prisma generate && next build",
-    "start": "next start",
+    "start": "concurrently \"next start\" \"npm run worker\"",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -14,6 +14,7 @@
     "test:integration": "jest __tests__/app",
     "test:load": "jest __tests__/lib/services/scraper.test.ts",
     "worker": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
+    "worker:dev": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -63,6 +64,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/string-similarity": "^4.0.2",
     "autoprefixer": "^10.4.23",
+    "concurrently": "^9.2.1",
     "cross-fetch": "^4.1.0",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.1",
