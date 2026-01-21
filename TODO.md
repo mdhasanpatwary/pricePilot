@@ -9,7 +9,11 @@
 ## 🔴 CRITICAL - Production Readiness (P0)
 
 ### Security & Compliance
-- [ ] **Email Verification**: Require email verification on registration before account activation
+- [x] **Email Verification**: Require email verification on registration before account activation
+  - ✅ Generated unique verification tokens on registration
+  - ✅ Implemented `lib/mail.ts` for (mock) email delivery
+  - ✅ Created `/api/v1/auth/verify` endpoint for token validation
+  - ✅ Enforced verification check in NextAuth authorization logic
 - [ ] **Password Reset Flow**: Implement secure password reset with time-limited tokens
 - [ ] **Session Management**: Add session timeout, concurrent session limits, and device management
   - [ ] Implement concurrent session limits (requires custom database adapter logic)
