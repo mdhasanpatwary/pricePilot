@@ -27,9 +27,6 @@
 - [ ] **Onboarding Flow**: Guided tour (driver.js) for first-time users with feature discovery
 - [ ] **Search Optimization**: Full-text search with debouncing and search result highlighting
 
-### Infrastructure & Security
-- [x] **Runbook**: Operations runbook for common incidents, scaling procedures, and disaster recovery
-
 ## 🎯 MVP COMPLETION CHECKLIST
 
 - [ ] Email notifications (P1)
