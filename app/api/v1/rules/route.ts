@@ -10,6 +10,7 @@ import {
   updatePricingRuleSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { withErrorHandling } from "@/lib/error-api";
 
 /**
  * GET /api/rules
@@ -24,20 +25,12 @@ async function handleGET(_req: NextRequest) {
 
   const tenantId = session.user.tenantId;
 
-  try {
-    const rules = await prisma.pricingRule.findMany({
-      where: { tenantId },
-      orderBy: { priority: "asc" },
-    });
+  const rules = await prisma.pricingRule.findMany({
+    where: { tenantId },
+    orderBy: { priority: "asc" },
+  });
 
-    return NextResponse.json(rules);
-  } catch (error) {
-    console.error("Error fetching rules:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch rules" },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(rules);
 }
 
 /**
@@ -53,47 +46,39 @@ async function handlePOST(req: NextRequest) {
 
   const tenantId = session.user.tenantId;
 
-  try {
-    // Validate and sanitize input
-    const validation = await validateBody(req, createPricingRuleSchema);
+  // Validate and sanitize input
+  const validation = await validateBody(req, createPricingRuleSchema);
 
-    if (!validation.success) {
-      return validationErrorResponse(validation);
-    }
-
-    const { name, strategy, parameter, priority, isActive, description } =
-      validation.data!;
-
-    const rule = await prisma.pricingRule.create({
-      data: {
-        tenantId,
-        name,
-        strategy,
-        parameter,
-        priority: priority || 1,
-        isActive: isActive !== undefined ? isActive : true,
-        description,
-      },
-    });
-
-    await recordAuditLog({
-      tenantId,
-      userId: session.user.id,
-      userEmail: session.user.email!,
-      action: "CREATE_PRICING_RULE",
-      entityId: rule.id,
-      ipAddress: getIpAddress(req),
-      details: { name, strategy, parameter },
-    });
-
-    return NextResponse.json(rule, { status: 201 });
-  } catch (error) {
-    console.error("Error creating rule:", error);
-    return NextResponse.json(
-      { error: "Failed to create rule" },
-      { status: 500 },
-    );
+  if (!validation.success) {
+    return validationErrorResponse(validation);
   }
+
+  const { name, strategy, parameter, priority, isActive, description } =
+    validation.data!;
+
+  const rule = await prisma.pricingRule.create({
+    data: {
+      tenantId,
+      name,
+      strategy,
+      parameter,
+      priority: priority || 1,
+      isActive: isActive !== undefined ? isActive : true,
+      description,
+    },
+  });
+
+  await recordAuditLog({
+    tenantId,
+    userId: session.user.id,
+    userEmail: session.user.email!,
+    action: "CREATE_PRICING_RULE",
+    entityId: rule.id,
+    ipAddress: getIpAddress(req),
+    details: { name, strategy, parameter },
+  });
+
+  return NextResponse.json(rule, { status: 201 });
 }
 
 /**
@@ -109,48 +94,40 @@ async function handlePUT(req: NextRequest) {
 
   const tenantId = session.user.tenantId;
 
-  try {
-    // Validate and sanitize input
-    const validation = await validateBody(req, updatePricingRuleSchema);
+  // Validate and sanitize input
+  const validation = await validateBody(req, updatePricingRuleSchema);
 
-    if (!validation.success) {
-      return validationErrorResponse(validation);
-    }
-
-    const { id, ...updateData } = validation.data!;
-
-    // Verify ownership
-    const existingRule = await prisma.pricingRule.findFirst({
-      where: { id, tenantId },
-    });
-
-    if (!existingRule) {
-      return NextResponse.json({ error: "Rule not found" }, { status: 404 });
-    }
-
-    const updatedRule = await prisma.pricingRule.update({
-      where: { id },
-      data: updateData,
-    });
-
-    await recordAuditLog({
-      tenantId,
-      userId: session.user.id,
-      userEmail: session.user.email!,
-      action: "UPDATE_PRICING_RULE",
-      entityId: id,
-      ipAddress: getIpAddress(req),
-      details: updateData,
-    });
-
-    return NextResponse.json(updatedRule);
-  } catch (error) {
-    console.error("Error updating rule:", error);
-    return NextResponse.json(
-      { error: "Failed to update rule" },
-      { status: 500 },
-    );
+  if (!validation.success) {
+    return validationErrorResponse(validation);
   }
+
+  const { id, ...updateData } = validation.data!;
+
+  // Verify ownership
+  const existingRule = await prisma.pricingRule.findFirst({
+    where: { id, tenantId },
+  });
+
+  if (!existingRule) {
+    return NextResponse.json({ error: "Rule not found" }, { status: 404 });
+  }
+
+  const updatedRule = await prisma.pricingRule.update({
+    where: { id },
+    data: updateData,
+  });
+
+  await recordAuditLog({
+    tenantId,
+    userId: session.user.id,
+    userEmail: session.user.email!,
+    action: "UPDATE_PRICING_RULE",
+    entityId: id,
+    ipAddress: getIpAddress(req),
+    details: updateData,
+  });
+
+  return NextResponse.json(updatedRule);
 }
 
 /**
@@ -172,51 +149,43 @@ async function handleDELETE(req: NextRequest) {
     return NextResponse.json({ error: "Rule ID required" }, { status: 400 });
   }
 
-  try {
-    // Verify ownership
-    const existingRule = await prisma.pricingRule.findFirst({
-      where: { id, tenantId },
-    });
+  // Verify ownership
+  const existingRule = await prisma.pricingRule.findFirst({
+    where: { id, tenantId },
+  });
 
-    if (!existingRule) {
-      return NextResponse.json({ error: "Rule not found" }, { status: 404 });
-    }
-
-    await prisma.pricingRule.delete({
-      where: { id },
-    });
-
-    await recordAuditLog({
-      tenantId,
-      userId: session.user.id,
-      userEmail: session.user.email!,
-      action: "DELETE_PRICING_RULE",
-      entityId: id,
-      ipAddress: getIpAddress(req),
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting rule:", error);
-    return NextResponse.json(
-      { error: "Failed to delete rule" },
-      { status: 500 },
-    );
+  if (!existingRule) {
+    return NextResponse.json({ error: "Rule not found" }, { status: 404 });
   }
+
+  await prisma.pricingRule.delete({
+    where: { id },
+  });
+
+  await recordAuditLog({
+    tenantId,
+    userId: session.user.id,
+    userEmail: session.user.email!,
+    action: "DELETE_PRICING_RULE",
+    entityId: id,
+    ipAddress: getIpAddress(req),
+  });
+
+  return NextResponse.json({ success: true });
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRateLimit(req, "read", withErrorHandling(handleGET));
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRateLimit(req, "write", withErrorHandling(handlePOST));
 }
 
 export async function PUT(req: NextRequest) {
-  return withRateLimit(req, "write", handlePUT);
+  return withRateLimit(req, "write", withErrorHandling(handlePUT));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", handleDELETE);
+  return withRateLimit(req, "write", withErrorHandling(handleDELETE));
 }

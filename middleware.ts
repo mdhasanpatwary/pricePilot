@@ -1,38 +1,60 @@
+import { withAuth } from "next-auth/middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCsrf } from "./lib/security";
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+/**
+ * Combined Middleware for Authentication and Security (CSRF)
+ */
+export default withAuth(
+  function middleware(req: NextRequest) {
+    const { pathname } = req.nextUrl;
 
-  // Only apply CSRF protection to API routes
-  if (pathname.startsWith("/api/")) {
-    // Skip protection for public webhooks if they existed or auth endpoints
-    // For now, next-auth handles its own CSRF, and we want to protect our v1 routes.
+    // 1. CSRF Protection for state-changing API requests
+    if (pathname.startsWith("/api/v1/")) {
+      // Skip CSRF for Next-Auth internal routes
+      if (pathname.includes("/api/auth")) {
+        return NextResponse.next();
+      }
 
-    // We exclude next-auth endpoints as it has built-in CSRF handling
-    if (pathname.includes("/api/auth")) {
-      return NextResponse.next();
+      if (!verifyCsrf(req)) {
+        return NextResponse.json(
+          { error: "CSRF validation failed or missing origin header" },
+          { status: 403 },
+        );
+      }
     }
 
-    if (!verifyCsrf(request)) {
-      return NextResponse.json(
-        { error: "CSRF token mismatch or missing origin header" },
-        { status: 403 },
-      );
-    }
-  }
+    return NextResponse.next();
+  },
+  {
+    callbacks: {
+      authorized: ({ token, req }) => {
+        const { pathname } = req.nextUrl;
 
-  return NextResponse.next();
-}
+        // Require authentication for all dashboard routes
+        if (pathname.startsWith("/dashboard")) {
+          return !!token;
+        }
+
+        // Require authentication for all admin routes
+        if (pathname.startsWith("/admin")) {
+          // If it's a super admin route, check the flag
+          if (token?.isSuperAdmin) {
+            return true;
+          }
+          return false;
+        }
+
+        // Allow other routes (public APIs, login, etc.)
+        return true;
+      },
+    },
+    pages: {
+      signIn: "/auth/login",
+    },
+  },
+);
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/api/:path*",
-  ],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/v1/:path*"],
 };
