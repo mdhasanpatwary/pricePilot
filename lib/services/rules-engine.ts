@@ -231,21 +231,30 @@ export class RulesEngine {
 
     for (const rec of recommendations) {
       try {
-        const product = await prisma.product.update({
-          where: { id: rec.productId },
-          data: {
-            currentPrice: rec.recommendedPrice,
-            lastCrawledAt: new Date(),
-          },
+        // Atomic Database Operations
+        const product = await prisma.$transaction(async (tx) => {
+          const p = await tx.product.update({
+            where: { id: rec.productId },
+            data: {
+              currentPrice: rec.recommendedPrice,
+              lastCrawledAt: new Date(),
+            },
+          });
+
+          // Record price history
+          await tx.priceHistory.create({
+            data: {
+              productId: rec.productId,
+              price: rec.recommendedPrice,
+            },
+          });
+
+          return p;
         });
 
-        // Record price history
-        await prisma.priceHistory.create({
-          data: {
-            productId: rec.productId,
-            price: rec.recommendedPrice,
-          },
-        });
+        // External Side Effects (Post-Transaction)
+        // We keep these outside the DB transaction to avoid long-held locks
+        // and because we can't "rollback" an email or a webhook dispatch.
 
         // Dispatch webhook
         await WebhookService.dispatch(product.tenantId, "price.updated", {
@@ -269,7 +278,10 @@ export class RulesEngine {
         updated++;
       } catch (error) {
         if (process.env.NODE_ENV !== "test") {
-          console.error(`Failed to update product ${rec.productId}:`, error);
+          console.error(
+            `[SAFE-RULES] Failed to update product ${rec.productId}:`,
+            error,
+          );
         }
         failed++;
       }

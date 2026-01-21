@@ -50,56 +50,67 @@ export class SyncService {
       externalProducts = await this.fetchFromLaravel(site);
     }
 
-    // 2. Process and Upsert products
+    // 2. Process and Upsert products in transactions
     const results = [];
     for (const extProd of externalProducts) {
-      // Find existing product by externalId within this site
-      const existingProduct = await prisma.product.findFirst({
-        where: {
-          siteId: site.id,
-          externalId: extProd.external_id,
-        },
-      });
+      try {
+        const product = await prisma.$transaction(async (tx) => {
+          // Find existing product by externalId within this site
+          const existingProduct = await tx.product.findFirst({
+            where: {
+              siteId: site.id,
+              externalId: extProd.external_id,
+            },
+          });
 
-      let product;
-      const productData = {
-        title: extProd.title,
-        category: extProd.category,
-        currentPrice: extProd.price,
-        sku: extProd.sku,
-        model: extProd.model,
-        brand: extProd.brand,
-        imageUrl: extProd.image,
-        url: extProd.url,
-        lastCrawledAt: new Date(),
-      };
+          let p;
+          const productData = {
+            title: extProd.title,
+            category: extProd.category,
+            currentPrice: extProd.price,
+            sku: extProd.sku,
+            model: extProd.model,
+            brand: extProd.brand,
+            imageUrl: extProd.image,
+            url: extProd.url,
+            lastCrawledAt: new Date(),
+          };
 
-      if (existingProduct) {
-        product = await prisma.product.update({
-          where: { id: existingProduct.id },
-          data: productData,
+          if (existingProduct) {
+            p = await tx.product.update({
+              where: { id: existingProduct.id },
+              data: productData,
+            });
+          } else {
+            p = await tx.product.create({
+              data: {
+                ...productData,
+                siteId: site.id,
+                tenantId: site.tenantId,
+                externalId: extProd.external_id,
+                currency: "USD",
+              },
+            });
+          }
+
+          // 3. Record price history (Atomic with the update)
+          await tx.priceHistory.create({
+            data: {
+              productId: p.id,
+              price: extProd.price,
+            },
+          });
+
+          return p;
         });
-      } else {
-        product = await prisma.product.create({
-          data: {
-            ...productData,
-            siteId: site.id,
-            tenantId: site.tenantId,
-            externalId: extProd.external_id,
-            currency: "USD",
-          },
-        });
+
+        results.push(product);
+      } catch (error) {
+        console.error(
+          `[SAFE-SYNC] Error processing external product ${extProd.external_id}:`,
+          error,
+        );
       }
-
-      // 3. Record price history
-      await prisma.priceHistory.create({
-        data: {
-          productId: product.id,
-          price: extProd.price,
-        },
-      });
-
-      results.push(product);
     }
 
     // 4. Update last sync time

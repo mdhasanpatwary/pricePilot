@@ -316,9 +316,11 @@ model BulkOperationSnapshot {
   snapshot     String   @db.Text // JSON snapshot of original data
   changes      String   @db.Text // JSON of what changed
   rolledBack   Boolean  @default(false)
+  idempotencyKey String?
   createdAt    DateTime @default(now())
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([createdAt])
+  @@index([idempotencyKey])
 }

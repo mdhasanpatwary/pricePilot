@@ -34,6 +34,24 @@ async function handlePOST(req: NextRequest) {
 
     const { productIds, updates, preview } = validation.data;
     const tenantId = session.user.tenantId;
+    const idempotencyKey = req.headers.get("x-idempotency-key");
+
+    // 0. Idempotency Check
+    if (idempotencyKey && !preview) {
+      const existingOp = await (prisma.bulkOperationSnapshot as any).findFirst({
+        where: { tenantId, idempotencyKey },
+      });
+
+      if (existingOp) {
+        return NextResponse.json({
+          success: true,
+          updated: existingOp.productCount,
+          snapshotId: existingOp.id,
+          message: `Operation with key ${idempotencyKey} already completed.`,
+          isDuplicate: true,
+        });
+      }
+    }
 
     // Verify all products belong to this tenant
     const products = await prisma.product.findMany({
@@ -80,48 +98,54 @@ async function handlePOST(req: NextRequest) {
       });
     }
 
-    // Create snapshot for rollback
-    const snapshot = await (prisma.bulkOperationSnapshot as any).create({
-      data: {
-        tenantId,
-        operation: "BULK_UPDATE",
-        productCount: products.length,
-        snapshot: JSON.stringify(products),
-        changes: JSON.stringify(updates),
-      },
-    });
-
-    // Perform bulk update
-    const updateData: any = {};
-    if (updates.currentPrice !== undefined) {
-      updateData.currentPrice = updates.currentPrice;
-    }
-    if (updates.inStock !== undefined) {
-      updateData.inStock = updates.inStock;
-    }
-
-    await prisma.product.updateMany({
-      where: {
-        id: { in: productIds },
-        tenantId,
-      },
-      data: updateData,
-    });
-
-    // Create price history entries if price changed
-    if (updates.currentPrice !== undefined) {
-      await prisma.priceHistory.createMany({
-        data: productIds.map((productId) => ({
-          productId,
-          price: updates.currentPrice!,
-        })),
+    // 1. Transactional Update
+    const result = await prisma.$transaction(async (tx) => {
+      // Create snapshot for rollback
+      const snapshot = await (tx.bulkOperationSnapshot as any).create({
+        data: {
+          tenantId,
+          operation: "BULK_UPDATE",
+          productCount: products.length,
+          snapshot: JSON.stringify(products),
+          changes: JSON.stringify(updates),
+          idempotencyKey,
+        },
       });
-    }
+
+      // Perform bulk update
+      const updateData: any = {};
+      if (updates.currentPrice !== undefined) {
+        updateData.currentPrice = updates.currentPrice;
+      }
+      if (updates.inStock !== undefined) {
+        updateData.inStock = updates.inStock;
+      }
+
+      await tx.product.updateMany({
+        where: {
+          id: { in: productIds },
+          tenantId,
+        },
+        data: updateData,
+      });
+
+      // Create price history entries if price changed
+      if (updates.currentPrice !== undefined) {
+        await tx.priceHistory.createMany({
+          data: productIds.map((productId) => ({
+            productId,
+            price: updates.currentPrice!,
+          })),
+        });
+      }
+
+      return snapshot;
+    });
 
     return NextResponse.json({
       success: true,
       updated: products.length,
-      snapshotId: snapshot.id,
+      snapshotId: result.id,
       message: `Successfully updated ${products.length} products`,
     });
   } catch (error) {
