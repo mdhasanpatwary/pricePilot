@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { redisConnection } from "./connection";
+import { getRedisConnection } from "./connection";
 import { QUEUE_NAMES, SyncJobData, NotificationJobData } from "./types";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 
@@ -39,7 +39,7 @@ const notificationProcessor = async (job: Job<NotificationJobData>) => {
 // Factory to create workers
 export const createWorkers = () => {
   const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
-    connection: redisConnection as any,
+    connection: getRedisConnection() as any,
     concurrency: 2, // Process 2 syncs at a time per worker instance
   });
 
@@ -47,7 +47,7 @@ export const createWorkers = () => {
     QUEUE_NAMES.NOTIFICATIONS,
     notificationProcessor,
     {
-      connection: redisConnection as any,
+      connection: getRedisConnection() as any,
       concurrency: 5,
     },
   );

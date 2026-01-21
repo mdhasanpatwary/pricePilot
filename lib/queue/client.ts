@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { redisConnection } from "./connection";
+import { getRedisConnection } from "./connection";
 import { QUEUE_NAMES } from "./types";
 
 // Use global singleton to prevent creating multiple connections in dev mode HMR
@@ -8,10 +8,14 @@ const globalForQueues = global as unknown as {
   notificationQueue?: Queue;
 };
 
-export const syncQueue =
-  globalForQueues.syncQueue ||
-  new Queue(QUEUE_NAMES.SYNC, {
-    connection: redisConnection as any,
+/**
+ * Lazy-initialized Sync Queue
+ */
+export const getSyncQueue = () => {
+  if (globalForQueues.syncQueue) return globalForQueues.syncQueue;
+
+  const queue = new Queue(QUEUE_NAMES.SYNC, {
+    connection: getRedisConnection() as any,
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -23,10 +27,21 @@ export const syncQueue =
     },
   });
 
-export const notificationQueue =
-  globalForQueues.notificationQueue ||
-  new Queue(QUEUE_NAMES.NOTIFICATIONS, {
-    connection: redisConnection as any,
+  if (process.env.NODE_ENV !== "production") {
+    globalForQueues.syncQueue = queue;
+  }
+  return queue;
+};
+
+/**
+ * Lazy-initialized Notification Queue
+ */
+export const getNotificationQueue = () => {
+  if (globalForQueues.notificationQueue)
+    return globalForQueues.notificationQueue;
+
+  const queue = new Queue(QUEUE_NAMES.NOTIFICATIONS, {
+    connection: getRedisConnection() as any,
     defaultJobOptions: {
       attempts: 5,
       backoff: {
@@ -36,10 +51,11 @@ export const notificationQueue =
     },
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForQueues.syncQueue = syncQueue;
-  globalForQueues.notificationQueue = notificationQueue;
-}
+  if (process.env.NODE_ENV !== "production") {
+    globalForQueues.notificationQueue = queue;
+  }
+  return queue;
+};
 
 /**
  * Schedules internal system tasks (maintenance, crons)
@@ -47,6 +63,7 @@ if (process.env.NODE_ENV !== "production") {
  */
 export async function scheduleSystemTasks() {
   console.log("📅 Scheduling system maintenance tasks...");
+  const syncQueue = getSyncQueue();
   await syncQueue.add(
     "INTERNAL_MAINTENANCE",
     { type: "MAINTENANCE" },
@@ -59,3 +76,8 @@ export async function scheduleSystemTasks() {
   );
   console.log("✅ System maintenance tasks scheduled.");
 }
+
+// Deprecated: Exporting constants created side effects during build.
+// Use getSyncQueue() and getNotificationQueue() instead.
+export const syncQueue = null as any;
+export const notificationQueue = null as any;

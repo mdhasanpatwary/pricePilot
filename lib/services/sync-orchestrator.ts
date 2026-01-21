@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { NotificationService } from "./notification";
 import { withRetry } from "@/lib/utils/timeout";
 import { SystemConfigService } from "@/lib/config";
-import { syncQueue } from "@/lib/queue/client";
+import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 
 export class SyncOrchestrator {
@@ -32,7 +32,7 @@ export class SyncOrchestrator {
       };
     }
 
-    await syncQueue.add(QUEUE_NAMES.SYNC, {
+    await getSyncQueue().add(QUEUE_NAMES.SYNC, {
       type: "FULL",
       tenantId,
     });
@@ -43,7 +43,7 @@ export class SyncOrchestrator {
    * Dispatch a single site sync job to the queue
    */
   static async dispatchSiteSync(siteId: string) {
-    await syncQueue.add(QUEUE_NAMES.SYNC, {
+    await getSyncQueue().add(QUEUE_NAMES.SYNC, {
       type: "SINGLE",
       siteId,
     });
