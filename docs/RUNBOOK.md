@@ -264,8 +264,13 @@ pm2 restart pricepilot-worker --max-memory-restart 1G
 **Automated Backups:**
 ```bash
 # Set up daily backups (cron job)
-0 2 * * * pg_dump $DATABASE_URL > /backups/pricepilot_$(date +\%Y\%m\%d).sql
+0 2 * * * cd /path/to/PricePilot && npm run backup
 ```
+
+The script at `scripts/backup-db.ts` handles:
+- Compressed SQL dumps (`.sql.gz`)
+- Automatic 7-day retention management
+- Local storage in the `/backups` directory
 
 **Manual Backup:**
 ```bash
