@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Info,
   ShieldCheck,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +98,14 @@ export default function BusinessSetupPage() {
         "Master controls for automated synchronization and platform reliability.",
       icon: ShieldCheck,
       items: configs.filter((c) => c.key.startsWith("SYNC")),
+    },
+    {
+      id: "data",
+      title: "Data & Redundancy",
+      description:
+        "Manage global backup destinations and data sovereignty parameters.",
+      icon: Database,
+      items: configs.filter((c) => c.key.startsWith("BACKUP")),
     },
   ];
 

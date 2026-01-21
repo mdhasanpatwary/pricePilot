@@ -48,6 +48,13 @@ const DEFAULT_CONFIGS = [
     description: "Rounding strategy: NONE, NEAREST_NINE, CEIL, FLOOR",
     type: "string",
   },
+  {
+    key: "BACKUP_GOOGLE_DRIVE_LINK",
+    value: "",
+    description:
+      "Cloud destination (Google Drive Link) for automated system snapshots.",
+    type: "string",
+  },
 ];
 
 async function handleGET(_req: NextRequest) {

@@ -23,6 +23,7 @@ model Tenant {
   auditLogs       TenantAuditLog[]
   notifications   Notification[]
   bulkSnapshots   BulkOperationSnapshot[]
+  backupConfig    Json?         // Stores Google Drive links, etc.
 }
 
 model User {

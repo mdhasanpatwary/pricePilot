@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   ShieldCheck,
+  Database,
   Globe,
   X,
   CheckCircle2,
@@ -28,6 +29,11 @@ const menuItems = [
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
   { icon: LineChart, label: "Pricing Rules", href: "/dashboard/rules" },
   { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/activity" },
+  {
+    icon: Database,
+    label: "Data & Backups",
+    href: "/dashboard/settings/backups",
+  },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 
