@@ -20,6 +20,9 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     } else if (job.data.type === "SINGLE") {
       if (!job.data.siteId) throw new Error("SiteID required for single sync");
       await SyncOrchestrator.processSiteSync(job.data.siteId);
+    } else if (job.data.type === "MAINTENANCE") {
+      const { MaintenanceService } = await import("@/lib/services/maintenance");
+      await MaintenanceService.runDataRetention();
     }
   } catch (error) {
     console.error(`[Worker] Job ${job.id} failed:`, error);

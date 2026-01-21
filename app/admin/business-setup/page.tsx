@@ -252,7 +252,37 @@ export default function BusinessSetupPage() {
                   </div>
                 </div>
               ))}
-              {section.items.length === 0 && (
+              {section.id === "retention" && (
+                <div className="col-span-full border border-primary/20 bg-primary/5 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-bold flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-primary" />
+                      Perform Manual Maintenance
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Instantly enforce the retention policies defined above and
+                      purge old records.
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/v1/admin/maintenance", {
+                          method: "POST",
+                        });
+                        if (res.ok) alert("Cleanup completed successfully!");
+                        else alert("Failed to run cleanup.");
+                      } catch (err) {
+                        alert("Connection error.");
+                      }
+                    }}
+                    className="shrink-0 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-bold hover:opacity-90 transition-all shadow-sm shadow-primary/20 active:scale-[0.98]"
+                  >
+                    Run Cleanup Now
+                  </button>
+                </div>
+              )}
+              {section.items.length === 0 && section.id !== "retention" && (
                 <div className="col-span-full py-10 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center text-muted-foreground">
                   <p className="text-sm font-medium italic">
                     No logic controllers found in this sector

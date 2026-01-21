@@ -6,7 +6,7 @@ export const QUEUE_NAMES = {
 export interface SyncJobData {
   siteId?: string;
   tenantId?: string; // If syncing all sites for a tenant
-  type: "FULL" | "SINGLE";
+  type: "FULL" | "SINGLE" | "MAINTENANCE";
 }
 
 export interface NotificationJobData {
