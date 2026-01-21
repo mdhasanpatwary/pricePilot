@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Product, Site } from "@prisma/client";
-import axios from "axios";
+import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 
 interface ExternalProduct {
   external_id: string;
@@ -15,6 +15,9 @@ interface ExternalProduct {
   id?: string;
   url: string | null;
 }
+
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF = 1000;
 
 export class SyncService {
   /**
@@ -108,6 +111,48 @@ export class SyncService {
   }
 
   /**
+   * Helper to execute Axios requests with retry logic (Exponential Backoff)
+   */
+  private static async axiosRequestWithRetry<T = any>(
+    config: AxiosRequestConfig,
+  ): Promise<AxiosResponse<T>> {
+    let lastError: any;
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        return await axios(config);
+      } catch (error) {
+        lastError = error;
+
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          // Don't retry client errors (4xx), except for Rate Limiting (429) and Request Timeout (408)
+          if (
+            status &&
+            status >= 400 &&
+            status < 500 &&
+            status !== 429 &&
+            status !== 408
+          ) {
+            throw error;
+          }
+        }
+
+        // If it's the last attempt, don't wait, just throw
+        if (i === MAX_RETRIES - 1) break;
+
+        const delay = INITIAL_BACKOFF * Math.pow(2, i);
+        console.warn(
+          `[SyncService] Request to ${config.url} failed. Retrying in ${delay}ms... (Attempt ${i + 1}/${MAX_RETRIES})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
    * Fetch products from OpenCart API
    */
   private static async fetchFromOpenCart(
@@ -130,12 +175,13 @@ export class SyncService {
     }
 
     try {
-      const response = await axios.get(
-        `${site.baseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`,
-        {
-          timeout: 30000,
-        },
-      );
+      const response = await this.axiosRequestWithRetry<{
+        products: OpenCartProduct[];
+      }>({
+        method: "GET",
+        url: `${site.baseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`,
+        timeout: 30000,
+      });
 
       // Expected OpenCart response format:
       // { products: [{ product_id, sku, name, price, manufacturer, model }] }
@@ -203,7 +249,11 @@ export class SyncService {
     }
 
     try {
-      const response = await axios.get(`${site.baseUrl}/api/pricepilot/sync`, {
+      const response = await this.axiosRequestWithRetry<{
+        data: LaravelProduct[];
+      }>({
+        method: "GET",
+        url: `${site.baseUrl}/api/pricepilot/sync`,
         headers: {
           "X-PricePilot-Token": site.apiToken,
           Accept: "application/json",
@@ -320,16 +370,15 @@ export class SyncService {
     const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${site.apiToken}`;
 
     try {
-      await axios.post(
+      await this.axiosRequestWithRetry({
+        method: "POST",
         url,
-        {
+        data: {
           product_id: product.externalId,
           price: product.currentPrice.toString(),
         },
-        {
-          timeout: 10000,
-        },
-      );
+        timeout: 10000,
+      });
       return true;
     } catch (error) {
       if (
@@ -356,20 +405,19 @@ export class SyncService {
     const url = `${site.baseUrl}/api/pricepilot/update`;
 
     try {
-      await axios.post(
+      await this.axiosRequestWithRetry({
+        method: "POST",
         url,
-        {
+        data: {
           product_id: product.externalId,
           price: product.currentPrice.toString(),
         },
-        {
-          headers: {
-            "X-PricePilot-Token": site.apiToken,
-            Accept: "application/json",
-          },
-          timeout: 10000,
+        headers: {
+          "X-PricePilot-Token": site.apiToken,
+          Accept: "application/json",
         },
-      );
+        timeout: 10000,
+      });
       return true;
     } catch (error) {
       console.error(`Laravel Update Error for ${product.id}:`, error);
