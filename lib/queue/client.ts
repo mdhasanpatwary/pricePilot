@@ -41,15 +41,21 @@ if (process.env.NODE_ENV !== "production") {
   globalForQueues.notificationQueue = notificationQueue;
 }
 
-// Schedule internal maintenance (runs daily at 3am)
-// This functions as an "internal cron" so the user doesn't have to manage OS-level crontabs
-syncQueue.add(
-  "INTERNAL_MAINTENANCE",
-  { type: "MAINTENANCE" },
-  {
-    repeat: {
-      pattern: "0 3 * * *", // 3:00 AM every day
+/**
+ * Schedules internal system tasks (maintenance, crons)
+ * This should be called once during application/worker startup.
+ */
+export async function scheduleSystemTasks() {
+  console.log("📅 Scheduling system maintenance tasks...");
+  await syncQueue.add(
+    "INTERNAL_MAINTENANCE",
+    { type: "MAINTENANCE" },
+    {
+      repeat: {
+        pattern: "0 3 * * *", // 3:00 AM every day
+      },
+      jobId: "system-maintenance", // Unique ID ensures only one instance is scheduled
     },
-    jobId: "system-maintenance", // Unique ID ensures only one instance is scheduled
-  },
-);
+  );
+  console.log("✅ System maintenance tasks scheduled.");
+}
