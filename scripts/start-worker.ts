@@ -14,8 +14,12 @@ async function start() {
     await scheduleSystemTasks();
 
     console.log("✅ Workers active:");
-    console.log("   - Sync Queue (Concurrency: 2)");
-    console.log("   - Notification Queue (Concurrency: 5)");
+    console.log(
+      `   - Sync Queue (Concurrency: ${(syncWorker as any).concurrencyValue})`,
+    );
+    console.log(
+      `   - Notification Queue (Concurrency: ${(notificationWorker as any).concurrencyValue})`,
+    );
 
     // Handle graceful shutdown
     const gracefulShutdown = async () => {

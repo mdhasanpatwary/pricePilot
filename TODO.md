@@ -32,8 +32,7 @@
 
 
 ### **Security & Scalability**
-*   ~~**CSP Tightening**: `Content-Security-Policy` currently allows `'unsafe-inline'` and `'unsafe-eval'`.~~ ✅ **RESOLVED** - Implemented dynamic nonce-based CSP in `proxy.ts`, removing `unsafe-eval` in production and utilizing `strict-dynamic`.
-*   **Browser Management**: The scraping worker concurrency is hardcoded (`concurrency: 2`). This should be dynamic based on system resources.
+*   ~~**Browser Management**: The scraping worker concurrency is hardcoded (`concurrency: 2`). This should be dynamic based on system resources.~~ ✅ **RESOLVED** - Concurrency is now calculated dynamically based on CPU cores and RAM availability.
 
 ---
 

@@ -70,11 +70,33 @@ const notificationProcessor = async (job: Job<NotificationJobData>) => {
   }
 };
 
+import os from "os";
+
 // Factory to create workers
 export const createWorkers = () => {
+  const cpus = os.cpus().length;
+  const totalMemMb = Math.floor(os.totalmem() / 1024 / 1024);
+
+  // CONCURRENCY STRATEGY:
+  // 1. Sync Worker: Scraping is CPU and RAM intensive.
+  //    - Rule: 1 task per 512MB RAM, or 1 per CPU core, whichever is lower.
+  //    - Min: 1, Max: total CPUs.
+  //    - Safe Default: 0.5 * CPUs
+  const memBasedSync = Math.floor(totalMemMb / 512);
+  const syncConcurrency = Number(
+    process.env.SYNC_CONCURRENCY ||
+      Math.max(1, Math.min(cpus, Math.floor(cpus * 0.5), memBasedSync)),
+  );
+
+  // 2. Notification Worker: I/O intensive, lightweight.
+  //    - Rule: 5 tasks per CPU core.
+  const notificationConcurrency = Number(
+    process.env.NOTIFICATION_CONCURRENCY || Math.max(5, cpus * 5),
+  );
+
   const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
     connection: getRedisConnection() as any,
-    concurrency: 2, // Process 2 syncs at a time per worker instance
+    concurrency: syncConcurrency,
   });
 
   const notificationWorker = new Worker(
@@ -82,9 +104,13 @@ export const createWorkers = () => {
     notificationProcessor,
     {
       connection: getRedisConnection() as any,
-      concurrency: 5,
+      concurrency: notificationConcurrency,
     },
   );
+
+  // Attach concurrency for logging purposes in scripts
+  (syncWorker as any).concurrencyValue = syncConcurrency;
+  (notificationWorker as any).concurrencyValue = notificationConcurrency;
 
   syncWorker.on("completed", (job) => {
     console.log(`[Worker] Sync Job ${job.id} completed!`);
