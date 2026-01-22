@@ -19,6 +19,8 @@ import {
   EyeOff,
   Users,
   UserPlus,
+  Key,
+  Copy,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -200,12 +202,79 @@ export default function SettingsPage() {
   const [showAddWebhook, setShowAddWebhook] = useState(false);
   const [newWebhookUrl, setNewWebhookUrl] = useState("");
   const [newWebhookSecret, setNewWebhookSecret] = useState("");
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(false);
+  const [showAddApiKey, setShowAddApiKey] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [createdKey, setCreatedKey] = useState<any>(null);
 
   useEffect(() => {
     if (activeTab === "developers") {
       fetchWebhooks();
+      fetchApiKeys();
     }
   }, [activeTab]);
+
+  const fetchApiKeys = async () => {
+    setIsLoadingKeys(true);
+    try {
+      const res = await fetch("/api/v1/user/api-keys");
+      if (res.ok) {
+        setApiKeys(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingKeys(false);
+    }
+  };
+
+  const handleCreateApiKey = async () => {
+    if (!newKeyName) {
+      toast.error("Key name is required");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/v1/user/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newKeyName }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCreatedKey(data);
+        toast.success("API Key generated");
+        setNewKeyName("");
+        setShowAddApiKey(false);
+        fetchApiKeys();
+      } else {
+        toast.error("Failed to generate API key");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRevokeApiKey = async (id: string) => {
+    if (!confirm("Are you sure? This action cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/v1/user/api-keys/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("API Key revoked");
+        fetchApiKeys();
+      } else {
+        toast.error("Failed to revoke key");
+      }
+    } catch (e) {
+      toast.error("Network error");
+    }
+  };
 
   const fetchWebhooks = async () => {
     try {
@@ -1179,6 +1248,134 @@ export default function SettingsPage() {
                       </button>
                       <button
                         onClick={() => setShowAddWebhook(false)}
+                        className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-2 rounded-md border border-border hover:bg-muted"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-8 border-t border-border space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">API Management</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Generate keys to access the PricePilot API externally.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowAddApiKey(true)}
+                      className="p-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {createdKey && (
+                    <div className="p-4 rounded-lg bg-success/5 border border-success/20 space-y-3 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-success uppercase tracking-widest">
+                          New API Key Generated
+                        </h4>
+                        <button
+                          onClick={() => setCreatedKey(null)}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <EyeOff className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Make sure to copy your key now. You won&apos;t be able
+                        to see it again!
+                      </p>
+                      <div className="flex items-center gap-2 bg-background border border-border p-2 rounded font-mono text-sm break-all group">
+                        <span className="flex-1">{createdKey.token}</span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(createdKey.token);
+                            toast.success("Copied to clipboard");
+                          }}
+                          className="p-1.5 hover:bg-muted rounded transition-colors"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    {isLoadingKeys ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                      </div>
+                    ) : apiKeys.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed border-border rounded-lg text-muted-foreground bg-muted/5">
+                        <Key className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">No API keys generated yet.</p>
+                      </div>
+                    ) : (
+                      apiKeys.map((key) => (
+                        <div
+                          key={key.id}
+                          className="p-4 rounded-lg border border-border bg-muted/10 flex items-center justify-between group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded bg-background border border-border flex items-center justify-center">
+                              <Code2 className="w-4 h-4 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold">{key.name}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                  {key.prefix}...
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  Created{" "}
+                                  {new Date(key.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRevokeApiKey(key.id)}
+                              className="p-2 hover:bg-danger/10 hover:text-danger rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {showAddApiKey && (
+                  <div className="p-6 rounded-xl border border-primary/20 bg-primary/5 space-y-4 animate-in fade-in zoom-in-95">
+                    <h4 className="text-sm font-bold">Generate New API Key</h4>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Key Name
+                      </label>
+                      <input
+                        value={newKeyName}
+                        onChange={(e) => setNewKeyName(e.target.value)}
+                        placeholder="e.g. Market Dashboard Integration"
+                        className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={handleCreateApiKey}
+                        disabled={isSaving}
+                        className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-2 rounded-md hover:opacity-90 transition-all"
+                      >
+                        {isSaving ? "Generating..." : "Generate Key"}
+                      </button>
+                      <button
+                        onClick={() => setShowAddApiKey(false)}
                         className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-2 rounded-md border border-border hover:bg-muted"
                       >
                         Cancel

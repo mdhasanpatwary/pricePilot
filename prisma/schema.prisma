@@ -25,6 +25,7 @@ model Tenant {
   auditLogs       TenantAuditLog[]
   notifications   Notification[]
   alertRules      AlertRule[]
+  apiKeys         ApiKey[]
   bulkSnapshots   BulkOperationSnapshot[]
   backupConfig    Json?         // Stores Google Drive links, etc.
 }
@@ -49,6 +50,7 @@ model User {
   passwordHistory   PasswordHistory[]
   accounts          Account[]
   sessions          Session[]
+  apiKeys           ApiKey[]
 }
 
 model Account {
@@ -365,4 +367,22 @@ enum AlertCondition {
   INCREASED_BY
   OUT_OF_STOCK
   BACK_IN_STOCK
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  name      String
+  key       String   @unique
+  prefix    String
+  userId    String
+  tenantId  String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
 }
