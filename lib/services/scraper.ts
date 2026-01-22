@@ -1,5 +1,6 @@
-import { chromium, Browser, Page } from "playwright";
+import { Page } from "playwright";
 import { logger } from "../logger";
+import { BrowserPool } from "./browser-pool";
 
 interface ScrapedProduct {
   title: string;
@@ -36,11 +37,12 @@ const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
   `${baseUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}`;
 
 export class ScraperService {
-  private browser: Browser | null = null;
+  private browserPool: BrowserPool;
   private proxies: string[] = [];
   private proxyIndex: number = 0;
 
   constructor() {
+    this.browserPool = BrowserPool.getInstance();
     const proxyEnv = process.env.SCRAPER_PROXIES;
     if (proxyEnv) {
       this.proxies = proxyEnv
@@ -64,26 +66,25 @@ export class ScraperService {
   }
 
   /**
-   * Initialize the browser instance
+   * Initialize the browser pool
    */
   async init() {
-    if (!this.browser) {
-      this.browser = await chromium.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      });
-      // Context will set user agent
-    }
+    const maxContexts = parseInt(process.env.SCRAPER_MAX_CONTEXTS || "10", 10);
+    await this.browserPool.init(maxContexts);
   }
 
   /**
-   * Close the browser instance
+   * Close the browser pool (usually called on shutdown)
    */
   async close() {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-    }
+    await this.browserPool.close();
+  }
+
+  /**
+   * Get pool statistics
+   */
+  getPoolStats() {
+    return this.browserPool.getStats();
   }
 
   /**
@@ -93,17 +94,16 @@ export class ScraperService {
     await this.init();
 
     const proxyUrl = this.getNextProxy();
-    const contextOptions: Parameters<Browser["newContext"]>[0] = {
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    };
+    const userAgent =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+    const proxy = proxyUrl ? { server: proxyUrl } : undefined;
 
     if (proxyUrl) {
-      contextOptions.proxy = { server: proxyUrl };
       logger.info(`[ScraperService] Using proxy for ${url}: ${proxyUrl}`);
     }
 
-    const context = await this.browser!.newContext(contextOptions);
+    // Acquire context from pool
+    const context = await this.browserPool.acquireContext(userAgent, proxy);
     const page = await context.newPage();
 
     try {
@@ -143,7 +143,8 @@ export class ScraperService {
       return null;
     } finally {
       await page.close();
-      await context.close();
+      // Release context back to pool instead of closing it
+      await this.browserPool.releaseContext(context);
     }
   }
 
@@ -459,10 +460,9 @@ export class ScraperService {
     query: string,
   ): Promise<ScrapedProduct | null> {
     await this.init();
-    const context = await this.browser!.newContext({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    });
+    const userAgent =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+    const context = await this.browserPool.acquireContext(userAgent);
     const page = await context.newPage();
 
     try {
@@ -519,7 +519,7 @@ export class ScraperService {
           });
           await page.waitForTimeout(3000); // Wait for Google results
 
-          productLink = await page.evaluate((targetHost) => {
+          productLink = await page.evaluate((targetHost: string) => {
             const links = Array.from(document.querySelectorAll("a"));
             // Look for links that point to the competitor site and aren't search/cache links
             const matches = links.filter((a) => {
@@ -596,7 +596,7 @@ export class ScraperService {
       return null;
     } finally {
       await page.close();
-      await context.close();
+      await this.browserPool.releaseContext(context);
     }
   }
 

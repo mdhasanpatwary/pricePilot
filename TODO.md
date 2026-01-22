@@ -32,7 +32,7 @@
 
 ### **Code Quality & Maintenance**
 *   ~~**Logging Consistency**: `ScraperService` uses `console.log` / `console.error` extensively instead of the centralized `lib/logger.ts`.~~ ✅ **RESOLVED** - Both `ScraperService` and `SyncOrchestrator` now use centralized logger.
-*   **Worker & Resources**: `ScraperService` launches a new browser context per request but lacks a robust pooling mechanism, which may lead to memory leaks under high load.
+*   ~~**Worker & Resources**: `ScraperService` launches a new browser context per request but lacks a robust pooling mechanism, which may lead to memory leaks under high load.~~ ✅ **RESOLVED** - Implemented `BrowserPool` singleton with context reuse, automatic cleanup, and configurable pool size.
 *   **Hardcoded Stubs**: `lib/queue/worker.ts` contains a placeholder for `notificationProcessor` ("Implementation for Email/Slack sending goes here").
 
 ### **UI/UX Gaps**
@@ -65,12 +65,13 @@
     *   Integrate a provider like Resend or SendGrid.
     *   Add Slack Webhook support for real-time alerts.
 
-2.  **Standardize Logging**:
-    *   Refactor `ScraperService` to inject `Logger`.
-    *   Ensure logs flow to a persistent store (or stdout in JSON format) for production monitoring.
+2.  ~~**Standardize Logging**~~: ✅ **COMPLETED**
+    *   ~~Refactor `ScraperService` to inject `Logger`.~~
+    *   ~~Ensure logs flow to a persistent store (or stdout in JSON format) for production monitoring.~~
 
-3.  **Browser Resource Pool**:
-    *   Implement a singleton browser instance in the worker that is reused across jobs, rather than launching/closing per scrape.
+3.  ~~**Browser Resource Pool**~~: ✅ **COMPLETED**
+    *   ~~Implement a singleton browser instance in the worker that is reused across jobs, rather than launching/closing per scrape.~~
+    *   Implemented `BrowserPool` with context pooling, automatic cleanup, and configurable limits.
 
 4.  **Rename & Refactor**:
     *   Rename `/dashboard/reports` to `/dashboard/catalog` or `/dashboard/products`.
@@ -87,7 +88,7 @@
 
 ### **Phase 2: Stability & core Features (P1)**
 - [ ] **Alert Center UI**: Build `/dashboard/alerts` for users to check notification history and configure channels.
-- [ ] **Browser Pooling**: Optimize `ScraperService` to reuse browser contexts.
+- [x] **Browser Pooling**: Optimize `ScraperService` to reuse browser contexts.
 - [ ] **Onboarding Flow**: Implement `driver.js` or custom tour for new tenants.
 
 ### **Phase 3: Scalability & Growth (P2)**
