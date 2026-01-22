@@ -76,7 +76,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
   const getPageTitle = () => {
     if (pathname === "/dashboard") return "Dashboard";
-    if (pathname === "/dashboard/reports") return "Products";
+    if (pathname === "/dashboard/products") return "Products";
     if (pathname === "/dashboard/connections") return "Integrations";
     if (pathname === "/dashboard/competitors") return "Competitors";
     if (pathname.startsWith("/admin")) {

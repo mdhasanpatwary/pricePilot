@@ -31,12 +31,10 @@
 ## 🚧 2. Issues & Improvement Areas
 
 ### **Code Quality & Maintenance**
-*   ~~**Logging Consistency**: `ScraperService` uses `console.log` / `console.error` extensively instead of the centralized `lib/logger.ts`.~~ ✅ **RESOLVED** - Both `ScraperService` and `SyncOrchestrator` now use centralized logger.
-*   ~~**Worker & Resources**: `ScraperService` launches a new browser context per request but lacks a robust pooling mechanism, which may lead to memory leaks under high load.~~ ✅ **RESOLVED** - Implemented `BrowserPool` singleton with context reuse, automatic cleanup, and configurable pool size.
 *   **Hardcoded Stubs**: `lib/queue/worker.ts` contains a placeholder for `notificationProcessor` ("Implementation for Email/Slack sending goes here").
 
 ### **UI/UX Gaps**
-*   **"Reports" Page Identity**: The `/dashboard/reports` page acts more like a "Product Management" list than an analytics report generator.
+*   ~~**"Reports" Page Identity**: The `/dashboard/reports` page acts more like a "Product Management" list than an analytics report generator.~~ ✅ **RESOLVED** - Renamed to `/dashboard/products` and updated all internal links.
 *   **Missing Feedbacks**: No dedicated UI for managing Alert Preferences (Email vs. Slack) or scheduling reports.
 *   **Dark Mode**: Theme toggle exists, but some charts (Recharts) and tables need verification for contrast in Dark Mode.
 
@@ -73,9 +71,10 @@
     *   ~~Implement a singleton browser instance in the worker that is reused across jobs, rather than launching/closing per scrape.~~
     *   Implemented `BrowserPool` with context pooling, automatic cleanup, and configurable limits.
 
-4.  **Rename & Refactor**:
-    *   Rename `/dashboard/reports` to `/dashboard/catalog` or `/dashboard/products`.
-    *   Create a true `/dashboard/analytics` or `/dashboard/reports` for downloadable summaries.
+4.  ~~**Rename & Refactor**~~: ✅ **COMPLETED**
+    *   ~~Rename `/dashboard/reports` to `/dashboard/catalog` or `/dashboard/products`.~~
+    *   Renamed to `/dashboard/products` to match UI title.
+    *   Create a true `/dashboard/analytics` or `/dashboard/reports` for downloadable summaries (Pending).
 
 ---
 
@@ -84,7 +83,7 @@
 ### **Phase 1: Immediate Fixes (P0 - Quick Wins)**
 - [ ] **Worker Implementation**: Flesh out `notificationProcessor` in `lib/queue/worker.ts` to actually send emails.
 - [x] **Logger Refactor**: Replace `console.log` with `logger.info` in `ScraperService` and `SyncOrchestrator`.
-- [ ] **Fix Reports Route**: Decide on `Reports` vs `Products` naming convention to avoid user confusion.
+- [x] **Fix Reports Route**: Renamed `/dashboard/reports` to `/dashboard/products` to fix identity confusion.
 
 ### **Phase 2: Stability & core Features (P1)**
 - [ ] **Alert Center UI**: Build `/dashboard/alerts` for users to check notification history and configure channels.

@@ -23,7 +23,7 @@ import Header from "@/components/header";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Package, label: "Products", href: "/dashboard/reports" },
+  { icon: Package, label: "Products", href: "/dashboard/products" },
   { icon: CheckCircle2, label: "Match Approval", href: "/dashboard/matching" },
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },

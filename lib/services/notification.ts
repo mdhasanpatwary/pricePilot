@@ -78,7 +78,7 @@ export class NotificationService {
       type: "PRICE_ALERT",
       title: "Market Price Shift",
       message: `Competitor price for ${productTitle} changed from ${oldPrice} to ${newPrice}.`,
-      link: "/dashboard/reports",
+      link: "/dashboard/products",
     });
   }
 }
