@@ -70,19 +70,22 @@
     --primary-foreground: 210 20% 98%;
     --secondary: 215 27.9% 12%;
     --secondary-foreground: 210 20% 98%;
-    --muted: 215 27.9% 12%;
-    --muted-foreground: 217.9 10.6% 60%;
+    --muted: 217 19% 14%;
+    --muted-foreground: 215 20% 65%;
     --accent: 263.4 80% 60%;
     --accent-foreground: 210 20% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 20% 98%;
-    --border: 215 27.9% 15%;
-    --input: 215 27.9% 15%;
+    --border: 215 27.9% 18%;
+    --input: 215 27.9% 18%;
     --ring: 263.4 80% 60%;
 
     --success: 142.1 70.6% 45.3%;
     --danger: 0 84.2% 60.2%;
     --warning: 48 96% 89%;
+
+    /* Chart specific */
+    --chart-grid: 215 27.9% 20% / 0.5;
   }
 }
 

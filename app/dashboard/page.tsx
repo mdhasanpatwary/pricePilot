@@ -248,9 +248,9 @@ function DashboardContent() {
                 className={cn(
                   "text-[10px] font-bold px-2 py-0.5 rounded-full border",
                   stat.trend === "up"
-                    ? "bg-success/5 text-success border-success/10"
+                    ? "bg-success/10 text-success border-success/20"
                     : stat.trend === "down"
-                      ? "bg-danger/5 text-danger border-danger/10"
+                      ? "bg-danger/10 text-danger border-danger/20"
                       : "bg-muted text-muted-foreground border-border",
                 )}
               >
@@ -362,7 +362,7 @@ function DashboardContent() {
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="hsl(var(--border))"
+                  stroke="hsl(var(--border) / 0.5)"
                 />
                 <XAxis
                   dataKey="name"
@@ -380,6 +380,7 @@ function DashboardContent() {
                   contentStyle={{
                     backgroundColor: "hsl(var(--card))",
                     border: "1px solid hsl(var(--border))",
+                    color: "hsl(var(--foreground))",
                     borderRadius: "0.75rem",
                     fontSize: "12px",
                     fontWeight: 600,
