@@ -63,6 +63,8 @@ const notificationProcessor = async (job: Job<NotificationJobData>) => {
 
       const slackText = `🔔 *${payload.title}*\n${payload.message}${fullLink ? `\n<${fullLink}|Open Dashboard>` : ""}`;
       await NotificationSender.sendSlack(slackText, payload.tenantId);
+    } else if (type === "CUSTOM_WEBHOOK") {
+      await NotificationSender.sendCustomWebhook(recipient, payload);
     }
   } catch (error) {
     console.error(`[Worker] Notification ${job.id} failed:`, error);

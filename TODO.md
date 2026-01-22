@@ -76,7 +76,7 @@
 ### **Phase 3: Scalability & Growth (P2)**
 - [x] **Scheduled Reports**: Implemented `/dashboard/analytics` with CSV export functionality. Cron-based emailing pending.
 - [x] **API Keys Management**: UI for users to generate/revoke their own API tokens for the external API.
-- [ ] **Webhook UI**: Interface for users to register their own webhooks (e.g., "POST to my server when price changes").
+- [x] **Webhook UI**: Interface for users to register their own webhooks (e.g., "POST to my server when price changes"). Full backend integration with BullMQ worker.
 
 ---
 

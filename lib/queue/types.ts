@@ -10,7 +10,7 @@ export interface SyncJobData {
 }
 
 export interface NotificationJobData {
-  type: "EMAIL" | "WEBHOOK";
+  type: "EMAIL" | "WEBHOOK" | "CUSTOM_WEBHOOK";
   payload: any;
   recipient: string;
 }

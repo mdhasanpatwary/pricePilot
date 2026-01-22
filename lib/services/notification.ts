@@ -69,6 +69,20 @@ export class NotificationService {
         }
       }
 
+      // 3. Queue Custom Webhooks for the tenant
+      await queue.add("custom-webhook-notification", {
+        type: "CUSTOM_WEBHOOK",
+        payload: {
+          type: options.type,
+          title: options.title,
+          message: options.message,
+          link: options.link,
+          timestamp: new Date().toISOString(),
+          tenantId: options.tenantId,
+        },
+        recipient: options.tenantId,
+      });
+
       return notification;
     } catch (error) {
       logger.error("[NotificationService] Failed to create notification:", {

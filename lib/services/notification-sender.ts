@@ -46,10 +46,10 @@ export class NotificationSender {
     // Check individual user preference
     const user = await prisma.user.findUnique({
       where: { email: to },
-      select: { emailNotifications: true },
+      select: { emailNotifications: true } as any,
     });
 
-    if (user && !user.emailNotifications) {
+    if (user && !(user as any).emailNotifications) {
       logger.info(
         `[NotificationSender] User ${to} has disabled email notifications`,
       );
@@ -102,13 +102,13 @@ export class NotificationSender {
     if (tenantId) {
       const tenant = await prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { slackEnabled: true, slackWebhookUrl: true },
+        select: { slackEnabled: true, slackWebhookUrl: true } as any,
       });
 
       if (tenant) {
-        isEnabled = tenant.slackEnabled;
-        if (tenant.slackWebhookUrl) {
-          webhookUrl = tenant.slackWebhookUrl;
+        isEnabled = (tenant as any).slackEnabled;
+        if ((tenant as any).slackWebhookUrl) {
+          webhookUrl = (tenant as any).slackWebhookUrl;
         }
       }
     }
@@ -173,5 +173,60 @@ export class NotificationSender {
     // 2. Send Slack
     const slackMsg = `🚨 *Price Alert*: ${productTitle}\nOld: ${oldPrice} | New: ${newPrice} | Diff: ${priceDiff.toFixed(2)}\n<${url}|View Details>`;
     await this.sendSlack(slackMsg);
+  }
+  /**
+   * Send a custom webhook notification to all registered endpoints for a tenant
+   */
+  static async sendCustomWebhook(tenantId: string, payload: any) {
+    try {
+      const webhooks = await prisma.webhook.findMany({
+        where: { tenantId, isActive: true },
+        select: { url: true, secret: true, id: true },
+      });
+
+      if (webhooks.length === 0) {
+        logger.info(
+          `[NotificationSender] No active webhooks found for tenant ${tenantId}`,
+        );
+        return true;
+      }
+
+      const promises = webhooks.map(async (webhook) => {
+        try {
+          const headers: any = {
+            "Content-Type": "application/json",
+            "User-Agent": "PricePilot-Webhook/1.0",
+            "X-PricePilot-Event": payload.type || "notification",
+          };
+
+          // Basic security if secret provided
+          if (webhook.secret) {
+            headers["X-PricePilot-Secret"] = webhook.secret;
+          }
+
+          await axios.post(webhook.url, payload, {
+            headers,
+            timeout: 8000,
+          });
+
+          logger.info(
+            `[NotificationSender] Webhook successfully delivered to ${webhook.url}`,
+          );
+        } catch (err: any) {
+          logger.warn(
+            `[NotificationSender] Webhook delivery failed for ${webhook.url}: ${err.message}`,
+          );
+        }
+      });
+
+      await Promise.allSettled(promises);
+      return true;
+    } catch (error) {
+      logger.error("[NotificationSender] Failed to dispatch custom webhooks:", {
+        error,
+        tenantId,
+      });
+      return false;
+    }
   }
 }
