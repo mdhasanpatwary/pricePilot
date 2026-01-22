@@ -30,6 +30,20 @@ jest.mock("@/lib/prisma", () => ({
   },
 }));
 
+// Mock WebhookService
+jest.mock("@/lib/services/webhook", () => ({
+  WebhookService: {
+    dispatch: jest.fn(),
+  },
+}));
+
+// Mock NotificationService
+jest.mock("@/lib/services/notification", () => ({
+  NotificationService: {
+    sendPriceAlert: jest.fn(),
+  },
+}));
+
 import { prisma } from "@/lib/prisma";
 
 describe("RulesEngine", () => {

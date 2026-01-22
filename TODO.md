@@ -37,47 +37,7 @@
 
 ---
 
-## 🛠 4. Actionable Recommendations
 
-1.  ~~**Operation "Speak Up" (Fix Notifications)**~~: ✅ **COMPLETED**
-    *   ~~Implement the `notificationProcessor` in `lib/queue/worker.ts`.~~
-    *   ~~Integrate a provider like Resend or SendGrid (using SMTP).~~
-    *   ~~Add Slack Webhook support for real-time alerts.~~
-    *   ~~Added Super Admin configuration UI for SMTP and Slack credentials.~~
-
-2.  ~~**Standardize Logging**~~: ✅ **COMPLETED**
-    *   ~~Refactor `ScraperService` to inject `Logger`.~~
-    *   ~~Ensure logs flow to a persistent store (or stdout in JSON format) for production monitoring.~~
-
-3.  ~~**Browser Resource Pool**~~: ✅ **COMPLETED**
-    *   ~~Implement a singleton browser instance in the worker that is reused across jobs, rather than launching/closing per scrape.~~
-    *   ~~Implemented `BrowserPool` with context pooling, automatic cleanup, and configurable limits.~~
-
-4.  ~~**Rename & Refactor**~~: ✅ **COMPLETED**
-    *   ~~Rename `/dashboard/reports` to `/dashboard/catalog` or `/dashboard/products`.~~
-    *   ~~Renamed to `/dashboard/products` to match UI title.~~
-    *   ~~Create a true `/dashboard/analytics` or `/dashboard/reports` for downloadable summaries.~~ ✅ **COMPLETED**
-
----
-
-## ✅ 5. Prioritized TODO List
-
-### **Phase 1: Immediate Fixes (P0 - Quick Wins)**
-- [x] **Worker Implementation**: Implemented `notificationProcessor` in `lib/queue/worker.ts` for Email/Slack alerts.
-- [x] **Logger Refactor**: Replace `console.log` with `logger.info` in `ScraperService` and `SyncOrchestrator`.
-- [x] **Fix Reports Route**: Renamed `/dashboard/reports` to `/dashboard/products` to fix identity confusion.
-
-### **Phase 2: Stability & core Features (P1)**
-- [x] **Alert Center UI**: Build `/dashboard/alerts` for users to check notification history and configure sentinel rules.
-- [x] **Browser Pooling**: Optimize `ScraperService` to reuse browser contexts.
-- [ ] **Onboarding Flow**: Implement `driver.js` or custom tour for new tenants.
-
-### **Phase 3: Scalability & Growth (P2)**
-- [x] **Scheduled Reports**: Implemented `/dashboard/analytics` with CSV export functionality. Cron-based emailing pending.
-- [x] **API Keys Management**: UI for users to generate/revoke their own API tokens for the external API.
-- [x] **Webhook UI**: Interface for users to register their own webhooks (e.g., "POST to my server when price changes"). Full backend integration with BullMQ worker.
-
----
 
 ## 🔮 6. Future Roadmap
 *   **v1.1**: Real-time WebSocket updates for the dashboard.

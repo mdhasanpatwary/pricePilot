@@ -13,10 +13,10 @@
     "test:unit": "jest __tests__/lib",
     "test:integration": "jest __tests__/app",
     "test:load": "jest __tests__/lib/services/scraper.test.ts",
-    "worker": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
-    "worker:dev": "ts-node -r tsconfig-paths/register scripts/start-worker.ts",
-    "backup": "ts-node -r tsconfig-paths/register scripts/backup-db.ts",
-    "retention": "ts-node -r tsconfig-paths/register scripts/data-retention.ts",
+    "worker": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/start-worker.ts",
+    "worker:dev": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/start-worker.ts",
+    "backup": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/backup-db.ts",
+    "retention": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/data-retention.ts",
     "prepare": "husky"
   },
   "dependencies": {
