@@ -10,7 +10,7 @@ import { withRateLimit } from "@/lib/middleware/ratelimit";
  */
 async function handleDELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -18,7 +18,7 @@ async function handleDELETE(
   }
 
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const apiKey = await (prisma as any).apiKey.findUnique({
       where: { id },
@@ -48,7 +48,7 @@ async function handleDELETE(
 
 export async function DELETE(
   req: NextRequest,
-  context: { params: { id: string } },
+  context: { params: Promise<{ id: string }> },
 ) {
   return withRateLimit(req, "write", () => handleDELETE(req, context));
 }
