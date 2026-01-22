@@ -31,7 +31,7 @@
 ## 🚧 2. Issues & Improvement Areas
 
 ### **Code Quality & Maintenance**
-*   **Logging Consistency**: `ScraperService` uses `console.log` / `console.error` extensively instead of the centralized `lib/logger.ts`.
+*   ~~**Logging Consistency**: `ScraperService` uses `console.log` / `console.error` extensively instead of the centralized `lib/logger.ts`.~~ ✅ **RESOLVED** - Both `ScraperService` and `SyncOrchestrator` now use centralized logger.
 *   **Worker & Resources**: `ScraperService` launches a new browser context per request but lacks a robust pooling mechanism, which may lead to memory leaks under high load.
 *   **Hardcoded Stubs**: `lib/queue/worker.ts` contains a placeholder for `notificationProcessor` ("Implementation for Email/Slack sending goes here").
 
@@ -82,7 +82,7 @@
 
 ### **Phase 1: Immediate Fixes (P0 - Quick Wins)**
 - [ ] **Worker Implementation**: Flesh out `notificationProcessor` in `lib/queue/worker.ts` to actually send emails.
-- [ ] **Logger Refactor**: Replace `console.log` with `logger.info` in `ScraperService` and `SyncOrchestrator`.
+- [x] **Logger Refactor**: Replace `console.log` with `logger.info` in `ScraperService` and `SyncOrchestrator`.
 - [ ] **Fix Reports Route**: Decide on `Reports` vs `Products` naming convention to avoid user confusion.
 
 ### **Phase 2: Stability & core Features (P1)**

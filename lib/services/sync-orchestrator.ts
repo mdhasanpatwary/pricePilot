@@ -9,6 +9,7 @@ import { withRetry } from "@/lib/utils/timeout";
 import { SystemConfigService } from "@/lib/config";
 import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
+import { logger } from "../logger";
 
 export class SyncOrchestrator {
   /**
@@ -59,18 +60,18 @@ export class SyncOrchestrator {
       false,
     );
     if (isKilled) {
-      console.warn(
+      logger.warn(
         "[SyncOrchestrator] Full sync aborted: Master Kill Switch is ON.",
       );
       return { success: false, message: "Sync globally disabled" };
     }
 
-    console.log(
+    logger.info(
       `[SyncOrchestrator] Starting full sync for tenant: ${tenantId}`,
     );
 
     const syncSessionStart = new Date();
-    console.log(
+    logger.info(
       `[SyncOrchestrator] Attempting to acquire sync locks for tenant ${tenantId}`,
     );
 
@@ -94,7 +95,7 @@ export class SyncOrchestrator {
       });
 
       if (totalCompetitors === 0) {
-        console.log(
+        logger.info(
           `[SyncOrchestrator] No competitor sites found for tenant ${tenantId}.`,
         );
         return {
@@ -105,7 +106,7 @@ export class SyncOrchestrator {
         };
       }
 
-      console.log(
+      logger.info(
         `[SyncOrchestrator] All ${totalCompetitors} competitor sites for tenant ${tenantId} are already syncing.`,
       );
       return {
@@ -115,7 +116,7 @@ export class SyncOrchestrator {
       };
     }
 
-    console.log(
+    logger.info(
       `[SyncOrchestrator] Acquired locks for ${lockResult.count} sites.`,
     );
 
@@ -187,11 +188,11 @@ export class SyncOrchestrator {
           });
 
           if (result.imageUrl) {
-            console.log(
+            logger.info(
               `[Sync] Saved image for ${cp.title}: ${result.imageUrl.substring(0, 50)}...`,
             );
           } else {
-            console.log(`[Sync] No image found for ${cp.title}`);
+            logger.info(`[Sync] No image found for ${cp.title}`);
           }
 
           await prisma.priceHistory.create({
@@ -243,7 +244,7 @@ export class SyncOrchestrator {
 
       return finalResult;
     } catch (error) {
-      console.error("[SyncOrchestrator] Sync failed fatally:", error);
+      logger.error("[SyncOrchestrator] Sync failed fatally:", { error });
       await NotificationService.sendSyncError(
         tenantId,
         `Fatal sync error: ${error instanceof Error ? error.message : "Internal service failure"}`,
@@ -271,13 +272,13 @@ export class SyncOrchestrator {
       false,
     );
     if (isKilled) {
-      console.warn(
+      logger.warn(
         "[SyncOrchestrator] Site sync aborted: Master Kill Switch is ON.",
       );
       return { success: false, message: "Sync globally disabled" };
     }
 
-    console.log(
+    logger.info(
       `[SyncOrchestrator] Starting single-site sync for: ${siteId} (Force: ${force})`,
     );
 
@@ -306,7 +307,7 @@ export class SyncOrchestrator {
     });
 
     if (updateResult.count === 0 && !force) {
-      console.log(
+      logger.info(
         `[SyncOrchestrator] Site ${siteId} is already syncing or record missing, skipping duplicate request`,
       );
       return {
@@ -379,7 +380,7 @@ export class SyncOrchestrator {
           !currentStatus?.isSyncing ||
           currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()
         ) {
-          console.log(
+          logger.info(
             `[SyncOrchestrator] Sync manually stopped or new session started for site ${siteId}`,
           );
           await prisma.syncLog.create({
@@ -539,7 +540,9 @@ export class SyncOrchestrator {
       // Log the error to the database
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
-      console.error(`[SyncOrchestrator] Sync error for site ${siteId}:`, error);
+      logger.error(`[SyncOrchestrator] Sync error for site ${siteId}:`, {
+        error,
+      });
 
       // Only attempt to log to DB if the site actually exists (avoid FK violation)
       if (errorMessage !== "Site not found") {
@@ -551,7 +554,7 @@ export class SyncOrchestrator {
               level: "ERROR",
             },
           })
-          .catch((err) => console.error("Failed to log error:", err));
+          .catch((err) => logger.error("Failed to log error:", { error: err }));
       }
 
       throw error;
@@ -569,7 +572,9 @@ export class SyncOrchestrator {
             lastSyncAt: new Date(),
           },
         })
-        .catch((e) => console.error("Failed to reset sync state:", e));
+        .catch((e) =>
+          logger.error("Failed to reset sync state:", { error: e }),
+        );
     }
   }
 

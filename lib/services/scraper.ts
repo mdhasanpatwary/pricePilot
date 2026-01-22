@@ -1,4 +1,5 @@
 import { chromium, Browser, Page } from "playwright";
+import { logger } from "../logger";
 
 interface ScrapedProduct {
   title: string;
@@ -46,7 +47,7 @@ export class ScraperService {
         .split(",")
         .map((p) => p.trim())
         .filter(Boolean);
-      console.log(
+      logger.info(
         `[ScraperService] Initialized with ${this.proxies.length} proxies.`,
       );
     }
@@ -99,7 +100,7 @@ export class ScraperService {
 
     if (proxyUrl) {
       contextOptions.proxy = { server: proxyUrl };
-      console.log(`[ScraperService] Using proxy for ${url}: ${proxyUrl}`);
+      logger.info(`[ScraperService] Using proxy for ${url}: ${proxyUrl}`);
     }
 
     const context = await this.browser!.newContext(contextOptions);
@@ -134,11 +135,11 @@ export class ScraperService {
       }
 
       if (process.env.NODE_ENV !== "test") {
-        console.warn(`Failed to scrape product from ${url}`);
+        logger.warn(`Failed to scrape product from ${url}`);
       }
       return null;
     } catch (error) {
-      console.error(`Error scraping ${url}:`, error);
+      logger.error(`Error scraping ${url}:`, { error });
       return null;
     } finally {
       await page.close();
@@ -336,23 +337,37 @@ export class ScraperService {
           for (const selector of imageSelectors) {
             const el = document.querySelector(selector) as HTMLImageElement;
             if (el) {
-              const src = el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.src;
-              if (src && !src.includes('placeholder') && !src.startsWith('data:')) {
+              const src =
+                el.getAttribute("data-src") ||
+                el.getAttribute("data-lazy-src") ||
+                el.src;
+              if (
+                src &&
+                !src.includes("placeholder") &&
+                !src.startsWith("data:")
+              ) {
                 return src;
               }
             }
           }
           // Fallback: search for any image in a product container that looks like a main image
-          const possibleContainers = ['.product-image', '.product-gallery', '.main-image', 'main', 'article'];
+          const possibleContainers = [
+            ".product-image",
+            ".product-gallery",
+            ".main-image",
+            "main",
+            "article",
+          ];
           for (const containerSelector of possibleContainers) {
-             const container = document.querySelector(containerSelector);
-             if (container) {
-                const images = Array.from(container.querySelectorAll('img'));
-                for (const img of images) {
-                   const src = img.getAttribute('data-src') || img.src;
-                   if (src && img.width > 200 && !src.includes('placeholder')) return src;
-                }
-             }
+            const container = document.querySelector(containerSelector);
+            if (container) {
+              const images = Array.from(container.querySelectorAll("img"));
+              for (const img of images) {
+                const src = img.getAttribute("data-src") || img.src;
+                if (src && img.width > 200 && !src.includes("placeholder"))
+                  return src;
+              }
+            }
           }
           return undefined;
         })();
@@ -456,7 +471,7 @@ export class ScraperService {
 
       // 1. Sanitize query
       const cleanQuery = this.sanitizeQuery(actualQuery);
-      console.log(
+      logger.info(
         `[ScraperService] Original query: "${query}" -> Sanitized: "${cleanQuery}"`,
       );
 
@@ -473,7 +488,7 @@ export class ScraperService {
 
       const searchUrl = buildUrl(baseUrl, cleanQuery);
 
-      console.log(
+      logger.info(
         `[ScraperService] Searching: ${searchUrl} (Strategy: ${strategyKey || "Default"})`,
       );
 
@@ -491,7 +506,7 @@ export class ScraperService {
 
       // --- NEW: Google Search Fallback ---
       if (!productLink) {
-        console.log(
+        logger.info(
           `[ScraperService] No direct results. Attempting Deep Search via Google...`,
         );
         const googleQuery = `site:${hostname} ${cleanQuery}`;
@@ -519,12 +534,14 @@ export class ScraperService {
             return matches[0]?.href || null;
           }, hostname);
         } catch (e) {
-          console.error(`[ScraperService] Google fallback failed:`, e);
+          logger.error(`[ScraperService] Google fallback failed:`, {
+            error: e,
+          });
         }
       }
 
       if (productLink) {
-        console.log(`[ScraperService] Found match: ${productLink}`);
+        logger.info(`[ScraperService] Found match: ${productLink}`);
         return await this.scrapeProductPage(productLink);
       }
 
@@ -556,7 +573,7 @@ export class ScraperService {
         const smartQuery = coreWords.slice(0, 5).join(" ");
 
         if (smartQuery !== cleanQuery && smartQuery.length > 5) {
-          console.log(
+          logger.info(
             `[ScraperService] No identification with full title. Retrying with smart simplified: "${smartQuery}"`,
           );
           return this.searchAndScrape(baseUrl, smartQuery + "__RETRY__");
@@ -566,7 +583,7 @@ export class ScraperService {
         // Only if Strategy A didn't change much or failed (we could chain these but let's stick to one good retry for now)
         if (words.length > 4) {
           const simpleQuery = words.slice(0, 4).join(" ");
-          console.log(
+          logger.info(
             `[ScraperService] No identification with full title. Retrying with simple truncation: "${simpleQuery}"`,
           );
           return this.searchAndScrape(baseUrl, simpleQuery + "__RETRY__");
@@ -575,7 +592,7 @@ export class ScraperService {
 
       return null;
     } catch (error) {
-      console.error(`[ScraperService] Search failed for ${query}:`, error);
+      logger.error(`[ScraperService] Search failed for ${query}:`, { error });
       return null;
     } finally {
       await page.close();
