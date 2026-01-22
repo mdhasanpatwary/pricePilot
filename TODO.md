@@ -32,7 +32,6 @@
 
 | Feature | Status | Notes |
 | :--- | :--- | :--- |
-| **Alert Center** | ✅ COMPLETED | Added UI to configure monitoring rules (Price drops, stock status) and Sentinel logic. |
 | **Scheduled Reports** | ❌ Missing | Cannot schedule PDF/CSV dumps via email. |
 | **Onboarding** | ❌ Missing | No `driver.js` tour as originally planned. |
 | **API Docs** | ⚠️ Partial | `DOCUMENTATION.md` is good, but no Swagger/OpenAPI spec for integrations. |
@@ -45,7 +44,7 @@
     *   ~~Implement the `notificationProcessor` in `lib/queue/worker.ts`.~~
     *   ~~Integrate a provider like Resend or SendGrid (using SMTP).~~
     *   ~~Add Slack Webhook support for real-time alerts.~~
-    *   Added Super Admin configuration UI for SMTP and Slack credentials.
+    *   ~~Added Super Admin configuration UI for SMTP and Slack credentials.~~
 
 2.  ~~**Standardize Logging**~~: ✅ **COMPLETED**
     *   ~~Refactor `ScraperService` to inject `Logger`.~~
@@ -53,12 +52,12 @@
 
 3.  ~~**Browser Resource Pool**~~: ✅ **COMPLETED**
     *   ~~Implement a singleton browser instance in the worker that is reused across jobs, rather than launching/closing per scrape.~~
-    *   Implemented `BrowserPool` with context pooling, automatic cleanup, and configurable limits.
+    *   ~~Implemented `BrowserPool` with context pooling, automatic cleanup, and configurable limits.~~
 
 4.  ~~**Rename & Refactor**~~: ✅ **COMPLETED**
     *   ~~Rename `/dashboard/reports` to `/dashboard/catalog` or `/dashboard/products`.~~
-    *   Renamed to `/dashboard/products` to match UI title.
-    *   Create a true `/dashboard/analytics` or `/dashboard/reports` for downloadable summaries (Pending).
+    *   ~~Renamed to `/dashboard/products` to match UI title.~~
+    *   ~~Create a true `/dashboard/analytics` or `/dashboard/reports` for downloadable summaries.~~ ✅ **COMPLETED**
 
 ---
 
@@ -70,12 +69,12 @@
 - [x] **Fix Reports Route**: Renamed `/dashboard/reports` to `/dashboard/products` to fix identity confusion.
 
 ### **Phase 2: Stability & core Features (P1)**
-- [ ] **Alert Center UI**: Build `/dashboard/alerts` for users to check notification history and configure channels.
+- [x] **Alert Center UI**: Build `/dashboard/alerts` for users to check notification history and configure sentinel rules.
 - [x] **Browser Pooling**: Optimize `ScraperService` to reuse browser contexts.
 - [ ] **Onboarding Flow**: Implement `driver.js` or custom tour for new tenants.
 
 ### **Phase 3: Scalability & Growth (P2)**
-- [ ] **Scheduled Reports**: Create a cron-based job to generate and email weekly PDF summaries.
+- [x] **Scheduled Reports**: Implemented `/dashboard/analytics` with CSV export functionality. Cron-based emailing pending.
 - [ ] **API Keys Management**: UI for users to generate/revoke their own API tokens for the external API.
 - [ ] **Webhook UI**: Interface for users to register their own webhooks (e.g., "POST to my server when price changes").
 

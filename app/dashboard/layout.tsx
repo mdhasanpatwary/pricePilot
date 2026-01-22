@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   History as HistoryIcon,
   Bell,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
@@ -26,9 +27,14 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Package, label: "Products", href: "/dashboard/products" },
   { icon: CheckCircle2, label: "Match Approval", href: "/dashboard/matching" },
+  {
+    icon: LineChart,
+    label: "Market Intelligence",
+    href: "/dashboard/analytics",
+  },
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
-  { icon: LineChart, label: "Pricing Rules", href: "/dashboard/rules" },
+  { icon: Zap, label: "Pricing Rules", href: "/dashboard/rules" },
   { icon: Bell, label: "Alert Center", href: "/dashboard/alerts" },
   { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/activity" },
   {

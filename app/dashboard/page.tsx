@@ -131,9 +131,7 @@ function DashboardContent() {
   };
 
   const handleExportReport = () => {
-    toast.success(
-      "Intelligence report generated. Download starting automatically.",
-    );
+    window.location.href = "/api/v1/analytics/reports/download";
   };
 
   const statsConfig = [
@@ -415,7 +413,7 @@ function DashboardContent() {
               Live Execution Queue
             </h4>
             <Link
-              href="/dashboard/reports"
+              href="/dashboard/activity"
               className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full transition-all"
             >
               Full Log <ChevronRight className="w-4 h-4" />

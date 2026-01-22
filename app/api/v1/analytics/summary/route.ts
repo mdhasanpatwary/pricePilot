@@ -125,6 +125,30 @@ async function handleGET(_req: NextRequest) {
       return userPrice > compPrice * 1.05; // 5% more expensive
     }).length;
 
+    // 6. Category Breakdown
+    const categories = Array.from(
+      new Set(matches.map((m) => m.userProduct.category).filter(Boolean)),
+    );
+    const categoryBreakdown = categories.map((cat) => {
+      const catMatches = matches.filter((m) => m.userProduct.category === cat);
+      const cheapest = catMatches.filter((m) => {
+        const up = parseFloat(m.userProduct.currentPrice.toString());
+        const cp = parseFloat(m.competitorProduct.currentPrice.toString());
+        return up < cp * 0.95;
+      }).length;
+
+      return {
+        name: cat,
+        total: catMatches.length,
+        cheapest,
+        expensive: catMatches.filter((m) => {
+          const up = parseFloat(m.userProduct.currentPrice.toString());
+          const cp = parseFloat(m.competitorProduct.currentPrice.toString());
+          return up > cp * 1.05;
+        }).length,
+      };
+    });
+
     return NextResponse.json({
       stats: {
         totalSKUs: totalProducts,
@@ -140,6 +164,7 @@ async function handleGET(_req: NextRequest) {
         neutral: neutralCount,
         expensive: expensiveCount,
       },
+      categoryBreakdown,
     });
   } catch (error) {
     console.error("Error fetching analytics summary:", error);
