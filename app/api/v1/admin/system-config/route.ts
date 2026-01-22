@@ -86,6 +86,54 @@ const DEFAULT_CONFIGS = [
       "Number of days to keep bulk operation snapshots for rollback.",
     type: "number",
   },
+  {
+    key: "NOTIFICATIONS_EMAIL_ENABLED",
+    value: "false",
+    description: "Enable/Disable global email notifications.",
+    type: "boolean",
+  },
+  {
+    key: "SMTP_HOST",
+    value: "smtp.example.com",
+    description: "SMTP Server Hostname",
+    type: "string",
+  },
+  {
+    key: "SMTP_PORT",
+    value: "587",
+    description: "SMTP Server Port (e.g., 587 for TLS, 465 for SSL)",
+    type: "number",
+  },
+  {
+    key: "SMTP_USER",
+    value: "user@example.com",
+    description: "SMTP Username",
+    type: "string",
+  },
+  {
+    key: "SMTP_PASS",
+    value: "password",
+    description: "SMTP Password",
+    type: "string",
+  },
+  {
+    key: "SMTP_FROM",
+    value: "PricePilot <noreply@example.com>",
+    description: "Sender email address",
+    type: "string",
+  },
+  {
+    key: "NOTIFICATIONS_SLACK_ENABLED",
+    value: "false",
+    description: "Enable/Disable global Slack notifications.",
+    type: "boolean",
+  },
+  {
+    key: "SLACK_WEBHOOK_URL",
+    value: "",
+    description: "Default Slack Webhook URL for global alerts.",
+    type: "string",
+  },
 ];
 
 async function handleGET(_req: NextRequest) {
@@ -96,22 +144,21 @@ async function handleGET(_req: NextRequest) {
   }
 
   try {
-    const configs = await prisma.systemConfig.findMany({
+    // Ensure all default configs exist
+    for (const def of DEFAULT_CONFIGS) {
+      const existing = await prisma.systemConfig.findUnique({
+        where: { key: def.key },
+      });
+      if (!existing) {
+        await prisma.systemConfig.create({ data: def });
+      }
+    }
+
+    const allConfigs = await prisma.systemConfig.findMany({
       orderBy: { key: "asc" },
     });
 
-    // If no configs exist, initialize with defaults
-    if (configs.length === 0) {
-      for (const def of DEFAULT_CONFIGS) {
-        await prisma.systemConfig.create({ data: def });
-      }
-      const newConfigs = await prisma.systemConfig.findMany({
-        orderBy: { key: "asc" },
-      });
-      return NextResponse.json(newConfigs);
-    }
-
-    return NextResponse.json(configs);
+    return NextResponse.json(allConfigs);
   } catch (error) {
     return NextResponse.json(
       { error: "Failed to fetch configuration" },

@@ -30,10 +30,44 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
   }
 };
 
-// Processor for Notification Jobs (Placeholder)
+// Processor for Notification Jobs
 const notificationProcessor = async (job: Job<NotificationJobData>) => {
-  console.log(`[Worker] Processing Notification ${job.id}`);
-  // Implementation for Email/Slack sending goes here
+  const { type, payload, recipient } = job.data;
+  console.log(`[Worker] Processing Notification ${job.id} (Type: ${type})`);
+
+  const { NotificationSender } =
+    await import("@/lib/services/notification-sender");
+
+  try {
+    if (type === "EMAIL") {
+      const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const fullLink = payload.link ? `${appUrl}${payload.link}` : appUrl;
+
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <h2 style="color: #0070f3; margin-top: 0;">${payload.title}</h2>
+          <p style="font-size: 16px; color: #333; line-height: 1.5;">${payload.message}</p>
+          ${
+            payload.link
+              ? `<a href="${fullLink}" style="display: inline-block; background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">View in Dashboard</a>`
+              : ""
+          }
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #666;">This is an automated message from PricePilot. Please do not reply.</p>
+        </div>
+      `;
+      await NotificationSender.sendEmail(recipient, payload.title, html);
+    } else if (type === "WEBHOOK") {
+      const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const fullLink = payload.link ? `${appUrl}${payload.link}` : "";
+
+      const slackText = `🔔 *${payload.title}*\n${payload.message}${fullLink ? `\n<${fullLink}|Open Dashboard>` : ""}`;
+      await NotificationSender.sendSlack(slackText);
+    }
+  } catch (error) {
+    console.error(`[Worker] Notification ${job.id} failed:`, error);
+    throw error;
+  }
 };
 
 // Factory to create workers

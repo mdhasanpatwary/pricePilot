@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getNotificationQueue } from "../queue/client";
+import { logger } from "../logger";
 
 export type NotificationType =
   | "SYNC_SUCCESS"
@@ -9,7 +11,7 @@ export type NotificationType =
 
 export class NotificationService {
   /**
-   * Create a new notification for a tenant
+   * Create a new notification for a tenant and dispatch background jobs
    */
   static async create(options: {
     tenantId: string;
@@ -19,7 +21,7 @@ export class NotificationService {
     link?: string;
   }) {
     try {
-      return await (prisma as any).notification.create({
+      const notification = await (prisma as any).notification.create({
         data: {
           tenantId: options.tenantId,
           type: options.type,
@@ -28,12 +30,49 @@ export class NotificationService {
           link: options.link,
         },
       });
+
+      // Dispatch to background worker for actual sending (Email/Slack)
+      const queue = getNotificationQueue();
+
+      // 1. Queue Slack notification (Global)
+      await queue.add("slack-notification", {
+        type: "WEBHOOK",
+        payload: {
+          title: options.title,
+          message: options.message,
+          link: options.link,
+        },
+        recipient: "SLACK_GLOBAL",
+      });
+
+      // 2. Queue Email notifications for all tenant admins
+      const admins = await prisma.user.findMany({
+        where: {
+          tenantId: options.tenantId,
+          role: "ADMIN",
+        },
+        select: { email: true },
+      });
+
+      for (const admin of admins) {
+        if (admin.email) {
+          await queue.add("email-notification", {
+            type: "EMAIL",
+            payload: {
+              title: options.title,
+              message: options.message,
+              link: options.link,
+            },
+            recipient: admin.email,
+          });
+        }
+      }
+
+      return notification;
     } catch (error) {
-      console.error(
-        "[NotificationService] Failed to create notification:",
+      logger.error("[NotificationService] Failed to create notification:", {
         error,
-      );
-      // We don't throw here to prevent notification failures from breaking core logic
+      });
       return null;
     }
   }

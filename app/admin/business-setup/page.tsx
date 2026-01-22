@@ -12,6 +12,8 @@ import {
   Info,
   ShieldCheck,
   Database,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -114,6 +116,26 @@ export default function BusinessSetupPage() {
         "Define GDPR-compliant data purge policies for history and logs.",
       icon: ShieldCheck,
       items: configs.filter((c) => c.key.startsWith("RETENTION")),
+    },
+    {
+      id: "email",
+      title: "Email Communications",
+      description:
+        "Global SMTP settings for system alerts and merchant notifications.",
+      icon: Mail,
+      items: configs.filter(
+        (c) => c.key.startsWith("SMTP") || c.key.includes("EMAIL"),
+      ),
+    },
+    {
+      id: "slack",
+      title: "Slack Integration",
+      description:
+        "Global Slack webhook configuration for real-time operations monitoring.",
+      icon: MessageSquare,
+      items: configs.filter(
+        (c) => c.key.startsWith("SLACK") || c.key.includes("SLACK"),
+      ),
     },
   ];
 

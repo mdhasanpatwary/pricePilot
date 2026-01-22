@@ -1,8 +1,8 @@
-import { logger } from "./logger";
+import { NotificationSender } from "./services/notification-sender";
 
 /**
- * Mock email service for PricePilot
- * In production, this would use SendGrid, Resend, or AWS SES
+ * Email service for PricePilot
+ * Uses SystemConfig credentials managed by Super Admin
  */
 export const mailService = {
   /**
@@ -11,23 +11,18 @@ export const mailService = {
   sendVerificationEmail: async (email: string, token: string) => {
     const verificationUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/auth/verify?token=${token}`;
 
-    // In production: await transporter.sendMail(...)
+    const html = `
+      <h2>Welcome to PricePilot</h2>
+      <p>Please verify your email address by clicking the link below:</p>
+      <p><a href="${verificationUrl}">${verificationUrl}</a></p>
+      <p>If you didn't create an account, you can safely ignore this email.</p>
+    `;
 
-    logger.info(`[Email] Verification email sent to ${email}`, {
-      url: verificationUrl,
-    });
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(`
-      -----------------------------------------
-      EMAIL VERIFICATION (DEV MOCK)
-      To: ${email}
-      URL: ${verificationUrl}
-      -----------------------------------------
-      `);
-    }
-
-    return true;
+    return NotificationSender.sendEmail(
+      email,
+      "Verify your PricePilot account",
+      html,
+    );
   },
 
   /**
@@ -36,20 +31,18 @@ export const mailService = {
   sendPasswordResetEmail: async (email: string, token: string) => {
     const resetUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/auth/reset-password?token=${token}`;
 
-    logger.info(`[Email] Password reset email sent to ${email}`, {
-      url: resetUrl,
-    });
+    const html = `
+      <h2>Password Reset Request</h2>
+      <p>You requested a password reset for your PricePilot account.</p>
+      <p>Click the link below to reset your password:</p>
+      <p><a href="${resetUrl}">${resetUrl}</a></p>
+      <p>This link will expire in 1 hour. If you didn't request this, please contact support.</p>
+    `;
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(`
-      -----------------------------------------
-      PASSWORD RESET (DEV MOCK)
-      To: ${email}
-      URL: ${resetUrl}
-      -----------------------------------------
-      `);
-    }
-
-    return true;
+    return NotificationSender.sendEmail(
+      email,
+      "Reset your PricePilot password",
+      html,
+    );
   },
 };
