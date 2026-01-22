@@ -30,13 +30,9 @@
 
 ## 🚧 2. Issues & Improvement Areas
 
-### **Code Quality & Maintenance**
-
-### **UI/UX Gaps**
-*   ~~**Dark Mode**: Theme toggle exists, but some charts (Recharts) and tables need verification for contrast in Dark Mode.~~ ✅ **RESOLVED** - Optimized palette and component-level contrast for Recharts and tables.
 
 ### **Security & Scalability**
-*   **CSP Tightening**: `Content-Security-Policy` currently allows `'unsafe-inline'` and `'unsafe-eval'`.
+*   ~~**CSP Tightening**: `Content-Security-Policy` currently allows `'unsafe-inline'` and `'unsafe-eval'`.~~ ✅ **RESOLVED** - Implemented dynamic nonce-based CSP in `proxy.ts`, removing `unsafe-eval` in production and utilizing `strict-dynamic`.
 *   **Browser Management**: The scraping worker concurrency is hardcoded (`concurrency: 2`). This should be dynamic based on system resources.
 
 ---
