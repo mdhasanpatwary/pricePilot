@@ -62,7 +62,7 @@ const notificationProcessor = async (job: Job<NotificationJobData>) => {
       const fullLink = payload.link ? `${appUrl}${payload.link}` : "";
 
       const slackText = `🔔 *${payload.title}*\n${payload.message}${fullLink ? `\n<${fullLink}|Open Dashboard>` : ""}`;
-      await NotificationSender.sendSlack(slackText);
+      await NotificationSender.sendSlack(slackText, payload.tenantId);
     }
   } catch (error) {
     console.error(`[Worker] Notification ${job.id} failed:`, error);

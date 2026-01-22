@@ -6,7 +6,6 @@ import {
   User,
   Bell,
   Lock,
-  Shield,
   Database,
   CreditCard,
   Mail,
@@ -69,6 +68,12 @@ export default function SettingsPage() {
     role: "VIEWER",
     password: "",
   });
+  const [userPrefs, setUserPrefs] = useState({ emailNotifications: true });
+  const [tenantPrefs, setTenantPrefs] = useState({
+    slackEnabled: false,
+    slackWebhookUrl: "",
+  });
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(false);
 
   const {
     register: registerGeneral,
@@ -317,11 +322,60 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchPrefs = async () => {
+    setIsLoadingPrefs(true);
+    try {
+      const [uRes, tRes] = await Promise.all([
+        fetch("/api/v1/user/notification-preferences"),
+        fetch("/api/v1/tenant/notification-settings"),
+      ]);
+
+      if (uRes.ok) setUserPrefs(await uRes.json());
+      if (tRes.ok) setTenantPrefs(await tRes.json());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingPrefs(false);
+    }
+  };
+
   useEffect(() => {
-    if (activeTab === "team") {
-      fetchTeam();
+    if (activeTab === "notifications") {
+      fetchPrefs();
     }
   }, [activeTab]);
+
+  const handleUserPrefToggle = async (field: string, value: boolean) => {
+    try {
+      const res = await fetch("/api/v1/user/notification-preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (res.ok) {
+        setUserPrefs((prev) => ({ ...prev, [field]: value }));
+        toast.success("Preference updated");
+      }
+    } catch (e) {
+      toast.error("Failed to update preference");
+    }
+  };
+
+  const handleTenantPrefUpdate = async (field: string, value: any) => {
+    try {
+      const res = await fetch("/api/v1/tenant/notification-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...tenantPrefs, [field]: value }),
+      });
+      if (res.ok) {
+        setTenantPrefs((prev) => ({ ...prev, [field]: value }));
+        toast.success("Settings updated");
+      }
+    } catch (e) {
+      toast.error("Failed to update settings");
+    }
+  };
 
   const tabs = [
     { id: "general", label: "General", icon: User },
@@ -448,47 +502,153 @@ export default function SettingsPage() {
             )}
 
             {activeTab === "notifications" && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-bold">Notification Preferences</h3>
+              <div className="space-y-8 animate-in slide-in-from-bottom-2 relative">
+                {isLoadingPrefs && (
+                  <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                        Loading...
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-4">
-                  {[
-                    {
-                      label: "Price Alerts",
-                      desc: "Get notified when a competitor changes prices.",
-                      icon: Mail,
-                    },
-                    {
-                      label: "Inventory Updates",
-                      desc: "Weekly summaries of stock movements.",
-                      icon: Database,
-                    },
-                    {
-                      label: "Security Events",
-                      desc: "Immediate alerts for new login sessions.",
-                      icon: Shield,
-                    },
-                  ].map((item, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start justify-between gap-4 p-4 rounded-md border border-border bg-muted/20"
-                    >
+                  <h3 className="text-lg font-bold">Personal Preferences</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4 p-4 rounded-md border border-border bg-muted/20">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-md bg-background border border-border">
-                          <item.icon className="w-4 h-4 text-muted-foreground" />
+                          <Mail className="w-4 h-4 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold">{item.label}</p>
+                          <p className="text-sm font-bold">
+                            Email Notifications
+                          </p>
                           <p className="text-[12px] text-muted-foreground">
-                            {item.desc}
+                            Receive price alerts and system updates via email.
                           </p>
                         </div>
                       </div>
-                      <div className="w-10 h-5 bg-primary/20 rounded-full relative cursor-pointer">
-                        <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full shadow-sm" />
+                      <button
+                        onClick={() =>
+                          handleUserPrefToggle(
+                            "emailNotifications",
+                            !userPrefs.emailNotifications,
+                          )
+                        }
+                        className={cn(
+                          "w-10 h-5 rounded-full relative transition-colors cursor-pointer",
+                          userPrefs.emailNotifications
+                            ? "bg-primary"
+                            : "bg-muted",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                            userPrefs.emailNotifications
+                              ? "right-0.5"
+                              : "left-0.5",
+                          )}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {session?.user?.role === "ADMIN" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold">Team Integrations</h3>
+                      <div
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 rounded font-black uppercase",
+                          tenantPrefs.slackEnabled
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-900/30 dark:text-zinc-400",
+                        )}
+                      >
+                        {tenantPrefs.slackEnabled ? "Active" : "Disabled"}
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="space-y-4 p-4 rounded-md border border-border bg-muted/20">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-md bg-background border border-border">
+                            <Zap className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold">Slack Alerts</p>
+                            <p className="text-[12px] text-muted-foreground">
+                              Send real-time alerts to your team Slack channel.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            handleTenantPrefUpdate(
+                              "slackEnabled",
+                              !tenantPrefs.slackEnabled,
+                            )
+                          }
+                          className={cn(
+                            "w-10 h-5 rounded-full relative transition-colors cursor-pointer",
+                            tenantPrefs.slackEnabled
+                              ? "bg-primary"
+                              : "bg-muted",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                              tenantPrefs.slackEnabled
+                                ? "right-0.5"
+                                : "left-0.5",
+                            )}
+                          />
+                        </button>
+                      </div>
+
+                      {tenantPrefs.slackEnabled && (
+                        <div className="space-y-1.5 pt-4 border-t border-border/50">
+                          <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                            Slack Webhook URL
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="password"
+                              value={tenantPrefs.slackWebhookUrl || ""}
+                              onChange={(e) =>
+                                setTenantPrefs((prev) => ({
+                                  ...prev,
+                                  slackWebhookUrl: e.target.value,
+                                }))
+                              }
+                              placeholder="https://hooks.slack.com/services/..."
+                              className="flex-1 bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm"
+                            />
+                            <button
+                              onClick={() =>
+                                handleTenantPrefUpdate(
+                                  "slackWebhookUrl",
+                                  tenantPrefs.slackWebhookUrl,
+                                )
+                              }
+                              className="bg-primary text-primary-foreground text-xs font-bold px-3 py-2 rounded-md hover:opacity-90 transition-all shadow-sm"
+                            >
+                              Save
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground italic">
+                            Leave empty to use the system default channel.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

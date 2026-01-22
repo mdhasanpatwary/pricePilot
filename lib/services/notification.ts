@@ -34,15 +34,16 @@ export class NotificationService {
       // Dispatch to background worker for actual sending (Email/Slack)
       const queue = getNotificationQueue();
 
-      // 1. Queue Slack notification (Global)
+      // 1. Queue Slack notification
       await queue.add("slack-notification", {
         type: "WEBHOOK",
         payload: {
           title: options.title,
           message: options.message,
           link: options.link,
+          tenantId: options.tenantId,
         },
-        recipient: "SLACK_GLOBAL",
+        recipient: options.tenantId, // Use tenantId as recipient for Slack
       });
 
       // 2. Queue Email notifications for all tenant admins

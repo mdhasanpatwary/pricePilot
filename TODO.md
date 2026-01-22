@@ -33,7 +33,7 @@
 ### **Code Quality & Maintenance**
 
 ### **UI/UX Gaps**
-*   **Missing Feedbacks**: No dedicated UI for managing Alert Preferences (Email vs. Slack) or scheduling reports.
+*   ~~**Missing Feedbacks**: No dedicated UI for managing Alert Preferences (Email vs. Slack) or scheduling reports.~~ ✅ **RESOLVED** - Implemented individual and team notification preference UI in Settings.
 *   **Dark Mode**: Theme toggle exists, but some charts (Recharts) and tables need verification for contrast in Dark Mode.
 
 ### **Security & Scalability**

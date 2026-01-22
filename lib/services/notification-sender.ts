@@ -43,6 +43,19 @@ export class NotificationSender {
       return false;
     }
 
+    // Check individual user preference
+    const user = await prisma.user.findUnique({
+      where: { email: to },
+      select: { emailNotifications: true },
+    });
+
+    if (user && !user.emailNotifications) {
+      logger.info(
+        `[NotificationSender] User ${to} has disabled email notifications`,
+      );
+      return false;
+    }
+
     try {
       const transporter = nodemailer.createTransport({
         host: configs["SMTP_HOST"],
@@ -72,7 +85,7 @@ export class NotificationSender {
   /**
    * Send a Slack notification
    */
-  static async sendSlack(message: string) {
+  static async sendSlack(message: string, tenantId?: string) {
     const configs = await this.getConfigs();
 
     if (configs["NOTIFICATIONS_SLACK_ENABLED"] !== "true") {
@@ -82,7 +95,31 @@ export class NotificationSender {
       return false;
     }
 
-    const webhookUrl = configs["SLACK_WEBHOOK_URL"];
+    // Determine webhook URL: Tenant specific vs Global
+    let webhookUrl = configs["SLACK_WEBHOOK_URL"];
+    let isEnabled = true;
+
+    if (tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { slackEnabled: true, slackWebhookUrl: true },
+      });
+
+      if (tenant) {
+        isEnabled = tenant.slackEnabled;
+        if (tenant.slackWebhookUrl) {
+          webhookUrl = tenant.slackWebhookUrl;
+        }
+      }
+    }
+
+    if (!isEnabled) {
+      logger.info(
+        `[NotificationSender] Slack notifications disabled for tenant ${tenantId}`,
+      );
+      return false;
+    }
+
     if (!webhookUrl) {
       logger.warn("[NotificationSender] Slack webhook URL is not configured");
       return false;
@@ -93,7 +130,9 @@ export class NotificationSender {
         text: message,
       });
 
-      logger.info("[NotificationSender] Slack notification sent");
+      logger.info(
+        `[NotificationSender] Slack notification sent (Tenant: ${tenantId || "Global"})`,
+      );
       return true;
     } catch (error) {
       logger.error("[NotificationSender] Failed to send Slack notification:", {
