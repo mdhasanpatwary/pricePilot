@@ -32,9 +32,8 @@
 
 | Feature | Status | Notes |
 | :--- | :--- | :--- |
+| **API Docs** | ✅ Complete | OpenAPI 3.0 spec + Interactive Reference at `/dashboard/developers/docs`. |
 | **Scheduled Reports** | ❌ Missing | Cannot schedule PDF/CSV dumps via email. |
-| **Onboarding** | ❌ Missing | No `driver.js` tour as originally planned. |
-| **API Docs** | ⚠️ Partial | `DOCUMENTATION.md` is good, but no Swagger/OpenAPI spec for integrations. |
 
 ---
 

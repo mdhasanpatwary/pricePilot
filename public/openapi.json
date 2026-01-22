@@ -1,0 +1,164 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "PricePilot Core API",
+    "description": "Professional-grade API for automated e-commerce monitoring and dynamic pricing. Access your products, matches, and market intelligence programmatically.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "PricePilot Support",
+      "email": "support@pricepilot.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "Development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
+    "schemas": {
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "sku": { "type": "string" },
+          "title": { "type": "string" },
+          "currentPrice": { "type": "number" },
+          "currency": { "type": "string" },
+          "inStock": { "type": "boolean" },
+          "url": { "type": "string" },
+          "category": { "type": "string" }
+        }
+      },
+      "Match": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "userProductId": { "type": "string" },
+          "competitorProductId": { "type": "string" },
+          "confidenceScore": { "type": "number" },
+          "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] }
+        }
+      },
+      "AnalyticsSummary": {
+        "type": "object",
+        "properties": {
+          "stats": {
+            "type": "object",
+            "properties": {
+              "totalSKUs": { "type": "integer" },
+              "activeRivals": { "type": "integer" },
+              "criticalAlerts": { "type": "integer" },
+              "marketEdge": { "type": "number" }
+            }
+          },
+          "positionSummary": {
+            "type": "object",
+            "properties": {
+              "cheapest": { "type": "integer" },
+              "neutral": { "type": "integer" },
+              "expensive": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Webhook": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "url": { "type": "string", "format": "uri" },
+          "isActive": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/products": {
+      "get": {
+        "summary": "List all products",
+        "description": "Returns a paginated list of your products integrated with PricePilot.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Product" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/summary": {
+      "get": {
+        "summary": "Market intelligence summary",
+        "description": "Get real-time aggregated stats of your market position.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AnalyticsSummary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks": {
+      "get": {
+        "summary": "List webhooks",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Webhook" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Register a new webhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string" },
+                  "secret": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created" }
+        }
+      }
+    }
+  }
+}

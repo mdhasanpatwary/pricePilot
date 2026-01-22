@@ -21,6 +21,7 @@ import {
   UserPlus,
   Key,
   Copy,
+  BookOpen,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 
 const generalSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -1264,12 +1266,21 @@ export default function SettingsPage() {
                         Generate keys to access the PricePilot API externally.
                       </p>
                     </div>
-                    <button
-                      onClick={() => setShowAddApiKey(true)}
-                      className="p-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href="/dashboard/developers/docs"
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md bg-muted/30"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        API Reference
+                      </Link>
+                      <button
+                        onClick={() => setShowAddApiKey(true)}
+                        className="p-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {createdKey && (
