@@ -28,21 +28,11 @@
 
 ---
 
-## 🚧 2. Issues & Improvement Areas
-
-
-### **Security & Scalability**
-*   ~~**Browser Management**: The scraping worker concurrency is hardcoded (`concurrency: 2`). This should be dynamic based on system resources.~~ ✅ **RESOLVED** - Concurrency is now calculated dynamically based on CPU cores and RAM availability.
-
----
-
 ## 🧩 3. Missing Parts (The "Gap")
 
 | Feature | Status | Notes |
 | :--- | :--- | :--- |
-| **Alert Center** | ❌ Missing | No UI to configure rules (e.g., "Alert me if competitor drops < $50"). |
-| **Alert Center** | ❌ Missing | No UI to configure rules (e.g., "Alert me if competitor drops < $50"). |
-| **Notification Sender** | ✅ COMPLETED | Implemented SMTP and Slack sending via background worker and Super Admin credentials. |
+| **Alert Center** | ✅ COMPLETED | Added UI to configure monitoring rules (Price drops, stock status) and Sentinel logic. |
 | **Scheduled Reports** | ❌ Missing | Cannot schedule PDF/CSV dumps via email. |
 | **Onboarding** | ❌ Missing | No `driver.js` tour as originally planned. |
 | **API Docs** | ⚠️ Partial | `DOCUMENTATION.md` is good, but no Swagger/OpenAPI spec for integrations. |

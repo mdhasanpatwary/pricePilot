@@ -24,6 +24,7 @@ model Tenant {
   webhooks        Webhook[]
   auditLogs       TenantAuditLog[]
   notifications   Notification[]
+  alertRules      AlertRule[]
   bulkSnapshots   BulkOperationSnapshot[]
   backupConfig    Json?         // Stores Google Drive links, etc.
 }
@@ -326,4 +327,42 @@ model BulkOperationSnapshot {
   @@index([tenantId])
   @@index([createdAt])
   @@index([idempotencyKey])
+}
+
+model AlertRule {
+  id          String         @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  type        AlertRuleType  @default(PRICE_CHANGE)
+  target      AlertTarget    @default(ALL_PRODUCTS)
+  targetId    String?        // ID of product or category
+  condition   AlertCondition @default(LESS_THAN)
+  value       Decimal        @db.Decimal(10, 2)
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+enum AlertRuleType {
+  PRICE_CHANGE
+  STOCK_STATUS
+}
+
+enum AlertTarget {
+  ALL_PRODUCTS
+  SINGLE_PRODUCT
+  CATEGORY
+}
+
+enum AlertCondition {
+  GREATER_THAN
+  LESS_THAN
+  DECREASED_BY
+  INCREASED_BY
+  OUT_OF_STOCK
+  BACK_IN_STOCK
 }

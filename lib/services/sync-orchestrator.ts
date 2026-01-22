@@ -442,6 +442,9 @@ export class SyncOrchestrator {
               },
             });
 
+            const oldPrice = parseFloat(product.currentPrice.toString());
+            const oldStock = product.inStock;
+
             await prisma.product.update({
               where: { id: product.id },
               data: {
@@ -451,6 +454,17 @@ export class SyncOrchestrator {
                 lastCrawledAt: new Date(),
               } as any,
             });
+
+            // Trigger Alert Rules Evaluation
+            const { AlertService } = await import("./alert-service");
+            await AlertService.evaluateRules(
+              product.tenantId,
+              product.id,
+              oldPrice,
+              result.price,
+              oldStock,
+              result.inStock,
+            );
 
             await prisma.priceHistory.create({
               data: {

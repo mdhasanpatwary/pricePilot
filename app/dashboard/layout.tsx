@@ -16,6 +16,7 @@ import {
   X,
   CheckCircle2,
   History as HistoryIcon,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
@@ -28,6 +29,7 @@ const menuItems = [
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
   { icon: LineChart, label: "Pricing Rules", href: "/dashboard/rules" },
+  { icon: Bell, label: "Alert Center", href: "/dashboard/alerts" },
   { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/activity" },
   {
     icon: Database,
