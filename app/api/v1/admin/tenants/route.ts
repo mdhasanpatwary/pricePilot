@@ -133,7 +133,47 @@ async function handlePATCH(req: NextRequest) {
       return validationErrorResponse(validation);
     }
 
-    const { id, storeLimit, competitorLimit, planType } = validation.data!;
+    const { id, storeLimit, competitorLimit, planType, reset } =
+      validation.data!;
+
+    if (reset) {
+      // Perform full reset for this specific tenant
+      await prisma.$transaction([
+        prisma.product.deleteMany({ where: { tenantId: id } }),
+        prisma.site.deleteMany({ where: { tenantId: id } }),
+        prisma.pricingRule.deleteMany({ where: { tenantId: id } }),
+        prisma.alertRule.deleteMany({ where: { tenantId: id } }),
+        prisma.notification.deleteMany({ where: { tenantId: id } }),
+        prisma.tenantAuditLog.deleteMany({ where: { tenantId: id } }),
+        prisma.bulkOperationSnapshot.deleteMany({ where: { tenantId: id } }),
+        prisma.webhook.deleteMany({ where: { tenantId: id } }),
+        prisma.apiKey.deleteMany({ where: { tenantId: id } }),
+        // Reset Tenant settings
+        prisma.tenant.update({
+          where: { id: id },
+          data: {
+            slackEnabled: false,
+            slackWebhookUrl: null,
+            currency: "USD",
+            backupConfig: null as any,
+          },
+        }),
+      ]);
+
+      await recordAuditLog({
+        tenantId: session.user.tenantId,
+        userId: session.user.id,
+        userEmail: session.user.email!,
+        action: "RESET_TENANT_DATA",
+        entityId: id,
+        ipAddress: getIpAddress(req),
+        details: { targetTenantId: id },
+      });
+
+      return NextResponse.json({
+        message: "Tenant data has been fully reset.",
+      });
+    }
 
     const updatedTenant = await prisma.tenant.update({
       where: { id },

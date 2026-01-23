@@ -38,7 +38,7 @@
 ---
 
 ## issues
-* force sync btn click korle sync start hoy but terminate btn disable hoye thake.  reload dile thik hoy. 
+* commit korar age yarn lint, yarn test and yarn build sob kichu pass korte hobe. nahole commit hove na.
 
 
 ## 🔮 6. Future Roadmap

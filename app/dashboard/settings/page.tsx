@@ -1619,9 +1619,8 @@ export default function SettingsPage() {
                             Reset All Data (Hard Reset)
                           </p>
                           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                            Permanently deletes ALL products, history, and
-                            matches. This will leave your account empty like a
-                            fresh install.
+                            Permanently deletes ALL integrations (stores), competitor sites, products, rules, and history. 
+                            This will leave your account empty like a fresh install.
                           </p>
                         </div>
                       </div>

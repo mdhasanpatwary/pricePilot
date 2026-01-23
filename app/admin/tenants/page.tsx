@@ -29,7 +29,9 @@ export default function TenantsPage() {
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<any | null>(null);
+  const [tenantToReset, setTenantToReset] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -115,6 +117,26 @@ export default function TenantsPage() {
       console.error("Failed to delete tenant");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleResetTenant = async () => {
+    if (!tenantToReset) return;
+    setIsResetting(true);
+    try {
+      const res = await fetch("/api/v1/admin/tenants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: tenantToReset.id, reset: true }),
+      });
+      if (res.ok) {
+        await fetchTenants(true);
+        setTenantToReset(null);
+      }
+    } catch (err) {
+      console.error("Failed to reset tenant");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -486,6 +508,13 @@ export default function TenantsPage() {
                         <ExternalLink className="w-4 h-4" />
                       </Link>
                       <button
+                        onClick={() => setTenantToReset(tenant)}
+                        className="p-1.5 hover:text-primary hover:bg-primary/10 rounded-md transition-all"
+                        title="Reset Tenant Data (Full Wipe)"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => setTenantToDelete(tenant)}
                         className="p-1.5 hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
                         title="Archive/Delete Tenant"
@@ -681,6 +710,50 @@ export default function TenantsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Confirmation Modal */}
+      {tenantToReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="bg-card w-full max-w-sm border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                <RefreshCw
+                  className={cn("w-6 h-6 text-primary", isResetting && "animate-spin")}
+                />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                Reset Tenant Data?
+              </h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                This will permanently delete ALL integrations, products, and history for{" "}
+                <span className="font-bold text-foreground">
+                  {tenantToReset.name}
+                </span>
+                . The account and users will remain active.
+              </p>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setTenantToReset(null)}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetTenant}
+                  disabled={isResetting}
+                  className="flex-1 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 shadow-sm flex items-center justify-center gap-2"
+                >
+                  {isResetting && (
+                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent animate-spin rounded-full" />
+                  )}
+                  Reset Data
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

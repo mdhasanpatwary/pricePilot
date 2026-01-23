@@ -15,12 +15,36 @@ async function handlePOST(req: NextRequest) {
   try {
     switch (action) {
       case "RESET_ALL":
-        // Delete all products (Includes matches and history due to Cascade)
-        await prisma.product.deleteMany({
-          where: { tenantId },
-        });
+        // Delete EVERYTHING for this tenant (except users/tenant itself)
+        await prisma.$transaction([
+          // 1. Delete Products (cascades to matches, history, updateLogs)
+          prisma.product.deleteMany({ where: { tenantId } }),
+          // 2. Delete Sites (integrations/competitors, cascades to syncLogs)
+          prisma.site.deleteMany({ where: { tenantId } }),
+          // 3. Delete Rules
+          prisma.pricingRule.deleteMany({ where: { tenantId } }),
+          prisma.alertRule.deleteMany({ where: { tenantId } }),
+          // 4. Delete Communications & Logs
+          prisma.notification.deleteMany({ where: { tenantId } }),
+          prisma.tenantAuditLog.deleteMany({ where: { tenantId } }),
+          prisma.bulkOperationSnapshot.deleteMany({ where: { tenantId } }),
+          // 5. Delete Webhooks & API Keys
+          prisma.webhook.deleteMany({ where: { tenantId } }),
+          prisma.apiKey.deleteMany({ where: { tenantId } }),
+          // 6. Reset Tenant settings
+          prisma.tenant.update({
+            where: { id: tenantId },
+            data: {
+              slackEnabled: false,
+              slackWebhookUrl: null,
+              currency: "USD",
+              backupConfig: null as any,
+            },
+          }),
+        ]);
+
         return NextResponse.json({
-          message: "All product data has been cleared.",
+          message: "Account has been fully reset. All integrations, products, and configuration have been cleared.",
         });
 
       case "CLEAN_MARKET_DATA":

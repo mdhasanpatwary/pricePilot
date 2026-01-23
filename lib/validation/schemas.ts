@@ -363,6 +363,7 @@ export const updateTenantSchema = z.object({
   storeLimit: z.number().int().min(1).max(100).optional(),
   competitorLimit: z.number().int().min(1).max(100).optional(),
   planType: z.enum(["BASIC", "PREMIUM", "PRO"]).optional(),
+  reset: z.boolean().optional(),
 });
 
 export const systemConfigSchema = z.object({
