@@ -5,8 +5,9 @@ export const QUEUE_NAMES = {
 
 export interface SyncJobData {
   siteId?: string;
-  tenantId?: string; // If syncing all sites for a tenant
-  type: "FULL" | "SINGLE" | "MAINTENANCE";
+  tenantId?: string;
+  productIds?: string[]; // IDs for chunked processing
+  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE";
 }
 
 export interface NotificationJobData {

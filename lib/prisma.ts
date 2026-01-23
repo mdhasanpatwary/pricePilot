@@ -4,7 +4,10 @@ import pg from "pg";
 
 const connectionString = `${process.env.DATABASE_URL}`;
 
-const pool = new pg.Pool({ connectionString });
+const pool = new pg.Pool({
+  connectionString,
+  max: 20, // Increase pool size for concurrent sync workers
+});
 const adapter = new PrismaPg(pool);
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };

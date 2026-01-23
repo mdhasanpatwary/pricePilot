@@ -166,6 +166,15 @@ export class SyncOrchestrator {
         const cp = match.competitorProduct;
         if (!cp.url || scrapedProductsMap.has(cp.id)) continue;
 
+        // SESSION-AWARE RESUME: Skip if already crawled in this session
+        if (
+          cp.lastCrawledAt &&
+          cp.lastCrawledAt.getTime() >= syncSessionStart.getTime()
+        ) {
+          scrappedCount++;
+          continue;
+        }
+
         // Skip if this product's site is currently being synced by another independent session
         // This prevents double-scraping and progress indicators jumping around.
         if (
@@ -282,49 +291,71 @@ export class SyncOrchestrator {
       `[SyncOrchestrator] Starting single-site sync for: ${siteId} (Force: ${force})`,
     );
 
+    // Initial delay to let DB pool settle especially on rapid clicks
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     const site = await prisma.site.findUnique({
       where: { id: siteId },
       include: { tenant: true },
     });
     if (!site) throw new Error("Site not found");
 
-    // Set syncing flag atomically to prevent race conditions
-    const syncSessionStart = new Date(); // Unique Session ID for this run
-
-    // ATOMIC LOCK ACQUISITION
-    const updateResult = await prisma.site.updateMany({
-      where: {
-        id: siteId,
-        isSyncing: force ? undefined : false, // If forcing, we don't care about current state
-      },
-      data: {
-        isSyncing: true,
-        syncLastAction: "Booting high-speed crawler...",
-        syncProcessed: 0,
-        syncTotal: 0,
-        syncStartedAt: syncSessionStart,
-      },
+    // ATOMIC LOCK ACQUISITION / RESUME CHECK
+    const currentSite = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { isSyncing: true, syncStartedAt: true },
     });
+    const isResuming = currentSite?.isSyncing && currentSite?.syncStartedAt;
+    const syncSessionStart = isResuming
+      ? currentSite.syncStartedAt!
+      : new Date();
 
-    if (updateResult.count === 0 && !force) {
+    if (!isResuming) {
+      const updateResult = await prisma.site.updateMany({
+        where: {
+          id: siteId,
+          isSyncing: force ? undefined : false,
+        },
+        data: {
+          isSyncing: true,
+          syncLastAction: "Booting high-speed crawler...",
+          syncProcessed: 0,
+          syncTotal: 0,
+          syncStartedAt: syncSessionStart,
+        },
+      });
+
+      if (updateResult.count === 0 && !force) {
+        logger.info(
+          `[SyncOrchestrator] Site ${siteId} is already syncing, skipping duplicate request`,
+        );
+        return {
+          success: true,
+          skipped: true,
+          message: "Sync already in progress",
+        };
+      }
+
+      await prisma.syncLog.deleteMany({ where: { siteId } });
+      await prisma.syncLog.create({
+        data: {
+          siteId,
+          message: "🚀 Initializing quantum price scanner...",
+          level: "INFO",
+        },
+      });
+    } else {
       logger.info(
-        `[SyncOrchestrator] Site ${siteId} is already syncing or record missing, skipping duplicate request`,
+        `[SyncOrchestrator] RESUMING sync for site ${siteId} from session ${syncSessionStart.toISOString()}`,
       );
-      return {
-        success: true,
-        skipped: true,
-        message: "Sync already in progress",
-      };
+      await prisma.syncLog.create({
+        data: {
+          siteId,
+          message: "♻️ Resuming interrupted sync session...",
+          level: "INFO",
+        },
+      });
     }
-
-    await prisma.syncLog.deleteMany({ where: { siteId } });
-    await prisma.syncLog.create({
-      data: {
-        siteId,
-        message: "🚀 Initializing quantum price scanner...",
-        level: "INFO",
-      },
-    });
     // ... (logs) ...
 
     try {
@@ -347,6 +378,18 @@ export class SyncOrchestrator {
         include: { matchesAsCompetitor: true },
       });
 
+      // Filtering: Only process products NOT yet updated in this session
+      const productsToScrape = matchedProducts.filter(
+        (p) =>
+          !p.lastCrawledAt ||
+          p.lastCrawledAt.getTime() < syncSessionStart.getTime(),
+      );
+
+      const alreadyProcessedCount =
+        matchedProducts.length - productsToScrape.length;
+      let processed = alreadyProcessedCount;
+      let count = 0;
+
       const scraper = new ScraperService();
       await scraper.init();
 
@@ -355,21 +398,25 @@ export class SyncOrchestrator {
         where: { id: siteId },
         data: {
           syncTotal: matchedProducts.length,
-          syncProcessed: 0,
-          syncLastAction: "Scanning for store matches...",
-          // syncStartedAt: new Date() // REMOVED: Do not reset session ID
+          syncProcessed: processed,
+          syncLastAction:
+            processed > 0
+              ? `Resuming: ${processed} already synced`
+              : "Scanning for store matches...",
         },
       });
 
-      // ... (logs) ...
-
-      let count = 0;
-      let processed = 0;
+      if (productsToScrape.length === 0 && matchedProducts.length > 0) {
+        logger.info(
+          `[SyncOrchestrator] All products already synced for site ${siteId}`,
+        );
+        // ... cleanup ...
+      }
 
       // Process in batches for better performance
       const BATCH_SIZE = await SystemConfigService.get("SCRAPER_BATCH_SIZE", 5);
 
-      for (let i = 0; i < matchedProducts.length; i += BATCH_SIZE) {
+      for (let i = 0; i < productsToScrape.length; i += BATCH_SIZE) {
         // Check if sync was manually stopped OR session invalidated
         const currentStatus = await prisma.site.findUnique({
           where: { id: siteId },
@@ -393,7 +440,7 @@ export class SyncOrchestrator {
           break;
         }
 
-        const batch = matchedProducts.slice(i, i + BATCH_SIZE);
+        const batch = productsToScrape.slice(i, i + BATCH_SIZE);
 
         // Process batch in parallel with retry logic
         const SCRAPE_TIMEOUT = await SystemConfigService.get(
@@ -405,7 +452,7 @@ export class SyncOrchestrator {
           3,
         );
 
-        const results = await Promise.allSettled(
+        const results = (await Promise.allSettled(
           batch.map(async (product) => {
             const result = await withRetry(
               () => scraper.scrapeProductPage(product.url || ""),
@@ -414,7 +461,7 @@ export class SyncOrchestrator {
             );
             return { product, result };
           }),
-        );
+        )) as any[];
 
         // Process results
         for (const promiseResult of results) {
@@ -483,9 +530,11 @@ export class SyncOrchestrator {
 
             const errorReason =
               promiseResult.status === "rejected"
-                ? promiseResult.reason?.message?.includes("timeout")
-                  ? "⏱️ Timeout"
-                  : "❌ Error"
+                ? promiseResult.reason?.message?.includes("BLOCKED")
+                  ? `🛡️ Blocked: ${promiseResult.reason.message.replace("BLOCKED: ", "")}`
+                  : promiseResult.reason?.message?.includes("timeout")
+                    ? "⏱️ Timeout"
+                    : "❌ Error"
                 : "⚠️ No data";
 
             await prisma.syncLog.create({
@@ -631,5 +680,39 @@ export class SyncOrchestrator {
     await RulesEngine.evaluateAllRules(product.site.tenantId);
 
     return { success: true, price: result?.price };
+  }
+
+  /**
+   * Run sync for a specific chunk of products
+   */
+  static async processChunkSync(siteId: string, productIds: string[]) {
+    logger.info(
+      `[SyncOrchestrator] Processing chunk of ${productIds.length} products for site ${siteId}`,
+    );
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+    });
+
+    const scraper = new ScraperService();
+    await scraper.init();
+
+    for (const product of products) {
+      if (!product.url) continue;
+      const result = await scraper.scrapeProductPage(product.url);
+      if (result && result.price) {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            currentPrice: result.price,
+            inStock: result.inStock,
+            lastCrawledAt: new Date(),
+          },
+        });
+        await prisma.priceHistory.create({
+          data: { productId: product.id, price: result.price },
+        });
+      }
+    }
+    await scraper.close();
   }
 }

@@ -37,6 +37,8 @@
 
 ---
 
+## issues
+* force sync btn click korle sync start hoy but terminate btn disable hoye thake.  reload dile thik hoy. 
 
 
 ## 🔮 6. Future Roadmap

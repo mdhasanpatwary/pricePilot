@@ -6,7 +6,10 @@ jest.mock("playwright", () => ({
     launch: jest.fn().mockResolvedValue({
       newContext: jest.fn().mockResolvedValue({
         newPage: jest.fn().mockResolvedValue({
-          goto: jest.fn().mockResolvedValue({}),
+          goto: jest.fn().mockResolvedValue({
+            status: jest.fn().mockReturnValue(200),
+          }),
+          title: jest.fn().mockResolvedValue("Test Page"),
           content: jest
             .fn()
             .mockResolvedValue("<html><body>Test</body></html>"),

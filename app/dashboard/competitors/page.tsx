@@ -167,11 +167,13 @@ export default function CompetitorsPage() {
 
       // Fetch fresh data to revert optimistic update
       await fetchCompetitors(true);
+    } finally {
       setSyncingSiteId(null);
     }
   };
 
   const handleStopSync = async (id: string) => {
+    setSyncingSiteId(id);
     try {
       const res = await fetch("/api/v1/competitors/sync/stop", {
         method: "POST",
@@ -203,6 +205,8 @@ export default function CompetitorsPage() {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to stop crawler";
       toast.error(errorMessage);
+    } finally {
+      setSyncingSiteId(null);
     }
   };
 

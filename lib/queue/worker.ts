@@ -20,6 +20,13 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     } else if (job.data.type === "SINGLE") {
       if (!job.data.siteId) throw new Error("SiteID required for single sync");
       await SyncOrchestrator.processSiteSync(job.data.siteId);
+    } else if (job.data.type === "CHUNK") {
+      if (!job.data.siteId || !job.data.productIds)
+        throw new Error("Missing data for chunk sync");
+      await SyncOrchestrator.processChunkSync(
+        job.data.siteId,
+        job.data.productIds,
+      );
     } else if (job.data.type === "MAINTENANCE") {
       const { MaintenanceService } = await import("@/lib/services/maintenance");
       await MaintenanceService.runDataRetention();
@@ -99,6 +106,7 @@ export const createWorkers = () => {
   const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
     connection: getRedisConnection() as any,
     concurrency: syncConcurrency,
+    lockDuration: 3600000, // 1 hour - ensures long-running discovery of 200+ products doesn't trigger a stall retry
   });
 
   const notificationWorker = new Worker(

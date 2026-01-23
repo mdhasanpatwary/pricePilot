@@ -53,7 +53,7 @@ jest.mock("@/lib/prisma", () => ({
       findUnique: jest.fn(),
     },
     tenantAuditLog: {
-      create: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: "log-1" }),
     },
   },
 }));
@@ -64,6 +64,7 @@ import { prisma } from "@/lib/prisma";
 describe("/api/integrations", () => {
   const mockSession = {
     user: {
+      id: "test-user-123",
       tenantId: "test-tenant-123",
       email: "test@example.com",
     },

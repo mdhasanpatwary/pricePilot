@@ -7,7 +7,7 @@
     "dev:full": "prisma generate && concurrently \"next dev\" \"yarn run worker:dev\"",
     "dev:next": "prisma generate && next dev",
     "build": "prisma generate && next build",
-    "start": "concurrently \"next start\" \"yarn run worker\"",
+    "start": "prisma generate && next start",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch",

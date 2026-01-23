@@ -57,31 +57,41 @@ export class DiscoveryService {
     for (const up of userProducts) {
       processedCount++;
 
-      // Check for manual stop OR session invalidation (zombie killer)
-      const currentStatus = await prisma.site.findUnique({
-        where: { id: siteId },
-        select: { isSyncing: true, syncStartedAt: true },
-      });
+      // Check for manual stop OR session invalidation every 10 products (throttled for DB stability)
+      if (processedCount === 1 || processedCount % 10 === 0) {
+        try {
+          const currentStatus = await prisma.site.findUnique({
+            where: { id: siteId },
+            select: { isSyncing: true, syncStartedAt: true },
+          });
 
-      // If syncing stopped OR the start time changed (meaning a NEW session started), abort this old one.
-      if (
-        !currentStatus?.isSyncing ||
-        currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()
-      ) {
-        console.log(
-          `[DiscoveryService] Aborting discovery session (Zombie process detected).`,
-        );
-        break;
+          // If syncing stopped OR the start time changed (meaning a NEW session started), abort this old one.
+          if (
+            !currentStatus?.isSyncing ||
+            currentStatus.syncStartedAt?.getTime() !==
+              syncSessionStart.getTime()
+          ) {
+            console.log(
+              `[DiscoveryService] Aborting discovery session (Zombie process detected or manually stopped).`,
+            );
+            break;
+          }
+
+          // Update progress only when checking status (every 10 units)
+          await prisma.site.update({
+            where: { id: siteId },
+            data: {
+              syncProcessed: processedCount,
+              syncLastAction: `Searching: ${up.title.substring(0, 30)}...`,
+            },
+          });
+        } catch (e) {
+          console.warn(
+            `[DiscoveryService] Transient error checking site status, continuing...`,
+            e,
+          );
+        }
       }
-
-      // Update progress every product (or every few)
-      await prisma.site.update({
-        where: { id: siteId },
-        data: {
-          syncProcessed: processedCount,
-          syncLastAction: `Searching: ${up.title.substring(0, 30)}...`,
-        },
-      });
 
       // Extract site name for clearer logs
       const siteName = new URL(site.baseUrl).hostname.replace("www.", "");
@@ -101,7 +111,11 @@ export class DiscoveryService {
         },
       });
 
-      if (existingMatch) continue;
+      if (existingMatch) {
+        // Small delay to prevent hammering the DB in a tight loop when many items are skipped
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
+      }
 
       // Try to find the product on the competitor site
       const result = await scraper.searchAndScrape(site.baseUrl, up.title);
@@ -153,7 +167,7 @@ export class DiscoveryService {
       }
     }
 
-    await scraper.close();
+    // DO NOT call scraper.close() here as it shuts down the global BrowserPool singleton
     return discoveredCount;
   }
 }

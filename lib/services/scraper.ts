@@ -108,10 +108,30 @@ export class ScraperService {
 
     try {
       // Navigate with timeout
-      await page.goto(url, {
+      const response = await page.goto(url, {
         waitUntil: "domcontentloaded",
         timeout: 30000,
       });
+
+      const status = response?.status ? response.status() : null;
+      const title = await page.title();
+
+      // Check for common blocking patterns
+      if (
+        status === 403 ||
+        status === 429 ||
+        title.includes("Cloudflare") ||
+        title.includes("Just a moment")
+      ) {
+        let reason = "Security Block";
+        if (status === 403) reason = "Access Forbidden (403)";
+        if (status === 429) reason = "Rate Limited (429)";
+        if (title.includes("Cloudflare") || title.includes("Just a moment"))
+          reason = "Cloudflare Shield Active";
+
+        logger.warn(`[ScraperService] Block detected at ${url}: ${reason}`);
+        throw new Error(`BLOCKED: ${reason}`);
+      }
 
       // Wait for common e-commerce elements
       await page.waitForTimeout(2000);
@@ -493,10 +513,25 @@ export class ScraperService {
       );
 
       // Ryans/Startech are heavy on JS, use networkidle if possible or longer wait
-      await page.goto(searchUrl, {
+      const response = await page.goto(searchUrl, {
         waitUntil: "domcontentloaded",
         timeout: 30000,
       });
+
+      const status = response?.status ? response.status() : null;
+      const title = await page.title();
+
+      if (
+        status === 403 ||
+        status === 429 ||
+        title.includes("Cloudflare") ||
+        title.includes("Just a moment")
+      ) {
+        logger.warn(
+          `[ScraperService] Search block detected: ${status} - ${title}`,
+        );
+        throw new Error(`SEARCH_BLOCKED: ${status}`);
+      }
 
       // Wait for results to render (critical for CSR sites)
       await page.waitForTimeout(5000);

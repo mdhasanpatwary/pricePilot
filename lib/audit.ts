@@ -52,8 +52,8 @@ export async function recordAuditLog(options: AuditLogOptions) {
     const log = await prisma.tenantAuditLog.create({
       data: {
         tenantId: options.tenantId,
-        userId: options.userId,
-        userEmail: options.userEmail,
+        userId: options.userId || "SYSTEM",
+        userEmail: options.userEmail || "system@pricepilot.ai",
         action: options.action,
         entityId: options.entityId,
         details: options.details ? JSON.stringify(options.details) : null,
@@ -61,7 +61,9 @@ export async function recordAuditLog(options: AuditLogOptions) {
       },
     });
 
-    console.log(`[AuditLog] Successfully recorded log ID: ${log.id}`);
+    if (log) {
+      console.log(`[AuditLog] Successfully recorded log ID: ${log.id}`);
+    }
   } catch (error) {
     console.error(
       `[AuditLog] CRITICAL: Failed to record audit log for action: ${options.action}`,
