@@ -11,7 +11,7 @@ async function handleGET(_req: NextRequest) {
   }
 
   try {
-    const rules = await (prisma as any).alertRule.findMany({
+    const rules = await prisma.alertRule.findMany({
       where: {
         tenantId: session.user.tenantId,
       },
@@ -22,6 +22,7 @@ async function handleGET(_req: NextRequest) {
 
     return NextResponse.json(rules);
   } catch (error) {
+    console.error("[ALERT_RULES_GET]", error);
     return NextResponse.json(
       { error: "Failed to fetch alert rules" },
       { status: 500 },
@@ -36,16 +37,39 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const data = await req.json();
-    const rule = await (prisma as any).alertRule.create({
+    const {
+      name,
+      description,
+      type,
+      target,
+      targetId,
+      condition,
+      value,
+      isActive,
+    } = await req.json();
+
+    // Validate value is present as it is required
+    if (value === undefined || value === null) {
+      return NextResponse.json({ error: "Value is required" }, { status: 400 });
+    }
+
+    const rule = await prisma.alertRule.create({
       data: {
-        ...data,
+        name,
+        description,
+        type,
+        target,
+        targetId,
+        condition,
+        value,
+        isActive: isActive !== undefined ? isActive : true,
         tenantId: session.user.tenantId,
       },
     });
 
     return NextResponse.json(rule);
   } catch (error) {
+    console.error("[ALERT_RULES_POST]", error);
     return NextResponse.json(
       { error: "Failed to create alert rule" },
       { status: 500 },
@@ -60,17 +84,40 @@ async function handlePATCH(req: NextRequest) {
   }
 
   try {
-    const { id, ...data } = await req.json();
-    const rule = await (prisma as any).alertRule.update({
+    const {
+      id,
+      name,
+      description,
+      type,
+      target,
+      targetId,
+      condition,
+      value,
+      isActive,
+    } = await req.json();
+
+    // Only include defined fields in the update
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (type !== undefined) updateData.type = type;
+    if (target !== undefined) updateData.target = target;
+    if (targetId !== undefined) updateData.targetId = targetId;
+    if (condition !== undefined) updateData.condition = condition;
+    if (value !== undefined) updateData.value = value;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const rule = await prisma.alertRule.update({
       where: {
         id,
         tenantId: session.user.tenantId,
       },
-      data,
+      data: updateData,
     });
 
     return NextResponse.json(rule);
   } catch (error) {
+    console.error("[ALERT_RULES_PATCH]", error);
     return NextResponse.json(
       { error: "Failed to update alert rule" },
       { status: 500 },
@@ -92,7 +139,7 @@ async function handleDELETE(req: NextRequest) {
   }
 
   try {
-    await (prisma as any).alertRule.delete({
+    await prisma.alertRule.delete({
       where: {
         id,
         tenantId: session.user.tenantId,
@@ -101,6 +148,7 @@ async function handleDELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("[ALERT_RULES_DELETE]", error);
     return NextResponse.json(
       { error: "Failed to delete alert rule" },
       { status: 500 },

@@ -68,9 +68,14 @@ async function handleGET(_req: NextRequest) {
       _count: true,
     });
 
-    // Fetch session counts for all users of these tenants
+    // Fetch session counts for all users of these tenants (only non-expired)
     const sessionCounts = await (prisma as any).session.groupBy({
       by: ["userId"],
+      where: {
+        expires: {
+          gt: new Date(),
+        },
+      },
       _count: true,
     });
 

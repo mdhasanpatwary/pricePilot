@@ -55,6 +55,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.sub = user.id; // Also set standard sub claim
         token.role = user.role;
         token.tenantId = user.tenantId;
         token.isSuperAdmin = user.isSuperAdmin;
@@ -116,7 +117,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user && token) {
-        session.user.id = token.id as string;
+        session.user.id = (token.id as string) || (token.sub as string);
         session.user.role = token.role;
         session.user.tenantId = token.tenantId;
         session.user.isSuperAdmin = token.isSuperAdmin;

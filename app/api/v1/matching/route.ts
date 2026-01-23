@@ -112,32 +112,63 @@ async function handlePOST(req: NextRequest) {
       return validationErrorResponse(validation);
     }
     const { matchId, action } = validation.data!;
+    console.log(`[MATCHING_POST] Action: ${action} for ID: ${matchId}`);
+    console.log(
+      `[MATCHING_POST] Session User:`,
+      JSON.stringify(session.user, null, 2),
+    );
+
+    // Fetch match info for audit log
+    const matchInfo = await prisma.productMatch.findUnique({
+      where: { id: matchId },
+      include: {
+        userProduct: { select: { title: true } },
+        competitorProduct: { select: { title: true } },
+      },
+    });
 
     if (action === "APPROVE") {
-      await (prisma as any).productMatch.update({
+      await prisma.productMatch.update({
         where: { id: matchId },
         data: { status: "APPROVED" },
       });
     } else if (action === "REJECT") {
-      await (prisma as any).productMatch.update({
+      await prisma.productMatch.update({
         where: { id: matchId },
         data: { status: "REJECTED" },
       });
     }
 
     // Create Audit Log
-    await recordAuditLog({
-      tenantId: session.user.tenantId,
-      userId: session.user.id,
-      userEmail: session.user.email!,
-      action: `${action}_MATCH`,
-      entityId: matchId,
-      ipAddress: getIpAddress(req),
-      details: { matchId, action },
-    });
+    console.log(`[MATCHING_POST] Recording audit log...`);
+    const userId = session.user.id || (session.user as any).sub;
+
+    if (!userId) {
+      console.error(
+        `[MATCHING_POST] CRITICAL: Cannot record audit log because userId is missing from session!`,
+        JSON.stringify(session.user, null, 2),
+      );
+    } else {
+      await recordAuditLog({
+        tenantId: session.user.tenantId,
+        userId: userId,
+        userEmail: session.user.email!,
+        action: `${action}_MATCH`,
+        entityId: matchId,
+        ipAddress: getIpAddress(req),
+        details: {
+          matchId,
+          action,
+          productTitle: matchInfo?.userProduct?.title,
+          competitorTitle: matchInfo?.competitorProduct?.title,
+        },
+      });
+      console.log(`[MATCHING_POST] Audit log sequence finished.`);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("[MATCHING_POST] Error:", error);
     return NextResponse.json({ error: "Action failed" }, { status: 500 });
   }
 }

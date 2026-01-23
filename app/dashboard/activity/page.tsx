@@ -53,7 +53,7 @@ export default function AuditLogsPage() {
     (log) =>
       log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchTerm.toLowerCase()),
+      (log.details?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false),
   );
 
   const getActionBadge = (action: string) => {
@@ -98,12 +98,25 @@ export default function AuditLogsPage() {
           <div className="flex flex-col gap-0.5">
             <span className="text-[11px] font-bold text-foreground">
               {action === "APPROVE_MATCH"
-                ? "Confirmed match for ID:"
-                : "Rejected match for ID:"}
+                ? "Confirmed match for:"
+                : "Rejected match for:"}
             </span>
-            <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-[180px]">
-              {details.matchId || log.entityId}
-            </code>
+            {details.productTitle ? (
+              <div className="flex flex-col gap-0.5 max-w-[200px]">
+                <span className="text-[10px] text-primary font-medium line-clamp-1">
+                  {details.productTitle}
+                </span>
+                {details.competitorTitle && (
+                  <span className="text-[9px] text-muted-foreground line-clamp-1 border-l-2 border-border pl-1.5 ml-1">
+                    matched with {details.competitorTitle}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-[180px]">
+                {details.matchId || log.entityId}
+              </code>
+            )}
           </div>
         );
       }

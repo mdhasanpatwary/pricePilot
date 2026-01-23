@@ -45,7 +45,11 @@ interface AuditLogOptions {
  */
 export async function recordAuditLog(options: AuditLogOptions) {
   try {
-    await prisma.tenantAuditLog.create({
+    console.log(
+      `[AuditLog] Attempting to record: ${options.action} for tenant: ${options.tenantId}`,
+    );
+
+    const log = await prisma.tenantAuditLog.create({
       data: {
         tenantId: options.tenantId,
         userId: options.userId,
@@ -56,6 +60,8 @@ export async function recordAuditLog(options: AuditLogOptions) {
         ipAddress: options.ipAddress || null,
       },
     });
+
+    console.log(`[AuditLog] Successfully recorded log ID: ${log.id}`);
   } catch (error) {
     console.error(
       `[AuditLog] CRITICAL: Failed to record audit log for action: ${options.action}`,

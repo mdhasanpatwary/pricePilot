@@ -1,5 +1,5 @@
-// This script starts the background worker process
-// Run with: npm run worker
+import * as dotenv from "dotenv";
+dotenv.config();
 
 import { createWorkers } from "../lib/queue/worker";
 
