@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -8,7 +8,6 @@ import {
   ExternalLink,
   Trash2,
   CheckCircle2,
-  AlertCircle,
   Zap,
   Shield,
   Globe,
@@ -16,6 +15,11 @@ import {
   ArrowUpRight,
   Eye,
   EyeOff,
+  Terminal,
+  Activity,
+  Loader2,
+  X,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -57,8 +61,9 @@ const platforms = [
 
 const connectionSchema = z.object({
   platform: z.string().min(1, "Please select a platform"),
-  baseUrl: z.string().url("Please enter a valid store URL"),
+  baseUrl: z.string().min(3, "Please enter a valid store address"),
   apiToken: z.string().optional(),
+  searchQueryPattern: z.string().optional(),
 });
 
 type ConnectionFormValues = z.infer<typeof connectionSchema>;
@@ -94,46 +99,81 @@ export default function ConnectionsPage() {
   });
 
   const selectedPlatform = watch("platform");
+  const consoleEndRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll console to bottom
   useEffect(() => {
-    fetchConnections();
-  }, []);
+    if (connections.some((c) => c.isSyncing)) {
+      consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [connections]);
 
-  const fetchConnections = async () => {
-    setIsLoadingConnections(true);
+  const fetchConnections = useCallback(async (silent = false) => {
+    if (!silent) setIsLoadingConnections(true);
     try {
       const res = await fetch("/api/v1/integrations");
       if (res.ok) {
         const data = await res.json();
         setConnections(data);
-      } else {
-        toast.error("Failed to load connections");
       }
     } catch (error) {
-      toast.error("Connection error");
+      if (!silent) toast.error("Connection error");
     } finally {
-      setIsLoadingConnections(false);
+      if (!silent) setIsLoadingConnections(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
+  useEffect(() => {
+    const hasActiveSync = connections.some((c) => c.isSyncing);
+    if (!hasActiveSync) return;
+
+    const interval = setInterval(() => {
+      fetchConnections(true);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [connections, fetchConnections]);
 
   const onSubmit = async (data: ConnectionFormValues) => {
+    console.log("Submitting connection...", data);
     setLoading(true);
     try {
+      // Auto-prepend https:// if missing
+      let baseUrl = data.baseUrl.trim();
+      if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+        baseUrl = `https://${baseUrl}`;
+      }
+      
+      const payload = {
+        ...data,
+        baseUrl,
+        type: "USER",
+        searchQueryPattern: data.searchQueryPattern,
+      };
+
+      console.log("Sending payload:", payload);
       const res = await fetch("/api/v1/integrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          type: "USER",
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
+        console.log("Integration created successfully!");
         const site = await res.json();
         const siteId = site.id;
 
         setIsSyncing(true);
         setProgressCount(0);
+        setSuccessData({
+          name: new URL(data.baseUrl).hostname,
+          platform: data.platform,
+          count: 0,
+        });
 
         // Start polling for progress
         const pollInterval = setInterval(async () => {
@@ -145,42 +185,37 @@ export default function ConnectionsPage() {
                 (s: any) => s.id === siteId,
               );
               if (currentSite) {
-                // Animate count up to current detected count
-                setProgressCount((prev) => {
-                  const target = currentSite.products;
-                  if (target > prev) return target;
-                  return prev;
-                });
+                setProgressCount(currentSite.products);
+                
+                // If sync finished, stop polling and show final state
+                if (!currentSite.isSyncing && currentSite.lastSync) {
+                  clearInterval(pollInterval);
+                  setIsSyncing(false);
+                  setSuccessData({
+                    name: new URL(data.baseUrl).hostname,
+                    platform: data.platform,
+                    count: currentSite.products,
+                  });
+                  toast.success("Store connected & synced!");
+                  fetchConnections(); // Refresh the background list
+                }
               }
             }
           } catch (e) {
             console.error("Polling error", e);
           }
-        }, 1000);
+        }, 1500);
 
-        // Trigger the actual sync
+        // Trigger the actual sync (now returns immediately)
         try {
-          const syncRes = await fetch("/api/v1/integrations/sync", {
+          await fetch("/api/v1/integrations/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ siteId }),
           });
-
-          if (syncRes.ok) {
-            const syncData = await syncRes.json();
-            clearInterval(pollInterval);
-            setIsSyncing(false);
-            setSuccessData({
-              name: new URL(data.baseUrl).hostname,
-              platform: data.platform,
-              count: syncData.count || 0,
-            });
-            toast.success("Store connected & synced!");
-          }
+          // We don't wait for syncRes.ok here because we rely on the poller
         } catch (syncErr) {
-          clearInterval(pollInterval);
-          setIsSyncing(false);
-          toast.error("Sync failed, but store added.");
+          console.error("Failed to trigger sync", syncErr);
         }
 
         reset();
@@ -220,11 +255,13 @@ export default function ConnectionsPage() {
   useEffect(() => {
     fetchConnections();
     fetchLimits();
-  }, []);
+  }, [fetchConnections]);
 
   const handleSyncConnection = async (siteId: string) => {
-    const toastId = toast.loading("Syncing store products...");
     try {
+      // Optimistically update UI
+      setConnections(prev => prev.map(c => c.id === siteId ? { ...c, isSyncing: true, status: 'SYNCING' } : c));
+      
       const res = await fetch("/api/v1/integrations/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -232,16 +269,35 @@ export default function ConnectionsPage() {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        toast.success(`Successfully synced ${data.count} products.`, {
-          id: toastId,
-        });
-        fetchConnections();
+        toast.success("Sync started in background");
       } else {
-        toast.error("Failed to sync products", { id: toastId });
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || "Failed to start sync");
+        fetchConnections(true);
       }
     } catch (error) {
-      toast.error("Network error during sync", { id: toastId });
+      toast.error("Network error during sync");
+      fetchConnections(true);
+    }
+  };
+
+  const handleStopSyncConnection = async (siteId: string) => {
+    try {
+      const res = await fetch("/api/v1/integrations/sync/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId }),
+      });
+
+      if (res.ok) {
+        toast.info("Termination signal sent");
+        setConnections(prev => prev.map(c => c.id === siteId ? { ...c, isSyncing: false } : c));
+        fetchConnections(true);
+      } else {
+        toast.error("Failed to stop sync");
+      }
+    } catch (error) {
+      toast.error("Error stopping sync");
     }
   };
 
@@ -302,7 +358,7 @@ export default function ConnectionsPage() {
               </p>
             </div>
 
-            {successData ? (
+            {successData || isSyncing ? (
               <div className="py-10 flex flex-col items-center text-center space-y-6 animate-in zoom-in-95 duration-300">
                 <div className="w-20 h-20 rounded-full bg-success/20 flex items-center justify-center">
                   <CheckCircle2 className="w-10 h-10 text-success" />
@@ -312,14 +368,14 @@ export default function ConnectionsPage() {
                     Connection Successful!
                   </h4>
                   <p className="text-muted-foreground">
-                    Your {successData.platform} store <b>{successData.name}</b>{" "}
+                    Your {successData?.platform} store <b>{successData?.name}</b>{" "}
                     has been linked.
                   </p>
                 </div>
 
                 <div className="bg-primary/5 rounded-xl p-6 w-full max-w-sm border border-primary/10">
                   <div className="text-3xl font-black text-primary mb-1 animate-pulse">
-                    {isSyncing ? progressCount : successData.count}
+                    {isSyncing ? progressCount : successData?.count}
                   </div>
                   <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     {isSyncing
@@ -333,6 +389,7 @@ export default function ConnectionsPage() {
                     setIsAdding(false);
                     setSuccessData(null);
                     setIsSyncing(false);
+                    fetchConnections();
                   }}
                   disabled={isSyncing}
                   className="bg-primary text-primary-foreground font-bold px-8 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-50"
@@ -468,13 +525,40 @@ export default function ConnectionsPage() {
                         {errors.apiToken.message}
                       </p>
                     )}
-                    <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-start gap-2.5 mt-2">
-                      <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                      <p className="text-[10px] font-semibold text-primary/80 leading-normal uppercase tracking-tight">
-                        This must match the API token configured in your
-                        store&apos;s integration settings or .env file (e.g.,
-                        PRICEPILOT_API_TOKEN for Laravel).
-                      </p>
+                  </div>
+                  <div className="space-y-1.5 pt-2">
+                    <div className="flex items-center justify-between px-0.5">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Search Pattern (Optional)
+                      </label>
+                      <div className="group relative">
+                        <span className="text-[10px] text-primary hover:underline cursor-help font-extrabold uppercase tracking-tighter">Guide</span>
+                        <div className="absolute bottom-full right-0 mb-2 w-72 p-3 bg-card border border-border rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover:opacity-100 transition-all z-50 pointer-events-none scale-95 group-hover:scale-100 origin-bottom-right">
+                           <div className="space-y-2">
+                             <p className="text-[10px] font-bold text-foreground">SITE-SPECIFIC SEARCH LOGIC</p>
+                             <p className="text-[10px] text-muted-foreground leading-relaxed font-medium">
+                               Specify how your store handles search queries. Use <code className="text-primary font-bold px-1 bg-primary/10 rounded">{`{query}`}</code> as a placeholder for the search term.
+                             </p>
+                             <div className="p-2 bg-muted rounded-lg space-y-1 border border-border">
+                               <p className="text-[9px] font-black text-muted-foreground uppercase">Example</p>
+                               <code className="text-[10px] break-all text-primary font-mono block leading-tight">
+                                 /search/advance/product/result/{"{query}"}
+                               </code>
+                             </div>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="relative group">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                      <input
+                        {...register("searchQueryPattern")}
+                        type="text"
+                        placeholder="https://mystore.com/search?q={query}"
+                        className={cn(
+                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                        )}
+                      />
                     </div>
                   </div>
                 </div>
@@ -582,7 +666,14 @@ export default function ConnectionsPage() {
                       Products:
                     </span>
                     <span className="text-sm font-bold text-primary">
-                      {conn.products || 0}
+                      {conn.isSyncing ? (
+                        <span className="flex items-center gap-1.5 animate-pulse">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          {conn.syncProcessed || 0} / {conn.syncTotal || "?"}
+                        </span>
+                      ) : (
+                        conn.products || 0
+                      )}
                     </span>
                   </div>
                 </div>
@@ -594,20 +685,40 @@ export default function ConnectionsPage() {
                     Last Activity
                   </span>
                   <span className="text-[11px] font-semibold text-foreground">
-                    {conn.lastSync}
+                    {conn.isSyncing ? (
+                      <span className="text-primary animate-pulse flex items-center gap-1">
+                        <Activity className="w-2.5 h-2.5" />
+                        Syncing...
+                      </span>
+                    ) : (
+                      conn.lastSync || "Never"
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleSyncConnection(conn.id)}
-                    className="p-2 hover:bg-primary/10 hover:text-primary rounded-md transition-all"
-                    title="Sync Products"
+                    onClick={() => conn.isSyncing ? handleStopSyncConnection(conn.id) : handleSyncConnection(conn.id)}
+                    className={cn(
+                      "p-2 rounded-md transition-all",
+                      conn.isSyncing 
+                        ? "bg-danger/10 text-danger hover:bg-danger/20" 
+                        : "hover:bg-primary/10 hover:text-primary"
+                    )}
+                    title={conn.isSyncing ? "Stop Sync" : "Sync Products"}
                   >
-                    <Zap className="w-4 h-4" />
+                    {conn.isSyncing ? (
+                      <X className="w-4 h-4 animate-pulse" />
+                    ) : (
+                      <Zap className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={() => handleDeleteConnection(conn.id)}
-                    className="p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all"
+                    disabled={conn.isSyncing}
+                    className={cn(
+                      "p-2 hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-md text-muted-foreground hover:text-danger transition-all",
+                      conn.isSyncing && "opacity-50 cursor-not-allowed"
+                    )}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -615,6 +726,108 @@ export default function ConnectionsPage() {
               </div>
             </div>
           ))}
+
+          {/* Global Terminal Feed */}
+          {connections.some((c) => c.isSyncing) && (
+            <div className="col-span-full mt-6 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-slate-950 rounded-xl border border-white/10 shadow-2xl overflow-hidden">
+                {/* Terminal Header */}
+                <div className="bg-white/5 px-4 py-2 border-b border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/40" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/40" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/40" />
+                    </div>
+                    {(() => {
+                      const activeSite = connections.find((c) => c.isSyncing);
+                      return activeSite ? (
+                        <div className="text-[10px] font-mono uppercase tracking-widest ml-2 flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-primary font-bold">[SYSTEM]</span>
+                            <span className="text-white/40">SYNCING STORE:</span>
+                            <span className="text-white font-bold">{activeSite.name.toUpperCase()}</span>
+                            <Terminal className="w-3 h-3 text-white/20 ml-1" />
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {(() => {
+                      const activeSite = connections.find((c) => c.isSyncing);
+                      return activeSite ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-1 rounded-full bg-primary animate-ping" />
+                          <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
+                            PROGRESS: <span className="text-primary">{activeSite.syncProcessed || 0}</span> / <span className="text-white/60">{activeSite.syncTotal || "?"}</span>
+                          </span>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+
+                {/* Terminal Body */}
+                <div className="p-0 font-mono text-[11px] h-[250px] flex flex-col bg-[#0a0a0a]">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-white/10">
+                    {connections
+                      .filter((c) => c.isSyncing)
+                      .map((site) => (
+                        <div key={site.id} className="space-y-0.5">
+                          {(site.logs || [])
+                            .slice()
+                            .reverse()
+                            .map((log: any) => (
+                              <div
+                                key={log.id}
+                                className="group flex gap-3 px-2 py-0.5 hover:bg-white/5 transition-colors border-l-2 border-transparent hover:border-primary/40"
+                              >
+                                <span className="text-white/20 shrink-0 select-none w-16">
+                                  {new Date(log.createdAt).toLocaleTimeString([], { hour12: false })}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "font-black shrink-0 w-12",
+                                    log.level === "SUCCESS"
+                                      ? "text-green-500"
+                                      : log.level === "ERROR"
+                                      ? "text-red-500"
+                                      : log.level === "WARN"
+                                      ? "text-amber-500"
+                                      : "text-blue-500"
+                                  )}
+                                >
+                                  {log.level}
+                                </span>
+                                <span className="text-white/80 break-all">{log.message}</span>
+                              </div>
+                            ))}
+                          {(!site.logs || site.logs.length === 0) && (
+                            <div className="flex gap-3 px-2 py-0.5 text-white/40 italic">
+                              <span className="animate-pulse">_</span>
+                              <span>Initializing data stream to {site.name}...</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    <div ref={consoleEndRef} />
+                  </div>
+                  
+                  {/* Traffic Footer Strip */}
+                  <div className="bg-white/[0.02] border-t border-white/5 px-4 py-2 flex items-center justify-between">
+                    <div className="flex gap-4 font-mono text-[9px] text-white/40 uppercase font-bold">
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        Status: <span className="text-primary">Syncing</span>
+                      </span>
+                      <span>Action: {connections.find(c => c.isSyncing)?.syncLastAction || "Processing"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {connections.length < limits.storeLimit && (
             <button

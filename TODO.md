@@ -39,6 +39,17 @@
 
 ## issues
 * commit korar age yarn lint, yarn test and yarn build sob kichu pass korte hobe. nahole commit hove na.
+* [x] ekta file create koro jekhane kichu instruction thakbe jegulo ei project jekono agent kaj korte gele follow korbe.
+* [x] should show searching full url in tenant & admin terminal.
+* [x] on tenant terminal this ">Awaiting next telemetry packet..." text has contrast issue. not showing properly.
+* [x] tenant panel competitor table product column content will be like this: (successfully fetched products / total products).
+* from super admin panel need to monitor what background process is running. and what is the status of that process. and also need to see logs of that process.
+* is there need 2 files AGENT_INSTRUCTIONS.md and AGENT_INSTRUCTIONS_FOR_DEVELOPER.md? 
+* don't execute the todo.md task from your own decision. ask me first.
+* ecommerce site er product api gulo ki public? public hole first sei api gulo use kore product fetch korar cheshta korbe. sob gulo product fetch kore ekta temp memory te store korbe. tarpor sei memory er product gulo sathe user er inventory product gulo match korbe. then oi memory theke product gulo delete kore dibe. jodi public na hoy tahole scraper use korbe.
+* 
+
+
 
 
 ## 🔮 6. Future Roadmap

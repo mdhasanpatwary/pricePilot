@@ -46,10 +46,19 @@ async function handleSync(req: NextRequest) {
       );
     }
 
+    // Mark site as syncing immediately to provide instant feedback to the frontend
+    const now = new Date();
+    await prisma.site.update({
+      where: { id: siteId },
+      data: { 
+        isSyncing: true, 
+        syncStartedAt: now,
+        syncLastAction: "Queuing sync job...",
+        syncProcessed: 0
+      },
+    });
+
     // Run sync in background (don't await)
-    // This prevents API timeout and allows the frontend to poll for progress
-    // Run sync in background (don't await)
-    // This prevents API timeout and allows the frontend to poll for progress
     SyncOrchestrator.dispatchSiteSync(siteId).catch((error) => {
       console.error(`[API] Background sync failed for site ${siteId}:`, error);
     });

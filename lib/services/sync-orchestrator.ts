@@ -1,4 +1,4 @@
-import { ScraperService } from "./scraper";
+import { ScraperService, ScrapeBlockError } from "./scraper";
 import { RulesEngine } from "./rules-engine";
 import { SyncService } from "./sync";
 import { MatchingService } from "./matching";
@@ -12,6 +12,44 @@ import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
 
 export class SyncOrchestrator {
+  /**
+   * Check if current time is off-peak (NIGHT: 10 PM to 6 AM)
+   */
+  private static isOffPeak(): boolean {
+    const hour = new Date().getHours();
+    return hour >= 22 || hour < 6;
+  }
+
+  /**
+   * Handle an advanced security block by switching to Golden Rule mode
+   */
+  private static async handleSecurityBlock(siteId: string, tenantId: string, siteName: string, productCount: number) {
+    await (prisma.site as any).update({
+      where: { id: siteId },
+      data: {
+        isAdvancedProtected: true,
+        lastSecurityBlockAt: new Date()
+      }
+    });
+
+    // ETA: 12s average * products
+    const etaSeconds = productCount * 12;
+    const etaMinutes = Math.ceil(etaSeconds / 60);
+    const etaString = etaMinutes > 60 
+      ? `${Math.floor(etaMinutes / 60)}h ${etaMinutes % 60}m`
+      : `${etaMinutes}m`;
+
+    await NotificationService.sendSecurityNotice(tenantId, siteName, etaString);
+    
+    await prisma.syncLog.create({
+      data: {
+        siteId,
+        message: `🚨 Golden Rule Activated! Advanced protection detected. Scraper slowing down (ETA: ~${etaString}).`,
+        level: "WARN"
+      }
+    });
+  }
+
   /**
    * Dispatch a full sync job to the queue
    */
@@ -54,7 +92,7 @@ export class SyncOrchestrator {
   /**
    * Run a full sync for a tenant (Executed by Worker)
    */
-  static async processFullSync(tenantId: string) {
+  static async processFullSync(tenantId: string, isCron: boolean = false) {
     const isKilled = await SystemConfigService.get(
       "SYNC_MASTER_KILL_SWITCH",
       false,
@@ -166,26 +204,40 @@ export class SyncOrchestrator {
         const cp = match.competitorProduct;
         if (!cp.url || scrapedProductsMap.has(cp.id)) continue;
 
-        // SESSION-AWARE RESUME: Skip if already crawled in this session
-        if (
-          cp.lastCrawledAt &&
-          cp.lastCrawledAt.getTime() >= syncSessionStart.getTime()
-        ) {
+        // Check if this specific site should still be syncing
+        // (Since FULL sync locks all sites at once, we should check individual flags if user wants to stop one)
+        const siteStatus = await prisma.site.findUnique({
+            where: { id: cp.siteId },
+            select: { isSyncing: true }
+        });
+        if (siteStatus && !siteStatus.isSyncing) continue;
+
+        // 20-HOUR FRESHNESS CHECK: Skip if already fetched within the last 20 hours
+        const REFRESH_WINDOW_MS = 20 * 60 * 60 * 1000;
+        const isFresh = cp.lastCrawledAt && (Date.now() - cp.lastCrawledAt.getTime() < REFRESH_WINDOW_MS);
+
+        if (isFresh || (cp.lastCrawledAt && cp.lastCrawledAt.getTime() >= syncSessionStart.getTime())) {
           scrappedCount++;
           continue;
         }
 
         // Skip if this product's site is currently being synced by another independent session
         // This prevents double-scraping and progress indicators jumping around.
-        if (
-          cp.site.isSyncing &&
-          cp.site.syncStartedAt?.getTime() !== syncSessionStart.getTime()
-        ) {
+        // Golden Rule: Skip advanced protected sites if it's a cron and not off-peak
+        if (cp.site.isAdvancedProtected && isCron && !this.isOffPeak()) {
           continue;
         }
 
-        const result = await scraper.scrapeProductPage(cp.url);
-        if (result && result.price) {
+        try {
+          // Golden Rule: Add delay if advanced protected
+          if (cp.site.isAdvancedProtected) {
+            const delay = 8000 + Math.random() * 7000; // 8-15s
+            await new Promise(r => setTimeout(r, delay));
+          }
+
+          const result = await scraper.scrapeProductPage(cp.url);
+          if (result && result.price) {
+            // ... (rest of the update logic)
           await prisma.product.update({
             where: { id: cp.id },
             data: {
@@ -212,8 +264,14 @@ export class SyncOrchestrator {
             },
           });
 
-          scrapedProductsMap.set(cp.id, result);
-          scrappedCount++;
+            scrapedProductsMap.set(cp.id, result);
+            scrappedCount++;
+          }
+        } catch (error) {
+          if (error instanceof ScrapeBlockError && error.isAdvanced) {
+             await this.handleSecurityBlock(cp.siteId, tenantId, cp.site.baseUrl, matches.length - scrappedCount);
+          }
+          logger.error(`[SyncOrchestrator] Error scraping ${cp.url}:`, { error });
         }
       }
 
@@ -275,7 +333,7 @@ export class SyncOrchestrator {
   /**
    * Run sync for a specific site (Executed by Worker)
    */
-  static async processSiteSync(siteId: string, force: boolean = false) {
+  static async processSiteSync(siteId: string, force: boolean = false, isCron: boolean = false) {
     const isKilled = await SystemConfigService.get(
       "SYNC_MASTER_KILL_SWITCH",
       false,
@@ -355,6 +413,12 @@ export class SyncOrchestrator {
           level: "INFO",
         },
       });
+
+      // Verification: Ensure the session is still marked as active in DB
+      const verify = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true, syncStartedAt: true } });
+      if (!verify?.isSyncing || verify.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+          return { success: true, message: "Resumed session already halted" };
+      }
     }
     // ... (logs) ...
 
@@ -366,11 +430,15 @@ export class SyncOrchestrator {
 
       // Always run discovery to find new matches or retry failed ones
       // Pass the session ID to kill zombies in discovery phase
-      await DiscoveryService.discoverForSite(
+      const discoveryRes = await DiscoveryService.discoverForSite(
         site.tenantId,
         siteId,
         syncSessionStart,
       );
+
+      if (discoveryRes.aborted) {
+          return { success: true, message: "Sync stopped during discovery" };
+      }
 
       // Refresh the list of products after discovery
       matchedProducts = await prisma.product.findMany({
@@ -378,12 +446,13 @@ export class SyncOrchestrator {
         include: { matchesAsCompetitor: true },
       });
 
-      // Filtering: Only process products NOT yet updated in this session
-      const productsToScrape = matchedProducts.filter(
-        (p) =>
-          !p.lastCrawledAt ||
-          p.lastCrawledAt.getTime() < syncSessionStart.getTime(),
-      );
+      // Filtering: Skip if successfully crawled within the last 20 hours
+      const REFRESH_WINDOW_MS = 20 * 60 * 60 * 1000;
+      const productsToScrape = matchedProducts.filter((p) => {
+        const isFresh = p.lastCrawledAt && (Date.now() - p.lastCrawledAt.getTime() < REFRESH_WINDOW_MS);
+        const alreadyInSession = p.lastCrawledAt && p.lastCrawledAt.getTime() >= syncSessionStart.getTime();
+        return !isFresh && !alreadyInSession;
+      });
 
       const alreadyProcessedCount =
         matchedProducts.length - productsToScrape.length;
@@ -413,10 +482,24 @@ export class SyncOrchestrator {
         // ... cleanup ...
       }
 
+      // Golden Rule Settings
+      let isGoldenRule = (site as any).isAdvancedProtected;
+      if (isGoldenRule && isCron && !this.isOffPeak()) {
+          await prisma.syncLog.create({
+              data: { 
+                  siteId, 
+                  message: "🛡️ Golden Rule: Off-peak hours only. Sync deferred to night.",
+                  level: "WARN"
+              }
+          });
+          return { success: true, message: "Sync deferred to off-peak" };
+      }
+
       // Process in batches for better performance
       const BATCH_SIZE = await SystemConfigService.get("SCRAPER_BATCH_SIZE", 5);
+      const effectiveBatchSize = isGoldenRule ? 1 : BATCH_SIZE;
 
-      for (let i = 0; i < productsToScrape.length; i += BATCH_SIZE) {
+      for (let i = 0; i < productsToScrape.length; i += effectiveBatchSize) {
         // Check if sync was manually stopped OR session invalidated
         const currentStatus = await prisma.site.findUnique({
           where: { id: siteId },
@@ -454,6 +537,19 @@ export class SyncOrchestrator {
 
         const results = (await Promise.allSettled(
           batch.map(async (product) => {
+            // Quick termination check inside the batch
+            const batchStatus = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: { isSyncing: true, syncStartedAt: true },
+            });
+            if (!batchStatus?.isSyncing || batchStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+                throw new Error("ABORTED");
+            }
+
+            if (isGoldenRule) {
+               const delay = 8000 + Math.random() * 7000; // 8-15s
+               await new Promise(r => setTimeout(r, delay));
+            }
             const result = await withRetry(
               () => scraper.scrapeProductPage(product.url || ""),
               MAX_RETRIES,
@@ -537,6 +633,16 @@ export class SyncOrchestrator {
                     : "❌ Error"
                 : "⚠️ No data";
 
+            // Advanced Block Detection
+            if (promiseResult.status === "rejected" && !isGoldenRule) {
+               const error = promiseResult.reason;
+               if (error instanceof ScrapeBlockError && error.isAdvanced) {
+                  const urlObj = new URL(site.baseUrl);
+                  await this.handleSecurityBlock(siteId, site.tenantId, urlObj.hostname, productsToScrape.length - processed);
+                  isGoldenRule = true;
+               }
+            }
+
             await prisma.syncLog.create({
               data: {
                 siteId,
@@ -553,7 +659,15 @@ export class SyncOrchestrator {
         }
       }
 
-      await scraper.close();
+      // Re-check status before proceeding to rules
+      const finalStatus = await prisma.site.findUnique({
+          where: { id: siteId },
+          select: { isSyncing: true, syncStartedAt: true }
+      });
+      
+      if (!finalStatus?.isSyncing || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+          return { success: true, message: "Sync aborted before rules engine" };
+      }
 
       // Add completion summary
       await prisma.syncLog.create({
@@ -587,6 +701,10 @@ export class SyncOrchestrator {
       });
 
       for (const userSite of userSites) {
+        // Double check session is still valid before pushing to each store
+        const pushCheck = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true, syncStartedAt: true } });
+        if (!pushCheck?.isSyncing || pushCheck.syncStartedAt?.getTime() !== syncSessionStart.getTime()) break;
+
         await SyncService.syncProductsToStore(userSite.id);
       }
 
@@ -676,7 +794,6 @@ export class SyncOrchestrator {
       });
     }
 
-    await scraper.close();
     await RulesEngine.evaluateAllRules(product.site.tenantId);
 
     return { success: true, price: result?.price };
@@ -713,6 +830,138 @@ export class SyncOrchestrator {
         });
       }
     }
-    await scraper.close();
+  }
+
+  /**
+   * Process a delayed retry for blocked products
+   */
+  static async processRetrySync(siteId: string, productIds: string[]) {
+    const site = await prisma.site.findUnique({ where: { id: siteId } });
+    if (!site || !site.isSyncing) return;
+
+    logger.info(`[SyncOrchestrator] Starting retry sync for ${productIds.length} products on site ${siteId}`);
+
+    const scraper = new ScraperService();
+    
+    for (const productId of productIds) {
+      const userProduct = await prisma.product.findUnique({ where: { id: productId } });
+      if (!userProduct) continue;
+
+      // Check if we should still be running
+      const currentSiteStatus = await prisma.site.findUnique({
+          where: { id: siteId },
+          select: { isSyncing: true }
+      });
+      if (currentSiteStatus && !currentSiteStatus.isSyncing) {
+          logger.info(`[SyncOrchestrator] Retry aborted for site ${siteId}`);
+          break;
+      }
+
+      // Update status to mark we are trying
+      await (prisma as any).scrapeRetry.updateMany({
+        where: { userProductId: productId, siteId, status: "PENDING" },
+        data: { updatedAt: new Date() }
+      });
+
+      try {
+        const cleanTitle = userProduct.title.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+        const result = await scraper.searchAndScrape(site.baseUrl, cleanTitle, siteId);
+
+        if (result && result.price > 0) {
+          // Success! Create match
+          await prisma.$transaction(async (tx) => {
+            const compProduct = await tx.product.create({
+              data: {
+                tenantId: userProduct.tenantId,
+                siteId: site.id,
+                url: result.url,
+                title: result.title,
+                currentPrice: result.price,
+                inStock: result.inStock,
+                currency: result.currency || "BDT",
+                lastCrawledAt: new Date(),
+              }
+            });
+
+            await tx.productMatch.create({
+              data: {
+                userProductId: userProduct.id,
+                competitorProductId: compProduct.id,
+                matchType: "AUTO_SKU",
+                confidenceScore: 0.9,
+              }
+            });
+
+            await tx.priceHistory.create({
+              data: { productId: compProduct.id, price: result.price }
+            });
+          });
+
+          await (prisma as any).scrapeRetry.updateMany({
+            where: { userProductId: productId, siteId, status: "PENDING" },
+            data: { status: "SUCCESS", updatedAt: new Date() }
+          });
+
+          await prisma.syncLog.create({
+            data: {
+              siteId,
+              message: `✅ [RETRY] MATCH: "${userProduct.title.substring(0, 30)}..." → ৳${result.price}`,
+              level: "SUCCESS",
+            },
+          });
+        } else {
+           await (prisma as any).scrapeRetry.updateMany({
+            where: { userProductId: productId, siteId, status: "PENDING" },
+            data: { status: "FAILED", reason: "Product not found on retry", updatedAt: new Date() }
+          });
+        }
+      } catch (error: any) {
+        // Scraper might throw ScrapeBlockError
+        if (error.name === "ScrapeBlockError" || error.message.includes("BLOCKED")) {
+          const retryRecord = await (prisma as any).scrapeRetry.findFirst({
+            where: { userProductId: productId, siteId, status: "PENDING" }
+          });
+          
+          if (retryRecord && retryRecord.retryCount < 3) {
+             const retryAfter = 10 + Math.floor(Math.random() * 10); // Longer delay: 10-20m
+             const nextAttempt = new Date(Date.now() + retryAfter * 60 * 1000);
+             
+             await (prisma as any).scrapeRetry.update({
+               where: { id: retryRecord.id },
+               data: {
+                 retryCount: { increment: 1 },
+                 nextAttemptAt: nextAttempt,
+                 reason: error.provider || "BLOCK",
+               }
+             });
+
+             await getSyncQueue().add(QUEUE_NAMES.SYNC, {
+                type: "RETRY",
+                siteId,
+                tenantId: userProduct.tenantId,
+                productIds: [productId]
+              }, { delay: retryAfter * 60 * 1000 });
+              
+              await prisma.syncLog.create({
+                data: {
+                  siteId,
+                  message: `🛡️ [RETRY] STILL BLOCKED: "${userProduct.title.substring(0, 30)}...". Attempt ${retryRecord.retryCount + 1} scheduled.`,
+                  level: "WARN",
+                },
+              });
+          } else {
+            await (prisma as any).scrapeRetry.updateMany({
+              where: { userProductId: productId, siteId, status: "PENDING" },
+              data: { status: "FAILED", reason: "MAX_RETRIES_EXCEEDED", updatedAt: new Date() }
+            });
+          }
+        } else {
+            await (prisma as any).scrapeRetry.updateMany({
+            where: { userProductId: productId, siteId, status: "PENDING" },
+            data: { status: "FAILED", reason: error.message, updatedAt: new Date() }
+          });
+        }
+      }
+    }
   }
 }

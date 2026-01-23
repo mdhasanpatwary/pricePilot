@@ -35,94 +35,187 @@ export class SyncService {
 
     if (!site) throw new Error("Site not found");
 
-    // 1. Fetch products from external platform
-    if (!site.apiToken) {
-      console.log(
-        `[SyncService] No API token for ${site.baseUrl}, skipping fetch.`,
-      );
-      return { count: 0, siteName: site.baseUrl };
-    }
+    const startTime = new Date();
+    await prisma.site.update({
+      where: { id: siteId },
+      data: { 
+        isSyncing: true, 
+        syncStartedAt: startTime, 
+        syncProcessed: 0,
+        syncLastAction: "Initializing sync..."
+      },
+    });
 
-    let externalProducts: ExternalProduct[] = [];
-    if (site.platform === "OPENCART") {
-      externalProducts = await this.fetchFromOpenCart(site);
-    } else if (site.platform === "LARAVEL") {
-      externalProducts = await this.fetchFromLaravel(site);
-    }
+    await prisma.syncLog.create({
+      data: {
+        siteId,
+        level: "INFO",
+        message: `🔄 Starting product synchronization for ${site.platform}...`
+      }
+    });
 
-    // 2. Process and Upsert products in transactions
-    const results = [];
-    for (const extProd of externalProducts) {
-      try {
-        const product = await prisma.$transaction(async (tx) => {
-          // Find existing product by externalId within this site
-          const existingProduct = await tx.product.findFirst({
-            where: {
-              siteId: site.id,
-              externalId: extProd.external_id,
-            },
+    try {
+      let externalProducts: ExternalProduct[] = [];
+      if (site.platform === "OPENCART") {
+        externalProducts = await this.fetchFromOpenCart(site);
+      } else if (site.platform === "LARAVEL") {
+        externalProducts = await this.fetchFromLaravel(site);
+      }
+
+      await prisma.site.update({
+        where: { id: siteId },
+        data: { 
+          syncTotal: externalProducts.length,
+          syncLastAction: `Fetched ${externalProducts.length} products`
+        },
+      });
+
+      await prisma.syncLog.create({
+        data: {
+          siteId,
+          level: "INFO",
+          message: `📡 API responded: Found ${externalProducts.length} products to process.`
+        }
+      });
+
+      // 2. Process and Upsert products in transactions
+      const results = [];
+      let processed = 0;
+
+      for (const extProd of externalProducts) {
+        try {
+          // Check if sync was manually stopped
+          const currentSite = await prisma.site.findUnique({
+            where: { id: siteId },
+            select: { isSyncing: true },
           });
 
-          let p;
-          const productData = {
-            title: extProd.title,
-            category: extProd.category,
-            currentPrice: extProd.price,
-            sku: extProd.sku,
-            model: extProd.model,
-            brand: extProd.brand,
-            imageUrl: extProd.image,
-            url: extProd.url,
-            lastCrawledAt: new Date(),
-          };
-
-          if (existingProduct) {
-            p = await tx.product.update({
-              where: { id: existingProduct.id },
-              data: productData,
-            });
-          } else {
-            p = await tx.product.create({
+          if (!currentSite?.isSyncing) {
+            console.log(`[SyncService] Sync terminated manually for site ${siteId}`);
+            await prisma.syncLog.create({
               data: {
-                ...productData,
+                siteId,
+                level: "WARN",
+                message: "🛑 Synchronization terminated manually by user.",
+              },
+            });
+            return { count: results.length, siteName: site.baseUrl };
+          }
+
+          const product = await prisma.$transaction(async (tx) => {
+            // Find existing product by externalId within this site
+            const existingProduct = await tx.product.findFirst({
+              where: {
                 siteId: site.id,
-                tenantId: site.tenantId,
                 externalId: extProd.external_id,
-                currency: "USD",
+              },
+            });
+
+            let p;
+            const productData = {
+              title: extProd.title,
+              category: extProd.category,
+              currentPrice: extProd.price,
+              sku: extProd.sku,
+              model: extProd.model,
+              brand: extProd.brand,
+              imageUrl: extProd.image,
+              url: extProd.url,
+              lastCrawledAt: new Date(),
+            };
+
+            if (existingProduct) {
+              p = await tx.product.update({
+                where: { id: existingProduct.id },
+                data: productData,
+              });
+            } else {
+              p = await tx.product.create({
+                data: {
+                  ...productData,
+                  siteId: site.id,
+                  tenantId: site.tenantId,
+                  externalId: extProd.external_id,
+                  currency: "USD",
+                },
+              });
+            }
+
+            // 3. Record price history (Atomic with the update)
+            await tx.priceHistory.create({
+              data: {
+                productId: p.id,
+                price: extProd.price,
+              },
+            });
+
+            return p;
+          });
+
+          results.push(product);
+          processed++;
+
+          // Update progress every 10 products
+          if (processed % 10 === 0) {
+            await prisma.site.update({
+              where: { id: siteId },
+              data: { 
+                syncProcessed: processed,
+                syncLastAction: `Processing products (${processed}/${externalProducts.length})`
               },
             });
           }
-
-          // 3. Record price history (Atomic with the update)
-          await tx.priceHistory.create({
-            data: {
-              productId: p.id,
-              price: extProd.price,
-            },
-          });
-
-          return p;
-        });
-
-        results.push(product);
-      } catch (error) {
-        console.error(
-          `[SAFE-SYNC] Error processing external product ${extProd.external_id}:`,
-          error,
-        );
+        } catch (error) {
+          console.error(
+            `[SAFE-SYNC] Error processing external product ${extProd.external_id}:`,
+            error,
+          );
+        }
       }
+
+      // 4. Update last sync time and finish
+      await prisma.site.update({
+        where: { id: siteId },
+        data: {
+          lastSyncAt: new Date(),
+          isSyncing: false,
+          syncProcessed: processed,
+          syncTotal: externalProducts.length,
+          syncLastAction: "Completed"
+        },
+      });
+
+      // Log success in SyncLogs if we have a way to record them for Source too
+      await prisma.syncLog.create({
+        data: {
+          siteId,
+          level: "INFO",
+          message: `✅ Integration sync completed: ${results.length} products imported.`,
+        },
+      });
+
+      return {
+        count: results.length,
+        siteName: site.baseUrl,
+      };
+    } catch (error) {
+      const err = error as Error;
+      // Record error in logs
+      await prisma.syncLog.create({
+        data: {
+          siteId,
+          level: "ERROR",
+          message: `❌ Sync failed: ${err.message}`,
+        },
+      });
+
+      // Ensure we clear the sync lock on error
+      await prisma.site.update({
+        where: { id: siteId },
+        data: { isSyncing: false },
+      });
+      throw error;
     }
-
-    // 4. Update last sync time
-    await prisma.site.update({
-      where: { id: siteId },
-      data: { lastSyncAt: new Date() },
-    });
-
-    return {
-      count: results.length,
-      siteName: site.baseUrl,
-    };
   }
 
   /**
@@ -185,22 +278,70 @@ export class SyncService {
       manufacturer?: string;
       model?: string;
       image?: string;
-      quantity: number;
-      stock_status: string;
+      quantity?: number;
+      stock_status?: string;
     }
 
     try {
-      const response = await this.axiosRequestWithRetry<{
-        products: OpenCartProduct[];
-      }>({
+      // Normalize URL (avoid double slashes)
+      const cleanBaseUrl = site.baseUrl.replace(/\/$/, "");
+      const apiUrl = `${cleanBaseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`;
+      
+      console.log(`[SyncService] Fetching from OpenCart: ${apiUrl}`);
+
+      const response = await this.axiosRequestWithRetry<any>({
         method: "GET",
-        url: `${site.baseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`,
+        url: apiUrl,
         timeout: 30000,
       });
 
-      // Expected OpenCart response format:
-      // { products: [{ product_id, sku, name, price, manufacturer, model }] }
-      const rawProducts = response.data.products || [];
+      // Check for HTML response (happens on 404/500 if server returns error page)
+      if (typeof response.data === "string" && response.data.includes("<html")) {
+        console.error(`[SyncService] Received HTML instead of JSON from ${site.baseUrl}. Check if the PricePilot extension is correctly installed and accessible.`);
+        throw new Error("Invalid API response: Received HTML instead of JSON");
+      }
+
+      let responseData = response.data;
+      
+      // Handle corrupted JSON responses (common when PHP errors or echoes are present)
+      if (typeof responseData === "string") {
+        console.warn(`[SyncService] Received string response instead of JSON object. Attempting to extract JSON...`);
+        const jsonStart = responseData.indexOf('{"products"');
+        const fallbackStart = responseData.indexOf('{');
+        
+        const actualStart = jsonStart !== -1 ? jsonStart : fallbackStart;
+        
+        if (actualStart !== -1) {
+          try {
+            // Find the last closing bracket to be safe
+            const lastBracket = responseData.lastIndexOf('}');
+            if (lastBracket !== -1 && lastBracket > actualStart) {
+              const jsonStr = responseData.substring(actualStart, lastBracket + 1);
+              responseData = JSON.parse(jsonStr);
+              console.log(`[SyncService] Successfully extracted and parsed JSON from string response.`);
+            }
+          } catch (parseError) {
+            console.error(`[SyncService] Failed to parse extracted JSON string:`, parseError);
+          }
+        }
+      }
+      
+      if (!responseData) {
+        console.warn(`[SyncService] Empty or invalid response from ${site.baseUrl}`);
+        return [];
+      }
+
+      const rawProducts = Array.isArray(responseData) 
+        ? responseData 
+        : (responseData.products || []);
+      
+      console.log(`[SyncService] Fetched ${rawProducts.length} raw products from OpenCart: ${site.baseUrl}`);
+      
+      // Log first product for debugging if exists
+      if (rawProducts.length > 0) {
+        console.log(`[SyncService] Sample product data:`, JSON.stringify(rawProducts[0]).substring(0, 200));
+      }
+      
       const validProducts: OpenCartProduct[] = [];
 
       for (const item of rawProducts) {
@@ -208,7 +349,6 @@ export class SyncService {
         if (result.success) {
           validProducts.push({
             ...result.data,
-            // Ensure derived properties are available for mapping
             product_id: result.data.product_id,
             id: result.data.id,
             sku: result.data.sku || undefined,
@@ -220,7 +360,7 @@ export class SyncService {
             manufacturer: result.data.manufacturer || undefined,
             model: result.data.model || undefined,
             image: result.data.image || undefined,
-            quantity: result.data.quantity,
+            quantity: result.data.quantity ?? 0,
             stock_status: result.data.stock_status || "",
           });
         } else {
@@ -228,6 +368,15 @@ export class SyncService {
             `[SyncService] Skipping invalid OpenCart product for ${site.baseUrl}:`,
             result.error.flatten(),
           );
+          if (validProducts.length < 5) {
+            await prisma.syncLog.create({
+              data: {
+                siteId: site.id,
+                level: "WARN",
+                message: `⚠️ Skipping product: ${JSON.stringify(result.error.flatten().fieldErrors).substring(0, 100)}`,
+              }
+            });
+          }
         }
       }
 
@@ -239,7 +388,7 @@ export class SyncService {
         price: parseFloat((p.price || p.special || "0").toString()),
         brand: p.manufacturer || null,
         model: p.model || null,
-        in_stock: p.quantity > 0 || p.stock_status === "In Stock",
+        in_stock: (p.quantity ?? 0) > 0 || p.stock_status === "In Stock" || p.stock_status === "1",
         image: p.image || undefined,
         url: `${site.baseUrl.replace(/\/$/, "")}/index.php?route=product/product&product_id=${p.product_id || p.id}`,
       }));
@@ -290,6 +439,7 @@ export class SyncService {
       model?: string;
       image?: string;
       in_stock?: boolean;
+      quantity?: number;
     }
 
     try {
@@ -342,7 +492,7 @@ export class SyncService {
         price: parseFloat((p.price || "0").toString()),
         brand: p.brand || null,
         model: p.model || null,
-        in_stock: p.in_stock ?? true,
+        in_stock: p.in_stock ?? (p.quantity !== undefined ? p.quantity > 0 : true),
         image: p.image || undefined,
         url: (p as any).url || null,
       }));

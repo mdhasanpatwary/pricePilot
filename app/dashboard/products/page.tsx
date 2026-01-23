@@ -299,20 +299,22 @@ export default function PriceReportPage() {
             </button>
           )}
 
-          <div className="relative group">
-            <select
-              value={refCompetitor}
-              onChange={(e) => setRefCompetitor(e.target.value)}
-              className="appearance-none bg-background border border-border rounded-md py-2 pl-3 pr-10 text-sm font-semibold hover:bg-muted/50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              {competitors.map((comp) => (
-                <option key={comp} value={comp}>
-                  Compare: {cleanName(comp)}
-                </option>
-              ))}
-            </select>
-            <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          </div>
+          {competitors.length > 1 && (
+            <div className="relative group">
+              <select
+                value={refCompetitor}
+                onChange={(e) => setRefCompetitor(e.target.value)}
+                className="appearance-none bg-background border border-border rounded-md py-2 pl-3 pr-10 text-sm font-semibold hover:bg-muted/50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {competitors.map((comp) => (
+                  <option key={comp} value={comp}>
+                    Compare: {cleanName(comp)}
+                  </option>
+                ))}
+              </select>
+              <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            </div>
+          )}
 
           <button
             onClick={handleExport}
@@ -595,10 +597,14 @@ export default function PriceReportPage() {
                 </th>
                 <th className="py-4 px-6 min-w-[320px]">Product</th>
                 <th className="py-4 px-6">Your Price</th>
-                <th className="py-4 px-6 text-center bg-primary/5 text-primary">
-                  {cleanName(refCompetitor)}
-                </th>
-                <th className="py-4 px-6 text-center">Gap</th>
+                {competitors.length > 0 && (
+                  <>
+                    <th className="py-4 px-6 text-center bg-primary/5 text-primary">
+                      {cleanName(refCompetitor)}
+                    </th>
+                    <th className="py-4 px-6 text-center">Gap</th>
+                  </>
+                )}
                 <th className="py-4 px-6 text-center">Status</th>
                 <th className="py-4 px-6 text-right">Actions</th>
               </tr>
@@ -719,91 +725,95 @@ export default function PriceReportPage() {
                       </span>
                     </td>
 
-                    <td className="py-4 px-6 text-center bg-primary/[0.01]">
-                      {(() => {
-                        const match = item.allMatches?.find(
-                          (m) => m.siteName === refCompetitor,
-                        );
-                        if (!match)
-                          return (
-                            <span className="text-muted-foreground/20 italic text-xs">
-                              -
-                            </span>
-                          );
+                    {competitors.length > 0 && (
+                      <>
+                        <td className="py-4 px-6 text-center bg-primary/[0.01]">
+                          {(() => {
+                            const match = item.allMatches?.find(
+                              (m) => m.siteName === refCompetitor,
+                            );
+                            if (!match)
+                              return (
+                                <span className="text-muted-foreground/20 italic text-xs">
+                                  -
+                                </span>
+                              );
 
-                        return (
-                          <div className="flex flex-col items-center">
-                            {!match.inStock ? (
-                              <span className="text-[10px] font-bold text-danger/60 uppercase">
-                                Unavailable
-                              </span>
-                            ) : (
-                              <span className="font-bold text-primary">
-                                {formatCurrency(match.price, currency)}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </td>
+                            return (
+                              <div className="flex flex-col items-center">
+                                {!match.inStock ? (
+                                  <span className="text-[10px] font-bold text-danger/60 uppercase">
+                                    Unavailable
+                                  </span>
+                                ) : (
+                                  <span className="font-bold text-primary">
+                                    {formatCurrency(match.price, currency)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
 
-                    <td className="py-4 px-6 text-center">
-                      {(() => {
-                        let diff = item.diff;
-                        let compPrice = item.compPrice;
-                        let compInStock = item.compInStock;
+                        <td className="py-4 px-6 text-center">
+                          {(() => {
+                            let diff = item.diff;
+                            let compPrice = item.compPrice;
+                            let compInStock = item.compInStock;
 
-                        if (refCompetitor !== "BEST") {
-                          const match = item.allMatches?.find(
-                            (m) => m.siteName === refCompetitor,
-                          );
-                          if (match) {
-                            compPrice = match.price;
-                            compInStock = match.inStock;
-                            if (compPrice !== null) {
-                              diff = compPrice - item.yourPrice;
+                            if (refCompetitor !== "BEST") {
+                              const match = item.allMatches?.find(
+                                (m) => m.siteName === refCompetitor,
+                              );
+                              if (match) {
+                                compPrice = match.price;
+                                compInStock = match.inStock;
+                                if (compPrice !== null) {
+                                  diff = compPrice - item.yourPrice;
+                                }
+                              } else {
+                                compPrice = null;
+                              }
                             }
-                          } else {
-                            compPrice = null;
-                          }
-                        }
 
-                        if (
-                          compPrice === null ||
-                          compPrice === 0 ||
-                          !compInStock
-                        ) {
-                          return (
-                            <span className="text-muted-foreground/30 text-xs italic">
-                              N/A
-                            </span>
-                          );
-                        }
+                            if (
+                              compPrice === null ||
+                              compPrice === 0 ||
+                              !compInStock
+                            ) {
+                              return (
+                                <span className="text-muted-foreground/30 text-xs italic">
+                                  N/A
+                                </span>
+                              );
+                            }
 
-                        return (
-                          <div
-                            className={cn(
-                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border",
-                              diff < 0
-                                ? "bg-danger/5 text-danger border-danger/10"
-                                : diff > 0
-                                  ? "bg-success/5 text-success border-success/10"
-                                  : "bg-muted text-muted-foreground border-border",
-                            )}
-                          >
-                            {diff < 0 ? (
-                              <TrendingDown className="w-3 h-3" />
-                            ) : diff > 0 ? (
-                              <TrendingUp className="w-3 h-3" />
-                            ) : (
-                              <Activity className="w-3 h-3" />
-                            )}
-                            {diff > 0 ? "+" : ""}
-                            {formatCurrency(Math.abs(diff), currency)}
-                          </div>
-                        );
-                      })()}
-                    </td>
+                            return (
+                              <div
+                                className={cn(
+                                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border",
+                                  diff < 0
+                                    ? "bg-danger/5 text-danger border-danger/10"
+                                    : diff > 0
+                                      ? "bg-success/5 text-success border-success/10"
+                                      : "bg-muted text-muted-foreground border-border",
+                                )}
+                              >
+                                {diff < 0 ? (
+                                  <TrendingDown className="w-3 h-3" />
+                                ) : diff > 0 ? (
+                                  <TrendingUp className="w-3 h-3" />
+                                ) : (
+                                  <Activity className="w-3 h-3" />
+                                )}
+                                {diff > 0 ? "+" : ""}
+                                {formatCurrency(Math.abs(diff), currency)}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                      </>
+                    )}
                     <td className="py-4 px-6 text-center">
                       {(() => {
                         let status = item.status;

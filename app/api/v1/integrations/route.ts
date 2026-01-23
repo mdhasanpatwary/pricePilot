@@ -33,9 +33,13 @@ async function handleGET(_req: NextRequest) {
         _count: {
           select: { products: true },
         },
+        syncLogs: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        },
       },
       orderBy: {
-        createdAt: "desc",
+        createdAt: "desc"
       },
     });
 
@@ -47,7 +51,17 @@ async function handleGET(_req: NextRequest) {
       url: site.baseUrl,
       products: site._count.products,
       status: site.lastSyncAt ? "CONNECTED" : "PENDING",
+      isSyncing: site.isSyncing,
+      syncProcessed: site.syncProcessed,
+      syncTotal: site.syncTotal,
+      syncLastAction: site.syncLastAction,
       lastSync: site.lastSyncAt?.toISOString() || null,
+      logs: site.syncLogs.map(log => ({
+        id: log.id,
+        level: log.level,
+        message: log.message,
+        createdAt: log.createdAt.toISOString()
+      }))
     }));
 
     return NextResponse.json(formattedSites);
@@ -81,7 +95,7 @@ async function handlePOST(req: NextRequest) {
       return validationErrorResponse(validation);
     }
 
-    const { platform, baseUrl, apiToken, type } = validation.data!;
+    const { platform, baseUrl, apiToken, type, searchQueryPattern } = validation.data!;
 
     // Fetch tenant limits
     const tenant = await prisma.tenant.findUnique({
@@ -117,6 +131,7 @@ async function handlePOST(req: NextRequest) {
         type: type || "USER",
         baseUrl,
         apiToken,
+        searchQueryPattern,
       },
     });
 
@@ -127,7 +142,7 @@ async function handlePOST(req: NextRequest) {
       action: "CREATE_INTEGRATION",
       entityId: site.id,
       ipAddress: getIpAddress(req),
-      details: { platform, baseUrl, type: type || "USER" },
+      details: { platform, baseUrl, type: type || "USER", searchQueryPattern },
     });
 
     return NextResponse.json(

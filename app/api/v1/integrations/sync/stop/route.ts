@@ -1,0 +1,55 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
+
+async function handlePOST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { siteId } = await req.json();
+
+    if (!siteId) {
+      return NextResponse.json(
+        { error: "Site ID is required" },
+        { status: 400 },
+      );
+    }
+
+    // To "stop" a sync, we simply flip the flag.
+    // The SyncService checks this flag on every iteration and will terminate.
+    await prisma.site.update({
+      where: { id: siteId, tenantId: session.user.tenantId },
+      data: { 
+        isSyncing: false, 
+        syncLastAction: "Terminated",
+        syncStartedAt: null 
+      },
+    });
+
+    await prisma.syncLog.create({
+      data: {
+        siteId,
+        message: "🛑 Synchronization terminated by user.",
+        level: "WARN",
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Sync termination signal sent",
+    });
+  } catch (error) {
+    console.error("Error stopping sync:", error);
+    return NextResponse.json({ error: "Failed to stop sync" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "sync", handlePOST);
+}

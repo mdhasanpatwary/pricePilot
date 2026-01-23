@@ -208,6 +208,7 @@ export const createIntegrationSchema = z.object({
     .max(500, "API token is too long")
     .optional(),
   type: z.enum(["USER", "COMPETITOR"]).default("USER"),
+  searchQueryPattern: z.string().trim().max(2048).optional(),
 });
 
 export const deleteIntegrationSchema = z.object({
@@ -220,6 +221,13 @@ export const deleteIntegrationSchema = z.object({
 
 export const createCompetitorSchema = z.object({
   url: urlSchema,
+  searchQueryPattern: z.string().trim().max(2048).optional(),
+});
+
+export const updateCompetitorSchema = z.object({
+  id: uuidSchema,
+  baseUrl: urlSchema.optional(),
+  searchQueryPattern: z.string().trim().max(2048).optional(),
 });
 
 export const manualMatchSchema = z.object({
@@ -450,17 +458,17 @@ export const dateRangeSchema = z
 export const openCartProductSchema = z.object({
   product_id: z.union([z.string(), z.number()]).optional(),
   id: z.union([z.string(), z.number()]).optional(),
-  sku: z.string().optional().nullable(),
-  name: z.string().optional(),
-  title: z.string().optional(),
-  category: z.string().optional().nullable(),
+  sku: z.union([z.string(), z.number()]).optional().nullable().transform(v => v?.toString()),
+  name: z.coerce.string().optional(),
+  title: z.coerce.string().optional(),
+  category: z.coerce.string().optional().nullable(),
   price: z.union([z.string(), z.number()]).optional(),
   special: z.union([z.string(), z.number()]).optional().nullable(),
-  manufacturer: z.string().optional().nullable(),
-  model: z.string().optional().nullable(),
-  image: z.string().optional().nullable(),
-  quantity: z.union([z.string(), z.number()]).transform((val) => Number(val)),
-  stock_status: z.string().optional().nullable(),
+  manufacturer: z.coerce.string().optional().nullable(),
+  model: z.coerce.string().optional().nullable(),
+  image: z.coerce.string().optional().nullable(),
+  quantity: z.union([z.string(), z.number()]).transform((val) => Number(val)).optional(),
+  stock_status: z.coerce.string().optional().nullable(),
 });
 
 export const laravelProductSchema = z.object({
@@ -474,6 +482,7 @@ export const laravelProductSchema = z.object({
   model: z.string().optional().nullable(),
   image: z.string().optional().nullable(),
   in_stock: z.boolean().optional(),
+  quantity: z.union([z.string(), z.number()]).transform((val) => Number(val)).optional(),
 });
 
 // ============================================================================

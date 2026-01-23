@@ -28,6 +28,7 @@ model Tenant {
   apiKeys         ApiKey[]
   bulkSnapshots   BulkOperationSnapshot[]
   backupConfig    Json?         // Stores Google Drive links, etc.
+  scrapeRetries   ScrapeRetry[]
 }
 
 model User {
@@ -107,11 +108,15 @@ model Site {
   syncProcessed  Int          @default(0)
   syncStartedAt  DateTime?
   syncTotal      Int          @default(0)
-  syncLastAction String?
-  currency       String       @default("USD")
+  syncLastAction        String?
+  isAdvancedProtected   Boolean      @default(false)
+  lastSecurityBlockAt   DateTime?
+  currency              String       @default("USD")
+  searchQueryPattern    String?     
   products       Product[]
   tenant         Tenant       @relation(fields: [tenantId], references: [id])
   syncLogs       SyncLog[]
+  scrapeRetries  ScrapeRetry[]
 }
 
 model SyncLog {
@@ -122,6 +127,7 @@ model SyncLog {
   createdAt DateTime @default(now())
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
+
 
 model Product {
   id                  String           @id @default(uuid())
@@ -148,6 +154,7 @@ model Product {
   tenant              Tenant           @relation(fields: [tenantId], references: [id])
   matchesAsCompetitor ProductMatch[]   @relation("CompetitorProduct")
   matchesAsUser       ProductMatch[]   @relation("UserProduct")
+  scrapeRetries       ScrapeRetry[]
 
   @@index([sku])
   @@index([tenantId])
@@ -385,4 +392,26 @@ model ApiKey {
 
   @@index([userId])
   @@index([tenantId])
+}
+
+model ScrapeRetry {
+  id              String   @id @default(uuid())
+  tenantId        String
+  siteId          String
+  userProductId   String
+  retryCount      Int      @default(0)
+  nextAttemptAt   DateTime
+  lastAttemptAt   DateTime?
+  status          String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  userProduct   Product  @relation(fields: [userProductId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([userProductId])
 }

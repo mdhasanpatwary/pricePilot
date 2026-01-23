@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SyncService } from "@/lib/services/sync";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
@@ -21,11 +20,19 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
-    const result = await SyncService.syncSite(siteId);
+    const { getSyncQueue } = await import("@/lib/queue/client");
+    const { QUEUE_NAMES } = await import("@/lib/queue/types");
+
+    const queue = getSyncQueue();
+    const job = await queue.add(QUEUE_NAMES.SYNC, {
+      type: "SOURCE_SYNC",
+      siteId,
+    });
+    console.log(`[API] Queued SOURCE_SYNC job ${job.id} for site ${siteId}`);
 
     return NextResponse.json({
-      message: "Sync completed successfully",
-      ...result,
+      message: "Sync started in background",
+      success: true,
     });
   } catch (error) {
     const err = error as Error;

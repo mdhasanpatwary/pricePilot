@@ -16,10 +16,10 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
       // We assume SyncOrchestrator.runFullSync handles logic.
       // Note: You might need to adjust SyncOrchestrator to accept siteId vs tenantId specifically
       // But based on previous context, runFullSync usually takes a tenantId.
-      await SyncOrchestrator.processFullSync(job.data.tenantId);
+      await SyncOrchestrator.processFullSync(job.data.tenantId, job.data.isCron);
     } else if (job.data.type === "SINGLE") {
       if (!job.data.siteId) throw new Error("SiteID required for single sync");
-      await SyncOrchestrator.processSiteSync(job.data.siteId);
+      await SyncOrchestrator.processSiteSync(job.data.siteId, false, job.data.isCron);
     } else if (job.data.type === "CHUNK") {
       if (!job.data.siteId || !job.data.productIds)
         throw new Error("Missing data for chunk sync");
@@ -27,6 +27,13 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
         job.data.siteId,
         job.data.productIds,
       );
+    } else if (job.data.type === "SOURCE_SYNC") {
+      if (!job.data.siteId) throw new Error("SiteID required for source sync");
+      const { SyncService } = await import("@/lib/services/sync");
+      await SyncService.syncSite(job.data.siteId);
+    } else if (job.data.type === "RETRY") {
+       if (!job.data.siteId || !job.data.productIds) throw new Error("Missing data for retry sync");
+       await SyncOrchestrator.processRetrySync(job.data.siteId, job.data.productIds);
     } else if (job.data.type === "MAINTENANCE") {
       const { MaintenanceService } = await import("@/lib/services/maintenance");
       await MaintenanceService.runDataRetention();

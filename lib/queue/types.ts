@@ -7,7 +7,8 @@ export interface SyncJobData {
   siteId?: string;
   tenantId?: string;
   productIds?: string[]; // IDs for chunked processing
-  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE";
+  isCron?: boolean;
+  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE" | "SOURCE_SYNC" | "RETRY";
 }
 
 export interface NotificationJobData {

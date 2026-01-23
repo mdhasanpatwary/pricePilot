@@ -101,7 +101,12 @@ describe("/api/integrations", () => {
           baseUrl: "https://mystore.com",
           lastSyncAt: new Date("2024-01-01"),
           createdAt: new Date("2024-01-01"),
+          isSyncing: false,
+          syncProcessed: 0,
+          syncTotal: 0,
+          syncLastAction: null,
           _count: { products: 100 },
+          syncLogs: [],
         },
       ];
 

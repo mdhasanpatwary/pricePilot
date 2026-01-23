@@ -15,6 +15,7 @@ import {
   X,
   Download,
   Filter,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -23,6 +24,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 const competitorSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
+  searchQueryPattern: z.string().optional(),
 });
 
 type CompetitorFormValues = z.infer<typeof competitorSchema>;
@@ -36,14 +38,15 @@ export default function CompetitorsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncingSiteId, setSyncingSiteId] = useState<string | null>(null);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
+  const [isAutoScroll, setIsAutoScroll] = useState(true);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll console to bottom when logs update
+  // Smart auto-scroll: Only scroll if user hasn't manually scrolled up
   useEffect(() => {
-    if (competitors.some((c) => c.isSyncing)) {
-      consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isAutoScroll && competitors.some((c) => c.isSyncing) && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [competitors]);
+  }, [competitors, isAutoScroll]);
 
   const {
     register,
@@ -390,6 +393,38 @@ export default function CompetitorsPage() {
                 )}
               </div>
 
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Search Pattern (Optional)
+                  </label>
+                  <div className="group relative">
+                    <span className="text-[10px] text-primary hover:underline cursor-help font-bold uppercase tracking-tighter">What&apos;s this?</span>
+                    <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-secondary border border-border rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                       <p className="text-[10px] text-muted-foreground leading-relaxed">
+                         Specify how the site&apos;s search works. Use <code className="text-primary font-bold">{`{query}`}</code> as a placeholder.
+                         <br /><br />
+                         Example:<br />
+                         <code className="text-xs break-all bg-muted p-1 rounded block mt-1">
+                           /search/advance/product/result/{"{query}"}
+                         </code>
+                       </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="relative group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
+                  <input
+                    {...register("searchQueryPattern")}
+                    type="text"
+                    placeholder="https://site.com/search?q={query}"
+                    className={cn(
+                      "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                    )}
+                  />
+                </div>
+              </div>
+
               <div className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <ShieldAlert className="w-4 h-4" />
@@ -469,6 +504,7 @@ export default function CompetitorsPage() {
                 <tr className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                   <th className="py-4 px-6">Source</th>
                   <th className="py-4 px-6 text-center">Products</th>
+                  <th className="py-4 px-6">Protection</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 w-48">Health</th>
                   <th className="py-4 px-6 text-right">Actions</th>
@@ -478,7 +514,7 @@ export default function CompetitorsPage() {
                 {isDataLoading ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="py-20 text-center text-muted-foreground animate-pulse"
                     >
                       Scanning market signals...
@@ -487,7 +523,7 @@ export default function CompetitorsPage() {
                 ) : competitors.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="py-20 text-center text-muted-foreground"
                     >
                       <div className="space-y-4">
@@ -533,8 +569,10 @@ export default function CompetitorsPage() {
                             <div className="text-foreground font-semibold">
                               {comp.name}
                             </div>
-                            <div className="text-[10px] text-muted-foreground font-mono">
-                              {new URL(comp.url).hostname}
+                            <div className="flex items-center gap-2">
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                {new URL(comp.url).hostname}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -550,9 +588,29 @@ export default function CompetitorsPage() {
                             </span>
                           </div>
                         ) : (
-                          <span className="font-semibold">
-                            {comp.products.toLocaleString()}
-                          </span>
+                          <div className="flex flex-col items-center justify-center">
+                            <span className="font-bold text-foreground text-xs">
+                              ({comp.products.toLocaleString()} / {comp.totalUserProducts?.toLocaleString() || "0"})
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-5 px-6">
+                        {comp.isAdvancedProtected ? (
+                          <div className="flex items-center gap-2 group cursor-help">
+                            <div className="flex -space-x-1">
+                               <ShieldAlert className="w-5 h-5 text-warning fill-warning/20 drop-shadow-[0_0_8px_rgba(var(--warning-rgb),0.4)]" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-warning leading-tight">Advanced</span>
+                              <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-tighter">Golden Rule</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
+                             <ShieldCheck className="w-5 h-5 text-success/70" />
+                             <span className="text-[10px] font-semibold text-muted-foreground uppercase">Standard</span>
+                          </div>
                         )}
                       </td>
                       <td className="py-5 px-6">
@@ -743,7 +801,16 @@ export default function CompetitorsPage() {
 
                 {/* Terminal Body - Vercel Build Log Style */}
                 <div className="p-0 font-mono text-[11px] h-[300px] flex flex-col bg-[#0a0a0a]">
-                  <div className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-white/10">
+                  <div 
+                    ref={scrollContainerRef}
+                    onScroll={(e) => {
+                      const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                      // Detect if user scrolled up (threshold 50px)
+                      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+                      setIsAutoScroll(isAtBottom);
+                    }}
+                    className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-white/10"
+                  >
                     {competitors.some((c) => c.isSyncing) ? (
                       competitors
                         .filter((c) => c.isSyncing)
@@ -803,7 +870,7 @@ export default function CompetitorsPage() {
 
                     {/* Final system signal */}
                     {competitors.some((c) => c.isSyncing) && (
-                      <div className="flex gap-3 px-2 py-2 text-primary/40">
+                      <div className="flex gap-3 px-2 py-2 text-primary/80 font-bold">
                         <span className="animate-pulse">&gt;</span>
                         <span className="animate-pulse">
                           Awaiting next telemetry packet...
@@ -811,8 +878,7 @@ export default function CompetitorsPage() {
                       </div>
                     )}
 
-                    {/* Auto-scroll anchor */}
-                    <div ref={consoleEndRef} />
+                    {/* Auto-scroll anchor removed in favor of scrollTop */}
                   </div>
 
                   {/* Traffic Footer Strip */}

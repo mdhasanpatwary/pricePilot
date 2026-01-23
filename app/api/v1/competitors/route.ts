@@ -21,6 +21,14 @@ async function handleGET(_req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
+    // Get total number of products the user is tracking (from USER site)
+    const totalUserProducts = await prisma.product.count({
+      where: {
+        tenantId,
+        site: { type: "USER" }
+      }
+    });
+
     const competitors = await prisma.site.findMany({
       where: {
         tenantId,
@@ -41,6 +49,9 @@ async function handleGET(_req: NextRequest) {
         syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
+        lastSecurityBlockAt: true,
+        currency: true,
+        searchQueryPattern: true,
         _count: {
           select: { products: true },
         },
@@ -93,6 +104,9 @@ async function handleGET(_req: NextRequest) {
             syncProcessed: site.syncProcessed,
             syncLastAction: site.syncLastAction,
             syncStartedAt: site.syncStartedAt,
+            totalUserProducts: totalUserProducts || 0,
+            isAdvancedProtected: (site as any).isAdvancedProtected || false,
+            searchQueryPattern: site.searchQueryPattern,
             logs: site.syncLogs || [],
           };
         } catch (e) {
@@ -136,7 +150,7 @@ async function handlePOST(req: NextRequest) {
       return validationErrorResponse(validation);
     }
 
-    const { url } = validation.data!;
+    const { url, searchQueryPattern } = validation.data!;
 
     // Fetch tenant limits
     const tenant = await prisma.tenant.findUnique({
@@ -171,6 +185,7 @@ async function handlePOST(req: NextRequest) {
         tenantId,
         isSyncing: true, // Start as syncing immediately so UI picks it up
         syncLastAction: "Initializing crawler...",
+        searchQueryPattern,
       },
     });
 

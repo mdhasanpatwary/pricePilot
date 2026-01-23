@@ -7,6 +7,7 @@ export type NotificationType =
   | "SYNC_ERROR"
   | "PRICE_ALERT"
   | "SYSTEM"
+  | "SECURITY_NOTICE"
   | "MATCH_ALERT";
 
 export class NotificationService {
@@ -133,6 +134,19 @@ export class NotificationService {
       title: "Market Price Shift",
       message: `Competitor price for ${productTitle} changed from ${oldPrice} to ${newPrice}.`,
       link: "/dashboard/products",
+    });
+  }
+
+  /**
+   * Send a security/block notification
+   */
+  static async sendSecurityNotice(tenantId: string, siteName: string, eta: string) {
+    return this.create({
+      tenantId,
+      type: "SECURITY_NOTICE",
+      title: "🛡️ Advanced Bot Protection Detected",
+      message: `Heads up! ${siteName} has increased security. We've switched to "Golden Rule" mode. Scraping will be much slower to avoid bans. Estimated completion: ~${eta}.`,
+      link: "/dashboard/competitors",
     });
   }
 }

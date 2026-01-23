@@ -14,12 +14,31 @@ jest.mock("playwright", () => ({
             .fn()
             .mockResolvedValue("<html><body>Test</body></html>"),
           waitForTimeout: jest.fn().mockResolvedValue({}),
+          waitForSelector: jest.fn().mockResolvedValue({}),
           close: jest.fn().mockResolvedValue({}),
+          evaluate: jest.fn().mockResolvedValue({}),
+          $: jest.fn().mockResolvedValue(null),
+          $$: jest.fn().mockResolvedValue([]),
+          $eval: jest.fn().mockResolvedValue("mock text"),
+          $$eval: jest.fn().mockResolvedValue([]),
+          url: jest.fn().mockReturnValue("https://example.com"),
         }),
         close: jest.fn().mockResolvedValue({}),
       }),
       close: jest.fn().mockResolvedValue({}),
     }),
+  },
+}));
+
+// Mock Prisma
+jest.mock("@/lib/prisma", () => ({
+  prisma: {
+    site: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
+    syncLog: {
+      create: jest.fn().mockResolvedValue({}),
+    },
   },
 }));
 

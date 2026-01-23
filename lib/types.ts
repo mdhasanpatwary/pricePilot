@@ -47,5 +47,8 @@ export interface Competitor {
   syncProcessed?: number;
   syncLastAction?: string | null;
   syncStartedAt?: string | Date | null;
+  totalUserProducts?: number;
+  isAdvancedProtected?: boolean;
+  searchQueryPattern?: string | null;
   logs?: any[];
 }
