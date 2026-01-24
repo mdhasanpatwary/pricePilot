@@ -44,10 +44,17 @@
 * [x] on tenant terminal this ">Awaiting next telemetry packet..." text has contrast issue. not showing properly.
 * [x] tenant panel competitor table product column content will be like this: (successfully fetched products / total products).
 * from super admin panel need to monitor what background process is running. and what is the status of that process. and also need to see logs of that process.
-* is there need 2 files AGENT_INSTRUCTIONS.md and AGENT_INSTRUCTIONS_FOR_DEVELOPER.md? 
+* is there need 2 files AGENT_INSTRUCTIONS.md and AGENT_INSTRUCTIONS_FOR_DEVELOPER.md?
 * don't execute the todo.md task from your own decision. ask me first.
 * ecommerce site er product api gulo ki public? public hole first sei api gulo use kore product fetch korar cheshta korbe. sob gulo product fetch kore ekta temp memory te store korbe. tarpor sei memory er product gulo sathe user er inventory product gulo match korbe. then oi memory theke product gulo delete kore dibe. jodi public na hoy tahole scraper use korbe.
-* 
+* in Match Approval page, should add competitor wise product filter tab.
+* [x] Most of the e-commerce sites have different search systems. Add an admin panel option to configure each site’s search pattern. For every site, store: (1) Website link and (2) Search pattern URL. Example: Website: https://www.techlandbd.com, Search pattern: https://www.techlandbd.com/search/advance/product/result/A4TECH+KRS-82+Wired+Multimedia.”
+* match approval page search is very unresponsive & laggy.
+* startech, ryans & techlandbd sob gulo jonno search pattern add kora ache code e but the default value is not showing on Configure Search Pattern modal for them!. also tenant from dashboard,  competitor website er search pattern add korte parbe. tenant er jonno proper instruction add korte hove.
+
+
+## Just Asking
+* jokhon scraper ekta url search diye multiple result pai, tokhon oi result gulo theke kivabe best result ta select kore?
 
 
 

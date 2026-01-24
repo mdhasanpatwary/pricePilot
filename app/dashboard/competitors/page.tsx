@@ -801,7 +801,7 @@ export default function CompetitorsPage() {
 
                 {/* Terminal Body - Vercel Build Log Style */}
                 <div className="p-0 font-mono text-[11px] h-[300px] flex flex-col bg-[#0a0a0a]">
-                  <div 
+                  <div
                     ref={scrollContainerRef}
                     onScroll={(e) => {
                       const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;

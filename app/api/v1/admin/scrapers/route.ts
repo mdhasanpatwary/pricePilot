@@ -41,7 +41,9 @@ async function handleGET(_req: NextRequest) {
     // 4. Get top domains being scraped
     const sites = await prisma.site.findMany({
       select: {
+        id: true,
         baseUrl: true,
+        searchQueryPattern: true,
         type: true,
         lastSyncAt: true,
         isSyncing: true,
@@ -63,6 +65,9 @@ async function handleGET(_req: NextRequest) {
         engineStatus: "Operational",
       },
       scrapers: sites.map((s) => ({
+        id: s.id,
+        baseUrl: s.baseUrl,
+        searchQueryPattern: s.searchQueryPattern,
         domain: new URL(s.baseUrl).hostname,
         type: s.type,
         tenant: s.tenant.companyName,

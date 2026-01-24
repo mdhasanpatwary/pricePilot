@@ -42,7 +42,7 @@ const SEARCH_STRATEGIES: Record<
   // TechLandBD: /search/advance/product/result/QUERY
   "techlandbd.com": (baseUrl, query) =>
     `${baseUrl.replace(/\/$/, "")}/search/advance/product/result/${encodeURIComponent(query).replace(/%20/g, "+")}`,
-  
+
   "techland.com.bd": (baseUrl, query) =>
     `${baseUrl.replace(/\/$/, "")}/search/advance/product/result/${encodeURIComponent(query).replace(/%20/g, "+")}`,
 };
@@ -139,12 +139,12 @@ export class ScraperService {
       const securityInfo = await this.analyzeSecurity(page, response);
       if (securityInfo.isBlocked) {
         logger.warn(`[ScraperService] ${securityInfo.provider} Block Detected at ${url}`);
-        
+
         // Dynamic Adjustment: If Cloudflare detected, try an extra long wait or specific stealth tactics
         if (securityInfo.provider === "CLOUDFLARE") {
            await page.waitForTimeout(5000); // Wait for challenge to potentially resolve
         }
-        
+
         if (securityInfo.isBlocked && securityInfo.provider !== "NONE") {
           logger.error(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url}`);
           throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
@@ -197,7 +197,7 @@ export class ScraperService {
     const status = response?.status ? response.status() : null;
     const title = (await page.title()).toLowerCase();
     const content = (await page.content()).toLowerCase();
-    
+
     // Safely extract headers - handle both real responses and mocks
     let headers: Record<string, string> = {};
     try {
@@ -264,7 +264,7 @@ export class ScraperService {
           const style = window.getComputedStyle(h);
           const size = parseFloat(style.fontSize);
           const text = h.textContent?.trim() || "";
-          
+
           // Exclude nav symbols, menus, etc.
           if (text.length > 10 && text.length < 200 && size > maxFontSize) {
             const rect = h.getBoundingClientRect();
@@ -279,7 +279,7 @@ export class ScraperService {
         // Score elements by their proximity to the title and visual prominence
         const allElements = Array.from(document.querySelectorAll('span, div, b, p, strong, td'));
         const pricePattern = /([৳\$]|TK|BDT)\s?([\d,]+\.?\d*)|([\d,]+\.?\d*)\s?([৳\$]|TK|BDT)/i;
-        
+
         let bestPriceMatch: string | null = null;
         let highestPriceScore = 0;
 
@@ -291,7 +291,7 @@ export class ScraperService {
             if (style.display === 'none' || style.visibility === 'hidden') continue;
 
             let score = parseFloat(style.fontSize) || 12;
-            
+
             // Bold price is better
             if (style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 600) score += 10;
             // Primary colored price (usually red or orange in BD) is better
@@ -585,7 +585,7 @@ export class ScraperService {
       // If price is 0 but product exists, check stock status
       if (price === 0 && data.title) {
         logger.warn(`[ScraperService] Price = 0 detected. Stock status: "${data.stockText}"`);
-        
+
         if (data.isComingSoon) {
           logger.info(`[ScraperService] Product is "Coming Soon" - marking as out of stock`);
         } else if (data.isPreOrder) {
@@ -750,7 +750,7 @@ export class ScraperService {
         const msg = `🛡️ [Scraper] Blocked by ${securityInfo.provider} at ${hostname}`;
         logger.warn(`[ScraperService] ${msg}`);
         await log(msg, "WARN");
-        
+
         if (securityInfo.isAdvanced) {
            throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
         }
@@ -785,7 +785,7 @@ export class ScraperService {
       // Fallback Strategy: Query Simplification
       if (!query.includes("__RETRY__") && cleanQuery.split(" ").length > 3) {
         logger.info(`[ScraperService] 🔄 No results. Attempting query simplification...`);
-        
+
         const stopWords = [
           "with", "graphics", "processor", "edition", "gaming", "desktop",
           "casing", "monitor", "series", "feature", "rgb", "tower", "color",
@@ -825,15 +825,15 @@ export class ScraperService {
       const potentialProducts = links.filter((a) => {
         const href = a.href.toLowerCase();
         const text = a.textContent?.trim().toLowerCase() || "";
-        
+
         // Skip links with very short text unless it's an image link (hard to detect here)
         if (text.length < 4 && !href.includes("product_id=")) return false;
 
-        const isSearchLink = 
-          (href.includes("route=product/search") || href.includes("/search/advance/product/result")) && 
+        const isSearchLink =
+          (href.includes("route=product/search") || href.includes("/search/advance/product/result")) &&
           !href.includes("product_id=");
-        
-        const isNavigation = 
+
+        const isNavigation =
           href.includes("sort=") ||
           href.includes("limit=") ||
           href.includes("page=") ||
@@ -849,7 +849,7 @@ export class ScraperService {
         const productContainer =
           a.closest(".product-thumb") ||
           a.closest(".product-layout") ||
-          a.closest(".product-box") || 
+          a.closest(".product-box") ||
           a.closest(".card") ||
           a.closest(".p-item") ||
           a.closest(".product-item") ||
@@ -862,7 +862,7 @@ export class ScraperService {
             if (queryWords.length > 0) {
                 const matchCount = queryWords.filter(w => text.includes(w) || href.includes(w)).length;
                 const matchRatio = matchCount / queryWords.length;
-                
+
                 // If it's a known container, we are more lenient (30% match)
                 // If it's a generic link, we are stricter (60% match)
                 const threshold = productContainer ? 0.3 : 0.6;
@@ -873,9 +873,9 @@ export class ScraperService {
         if (productContainer) return true;
 
         // Generic heuristic: Link contains /product/ or /p/ and has significant text
-        const isProductUrl = 
-          href.includes("/product/") || 
-          href.includes("/p/") || 
+        const isProductUrl =
+          href.includes("/product/") ||
+          href.includes("/p/") ||
           href.includes("/item/") ||
           (href.includes("/details/") && !href.includes("search")) ||
           (href.split('/').length > 3 && text.length > 20); // Deep link with long text
@@ -883,7 +883,7 @@ export class ScraperService {
         return isProductUrl && text.length > 15;
       });
 
-      // Filter and rank by distance from search query if possible, 
+      // Filter and rank by distance from search query if possible,
       // but for now, just return the first one that isn't a "compare" link
       const filtered = potentialProducts.filter(a => !a.href.includes("compare"));
       return filtered[0]?.href || null;

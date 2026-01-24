@@ -12,11 +12,17 @@ import {
   ExternalLink,
   ShieldCheck,
   Cpu,
+  Pencil,
+  X,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ScraperStat {
+  id: string;
   domain: string;
+  baseUrl: string;
+  searchQueryPattern: string | null;
   type: string;
   tenant: string;
   lastRun: string | null;
@@ -39,6 +45,44 @@ export default function ScraperStatusPage() {
   const [data, setData] = useState<ScraperData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [editingScraper, setEditingScraper] = useState<ScraperStat | null>(null);
+  const [editForm, setEditForm] = useState({ searchQueryPattern: "" });
+  const [saving, setSaving] = useState(false);
+
+  const openEdit = (scraper: ScraperStat) => {
+    setEditingScraper(scraper);
+    setEditForm({ searchQueryPattern: scraper.searchQueryPattern || "" });
+  };
+
+  const closeEdit = () => {
+    setEditingScraper(null);
+    setEditForm({ searchQueryPattern: "" });
+  };
+
+  const saveConfig = async () => {
+    if (!editingScraper) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/admin/sites/${editingScraper.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ searchQueryPattern: editForm.searchQueryPattern }),
+      });
+
+      if (res.ok) {
+        // Optimistic update or refresh
+        fetchStatus();
+        closeEdit();
+      } else {
+        alert("Failed to save configuration");
+      }
+    } catch (error) {
+      console.error("Save failed", error);
+      alert("Error saving configuration");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const fetchStatus = async () => {
     setRefreshing(true);
@@ -194,7 +238,8 @@ export default function ScraperStatusPage() {
                   <th className="px-6 py-4 text-left">Target Domain</th>
                   <th className="px-6 py-4 text-left">Tenant Info</th>
                   <th className="px-6 py-4 text-left">Last Sync</th>
-                  <th className="px-6 py-4 text-right">Status</th>
+                  <th className="px-6 py-4 text-center">Status</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -237,7 +282,8 @@ export default function ScraperStatusPage() {
                           : "Never"}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
+
+                    <td className="px-6 py-4 text-center">
                       <span
                         className={cn(
                           "inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border",
@@ -257,12 +303,21 @@ export default function ScraperStatusPage() {
                         {s.status}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => openEdit(s)}
+                        className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
+                        title="Configure Scraper"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {data.scrapers.length === 0 && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={5}
                       className="px-6 py-12 text-center text-muted-foreground italic"
                     >
                       No scraping endpoints configured.
@@ -337,6 +392,76 @@ export default function ScraperStatusPage() {
           </div>
         </div>
       </div>
+      {/* Edit Dialog - Simple Overlay Implementation */}
+      {editingScraper && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-background border rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b flex items-center justify-between bg-muted/30">
+              <div>
+                <h3 className="font-bold text-lg">Configure Search Pattern</h3>
+                <p className="text-xs text-muted-foreground">
+                  {editingScraper.domain}
+                </p>
+              </div>
+              <button
+                onClick={closeEdit}
+                className="p-1 hover:bg-muted rounded text-muted-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Website Link</label>
+                <div className="p-2 bg-muted rounded border text-sm font-mono truncate text-muted-foreground">
+                  {editingScraper.baseUrl}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Search Pattern URL
+                </label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Use the pattern from the target site. The search term will be appended or inserted.
+                  <br/>Example: <code>https://www.example.com/s?k=jacket+for+men</code>
+                </p>
+                <input
+                  type="text"
+                  value={editForm.searchQueryPattern}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, searchQueryPattern: e.target.value })
+                  }
+                  placeholder="https://example.com/search?q="
+                  className="w-full p-2 rounded border bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t bg-muted/30 flex justify-end gap-2">
+              <button
+                onClick={closeEdit}
+                className="px-4 py-2 text-sm font-medium hover:bg-muted rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveConfig}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors flex items-center gap-2"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save Configuration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
