@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-async function handleGET(_req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -42,13 +42,61 @@ async function handleGET(_req: NextRequest) {
       // keep default USD
     }
 
+    // Parse query params
+    const searchParams = req.nextUrl.searchParams;
+    const q = searchParams.get("q") || "";
+    const brand = searchParams.get("brand");
+    const category = searchParams.get("category");
+    const stock = searchParams.get("stock"); // ALL, INSTOCK, OOS
+    const ram = searchParams.get("ram");
+    const storage = searchParams.get("storage");
+    const processor = searchParams.get("processor");
+
+    const where: any = {
+      tenantId,
+      site: { type: "USER" },
+    };
+
+    // 1. Text Search
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: "insensitive" } },
+        { sku: { contains: q, mode: "insensitive" } },
+        { brand: { contains: q, mode: "insensitive" } },
+        { model: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    // 2. Standard Filters
+    if (brand && brand !== "ALL") where.brand = brand;
+    if (category && category !== "ALL") where.category = category;
+    if (stock === "INSTOCK") where.inStock = true;
+    if (stock === "OOS") where.inStock = false;
+
+    // 3. Tech Spec Filters (JSONB)
+    if (ram || storage || processor) {
+      // Prisma JSON filtering requires specific syntax
+      // We check if the specifications JSON contains the key-value pair
+      const specsFilter: any = {};
+      if (ram) specsFilter.ram = ram;
+      if (storage) specsFilter.storage = storage;
+      if (processor) specsFilter.processor = processor;
+      
+      // Use 'equals' for exact JSON match on a subset of properties if possible,
+      // but Prisma's 'path' support is better for individual fields.
+      // Since we want ANY of these to match if provided:
+      const andConditions = [];
+      if (ram) andConditions.push({ specifications: { path: ["ram"], equals: ram } });
+      if (storage) andConditions.push({ specifications: { path: ["storage"], equals: storage } });
+      if (processor) andConditions.push({ specifications: { path: ["processor"], equals: processor } });
+      
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
+      }
+    }
+
     const products = await prisma.product.findMany({
-      where: {
-        tenantId,
-        site: {
-          type: "USER",
-        },
-      },
+      where,
       include: {
         site: true,
         matchesAsUser: {
@@ -147,8 +195,8 @@ async function handleGET(_req: NextRequest) {
         siteName: product.site?.baseUrl
           ? new URL(product.site.baseUrl).hostname.replace("www.", "")
           : "Unknown",
-        url: product.url,
         allMatches,
+        specifications: (product as any).specifications || {},
       };
     });
 

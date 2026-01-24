@@ -9,7 +9,12 @@ import {
   RefreshCw,
   Target,
   AlertCircle,
+  TrendingDown,
   TrendingUp as ProfitIcon,
+  Globe,
+  ShieldCheck,
+  Activity,
+  Zap,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -22,9 +27,13 @@ import {
   PieChart,
   Pie,
   Cell,
+  BarChart,
+  Bar,
+  Legend,
 } from "recharts";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function AnalyticsContent() {
@@ -33,6 +42,9 @@ function AnalyticsContent() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
+  const [techStats, setTechStats] = useState<any>(null);
+  const [competitorStats, setCompetitorStats] = useState<any>(null);
+  const [elasticityData, setElasticityData] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [currency, setCurrency] = useState("USD");
 
@@ -40,18 +52,28 @@ function AnalyticsContent() {
     setIsLoading(true);
     try {
       const query = impersonateId ? `?tenantId=${impersonateId}` : "";
-      const [summaryRes, historyRes] = await Promise.all([
+      const [summaryRes, historyRes, techRes, compRes, elasticRes] = await Promise.all([
         fetch(`/api/v1/analytics/summary${query}`),
         fetch(
           `/api/v1/analytics/history${query ? query + "&days=30" : "?days=30"}`,
         ),
+        fetch(`/api/v1/analytics/tech-intelligence${query}`),
+        fetch(`/api/v1/analytics/competitor-analysis${query}`),
+        fetch(`/api/v1/analytics/price-elasticity${query}`),
       ]);
 
-      if (summaryRes.ok && historyRes.ok) {
+      if (summaryRes.ok && historyRes.ok && techRes.ok && compRes.ok && elasticRes.ok) {
         const summaryData = await summaryRes.json();
         const historyData = await historyRes.json();
+        const techData = await techRes.json();
+        const compData = await compRes.json();
+        const elasticData = await elasticRes.json();
+        
         setStats(summaryData);
         setHistory(historyData);
+        setTechStats(techData);
+        setCompetitorStats(compData);
+        setElasticityData(elasticData);
         if (summaryData.stats.currency) setCurrency(summaryData.stats.currency);
       } else {
         toast.error("Failed to load analytics data");
@@ -405,6 +427,270 @@ function AnalyticsContent() {
           </p>
         </div>
       </div>
+
+      {/* Tech Intelligence Section (NEW) */}
+      {techStats && (
+        <div className="space-y-8">
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Brand Performance Analysis */}
+            <div className="flex-1 bg-card border border-border rounded-xl p-8 shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <Target className="w-5 h-5 text-primary" />
+                <h3 className="text-xl font-bold">Brand Performance Matrix</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-widest text-left">
+                      <th className="pb-4">Brand</th>
+                      <th className="pb-4">Risk (%)</th>
+                      <th className="pb-4">Avg Price</th>
+                      <th className="pb-4">Mkt Index</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    {techStats.brandPerformance?.map((b: any) => (
+                      <tr key={b.brand} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td className="py-4 font-bold">{b.brand}</td>
+                        <td className="py-4">
+                          <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold", b.riskPercentage > 30 ? "bg-danger/10 text-danger" : "bg-success/10 text-success")}>
+                            {b.riskPercentage}%
+                          </span>
+                        </td>
+                        <td className="py-4 font-mono">{formatCurrency(b.avgPrice, currency)}</td>
+                        <td className="py-4">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            {b.marketIndex > 0 ? (
+                              <TrendingUp className="w-3 h-3 text-success" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3 text-danger" />
+                            )}
+                            <span className={b.marketIndex > 0 ? "text-success" : "text-danger"}>
+                                {Math.abs(b.marketIndex)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Spec-Based Pricing Trends */}
+            <div className="w-full md:w-1/3 bg-card border border-border rounded-xl p-8 shadow-sm">
+                <div className="flex items-center gap-2 mb-6">
+                    <ProfitIcon className="w-5 h-5 text-primary" />
+                    <h3 className="text-xl font-bold">Spec Pricing Hub</h3>
+                </div>
+                <div className="space-y-6">
+                    <div>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground mb-3 tracking-widest opacity-60">RAM Variation Premium</p>
+                        <div className="space-y-3">
+                            {techStats.specInsights?.ram?.map((r: any) => (
+                                <div key={r.value} className="flex flex-col gap-1">
+                                    <div className="flex justify-between text-xs font-bold">
+                                        <span>{r.value}</span>
+                                        <span className={r.gap < 0 ? "text-danger" : "text-success"}>
+                                            {r.gap > 0 ? "+" : ""}{r.gap}% gap
+                                        </span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-primary" 
+                                            style={{ width: `${Math.min(100, (r.avgPrice / techStats.specInsights.ram[0].avgPrice) * 100)}%` }} 
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-border">
+                        <p className="text-[10px] font-black uppercase text-muted-foreground mb-3 tracking-widest opacity-60">Storage Tier Efficiency</p>
+                        <div className="space-y-3">
+                            {techStats.specInsights?.storage?.map((s: any) => (
+                                <div key={s.value} className="flex flex-col gap-1">
+                                    <div className="flex justify-between text-xs font-bold">
+                                        <span>{s.value}</span>
+                                        <span className="text-muted-foreground">{formatCurrency(s.avgPrice, currency)}</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-indigo-500" 
+                                            style={{ width: `${Math.min(100, (s.avgPrice / techStats.specInsights.storage[0].avgPrice) * 100)}%` }} 
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Competitor Landscape Section (NEW) */}
+      {competitorStats && competitorStats.data?.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-8 shadow-sm space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-primary" />
+                    Market Landscape: Competitor Pricing
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Benchmark average price points across different store categories.
+                  </p>
+                </div>
+              </div>
+
+              <div className="h-[400px] w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={competitorStats.data}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border)/0.5)" />
+                          <XAxis 
+                            dataKey="category" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fontSize: 10, fontWeight: 'bold' }} 
+                          />
+                          <YAxis 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(val) => `${val}`}
+                          />
+                          <Tooltip 
+                            cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
+                            contentStyle={{ borderRadius: '12px', border: '1px solid hsl(var(--border))', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                          />
+                          <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
+                          {competitorStats.competitors.slice(0, 5).map((comp: any, idx: number) => {
+                              const colors = ["hsl(var(--primary))", "hsl(var(--indigo-500))", "hsl(var(--blue-500))", "hsl(var(--slate-500))", "hsl(var(--zinc-500))"];
+                              return (
+                                <Bar 
+                                    key={comp.id} 
+                                    dataKey={comp.name} 
+                                    fill={colors[idx] || colors[0]} 
+                                    radius={[4, 4, 0, 0]} 
+                                    barSize={20}
+                                />
+                              );
+                          })}
+                      </BarChart>
+                  </ResponsiveContainer>
+              </div>
+
+              <div className="pt-8 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-12">
+                  <div>
+                      <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground mb-4 opacity-70">Catalog Density by Rival</h4>
+                      <div className="space-y-4">
+                          {competitorStats.competitors.map((comp: any) => {
+                              const totalItems = competitorStats.data.reduce((sum: number, row: any) => sum + (row[`${comp.name}_count`] || 0), 0);
+                              return (
+                                  <div key={comp.id} className="flex flex-col gap-1.5">
+                                      <div className="flex justify-between items-center text-xs font-bold">
+                                          <span>{comp.name}</span>
+                                          <Badge variant="secondary" className="text-[9px] font-black">{totalItems} Products Tracked</Badge>
+                                      </div>
+                                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full bg-primary/40" 
+                                            style={{ width: `${Math.min(100, (totalItems / 100) * 100)}%` }} // Scaling helper
+                                          />
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
+                  <div className="bg-primary/[0.03] border border-primary/10 rounded-2xl p-6 flex flex-col justify-center">
+                       <ShieldCheck className="w-10 h-10 text-primary mb-4 opacity-40" />
+                       <h5 className="font-extrabold text-sm mb-2">Market Intelligence Note</h5>
+                       <p className="text-xs text-muted-foreground leading-relaxed">
+                          This data is aggregated from your active crawlers. Categories are mapped automatically based on competitor site structures. 
+                          <b> Average Price</b> is calculated based on current listing data and does not reflect promotional flash sales unless detected during the last sync.
+                       </p>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Price Elasticity & Sensitivity Section (NEW) */}
+      {elasticityData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Market Reactivity Meter */}
+            <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8">
+                    <div>
+                        <h3 className="text-xl font-bold flex items-center gap-2">
+                            <Activity className="w-5 h-5 text-primary" />
+                            Market Reactivity Index
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            Measures how responsive your prices are to competitor moves.
+                        </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest px-3 py-1">
+                        Sensitivity: {elasticityData.reactivityIndex > 70 ? 'High' : elasticityData.reactivityIndex > 30 ? 'Moderate' : 'Low'}
+                    </Badge>
+                </div>
+
+                <div className="flex flex-col items-center justify-center space-y-4 py-6">
+                    <div className="relative w-48 h-24 overflow-hidden">
+                        <div className="absolute inset-0 border-[16px] border-muted rounded-t-full" />
+                        <div 
+                            className="absolute inset-0 border-[16px] border-primary rounded-t-full origin-bottom transition-all duration-1000"
+                            style={{ transform: `rotate(${(elasticityData.reactivityIndex / 100) * 180 - 180}deg)` }}
+                        />
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-3xl font-black text-foreground">
+                            {elasticityData.reactivityIndex}%
+                        </div>
+                    </div>
+                    <p className="text-xs text-center text-muted-foreground max-w-[280px]">
+                        Your catalog has a <b>{elasticityData.sensitivityOverview.marketCorrelation}</b> correlation with market leaders. 
+                        A higher index suggests proactive pricing strategies.
+                    </p>
+                </div>
+            </div>
+
+            {/* Spec Premium Elasticity */}
+            <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
+                <div className="flex items-center gap-2 mb-6">
+                    <Zap className="w-5 h-5 text-primary" />
+                    <h3 className="text-xl font-bold">Base vs. Spec Elasticity</h3>
+                </div>
+                <div className="space-y-6">
+                    {elasticityData.specElasticity?.length > 0 ? (
+                        elasticityData.specElasticity.slice(0, 3).map((item: any) => (
+                            <div key={item.model} className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs font-black uppercase text-muted-foreground">{item.model}</span>
+                                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                                        Premium Gap: {formatCurrency(item.variants[item.variants.length-1].price - item.variants[0].price, currency)}
+                                    </span>
+                                </div>
+                                <div className="flex gap-2">
+                                    {item.variants.map((v: any) => (
+                                        <div key={v.ram} className="flex-1 bg-muted/30 p-3 rounded-lg border border-border/50 text-center">
+                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">{v.ram}</p>
+                                            <p className="text-sm font-black">{formatCurrency(v.price, currency)}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="py-12 text-center text-muted-foreground italic text-sm">
+                            Insufficient variant data found for elasticity mapping.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -489,6 +489,57 @@ export const laravelProductSchema = z.object({
 // EXPORT TYPES
 // ============================================================================
 
+export const shopifyProductSchema = z.object({
+  id: z.coerce.string(),
+  title: z.string(),
+  body_html: z.string().optional().nullable(),
+  vendor: z.string().optional().nullable(),
+  product_type: z.string().optional().nullable(),
+  tags: z.string().optional().nullable(),
+  variants: z.array(z.object({
+    id: z.coerce.string(),
+    sku: z.string().optional().nullable(),
+    price: z.coerce.string(),
+    inventory_quantity: z.number().optional().nullable(),
+    option1: z.string().optional().nullable(),
+    option2: z.string().optional().nullable(),
+    option3: z.string().optional().nullable(),
+  })).optional().default([]),
+  images: z.array(z.object({ src: z.string() })).optional().default([]),
+});
+
+export const wooCommerceProductSchema = z.object({
+  id: z.coerce.string(),
+  name: z.string(),
+  sku: z.string().optional().nullable(),
+  price: z.coerce.string(),
+  stock_status: z.string().optional().nullable(),
+  categories: z.array(z.object({ name: z.string() })).optional().default([]),
+  images: z.array(z.object({ src: z.string() })).optional().default([]),
+  attributes: z.array(z.object({
+    name: z.string(),
+    options: z.array(z.string())
+  })).optional().default([]),
+});
+
+export const magentoProductSchema = z.object({
+  id: z.coerce.string(),
+  sku: z.string(),
+  name: z.string(),
+  price: z.number(),
+  status: z.number().optional().nullable(),
+  type_id: z.string().optional().nullable(),
+  extension_attributes: z.object({
+    stock_item: z.object({
+      is_in_stock: z.boolean()
+    }).optional()
+  }).optional(),
+  custom_attributes: z.array(z.object({
+    attribute_code: z.string(),
+    value: z.any()
+  })).optional().default([]),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateIntegrationInput = z.infer<typeof createIntegrationSchema>;
@@ -509,3 +560,6 @@ export type SearchQueryInput = z.infer<typeof searchQuerySchema>;
 export type DateRangeInput = z.infer<typeof dateRangeSchema>;
 export type OpenCartProduct = z.infer<typeof openCartProductSchema>;
 export type LaravelProduct = z.infer<typeof laravelProductSchema>;
+export type ShopifyProduct = z.infer<typeof shopifyProductSchema>;
+export type WooCommerceProduct = z.infer<typeof wooCommerceProductSchema>;
+export type MagentoProduct = z.infer<typeof magentoProductSchema>;

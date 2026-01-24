@@ -17,13 +17,19 @@ export const getSyncQueue = () => {
   const queue = new Queue(QUEUE_NAMES.SYNC, {
     connection: getRedisConnection() as any,
     defaultJobOptions: {
-      attempts: 1, // Disable retries for sync jobs to avoid 'zombie restarts'
+      attempts: 3, // Allow retries for transient networking errors
       backoff: {
         type: "exponential",
-        delay: 5000,
+        delay: 10000, // Start with 10s backoff
       },
-      removeOnComplete: 100, // Keep last 100 jobs
-      removeOnFail: 500, // Keep last 500 failed jobs
+      removeOnComplete: {
+        count: 500, // Keep more completed jobs for audit
+        age: 24 * 3600, // Max 24 hours
+      },
+      removeOnFail: {
+        count: 1000, // Detailed failure history for tech matching
+        age: 7 * 24 * 3600, // Keep failures for a week
+      },
     },
   });
 

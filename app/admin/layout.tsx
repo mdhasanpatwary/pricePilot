@@ -20,7 +20,6 @@ import {
   FileText,
   Bug,
   RefreshCw,
-  ActivitySquare,
   CalendarClock,
   HeartPulse,
   Microscope,
@@ -52,7 +51,7 @@ const adminMenuItems = [
     ],
   },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
-  { icon: ActivitySquare, label: "Diagnostics", href: "/admin/diagnostics" },
+  { icon: Bug, label: "System Debug Center", href: "/admin/debug" },
   {
     icon: Settings2,
     label: "Business Setup (Logic)",

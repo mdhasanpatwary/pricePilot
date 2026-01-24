@@ -9,7 +9,9 @@ import {
   Server,
   Terminal,
   RefreshCw,
+  BadgeCent,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface SyncLog {
   id: string;
@@ -35,8 +37,36 @@ interface SyncSession {
   syncLogs: SyncLog[];
 }
 
+interface QueueJob {
+  id: string;
+  name: string;
+  data: any;
+  progress: number;
+  timestamp: number;
+  failedReason?: string;
+}
+
+interface QueueStats {
+  name: string;
+  counts: {
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+    waiting: number;
+  };
+  activeJobs: QueueJob[];
+  recentFailures?: QueueJob[];
+}
+
+interface AllQueueStats {
+  sync: QueueStats;
+  notifications: QueueStats;
+}
+
 export default function LiveSyncMonitor() {
   const [sessions, setSessions] = useState<SyncSession[]>([]);
+  const [queueStats, setQueueStats] = useState<AllQueueStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -48,6 +78,12 @@ export default function LiveSyncMonitor() {
         const data = await res.json();
         setSessions(data);
         setLastUpdated(new Date());
+      }
+
+      const queueRes = await fetch("/api/v1/admin/queue-status");
+      if (queueRes.ok) {
+        const queueData = await queueRes.json();
+        setQueueStats(queueData);
       }
     } catch (error) {
       console.error("Failed to fetch sync data:", error);
@@ -106,6 +142,86 @@ export default function LiveSyncMonitor() {
           </button>
         </div>
       </div>
+
+      {/* Queue Health Section */}
+      {queueStats && (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <QueueCard stats={queueStats.sync} icon={RefreshCw} color="blue" />
+            <QueueCard
+              stats={queueStats.notifications}
+              icon={Activity}
+              color="indigo"
+            />
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Active Jobs List */}
+            <div className="border rounded-lg bg-card overflow-hidden h-fit">
+              <div className="bg-muted/50 px-4 py-3 border-b flex items-center justify-between">
+                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                   <Terminal className="w-4 h-4" />
+                   Active Worker Processes
+                </h3>
+                <Badge variant="outline" className="text-[10px]">{queueStats.sync.activeJobs.length + queueStats.notifications.activeJobs.length} Running</Badge>
+              </div>
+              <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
+                {[...queueStats.sync.activeJobs, ...queueStats.notifications.activeJobs].length === 0 ? (
+                  <p className="p-10 text-center text-sm text-muted-foreground italic">No active jobs in flight</p>
+                ) : (
+                  [...queueStats.sync.activeJobs, ...queueStats.notifications.activeJobs].map(job => (
+                    <div key={job.id} className="p-3 hover:bg-muted/30 transition-colors flex items-center justify-between group">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <code className="text-[10px] bg-zinc-100 dark:bg-zinc-800 px-1 rounded font-mono text-muted-foreground">#{job.id.substring(0,8)}</code>
+                          <span className="text-xs font-bold">{job.data.type || job.name}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+                          {job.data.siteId || job.data.tenantId || "System Core"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-muted-foreground">{new Date(job.timestamp).toLocaleTimeString()}</span>
+                            {job.progress > 0 && <span className="text-[10px] font-bold text-primary">{job.progress}%</span>}
+                         </div>
+                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Recent Failures List */}
+            <div className="border rounded-lg bg-card overflow-hidden h-fit">
+              <div className="bg-red-50 dark:bg-red-950/20 px-4 py-3 border-b flex items-center justify-between">
+                <h3 className="font-bold text-sm uppercase tracking-wider text-red-600 dark:text-red-400 flex items-center gap-2">
+                   <Activity className="w-4 h-4" />
+                   Recent Failure Logs
+                </h3>
+              </div>
+              <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
+                {!queueStats.sync.recentFailures || queueStats.sync.recentFailures.length === 0 ? (
+                  <p className="p-10 text-center text-sm text-muted-foreground italic">No recent failures detected</p>
+                ) : (
+                  queueStats.sync.recentFailures.map(job => (
+                    <div key={job.id} className="p-3 bg-red-50/30 dark:bg-red-950/5 hover:bg-red-50/50 transition-colors">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-red-700 dark:text-red-400">{job.data.type || job.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(job.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                      <p className="text-[10px] text-red-600 dark:text-red-400 font-mono line-clamp-2 bg-red-100/50 dark:bg-red-900/20 p-2 rounded border border-red-200/50 dark:border-red-900/50">
+                        {job.failedReason}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && sessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
@@ -266,6 +382,52 @@ function SyncCard({ session }: { session: SyncSession }) {
               No logs available for this session.
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QueueCard({
+  stats,
+  icon: Icon,
+  color,
+}: {
+  stats: QueueStats;
+  icon: any;
+  color: "blue" | "indigo";
+}) {
+  const total = stats.counts.active + stats.counts.waiting + stats.counts.delayed;
+  
+  return (
+    <div className="border rounded-lg p-4 bg-card shadow-sm">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
+          <Icon className={`w-4 h-4 text-${color}-500`} />
+          {stats.name}
+        </h3>
+        {stats.counts.failed > 0 && (
+          <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">
+            {stats.counts.failed} Fails
+          </span>
+        )}
+      </div>
+      <div className="flex items-end gap-2 mb-1">
+        <span className="text-2xl font-bold">{stats.counts.active}</span>
+        <span className="text-sm text-muted-foreground mb-1">Active</span>
+      </div>
+      <div className="flex gap-2 text-xs text-muted-foreground mt-3 pt-3 border-t">
+        <div className="flex flex-col">
+          <span className="font-medium">{stats.counts.waiting}</span>
+          <span className="text-[10px]">Waiting</span>
+        </div>
+        <div className="flex flex-col border-l pl-2">
+          <span className="font-medium">{stats.counts.delayed}</span>
+          <span className="text-[10px]">Delayed</span>
+        </div>
+        <div className="flex flex-col border-l pl-2">
+          <span className="font-medium text-green-600">{stats.counts.completed}</span>
+          <span className="text-[10px]">Done</span>
         </div>
       </div>
     </div>

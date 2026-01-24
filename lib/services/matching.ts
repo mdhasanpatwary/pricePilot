@@ -9,7 +9,23 @@ interface LiteProduct {
   brand: string | null;
   model: string | null;
   title: string;
+  specifications?: any;
 }
+
+// Synonyms map for tech jargon normalization
+const TECH_SYNONYMS: Record<string, string> = {
+  "generation": "gen",
+  "notebook": "laptop",
+  "wireless": "bt",
+  "bluetooth": "bt",
+  "memory": "ram",
+  "storage": "rom",
+  "cellular": "4g",
+  "lte": "4g",
+  "pro max": "promax", // remove space for easier matching
+  "ultra hd": "4k",
+  "uhd": "4k",
+};
 
 /**
  * Advanced Product Matching Service
@@ -133,6 +149,44 @@ export class MatchingService {
         };
       }
     }
+    // Pass 1.5: Regex-based Model Pattern Match (Explicit in Title)
+    // Extracts common patterns like "KRS-82", "S23", "RTX-4090"
+    const userModel = this.extractModelNumber(userProduct.title);
+    if (userModel) {
+      const regexMatch = competitorProducts.find((cp) => {
+        const cpModel = this.extractModelNumber(cp.title);
+        // Match if extracted model numbers are identical and > 3 chars (to avoid noise like 'AMD')
+        return cpModel && cpModel === userModel && userModel.length > 3;
+      });
+
+      if (regexMatch) {
+        return {
+          product: regexMatch,
+          type: "AUTO_MODEL",
+          confidence: 0.95, // Higher than Brand match, slightly lower than explicit SKU
+        };
+      }
+    }
+
+    // Pass 1.8: Specification Match (Check RAM/Storage/Color if available)
+    // This handles "Semantic Product Understanding" by verifying key attributes
+    if (userProduct.specifications) {
+      const bestSpecMatch = competitorProducts
+        .map((cp) => ({
+          product: cp,
+          score: this.compareSpecifications(userProduct, cp),
+        }))
+        .filter((m) => m.score > 0.8) // High threshold for spec match
+        .sort((a, b) => b.score - a.score)[0];
+
+      if (bestSpecMatch) {
+        return {
+          product: bestSpecMatch.product,
+          type: "AUTO_MODEL",
+          confidence: 0.85 + (bestSpecMatch.score * 0.1), // Boost confidence if specs align
+        };
+      }
+    }
 
     // Pass 2: Brand + Model Match (High Confidence)
     if (userProduct.brand && userProduct.model) {
@@ -208,9 +262,83 @@ export class MatchingService {
     // Strip common noise words and colors
     const words = cleaned.split(" ").filter((word) => {
       return !this.NOISE_WORDS.includes(word) && !this.COLORS.includes(word);
-    });
+    }).map(word => TECH_SYNONYMS[word] || word);
 
     return words.join(" ");
+  }
+
+  /**
+   * Compare technical specifications between two products
+   * Returns a score between 0 and 1
+   */
+  private static compareSpecifications(p1: LiteProduct, p2: LiteProduct): number {
+    if (!p1.specifications || !p2.specifications) return 0;
+    
+    // Normalize to simple key-value maps
+    const s1 = typeof p1.specifications === 'string' ? JSON.parse(p1.specifications) : p1.specifications;
+    const s2 = typeof p2.specifications === 'string' ? JSON.parse(p2.specifications) : p2.specifications;
+
+    if (!s1 || !s2) return 0;
+
+    let matches = 0;
+    let comparisons = 0;
+
+    // Critical Tech Keys to compare
+    const keys = ['ram', 'memory', 'storage', 'capacity', 'color', 'processor', 'cpu', 'gpu'];
+
+    for (const key of keys) {
+        // Find matching keys in both objects (fuzzy key search)
+        const v1 = this.findValueByKey(s1, key);
+        const v2 = this.findValueByKey(s2, key);
+
+        if (v1 && v2) {
+            comparisons++;
+            // Simple inclusion/equality check
+            if (this.fuzzyValueMatch(v1, v2)) {
+                matches++;
+            } else {
+                // If critical specs differ (e.g. 8GB vs 16GB), huge penalty
+                matches -= 2; 
+            }
+        }
+    }
+
+    if (comparisons === 0) return 0; 
+    
+    // Return score. Note: matches can be negative, floor at 0.
+    return Math.max(0, matches / comparisons);
+  }
+
+  // Helper to find value by fuzzy key
+  private static findValueByKey(specs: any, searchKey: string): string | null {
+      const foundKey = Object.keys(specs).find(k => k.toLowerCase().includes(searchKey));
+      return foundKey ? String(specs[foundKey]) : null;
+  }
+
+  // Helper for value matching (e.g. "8GB" == "8 GB")
+  private static fuzzyValueMatch(v1: string, v2: string): boolean {
+      const n1 = v1.toLowerCase().replace(/\s/g, '');
+      const n2 = v2.toLowerCase().replace(/\s/g, '');
+      return n1.includes(n2) || n2.includes(n1);
+  }
+
+  /**
+   * Extract model number pattern key from title
+   * Matches patterns like: KRS-82, G304, S23-Ultra, iPhone 15
+   */
+  private static extractModelNumber(title: string): string | null {
+    // 1. Alphanumeric with hyphen (Tech style: A4TECH-KRS-82, KRS-83)
+    const techRegex = /\b[A-Z0-9]{2,}-[A-Z0-9]{2,}\b/i;
+    const match1 = title.match(techRegex);
+    if (match1) return match1[0].toUpperCase();
+
+    // 2. Standalone alphanumeric model codes (common in GPUs, Phones: RTX4090, S24)
+    // Avoids strictly numeric (sizes) or pure alpha (words) unless mixed
+    const modelCodeRegex = /\b(?=[A-Z]+[0-9]|[0-9]+[A-Z])[A-Z0-9]{4,}\b/i;
+    const match2 = title.match(modelCodeRegex);
+    if (match2) return match2[0].toUpperCase();
+
+    return null;
   }
 
   /**

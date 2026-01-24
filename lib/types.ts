@@ -25,6 +25,7 @@ export interface Product {
   isCheapest?: boolean;
   isMostExpensive?: boolean;
   priceDifference?: number;
+  specifications?: Record<string, string>;
 }
 
 export interface Stats {

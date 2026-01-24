@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { Product, Site } from "@prisma/client";
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import { z } from "zod";
 import {
   openCartProductSchema,
   laravelProductSchema,
+  shopifyProductSchema,
+  wooCommerceProductSchema,
+  magentoProductSchema,
 } from "@/lib/validation/schemas";
 
 interface ExternalProduct {
@@ -60,6 +64,12 @@ export class SyncService {
         externalProducts = await this.fetchFromOpenCart(site);
       } else if (site.platform === "LARAVEL") {
         externalProducts = await this.fetchFromLaravel(site);
+      } else if (site.platform === "SHOPIFY") {
+        externalProducts = await this.fetchFromShopify(site);
+      } else if (site.platform === "WOOCOMMERCE") {
+        externalProducts = await this.fetchFromWooCommerce(site);
+      } else if (site.platform === "MAGENTO") {
+        externalProducts = await this.fetchFromMagento(site);
       }
 
       await prisma.site.update({
@@ -641,5 +651,131 @@ export class SyncService {
       console.error(`Laravel Update Error for ${product.id}:`, error);
       return false;
     }
+  }
+
+  /**
+   * Shopify Implementation
+   */
+  private static async fetchFromShopify(site: Site): Promise<ExternalProduct[]> {
+    try {
+      const response = await this.axiosRequestWithRetry({
+         method: 'GET',
+         url: `${site.baseUrl}/admin/api/2023-01/products.json`,
+         headers: { "X-Shopify-Access-Token": site.apiToken || "" }
+      });
+      
+      const shops = z.array(shopifyProductSchema).parse(response.data.products);
+      return shops.flatMap((p: any) => 
+        p.variants.map((v: any) => ({
+          external_id: v.id,
+          sku: v.sku || null,
+          title: p.title + (v.title !== 'Default Title' ? ` - ${v.title}` : ''),
+          category: p.product_type,
+          price: parseFloat(v.price),
+          brand: p.vendor,
+          model: null,
+          in_stock: (v.inventory_quantity ?? 0) > 0,
+          image: p.images[0]?.src,
+          url: `${site.baseUrl}/products/${(p as any).handle || p.id}`,
+          specifications: this.extractTechSpecs(p.tags || "", p.body_html || "", v)
+        } as any))
+      );
+    } catch (e) {
+      console.error("[Shopify Fetch Error]", e);
+      return [];
+    }
+  }
+
+  /**
+   * WooCommerce Implementation
+   */
+  private static async fetchFromWooCommerce(site: Site): Promise<ExternalProduct[]> {
+    try {
+      const consumerKey = site.apiToken?.split(':')[0];
+      const consumerSecret = site.apiToken?.split(':')[1];
+      
+      const response = await this.axiosRequestWithRetry({
+        method: 'GET',
+        url: `${site.baseUrl}/wp-json/wc/v3/products`,
+        params: { consumer_key: consumerKey, consumer_secret: consumerSecret, per_page: 100 }
+      });
+      
+      const products = z.array(wooCommerceProductSchema).parse(response.data);
+      return products.map((p: any) => ({
+        external_id: p.id,
+        sku: p.sku || null,
+        title: p.name,
+        category: p.categories[0]?.name,
+        price: parseFloat(p.price),
+        brand: p.attributes.find((a: any) => a.name.toLowerCase() === 'brand')?.options[0] || null,
+        model: null,
+        in_stock: p.stock_status === 'instock',
+        image: p.images[0]?.src,
+        url: `${site.baseUrl}/?p=${p.id}`,
+        specifications: {
+            ram: p.attributes.find((a: any) => a.name.toLowerCase() === 'ram')?.options[0],
+            storage: p.attributes.find((a: any) => a.name.toLowerCase() === 'storage' || a.name.toLowerCase() === 'ssd')?.options[0]
+        }
+      } as any));
+    } catch (e) {
+      console.error("[WooCommerce Fetch Error]", e);
+      return [];
+    }
+  }
+
+  /**
+   * Magento Implementation
+   */
+  private static async fetchFromMagento(site: Site): Promise<ExternalProduct[]> {
+    try {
+      const response = await this.axiosRequestWithRetry({
+        method: 'GET',
+        url: `${site.baseUrl}/rest/V1/products?searchCriteria[pageSize]=100`,
+        headers: { "Authorization": `Bearer ${site.apiToken}` }
+      });
+      
+      const products = z.array(magentoProductSchema).parse(response.data.items);
+      return products.map((p: any) => {
+        const getAttr = (code: string) => p.custom_attributes.find((a: any) => a.attribute_code === code)?.value;
+        return {
+          external_id: p.id,
+          sku: p.sku,
+          title: p.name,
+          category: null, 
+          price: p.price,
+          brand: getAttr('manufacturer'),
+          model: getAttr('model_number'),
+          in_stock: p.extension_attributes?.stock_item?.is_in_stock ?? true,
+          image: null,
+          url: null,
+          specifications: {
+              ram: getAttr('ram'),
+              storage: getAttr('ssd_storage') || getAttr('hdd_storage')
+          }
+        } as any;
+      });
+    } catch (e) {
+      console.error("[Magento Fetch Error]", e);
+      return [];
+    }
+  }
+
+  /**
+   * Tech Spec Extraction Helper
+   */
+  private static extractTechSpecs(tags: string, body: string, variant: any): Record<string, string> {
+      const specs: Record<string, string> = {};
+      
+      // 1. Try from variant options
+      const optStr = `${variant.option1} ${variant.option2} ${variant.option3}`.toLowerCase();
+      const ramMatch = optStr.match(/(\d+gb|\d+g) ram/i) || optStr.match(/(\d+)gb/i);
+      if (ramMatch) specs.ram = ramMatch[0].toUpperCase();
+      
+      // 2. Try from tags (e.g. "Spec:16GB RAM")
+      const tagList = tags.split(',').map(t => t.trim().toLowerCase());
+      const ramTag = tagList.find(t => t.includes('ram'));
+      if (ramTag) specs.ram = ramTag.toUpperCase();
+
+      return specs;
   }
 }

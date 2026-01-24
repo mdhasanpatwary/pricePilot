@@ -18,6 +18,7 @@ import {
   History as HistoryIcon,
   Bell,
   Zap,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
@@ -27,6 +28,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Package, label: "Products", href: "/dashboard/products" },
   { icon: CheckCircle2, label: "Match Approval", href: "/dashboard/matching" },
+  { icon: Copy, label: "Duplicate Detection", href: "/dashboard/duplicates" },
   {
     icon: LineChart,
     label: "Market Intelligence",

@@ -2,6 +2,10 @@ import { Page } from "playwright";
 import { logger } from "../logger";
 import { BrowserPool } from "./browser-pool";
 import { prisma } from "@/lib/prisma";
+import { TECH_BRANDS } from "../data/brands";
+import { getSiteProfile } from "../config/site-profiles";
+import { CacheService } from "./cache";
+import { TechProductValidator } from "./validation";
 
 interface ScrapedProduct {
   title: string;
@@ -13,6 +17,7 @@ interface ScrapedProduct {
   url: string;
   inStock: boolean;
   imageUrl?: string;
+  specifications?: Record<string, string>;
 }
 
 export class ScrapeBlockError extends Error {
@@ -128,10 +133,52 @@ export class ScraperService {
     const context = await this.browserPool.acquireContext(userAgent, proxy);
     const page = await context.newPage();
 
+    // Cache Key
+    const cacheKey = `product:${url}`;
+    const cache = CacheService.getInstance();
+    
+    // 1. Try Cache
+    const cached = await cache.get<ScrapedProduct>(cacheKey);
+    if (cached) {
+      logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
+      await context.close(); // Close immediately if cached
+      return cached;
+    }
+
     try {
+      // Resolve profile
+      const hostname = new URL(url).hostname;
+      const profile = getSiteProfile(hostname);
+
+      // 0. Smart Pre-Flight Analysis (HEAD Request)
+      // This saves massive resources by failing fast on 404s or non-HTML content
+      if (profile.strategy !== 'full-js') { // Only valid if we can rely on standard HTTP codes
+        try {
+          const preFlight = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+          if (!preFlight.ok) {
+             if (preFlight.status === 403 || preFlight.status === 429) {
+                // If blocked on HEAD, launching a browser might actually work via stealth plugin, so continue.
+                logger.warn(`[Scraper] Pre-flight ${preFlight.status} on ${url}. Proceeding with stealth browser.`);
+             } else {
+                logger.warn(`[Scraper] 🛑 Pre-flight failed: ${preFlight.status} for ${url}. Aborting.`);
+                return null;
+             }
+          }
+          const contentType = preFlight.headers.get("content-type");
+          if (contentType && !contentType.includes("text/html")) {
+             logger.warn(`[Scraper] 🛑 Skipping non-HTML resource: ${contentType} at ${url}`);
+             return null;
+          }
+        } catch (e) {
+           // Network errors in preflight usually mean the site is down or blocking generic fetch
+           // We'll let the browser try as a fallback, but log it.
+           logger.warn(`[Scraper] Pre-flight network error: ${e}. Browser will attempt fallback.`);
+        }
+      }
+
       // 1. Navigate with timeout
       const response = await page.goto(url, {
-        waitUntil: "domcontentloaded",
+        waitUntil: profile.strategy === 'full-js' ? 'networkidle' : 'domcontentloaded',
         timeout: 30000,
       });
 
@@ -153,29 +200,77 @@ export class ScraperService {
         }
       }
 
-      // Wait for common e-commerce elements (slightly longer for dynamic sites)
-      await page.waitForTimeout(3000);
+      // Wait for common e-commerce elements (customized by profile)
+      await page.waitForTimeout(profile.waitTime);
 
       // Strategy 1: JSON-LD (Most Reliable)
       const jsonLdData = await this.extractFromJsonLd(page);
-      if (jsonLdData && jsonLdData.price > 0) return { ...jsonLdData, url };
+      if (jsonLdData && jsonLdData.price > 0) {
+         const result = { 
+            ...jsonLdData, 
+            url,
+            specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
+         };
+         // Validation
+         const validation = TechProductValidator.validateProduct(result);
+         if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
+         
+         await cache.set(cacheKey, result, profile.cacheTime);
+         return result;
+      }
 
       // Strategy 2: OpenGraph
       const ogData = await this.extractFromOpenGraph(page);
-      if (ogData && ogData.price > 0) return { ...ogData, url };
+      if (ogData && ogData.price > 0) {
+         const result = { 
+            ...ogData, 
+            url,
+            specifications: this.parseSpecifications(ogData.title),
+         };
+         await cache.set(cacheKey, result, profile.cacheTime);
+         return result;
+      }
 
       // Strategy 3: CSS Selector Fallback
       const cssData = await this.extractFromSelectors(page);
-      if (cssData && cssData.price > 0) return { ...cssData, url };
+      if (cssData && cssData.price > 0) {
+         const result = { 
+            ...cssData, 
+            url, 
+            specifications: this.parseSpecifications(cssData.title),
+         };
+         await cache.set(cacheKey, result, profile.cacheTime);
+         return result;
+      }
 
       // Strategy 4: Dynamic Heuristic Extraction (NEW)
       // This analyzes the page structure dynamically to find title/price even if selectors changed
       const heuristicData = await this.extractFromHeuristics(page);
       if (heuristicData && heuristicData.price > 0) {
         logger.info(`[ScraperService] Dynamic Heuristics saved the day for ${url}`);
-        return { ...heuristicData, url };
-      }
+        const result = { 
+            ...heuristicData, 
+            url, 
+            // Heuristic extraction might fail to find title cleanly sometimes, but if it does:
+            specifications: this.parseSpecifications(heuristicData.title),
+        };
+        
+        // Validation Check
+        const validation = TechProductValidator.validateProduct(result);
+        if (!validation.isValid) {
+           logger.warn(`[ScraperService] ⚠️ Validation failed for ${url}: ${validation.errors.join(", ")}`);
+           // We might still return it, but maybe with a flag or just log it.
+           // For now, we return it but log warnings.
+        } else if (validation.warnings.length > 0) {
+           logger.info(`[ScraperService] ℹ️ Validation warnings for ${url}: ${validation.warnings.join(", ")}`);
+        }
 
+        await cache.set(cacheKey, result, profile.cacheTime);
+        return result;
+      }
+      
+      // ... existing strategies ...
+      
       if (process.env.NODE_ENV !== "test") {
         logger.warn(`Failed to scrape product from ${url} - No data found in any strategy.`);
       }
@@ -188,6 +283,48 @@ export class ScraperService {
       await page.close();
       await this.browserPool.releaseContext(context);
     }
+  }
+
+  /**
+   * Identifies anti-bot protection and security providers
+   */
+  /**
+   * Helper to parse tech specs from title or extra data
+   * (RAM, Storage, etc.)
+   */
+  private parseSpecifications(title: string, rawSpecs?: Record<string, string>): Record<string, string> {
+    const specs: Record<string, string> = { ...rawSpecs };
+    // 1. RAM Logic (e.g. 8GB, 16GB)
+    if (!specs.ram) {
+      const ramCheck = title.match(/(\d{1,3})\s*(GB)\s*(RAM|DDR\d|Memory)/i);
+      if (ramCheck) {
+        specs.ram = `${ramCheck[1]}GB`;
+      } else {
+        const simpleRam = title.match(/\b(\d{1,3})\s*GB\b/i);
+        if (simpleRam) {
+           const val = parseInt(simpleRam[1]);
+           if (val <= 64) specs.ram = `${val}GB`;
+        }
+      }
+    }
+    // 2. Storage Logic (e.g. 256GB SSD)
+    if (!specs.storage) {
+      const storageMatch = title.match(/(\d{1,4})\s*(GB|TB)\s*(SSD|HDD|NVMe|Gen4)/i);
+      if (storageMatch) {
+        let val = storageMatch[1];
+        let unit = storageMatch[2].toUpperCase();
+        specs.storage = `${val}${unit}`;
+        if (storageMatch[3]) specs.storage += ` ${storageMatch[3]}`;
+      }
+    }
+    // 3. Processor Logic
+    if (!specs.processor) {
+      const procMatch = title.match(/(core\s*i\d|ryzen\s*\d|m1|m2|m3|celeron|pentium)/i);
+      if (procMatch) {
+        specs.processor = procMatch[0].replace(/\s+/g, " ");
+      }
+    }
+    return specs;
   }
 
   /**
@@ -708,19 +845,29 @@ export class ScraperService {
 
         if (site?.searchQueryPattern) {
           const pattern = site.searchQueryPattern;
+          
+          // If the pattern itself is a full URL, use it as base. Otherwise, append to baseUrl.
+          let baseUrlToUse = baseUrl.replace(/\/$/, "");
+          if (pattern.startsWith("http")) {
+             // If pattern is absolute, we ignore the passed baseUrl for the search part 
+             // but we still need to process the query replacement.
+             baseUrlToUse = "";
+          }
+
           // Standard placeholder replacement: {query} or {q}
           if (pattern.includes("{query}")) {
-            searchUrl = pattern.replace(
+            searchUrl = (baseUrlToUse + pattern).replace(
               "{query}",
               encodeURIComponent(cleanQuery).replace(/%20/g, "+"),
             );
           } else if (pattern.includes("{q}")) {
-            searchUrl = pattern.replace(
+            searchUrl = (baseUrlToUse + pattern).replace(
               "{q}",
               encodeURIComponent(cleanQuery).replace(/%20/g, "+"),
             );
           } else {
-             searchUrl = pattern;
+             // Fallback: If no placeholder, just append query (rare)
+             searchUrl = baseUrlToUse + pattern + encodeURIComponent(cleanQuery);
           }
           usedCustomPattern = true;
         }
@@ -817,35 +964,45 @@ export class ScraperService {
   }
 
   /**
-   * Helper to identify product links on a results page
+   * Helper to identify product links on a results page using Weighted Scoring
    */
   private async evaluateProductLink(page: Page, query?: string): Promise<string | null> {
-    return await page.evaluate((q) => {
+    // Pass TECH_BRANDS to the browser context
+    return await page.evaluate(({ q, brands }) => {
+      const candidates: Array<{
+        href: string;
+        text: string;
+        score: number;
+        reasons: string[];
+      }> = [];
+
       const links = Array.from(document.querySelectorAll("a"));
-      const potentialProducts = links.filter((a) => {
+      
+      // Helper to normalize text
+      const clean = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      links.forEach((a, index) => {
         const href = a.href.toLowerCase();
-        const text = a.textContent?.trim().toLowerCase() || "";
+        const text = a.textContent?.trim() || "";
+        const lowerText = text.toLowerCase();
+        
+        // 1. Basic Filtering (Fail Fast)
+        if (text.length < 4 && !href.includes("product_id=")) return;
+        if (href.includes("javascript:") || href.includes("#")) return;
+        
+        // Skip navigation/sort/compare links
+        const isJunk = 
+          href.includes("sort=") || href.includes("limit=") || 
+          href.includes("page=") || href.includes("order=") || 
+          href.includes("compare") || href.includes("wishlist") || 
+          href.includes("/account") || href.includes("/checkout");
+          
+        if (isJunk) return;
 
-        // Skip links with very short text unless it's an image link (hard to detect here)
-        if (text.length < 4 && !href.includes("product_id=")) return false;
+        let score = 0;
+        const reasons: string[] = [];
 
-        const isSearchLink =
-          (href.includes("route=product/search") || href.includes("/search/advance/product/result")) &&
-          !href.includes("product_id=");
-
-        const isNavigation =
-          href.includes("sort=") ||
-          href.includes("limit=") ||
-          href.includes("page=") ||
-          href.includes("javascript:") ||
-          href.includes("order=") ||
-          href.includes("compare");
-
-        if (isSearchLink || isNavigation) {
-          return false;
-        }
-
-        // Broaden container detection
+        // 2. Container Score (20% Weight)
         const productContainer =
           a.closest(".product-thumb") ||
           a.closest(".product-layout") ||
@@ -854,40 +1011,124 @@ export class ScraperService {
           a.closest(".p-item") ||
           a.closest(".product-item") ||
           a.closest(".main-products") ||
-          a.closest(".product-list");
+          a.closest(".product-list") ||
+          a.closest(".search-result");
 
-        // Relevance Check: If query is provided, at least some words should match
-        if (q) {
-            const queryWords = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-            if (queryWords.length > 0) {
-                const matchCount = queryWords.filter(w => text.includes(w) || href.includes(w)).length;
-                const matchRatio = matchCount / queryWords.length;
-
-                // If it's a known container, we are more lenient (30% match)
-                // If it's a generic link, we are stricter (60% match)
-                const threshold = productContainer ? 0.3 : 0.6;
-                if (matchRatio < threshold) return false;
-            }
+        if (productContainer) {
+          score += 20;
+          reasons.push("In Product Container");
+          
+          // --- NEW: Price Detection ---
+          // Check if parent container has something that looks like money
+          if (productContainer.textContent && /([$\u09F3\u20B9]|BDT|TK)\s?\d+/i.test(productContainer.textContent)) {
+             score += 15;
+             reasons.push("Price Detected Nearby");
+          }
         }
 
-        if (productContainer) return true;
+        // --- NEW: Image Quality Check ---
+        const img = a.querySelector("img");
+        if (img) {
+           score += 10;
+           reasons.push("Has Image");
+           // Bonus: Alt text matches query?
+           if (q && img.alt) {
+              const altClean = clean(img.alt);
+              const qClean = clean(q);
+              if (altClean.includes(qClean) || qClean.includes(altClean)) {
+                 score += 15; 
+                 reasons.push("Image Alt Match");
+              }
+           }
+        }
 
-        // Generic heuristic: Link contains /product/ or /p/ and has significant text
+        // --- NEW: Text Quality Score ---
+        if (text.length > 10 && text.length < 150) {
+           // Sweet spot for titles
+           score += 5;
+        } else if (text.length < 5) {
+           // "Buy", "More", "View" usually short
+           score -= 5;
+        }
+
+        // 3. Query Match Score (40% Weight)
+        if (q) {
+          const queryWords = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+          if (queryWords.length > 0) {
+            const matchCount = queryWords.filter(w => lowerText.includes(w) || href.includes(w)).length;
+            const matchRatio = matchCount / queryWords.length;
+            
+            // Boost for full matches
+            const boost = matchRatio === 1 ? 40 : (matchRatio * 30);
+            score += boost;
+            reasons.push(`Query Match: ${Math.round(matchRatio * 100)}%`);
+
+            // Special penalty: If query has words, but link text has NONE of them, strict penalty
+            if (matchCount === 0 && !productContainer) {
+              score -= 50; 
+            }
+          }
+        }
+
+        // 4. URL Structure Score (20% Weight)
         const isProductUrl =
           href.includes("/product/") ||
           href.includes("/p/") ||
           href.includes("/item/") ||
-          (href.includes("/details/") && !href.includes("search")) ||
-          (href.split('/').length > 3 && text.length > 20); // Deep link with long text
+          (href.includes("/details/") && !href.includes("search"));
+        
+        if (isProductUrl) {
+          score += 20;
+          reasons.push("Product URL Pattern");
+        } else if (href.split('/').length > 4) {
+          // Deeper links are often products
+          score += 5;
+        }
 
-        return isProductUrl && text.length > 15;
+        // 5. Brand Match Bonus (20% Weight)
+        if (q && brands) {
+           let queryBrand: string | null = null;
+           const qClean = clean(q);
+           
+           // Identify brand in query
+           for (const [key, data] of Object.entries(brands as Record<string, { aliases: string[] }>)) {
+             if (data.aliases.some(alias => qClean.includes(clean(alias)))) {
+               queryBrand = key;
+               break;
+             }
+           }
+
+           if (queryBrand) {
+             const brandData = (brands as any)[queryBrand];
+             // Check if link text contains the brand
+             const linkHasBrand = brandData.aliases.some((alias: string) => clean(lowerText).includes(clean(alias)));
+             
+             if (linkHasBrand) {
+               score += 20;
+               reasons.push(`Brand Match (${queryBrand})`);
+             }
+           }
+        }
+        
+        // 6. Position Score (Small bias to top results)
+        // Top 5 results get a small boost
+        if (index < 5) {
+          score += (5 - index); 
+        }
+
+        // Threshold to be considered a candidate
+        if (score > 10) {
+          candidates.push({ href: a.href, text: text, score, reasons });
+        }
       });
 
-      // Filter and rank by distance from search query if possible,
-      // but for now, just return the first one that isn't a "compare" link
-      const filtered = potentialProducts.filter(a => !a.href.includes("compare"));
-      return filtered[0]?.href || null;
-    }, query);
+      // Sort by score descending
+      candidates.sort((a, b) => b.score - a.score);
+
+      // Return top candidate or null
+      return candidates.length > 0 ? candidates[0].href : null;
+
+    }, { q: query, brands: TECH_BRANDS });
   }
 
   // Helper to handle the magic retry suffix transparently if needed,

@@ -29,6 +29,45 @@ model Tenant {
   bulkSnapshots   BulkOperationSnapshot[]
   backupConfig    Json?         // Stores Google Drive links, etc.
   scrapeRetries   ScrapeRetry[]
+  categories      Category[]
+  brands          Brand[]
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  description String?
+  parentId    String?
+  level       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, parentId])
+}
+
+model Brand {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  aliases     String[]  // Alternate names e.g., ["HP", "Hewlett Packard"]
+  logoUrl     String?
+  website     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@unique([tenantId, slug])
 }
 
 model User {
@@ -137,8 +176,16 @@ model Product {
   sku                 String?
   url                 String?
   title               String
+  
+  // Normalized relations
+  brandId             String?
+  categoryId          String?
+  
+  // Legacy string fields (kept for backward compat or raw data)
   brand               String?
   model               String?
+  category            String?
+  
   currentPrice        Decimal          @db.Decimal(10, 2)
   currency            String           @default("USD")
   lastCrawledAt       DateTime?
@@ -146,18 +193,28 @@ model Product {
   stockLevel          Int?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
-  category            String?
   imageUrl            String?
+  specifications      Json?
+  
   priceHistory        PriceHistory[]
   updateLogs          PriceUpdateLog[]
   site                Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   tenant              Tenant           @relation(fields: [tenantId], references: [id])
+  
+  normBrand           Brand?           @relation(fields: [brandId], references: [id])
+  normCategory        Category?        @relation(fields: [categoryId], references: [id])
+  
   matchesAsCompetitor ProductMatch[]   @relation("CompetitorProduct")
   matchesAsUser       ProductMatch[]   @relation("UserProduct")
   scrapeRetries       ScrapeRetry[]
 
   @@index([sku])
   @@index([tenantId])
+  @@index([brand, model])
+  @@index([category, currentPrice])
+  @@index([tenantId, brand])
+  @@index([brandId])
+  @@index([categoryId])
 }
 
 model ProductMatch {

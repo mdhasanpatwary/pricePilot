@@ -29,7 +29,7 @@ export function useDebounce<T = string>(initialValue: T, delay: number = 300) {
     };
   }, [value, delay]);
 
-  return [debouncedValue, value, setValue] as const;
+  return [value, debouncedValue, setValue] as const;
 }
 
 /**

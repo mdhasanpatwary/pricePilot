@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import {
   CheckCircle2,
@@ -17,6 +17,10 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { useDebounce } from "@/lib/hooks/useSearch";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface Match {
   id: string;
@@ -48,14 +52,14 @@ export default function MatchApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchQuery, debouncedQuery, setSearchQuery] = useDebounce("", 300);
+  const [selectedSite, setSelectedSite] = useState<string>("ALL");
 
-  useEffect(() => {
-    fetchMatches();
-  }, []);
-
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/matching");
+      const params = new URLSearchParams();
+      if (debouncedQuery) params.append("q", debouncedQuery);
+
+      const res = await fetch(`/api/v1/matching?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setMatches(data);
@@ -65,7 +69,11 @@ export default function MatchApprovalPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedQuery]);
+
+  useEffect(() => {
+    fetchMatches();
+  }, [fetchMatches]);
 
   const handleAction = async (
     matchId: string,
@@ -92,17 +100,13 @@ export default function MatchApprovalPage() {
     }
   };
 
-  // Filter matches based on search query
-  const filteredMatches = matches.filter((match) => {
-    if (!debouncedQuery) return true;
-    const query = debouncedQuery.toLowerCase();
-    return (
-      match.product.title.toLowerCase().includes(query) ||
-      match.product.sku?.toLowerCase().includes(query) ||
-      match.competitor.title.toLowerCase().includes(query) ||
-      match.competitor.sku?.toLowerCase().includes(query) ||
-      match.competitor.siteName.toLowerCase().includes(query)
-    );
+  // Get unique sites for filter tabs
+  const sites = Array.from(new Set(matches.map(m => m.competitor.siteName))).sort();
+
+  // Filter matches based on search query and selected site
+  const filteredMatches = matches.filter(m => {
+      const matchesSite = selectedSite === "ALL" || m.competitor.siteName === selectedSite;
+      return matchesSite;
   });
 
   if (loading) {
@@ -128,32 +132,68 @@ export default function MatchApprovalPage() {
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 rounded-full border border-primary/10">
           <Target className="w-3.5 h-3.5 text-primary" />
-          <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+          <Badge variant="outline" className="text-[10px] uppercase tracking-widest border-primary/20 text-primary bg-primary/5">
             {filteredMatches.length}{" "}
             {debouncedQuery ? "Found" : "Pending Review"}
-          </span>
+          </Badge>
         </div>
       </div>
 
       {/* Search Bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
+        <Input
           type="text"
           placeholder="Search products, SKUs, or competitors..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+          className="pl-10 pr-10"
         />
         {searchQuery && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSearchQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            className="absolute right-0 top-0 h-full w-10 hover:bg-transparent"
           >
-            <X className="w-4 h-4" />
-          </button>
+            <X className="w-4 h-4 text-muted-foreground" />
+          </Button>
         )}
       </div>
+
+      {/* Competitor Filter Tabs */}
+      {sites.length > 0 && (
+          <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border rounded-xl overflow-x-auto no-scrollbar">
+              <button
+                  onClick={() => setSelectedSite("ALL")}
+                  className={cn(
+                      "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap",
+                      selectedSite === "ALL"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                  )}
+              >
+                  All Targets
+              </button>
+              {sites.map(site => (
+                  <button
+                      key={site}
+                      onClick={() => setSelectedSite(site)}
+                      className={cn(
+                          "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-2",
+                          selectedSite === site
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                      )}
+                  >
+                      {site}
+                      <Badge variant="outline" className="px-1.5 py-0 h-4 min-w-[1.25rem] flex items-center justify-center text-[10px] bg-muted/50 border-transparent">
+                          {matches.filter(m => m.competitor.siteName === site).length}
+                      </Badge>
+                  </button>
+              ))}
+          </div>
+      )}
 
       {filteredMatches.length === 0 && debouncedQuery && (
         <div className="text-center py-12">
@@ -169,9 +209,9 @@ export default function MatchApprovalPage() {
 
       <div className="grid grid-cols-1 gap-6">
         {filteredMatches.map((match) => (
-          <div
+          <Card
             key={match.id}
-            className="group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-all shadow-sm flex flex-col lg:flex-row"
+            className="group overflow-hidden hover:border-primary/40 transition-all flex flex-col lg:flex-row shadow-sm"
           >
             {/* User Product side */}
             <div className="flex-1 p-6 border-b lg:border-b-0 lg:border-r border-border bg-muted/5">
@@ -303,43 +343,40 @@ export default function MatchApprovalPage() {
 
             {/* Actions */}
             <div className="bg-card border-t lg:border-t-0 lg:border-l border-border p-6 flex lg:flex-col gap-3 justify-center">
-              <button
+              <Button
                 onClick={() => handleAction(match.id, "APPROVE")}
                 disabled={!!processingId}
-                className="flex-1 lg:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                className="flex-1 lg:flex-initial bg-emerald-600 hover:bg-emerald-700"
               >
                 {processingId === match.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : (
-                  <Check className="w-4 h-4" />
+                  <Check className="w-4 h-4 mr-2" />
                 )}
-                <span className="text-xs uppercase tracking-widest font-black">
-                  Approve
-                </span>
-              </button>
-              <button
+                Approve
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => handleAction(match.id, "REJECT")}
                 disabled={!!processingId}
-                className="flex-1 lg:flex-initial flex items-center justify-center gap-2 bg-secondary hover:bg-destructive hover:text-destructive-foreground text-foreground font-bold py-2 px-6 rounded-lg transition-all active:scale-95 border border-border disabled:opacity-50"
+                className="flex-1 lg:flex-initial hover:bg-destructive hover:text-destructive-foreground border-border"
               >
                 {processingId === match.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : (
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4 mr-2" />
                 )}
-                <span className="text-xs uppercase tracking-widest font-black">
-                  Reject
-                </span>
-              </button>
+                Reject
+              </Button>
             </div>
-          </div>
+          </Card>
         ))}
 
         {matches.length === 0 && (
           <div className="py-20 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl bg-muted/10">
             <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mb-6">
               <CheckCircle2 className="w-10 h-10 text-success" />
-            </div>
+              </div>
             <h3 className="text-xl font-bold">All caught up!</h3>
             <p className="text-muted-foreground text-sm max-w-xs text-center mt-2 font-medium">
               No pending matches require your review at this time. Our engine is

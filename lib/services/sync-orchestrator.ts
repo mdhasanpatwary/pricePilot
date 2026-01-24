@@ -74,7 +74,7 @@ export class SyncOrchestrator {
     await getSyncQueue().add(QUEUE_NAMES.SYNC, {
       type: "FULL",
       tenantId,
-    });
+    }, { priority: 5 }); // Lowest priority for mass background syncs
     return { success: true, message: "Full sync job queued successfully." };
   }
 
@@ -85,7 +85,7 @@ export class SyncOrchestrator {
     await getSyncQueue().add(QUEUE_NAMES.SYNC, {
       type: "SINGLE",
       siteId,
-    });
+    }, { priority: 2 }); // Higher priority for user-triggered single site syncs
     return { success: true, message: "Site sync job queued successfully." };
   }
 
@@ -169,12 +169,27 @@ export class SyncOrchestrator {
       });
 
       for (const site of competitorSites) {
-        await DiscoveryService.discoverForSite(
-          tenantId,
-          site.id,
-          syncSessionStart,
-        );
+        // Optimization: Instead of doing everything here, dispatch individual jobs 
+        // to the queue so multiple workers can pick them up in parallel.
+        await getSyncQueue().add(QUEUE_NAMES.SYNC, {
+          type: "SINGLE",
+          siteId: site.id,
+          isCron: isCron,
+        }, { 
+          jobId: `sync-${site.id}-${syncSessionStart.getTime()}`,
+          priority: isCron ? 4 : 2 
+        });
       }
+
+      await prisma.syncLog.create({
+        data: {
+          siteId: competitorSites[0]?.id || "", // Just use first for generic log
+          message: `📊 Distributed ${competitorSites.length} site sync jobs to worker cluster.`,
+          level: "INFO",
+        }
+      });
+
+      return { success: true, dispatched: competitorSites.length };
 
       // 1. Run Matching Discovery
       await MatchingService.runMatching(tenantId);
@@ -244,6 +259,7 @@ export class SyncOrchestrator {
               currentPrice: result.price,
               inStock: result.inStock,
               imageUrl: result.imageUrl || (cp as any).imageUrl,
+              specifications: result.specifications || (cp as any).specifications, // Save Specs
               lastCrawledAt: new Date(),
             } as any,
           });
@@ -594,6 +610,7 @@ export class SyncOrchestrator {
                 currentPrice: result.price,
                 inStock: result.inStock,
                 imageUrl: result.imageUrl || (product as any).imageUrl,
+                specifications: result.specifications || (product as any).specifications, // Save Specs
                 lastCrawledAt: new Date(),
               } as any,
             });
@@ -781,6 +798,7 @@ export class SyncOrchestrator {
           currentPrice: result.price,
           inStock: result.inStock,
           imageUrl: result.imageUrl || (product as any).imageUrl,
+          specifications: result.specifications || (product as any).specifications, // Save Specs
           lastCrawledAt: new Date(),
         } as any,
       });

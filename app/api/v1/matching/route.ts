@@ -10,7 +10,7 @@ import {
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
-async function handleGET(_req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -18,78 +18,81 @@ async function handleGET(_req: NextRequest) {
   }
 
   const tenantId = session.user.tenantId;
+  const searchParams = req.nextUrl.searchParams;
+  const q = searchParams.get("q") || "";
 
   try {
-    // Fetch all products with their matches
-    const products = await prisma.product.findMany({
+    // Optimized: Query ProductMatch directly instead of fetching all Products
+    // This allows efficient filtering and avoids loading the entire catalog
+    const matches = await prisma.productMatch.findMany({
       where: {
-        tenantId,
-        site: {
-          type: "USER",
+        status: "PENDING",
+        userProduct: {
+          tenantId: tenantId, // Ensure tenancy scope
         },
+        OR: q
+          ? [
+              // Use insensitive search for various fields
+              { userProduct: { title: { contains: q, mode: "insensitive" } } },
+              { userProduct: { sku: { contains: q, mode: "insensitive" } } },
+              { competitorProduct: { title: { contains: q, mode: "insensitive" } } },
+              { competitorProduct: { sku: { contains: q, mode: "insensitive" } } },
+              // Search by competitor site name (through relation)
+              { competitorProduct: { site: { baseUrl: { contains: q, mode: "insensitive" } } } },
+            ]
+          : undefined,
       },
       include: {
-        site: true,
-        matchesAsUser: {
-          include: {
-            competitorProduct: {
-              include: {
-                site: true,
-              },
-            },
-          },
+        userProduct: {
+          include: { site: true },
+        },
+        competitorProduct: {
+          include: { site: true },
         },
       },
       orderBy: {
-        updatedAt: "desc",
+        confidenceScore: "desc", // Show high confidence matches first
       },
+      take: 100, // Limit results for performance
     });
 
-    // We define "Pending Approval" as any match that hasn't been manually confirmed.
-    // In our simplified logic, since we don't have an 'approved' field in ProductMatch yet,
-    // we return all AUTO matches for review.
+    const formattedMatches = matches.map((m) => {
+      let siteName = "Unknown";
+      try {
+        siteName = m.competitorProduct.site.baseUrl
+          ? new URL(m.competitorProduct.site.baseUrl).hostname.replace(
+              "www.",
+              "",
+            )
+          : "Unknown";
+      } catch (e) {}
 
-    const formattedMatches = products.flatMap((product) =>
-      product.matchesAsUser
-        .filter((m: any) => m.status === "PENDING") // Show only pending review
-        .map((m) => {
-          let siteName = "Unknown";
-          try {
-            siteName = m.competitorProduct.site.baseUrl
-              ? new URL(m.competitorProduct.site.baseUrl).hostname.replace(
-                  "www.",
-                  "",
-                )
-              : "Unknown";
-          } catch (e) {}
-
-          return {
-            id: m.id,
-            confidence: parseFloat(m.confidenceScore.toString()),
-            matchType: m.matchType,
-            status: (m as any).status,
-            product: {
-              id: product.id,
-              title: product.title,
-              sku: product.sku,
-              price: parseFloat(product.currentPrice.toString()),
-              url: product.url,
-              image: (product as any).imageUrl,
-              site: product.site.baseUrl,
-            },
-            competitor: {
-              id: m.competitorProduct.id,
-              title: m.competitorProduct.title,
-              sku: m.competitorProduct.sku,
-              price: parseFloat(m.competitorProduct.currentPrice.toString()),
-              url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
-              image: (m.competitorProduct as any).imageUrl,
-              site: m.competitorProduct.site.baseUrl,
-              siteName,
-            },
-          };
-        }),
-    );
+      return {
+        id: m.id,
+        confidence: parseFloat(m.confidenceScore.toString()),
+        matchType: m.matchType,
+        status: m.status,
+        product: {
+          id: m.userProduct.id,
+          title: m.userProduct.title,
+          sku: m.userProduct.sku,
+          price: parseFloat(m.userProduct.currentPrice.toString()),
+          url: m.userProduct.url,
+          image: (m.userProduct as any).imageUrl,
+          site: m.userProduct.site.baseUrl,
+        },
+        competitor: {
+          id: m.competitorProduct.id,
+          title: m.competitorProduct.title,
+          sku: m.competitorProduct.sku,
+          price: parseFloat(m.competitorProduct.currentPrice.toString()),
+          url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+          image: (m.competitorProduct as any).imageUrl,
+          site: m.competitorProduct.site.baseUrl,
+          siteName,
+        },
+      };
+    });
 
     return NextResponse.json(formattedMatches);
   } catch (error) {

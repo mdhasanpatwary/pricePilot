@@ -50,6 +50,7 @@ async function handleGET(_req: NextRequest) {
         createdAt: true,
         updatedAt: true,
         lastSecurityBlockAt: true,
+        isAdvancedProtected: true, // Explicitly select this field
         currency: true,
         searchQueryPattern: true,
         _count: {
@@ -105,7 +106,7 @@ async function handleGET(_req: NextRequest) {
             syncLastAction: site.syncLastAction,
             syncStartedAt: site.syncStartedAt,
             totalUserProducts: totalUserProducts || 0,
-            isAdvancedProtected: (site as any).isAdvancedProtected || false,
+            isAdvancedProtected: site.isAdvancedProtected || false, // Use the real DB value
             searchQueryPattern: site.searchQueryPattern,
             logs: site.syncLogs || [],
           };

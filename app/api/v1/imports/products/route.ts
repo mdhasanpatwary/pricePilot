@@ -5,6 +5,34 @@ import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
+/**
+ * Enhanced CSV Parser that handles quotes and escapes
+ */
+function parseCSVLine(line: string): string[] {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
 async function handleImport(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
@@ -23,35 +51,36 @@ async function handleImport(req: NextRequest) {
     }
 
     const text = await file.text();
-    const lines = text.split(/\r?\n/);
+    const lines = text.split(/\r?\n/).filter(line => line.trim());
 
     if (lines.length < 2) {
       return NextResponse.json(
-        { error: "Empty or invalid CSV" },
+        { error: "Empty or invalid CSV (Header + at least one data row required)" },
         { status: 400 },
       );
     }
 
-    const headers = lines[0].split(",");
-    const skuIdx = headers.findIndex((h) => h.toLowerCase().includes("sku"));
-    const priceIdx = headers.findIndex((h) =>
-      h.toLowerCase().includes("price"),
-    );
-    const titleIdx = headers.findIndex((h) =>
-      h.toLowerCase().includes("title"),
-    );
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
+    
+    // Core Columns
+    const skuIdx = headers.findIndex(h => h.includes("sku"));
+    const priceIdx = headers.findIndex(h => h.includes("price"));
+    const titleIdx = headers.findIndex(h => h.includes("title"));
+    
+    // Tech Meta Columns
+    const brandIdx = headers.findIndex(h => h.includes("brand"));
+    const modelIdx = headers.findIndex(h => h.includes("model"));
+    const categoryIdx = headers.findIndex(h => h.includes("category"));
+    const ramIdx = headers.findIndex(h => h.includes("ram"));
+    const storageIdx = headers.findIndex(h => h.includes("storage") || h.includes("ssd") || h.includes("hdd"));
 
     if (skuIdx === -1 || priceIdx === -1) {
       return NextResponse.json(
-        { error: "CSV must contain SKU and Price columns" },
+        { error: "CSV must contain at least 'SKU' and 'Price' columns. Recommended: 'Title', 'Brand', 'RAM', 'Storage'" },
         { status: 400 },
       );
     }
 
-    let updatedCount = 0;
-    let createdCount = 0;
-
-    // Get the first USER site for this tenant to associate new products
     const userSite = await prisma.site.findFirst({
       where: { tenantId, type: "USER" },
     });
@@ -63,72 +92,93 @@ async function handleImport(req: NextRequest) {
       );
     }
 
+    let updatedCount = 0;
+    let createdCount = 0;
+    const errors: string[] = [];
+
     for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+        try {
+            const values = parseCSVLine(lines[i]);
+            const sku = values[skuIdx];
+            const priceVal = values[priceIdx];
+            const price = parseFloat(priceVal.replace(/[^0-9.]/g, ''));
+            
+            if (!sku || isNaN(price)) {
+                errors.push(`Row ${i+1}: Invalid SKU or Price`);
+                continue;
+            }
 
-      // Simple CSV split (not handling escaped commas yet)
-      const values = line.split(",");
-      const sku = values[skuIdx]?.trim();
-      const price = parseFloat(values[priceIdx]?.trim());
-      const title =
-        titleIdx !== -1
-          ? values[titleIdx]?.trim()?.replace(/^"(.*)"$/, "$1")
-          : null;
+            const title = titleIdx !== -1 ? values[titleIdx] : sku;
+            const brand = brandIdx !== -1 ? values[brandIdx] : null;
+            const model = modelIdx !== -1 ? values[modelIdx] : null;
+            const category = categoryIdx !== -1 ? values[categoryIdx] : null;
+            
+            // Build specs JSON
+            const specs: Record<string, string> = {};
+            if (ramIdx !== -1 && values[ramIdx]) specs.ram = values[ramIdx];
+            if (storageIdx !== -1 && values[storageIdx]) specs.storage = values[storageIdx];
 
-      if (!sku || isNaN(price)) continue;
-
-      const product = await prisma.product.upsert({
-        where: {
-          // This assumes SKU is unique per tenant for USER products.
-          // In a real app we might use a composite key or filter by siteId.
-          id:
-            (
-              await prisma.product.findFirst({
+            const existingProduct = await prisma.product.findFirst({
                 where: { tenantId, sku, site: { type: "USER" } },
-              })
-            )?.id || "temp-id-for-creation",
-        },
-        update: {
-          currentPrice: price,
-          title: title || undefined,
-        },
-        create: {
-          tenantId,
-          siteId: userSite.id,
-          sku,
-          title: title || sku,
-          currentPrice: price,
-          currency: "USD",
-        },
-      });
+                select: { id: true }
+            });
 
-      if (product.createdAt.getTime() === product.updatedAt.getTime()) {
-        createdCount++;
-      } else {
-        updatedCount++;
-      }
+            if (existingProduct) {
+                await prisma.product.update({
+                    where: { id: existingProduct.id },
+                    data: {
+                        currentPrice: price,
+                        title: title || undefined,
+                        brand: brand || undefined,
+                        model: model || undefined,
+                        category: category || undefined,
+                        specifications: Object.keys(specs).length > 0 ? specs : undefined
+                    }
+                });
+                updatedCount++;
+            } else {
+                await prisma.product.create({
+                    data: {
+                        tenantId,
+                        siteId: userSite.id,
+                        sku,
+                        title: title || sku,
+                        currentPrice: price,
+                        brand: brand || null,
+                        model: model || null,
+                        category: category || "Uncategorized",
+                        specifications: specs,
+                        currency: userSite.currency || "USD"
+                    }
+                });
+                createdCount++;
+            }
+        } catch (e) {
+            errors.push(`Row ${i+1}: Critical Processing Error`);
+        }
     }
 
     await recordAuditLog({
       tenantId,
       userId: session.user.id,
       userEmail: session.user.email!,
-      action: "IMPORT_PRODUCTS",
+      action: "IMPORT_PRODUCTS_BULK",
       entityId: "SYSTEM",
       ipAddress: getIpAddress(req),
-      details: { created: createdCount, updated: updatedCount },
+      details: { created: createdCount, updated: updatedCount, errors: errors.length },
     });
 
     return NextResponse.json({
       success: true,
       updated: updatedCount,
       created: createdCount,
+      errorCount: errors.length,
+      errors: errors.slice(0, 10) // Only send first 10 for UI brevity
     });
   } catch (error) {
     console.error("Import error:", error);
     return NextResponse.json(
-      { error: "Failed to process CSV file" },
+      { error: "Failed to process bulk import file" },
       { status: 500 },
     );
   }

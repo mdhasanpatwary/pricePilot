@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
@@ -23,7 +23,19 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
 import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
+import ProductComparisonDrawer from "@/components/dashboard/product-comparison-drawer";
 import { useDebounce, searchItems } from "@/lib/hooks/useSearch";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
 
 import { Product } from "@/lib/types";
 
@@ -43,17 +55,24 @@ export default function PriceReportPage() {
   const [filterStock, setFilterStock] = useState<string>("ALL"); // ALL, INSTOCK, OOS
   const [filterBrand, setFilterBrand] = useState<string>("ALL");
   const [filterSite, setFilterSite] = useState<string>("ALL");
+  const [filterRam, setFilterRam] = useState<string>("ALL");
+  const [filterStorage, setFilterStorage] = useState<string>("ALL");
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/v1/products");
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.append("q", debouncedSearch);
+      if (filterBrand !== "ALL") params.append("brand", filterBrand);
+      if (filterCategory !== "ALL") params.append("category", filterCategory);
+      if (filterStock !== "ALL") params.append("stock", filterStock);
+      if (filterRam !== "ALL") params.append("ram", filterRam);
+      if (filterStorage !== "ALL") params.append("storage", filterStorage);
+
+      const res = await fetch(`/api/v1/products?${params.toString()}`);
       const result = await res.json();
       if (res.ok) {
         setData(result.products);
@@ -66,7 +85,31 @@ export default function PriceReportPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [debouncedSearch, filterBrand, filterCategory, filterStock, filterRam, filterStorage]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // Re-fetch when filters change (server-side filtering is better for many items, 
+  // but for now we are mixing client/server. 
+  // Let's rely on the useEffect below to trigger fetch on key filter changes if we want server side,
+  // OR keep client side. The current implementation was client side 'filteredData'.
+  // However, `fetchProducts` is called ONLY on mount currently.
+  // The user plan implies backend filtering. Let's make `fetchProducts` called on filter changes.
+  useEffect(() => {
+     // If we want server-side filtering, we should debounce and call fetchProducts.
+     // But `filteredData` logic below is client-side. 
+     // For hybrid approach: We fetch ALL products initially (as per original code), 
+     // then filter client side. 
+     // BUT the API update I just made supports server side. 
+     // Let's stick to client side for responsiveness if data < 1000 items, 
+     // but since we added API params, let's use them?
+     // Actually, let's keep the client-side 'filteredData' logic for immediate UI feedback
+     // AND keep the API capable for the future or if we decide to switch.
+     // The original code fetched ONCE. Let's stick to that to avoid refactoring the whole paginator yet.
+     // So I will update `filteredData` to handle the new RAM/Storage filters.
+  }, []);
 
   const handleDeleteProduct = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
@@ -109,6 +152,10 @@ export default function PriceReportPage() {
         (filterStock === "INSTOCK" ? item.inStock : !item.inStock);
       const matchesBrand = filterBrand === "ALL" || item.brand === filterBrand;
       const matchesSite = filterSite === "ALL" || item.siteName === filterSite;
+      
+      const specs = item.specifications || {};
+      const matchesRam = filterRam === "ALL" || specs.ram === filterRam;
+      const matchesStorage = filterStorage === "ALL" || specs.storage === filterStorage;
 
       // Smart Segments
       let matchesSegment = true;
@@ -123,6 +170,8 @@ export default function PriceReportPage() {
         matchesStock &&
         matchesBrand &&
         matchesSite &&
+        matchesRam &&
+        matchesStorage &&
         matchesSegment
       );
     });
@@ -134,6 +183,8 @@ export default function PriceReportPage() {
     filterBrand,
     filterSite,
     filterSegment,
+    filterRam,
+    filterStorage,
   ]);
 
   // Pagination logic
@@ -165,6 +216,10 @@ export default function PriceReportPage() {
   const brands = Array.from(
     new Set(availableData.filter((p) => p.brand).map((p) => p.brand)),
   ).sort() as string[];
+  
+  // Extract unique Specs for filters
+  const ramOptions = Array.from(new Set(data.flatMap(p => p.specifications?.ram ? [p.specifications.ram] : []))).sort();
+  const storageOptions = Array.from(new Set(data.flatMap(p => p.specifications?.storage ? [p.specifications.storage] : []))).sort();
 
   // Dynamic status counts based on selected site and competitor
   const dynamicStats = useMemo(() => {
@@ -241,8 +296,32 @@ export default function PriceReportPage() {
   };
 
   const handleExport = () => {
-    window.location.href = "/api/v1/exports/products";
-    toast.success("Preparing your CSV export...");
+    toast.promise(
+        fetch("/api/v1/exports/products"),
+        {
+          loading: 'Assembling your technical intelligence catalog...',
+          success: (res) => {
+            if (res.ok) {
+              window.location.href = res.url;
+              return "Full tech catalog exported successfully";
+            }
+            throw new Error("Failed to generate export");
+          },
+          error: 'Export failed'
+        }
+    );
+  };
+
+  const downloadTemplate = () => {
+      const headers = "SKU,Title,Current Price,Category,Brand,Model,RAM,Storage\n";
+      const example = "PP-MAC-M2-001,MacBook Air M2 13-inch,1199.00,Laptops,Apple,M2,16GB,512GB SSD\n";
+      const blob = new Blob([headers + example], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "PricePilot-Tech-Template.csv";
+      a.click();
+      toast.success("Tech template downloaded. Fill it with your hardware inventory.");
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -262,11 +341,18 @@ export default function PriceReportPage() {
       if (res.ok) {
         const result = await res.json();
         toast.success(
-          `Import complete: ${result.created} created, ${result.updated} updated.`,
+          `Import complete: ${result.created} created, ${result.updated} updated.`
         );
+        if (result.errorCount > 0) {
+            toast.error(`${result.errorCount} rows failed. Check SKU/Price formatting.`, { 
+                description: result.errors.join(', '),
+                duration: 5000 
+            });
+        }
         fetchProducts();
       } else {
-        toast.error("Failed to import products");
+        const err = await res.json();
+        toast.error(err.error || "Failed to import products");
       }
     } catch (error) {
       toast.error("Network error during import");
@@ -286,17 +372,31 @@ export default function PriceReportPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {selectedItems.length > 1 && (
+            <Button
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsComparisonOpen(true);
+              }}
+              className="gap-2 border-primary/20 text-primary hover:bg-primary/5"
+            >
+              <ArrowUpDown className="w-4 h-4 rotate-90" />
+              Compare {selectedItems.length} Items
+            </Button>
+          )}
+
           {selectedItems.length > 0 && (
-            <button
+            <Button
               onClick={(e) => {
                 e.stopPropagation();
                 setIsUpdateDrawerOpen(true);
               }}
-              className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
+              className="gap-2"
             >
               <Zap className="w-4 h-4 fill-current" />
               Sync {selectedItems.length} Products
-            </button>
+            </Button>
           )}
 
           {competitors.length > 1 && (
@@ -316,13 +416,14 @@ export default function PriceReportPage() {
             </div>
           )}
 
-          <button
+          <Button
+            variant="outline"
             onClick={handleExport}
-            className="bg-secondary text-secondary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:bg-secondary/80 transition-all border border-border flex items-center gap-2"
+            className="gap-2"
           >
             <Download className="w-4 h-4" />
             Export
-          </button>
+          </Button>
 
           <label className="bg-primary/5 text-primary text-sm font-semibold px-4 py-2 rounded-md border border-primary/10 hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer active:scale-95">
             {isImporting ? (
@@ -330,7 +431,7 @@ export default function PriceReportPage() {
             ) : (
               <Download className="w-4 h-4 rotate-180" />
             )}
-            Import
+            Import CSV
             <input
               type="file"
               className="hidden"
@@ -339,18 +440,26 @@ export default function PriceReportPage() {
               disabled={isImporting}
             />
           </label>
+
+          <Button
+            variant="ghost"
+            onClick={downloadTemplate}
+            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+          >
+            Get Template
+          </Button>
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row items-center gap-4">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
+          <Input
             type="text"
             placeholder="Search by SKU, Brand, or Model..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-background border border-border rounded-md py-2 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
+            className="pl-10"
           />
         </div>
 
@@ -430,13 +539,14 @@ export default function PriceReportPage() {
           </div>
 
           <div className="relative">
-            <button
+            <Button
+              variant="outline"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsFilterOpen(!isFilterOpen);
               }}
               className={cn(
-                "p-2 bg-background border rounded-md text-muted-foreground hover:text-foreground transition-all shrink-0 flex items-center gap-2",
+                "gap-2",
                 filterCategory !== "ALL" ||
                   filterStock !== "ALL" ||
                   filterBrand !== "ALL" ||
@@ -452,7 +562,7 @@ export default function PriceReportPage() {
                 filterSite !== "ALL") && (
                 <span className="w-2 h-2 rounded-full bg-primary" />
               )}
-            </button>
+            </Button>
 
             {isFilterOpen && (
               <>
@@ -471,6 +581,8 @@ export default function PriceReportPage() {
                         setFilterStock("ALL");
                         setFilterBrand("ALL");
                         setFilterSite("ALL");
+                        setFilterRam("ALL");
+                        setFilterStorage("ALL");
                       }}
                       className="text-[10px] font-bold text-primary hover:underline uppercase tracking-tighter"
                     >
@@ -483,36 +595,44 @@ export default function PriceReportPage() {
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                         Store / Site
                       </label>
-                      <select
+                      <Select
                         value={filterSite}
-                        onChange={(e) => setFilterSite(e.target.value)}
-                        className="w-full bg-muted/30 border border-border rounded-lg py-2 px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+                        onValueChange={setFilterSite}
                       >
-                        <option value="ALL">All Stores</option>
-                        {sites.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="All Stores" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">All Stores</SelectItem>
+                          {sites.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                         Category
                       </label>
-                      <select
+                      <Select
                         value={filterCategory}
-                        onChange={(e) => setFilterCategory(e.target.value)}
-                        className="w-full bg-muted/30 border border-border rounded-lg py-2 px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+                        onValueChange={setFilterCategory}
                       >
-                        <option value="ALL">All Categories</option>
-                        {categories.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="All Categories" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">All Categories</SelectItem>
+                          {categories.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
@@ -520,28 +640,32 @@ export default function PriceReportPage() {
                         Inventory Status
                       </label>
                       <div className="grid grid-cols-2 gap-2">
-                        <button
+                        <Button
+                          variant={filterStock === "INSTOCK" ? "default" : "outline"}
+                          size="sm"
                           onClick={() => setFilterStock("INSTOCK")}
                           className={cn(
-                            "py-2 px-3 rounded-lg text-xs font-bold border transition-all",
+                            "h-9 text-xs",
                             filterStock === "INSTOCK"
-                              ? "bg-success/10 border-success/30 text-success"
-                              : "bg-muted/30 border-border text-muted-foreground hover:bg-muted/50",
+                              ? "bg-success/10 border-success/30 text-success hover:bg-success/20 hover:text-success"
+                              : "text-muted-foreground"
                           )}
                         >
                           In Stock
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant={filterStock === "OOS" ? "default" : "outline"}
+                          size="sm"
                           onClick={() => setFilterStock("OOS")}
                           className={cn(
-                            "py-2 px-3 rounded-lg text-xs font-bold border transition-all",
+                            "h-9 text-xs",
                             filterStock === "OOS"
-                              ? "bg-danger/10 border-danger/30 text-danger"
-                              : "bg-muted/30 border-border text-muted-foreground hover:bg-muted/50",
+                              ? "bg-danger/10 border-danger/30 text-danger hover:bg-danger/20 hover:text-danger"
+                              : "text-muted-foreground"
                           )}
                         >
                           Out of Stock
-                        </button>
+                      </Button>
                       </div>
                     </div>
 
@@ -549,18 +673,63 @@ export default function PriceReportPage() {
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                         Brand
                       </label>
-                      <select
+                      <Select
                         value={filterBrand}
-                        onChange={(e) => setFilterBrand(e.target.value)}
-                        className="w-full bg-muted/30 border border-border rounded-lg py-2 px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+                        onValueChange={setFilterBrand}
                       >
-                        <option value="ALL">All Brands</option>
-                        {brands.map((b) => (
-                          <option key={b} value={b}>
-                            {b}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="All Brands" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">All Brands</SelectItem>
+                          {brands.map((b) => (
+                            <SelectItem key={b} value={b}>
+                              {b}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                            RAM
+                          </label>
+                          <Select
+                            value={filterRam}
+                            onValueChange={setFilterRam}
+                          >
+                            <SelectTrigger className="w-full h-9">
+                              <SelectValue placeholder="All RAM" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ALL">All RAM</SelectItem>
+                              {ramOptions.map((r) => (
+                                <SelectItem key={r} value={r}>{r}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                            Storage
+                          </label>
+                          <Select
+                            value={filterStorage}
+                            onValueChange={setFilterStorage}
+                          >
+                            <SelectTrigger className="w-full h-9">
+                              <SelectValue placeholder="All Storage" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ALL">All Storage</SelectItem>
+                              {storageOptions.map((s) => (
+                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                     </div>
                   </div>
                 </div>
@@ -570,7 +739,7 @@ export default function PriceReportPage() {
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
+      <Card className="overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -596,6 +765,7 @@ export default function PriceReportPage() {
                   </div>
                 </th>
                 <th className="py-4 px-6 min-w-[320px]">Product</th>
+                <th className="py-4 px-6">Specs</th>
                 <th className="py-4 px-6">Your Price</th>
                 {competitors.length > 0 && (
                   <>
@@ -613,7 +783,7 @@ export default function PriceReportPage() {
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="py-20 text-center text-muted-foreground animate-pulse"
                   >
                     Loading your catalog...
@@ -622,7 +792,7 @@ export default function PriceReportPage() {
               ) : filteredData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="py-20 text-center text-muted-foreground"
                   >
                     No products found.
@@ -705,13 +875,32 @@ export default function PriceReportPage() {
                                   : "text-danger/70"
                               }
                             >
-                              {item.inStock && item.yourPrice > 0
-                                ? "In Stock"
-                                : "Unavailable"}
+                              {item.inStock && item.yourPrice > 0 ? (
+                                <Badge variant="success" className="h-5 px-1.5 text-[9px]">In Stock</Badge>
+                              ) : (
+                                <Badge variant="destructive" className="h-5 px-1.5 text-[9px]">Unavailable</Badge>
+                              )}
                             </span>
                           </div>
                         </div>
                       </div>
+                    </td>
+                    <td className="py-4 px-6">
+                        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                            {item.specifications?.ram && (
+                                <span className="inline-flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
+                                    {item.specifications.ram}
+                                </span>
+                            )}
+                            {item.specifications?.storage && (
+                                <span className="inline-flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
+                                    {item.specifications.storage}
+                                </span>
+                            )}
+                            {(!item.specifications?.ram && !item.specifications?.storage) && (
+                                <span className="opacity-30">-</span>
+                            )}
+                        </div>
                     </td>
                     <td className="py-4 px-6">
                       <span className="font-semibold text-foreground">
@@ -915,20 +1104,24 @@ export default function PriceReportPage() {
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Rows per page:
               </span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
+              <Select
+                value={itemsPerPage.toString()}
+                onValueChange={(val) => {
+                  setItemsPerPage(Number(val));
                   setCurrentPage(1);
                 }}
-                className="bg-background border border-border rounded px-2 py-1 text-xs font-bold outline-none focus:ring-1 focus:ring-primary/30 cursor-pointer"
               >
-                {[10, 25, 50, 100].map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-8 w-[70px]">
+                  <SelectValue placeholder={itemsPerPage} />
+                </SelectTrigger>
+                <SelectContent side="top">
+                  {[10, 25, 50, 100].map((size) => (
+                    <SelectItem key={size} value={size.toString()}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <span className="text-xs font-bold text-muted-foreground">
               Showing{" "}
@@ -941,13 +1134,15 @@ export default function PriceReportPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="p-2 border border-border rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="h-8 w-8"
             >
               <ChevronLeft className="w-4 h-4" />
-            </button>
+            </Button>
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 let pageNum = currentPage;
@@ -959,33 +1154,35 @@ export default function PriceReportPage() {
                 if (pageNum <= 0 || pageNum > totalPages) return null;
 
                 return (
-                  <button
+                  <Button
                     key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "ghost"}
+                    size="sm"
                     onClick={() => setCurrentPage(pageNum)}
                     className={cn(
-                      "w-8 h-8 rounded-md text-xs font-black transition-all",
-                      currentPage === pageNum
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                        : "hover:bg-muted text-muted-foreground",
+                      "w-8 h-8 p-0 font-bold",
+                      currentPage === pageNum ? "shadow-md" : "text-muted-foreground"
                     )}
                   >
                     {pageNum}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() =>
                 setCurrentPage((prev) => Math.min(totalPages, prev + 1))
               }
               disabled={currentPage === totalPages || totalPages === 0}
-              className="p-2 border border-border rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="h-8 w-8"
             >
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       <BulkUpdateDrawer
         isOpen={isUpdateDrawerOpen}
@@ -1014,6 +1211,12 @@ export default function PriceReportPage() {
           setSelectedProduct(null);
           fetchProducts();
         }}
+      />
+      <ProductComparisonDrawer
+        products={data.filter(p => selectedItems.includes(p.id))}
+        isOpen={isComparisonOpen}
+        onClose={() => setIsComparisonOpen(false)}
+        currency={currency}
       />
     </div>
   );

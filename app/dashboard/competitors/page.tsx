@@ -16,6 +16,8 @@ import {
   Download,
   Filter,
   ShieldCheck,
+  Settings,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -29,7 +31,30 @@ const competitorSchema = z.object({
 
 type CompetitorFormValues = z.infer<typeof competitorSchema>;
 
+// Hardcoded Default Patterns for known sites
+const KNOWN_SEARCH_PATTERNS: Record<string, string> = {
+  "startech.com.bd": "/product/search?search={query}",
+  "ryans.com": "/search?q={query}",
+  "ryanscomputers.com": "/search?q={query}",
+  "techlandbd.com": "/search/advance/product/result/{query}",
+  "techland.com.bd": "/search/advance/product/result/{query}",
+  "skyland.com.bd": "/search?q={query}",
+  "ultratech.com.bd": "/products?search={query}",
+};
+
 import { Competitor } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -40,6 +65,11 @@ export default function CompetitorsPage() {
   const [syncingSiteId, setSyncingSiteId] = useState<string | null>(null);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Settings Modal State
+  const [editingSite, setEditingSite] = useState<Competitor | null>(null);
+  const [searchPatternInput, setSearchPatternInput] = useState("");
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Smart auto-scroll: Only scroll if user hasn't manually scrolled up
   useEffect(() => {
@@ -282,6 +312,51 @@ export default function CompetitorsPage() {
       console.error(e);
     }
   }, []);
+
+  // Open Settings Modal
+  const openSettings = (site: Competitor) => {
+    setEditingSite(site);
+    
+    // If DB has a pattern, use it.
+    if (site.searchQueryPattern) {
+      setSearchPatternInput(site.searchQueryPattern);
+    } else {
+      // Otherwise, check if we have a known default for this domain
+      try {
+        const hostname = new URL(site.url).hostname.replace("www.", "");
+        const defaultPattern = KNOWN_SEARCH_PATTERNS[hostname] || "";
+        setSearchPatternInput(defaultPattern);
+      } catch (e) {
+        setSearchPatternInput("");
+      }
+    }
+  };
+
+  // Save Settings
+  const handleSaveSettings = async () => {
+    if (!editingSite) return;
+    setIsSavingSettings(true);
+
+    try {
+      const res = await fetch(`/api/v1/competitors/${editingSite.id}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ searchQueryPattern: searchPatternInput }),
+      });
+
+      if (res.ok) {
+        toast.success("Search pattern updated successfully");
+        setEditingSite(null);
+        fetchCompetitors(true); // Refresh list
+      } else {
+        toast.error("Failed to update settings");
+      }
+    } catch (error) {
+      toast.error("Connection error");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   useEffect(() => {
     fetchCompetitors();
@@ -692,6 +767,15 @@ export default function CompetitorsPage() {
                       </td>
                       <td className="py-5 px-6 text-right">
                         <div className="flex items-center justify-end gap-2 text-muted-foreground">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openSettings(comp)}
+                            className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+                            title="Configure Search Pattern"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </Button>
                           <button
                             onClick={() =>
                               comp.isSyncing
@@ -921,6 +1005,74 @@ export default function CompetitorsPage() {
           )}
         </div>
       )}
+      {/* Settings Modal */}
+      <Dialog open={!!editingSite} onOpenChange={(open) => !open && setEditingSite(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Configure Search Pattern</DialogTitle>
+            <DialogDescription>
+              Define how PricePilot searches for products on <strong>{editingSite?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-6 py-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="pattern" className="text-sm font-semibold">
+                  Search URL Pattern
+                </Label>
+                <Input
+                  id="pattern"
+                  placeholder="/search?q={query}"
+                  value={searchPatternInput}
+                  onChange={(e) => setSearchPatternInput(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="bg-muted/40 p-4 rounded-lg border border-border text-xs space-y-3">
+                <div className="flex items-center gap-2 font-bold text-primary">
+                  <div className="p-1 bg-primary/10 rounded">
+                    <Zap className="w-3 h-3" />
+                  </div>
+                  <span>How it works</span>
+                </div>
+                <ul className="space-y-2 text-muted-foreground list-disc pl-4">
+                  <li>
+                    Replace the search term in the URL with <code className="bg-muted px-1 py-0.5 rounded font-mono text-foreground">{`{query}`}</code>.
+                  </li>
+                  <li>
+                    <strong>Example:</strong> For a site <em>{editingSite?.url ? new URL(editingSite.url).hostname : "example.com"}</em> that searches like <code>/search?keyword=iphone</code>, enter:
+                    <br />
+                    <code className="block mt-1 bg-background border px-2 py-1 rounded">/search?keyword={"{query}"}</code>
+                  </li>
+                  {editingSite && KNOWN_SEARCH_PATTERNS[new URL(editingSite.url).hostname.replace("www.", "")] && (
+                     <li className="text-success font-medium">
+                       We detected a known site! A recommended pattern has been auto-filled.
+                     </li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingSite(null)} disabled={isSavingSettings}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveSettings} disabled={isSavingSettings}>
+              {isSavingSettings ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Configuration"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

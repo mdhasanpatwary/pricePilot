@@ -4,6 +4,18 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
+/**
+ * Robust CSV Value Formatter
+ */
+function formatCSVValue(val: any): string {
+    if (val === null || val === undefined) return "";
+    const str = String(val);
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+}
+
 export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
@@ -30,51 +42,45 @@ export async function GET(_req: NextRequest) {
       },
     });
 
-    // Prepare CSV header
+    // Prepare Tech-Ready CSV headers
     const headers = [
-      "ID",
       "SKU",
       "Title",
       "Current Price",
       "Currency",
+      "Category",
       "Brand",
       "Model",
+      "RAM",
+      "Storage",
       "In Stock",
-      "Stock Level",
       "Competitor Price",
       "Competitor Site",
-      "Last Updated",
+      "Market Gap"
     ];
 
-    interface ProductWithStock {
-      id: string;
-      sku: string | null;
-      title: string;
-      currentPrice: any;
-      currency: string;
-      brand: string | null;
-      model: string | null;
-      inStock: boolean;
-      stockLevel: number | null;
-      matchesAsUser: any[];
-      updatedAt: Date;
-    }
-
-    const rows = (products as unknown as ProductWithStock[]).map((p) => {
+    const rows = products.map((p) => {
       const bestMatch = p.matchesAsUser[0];
+      const specs = (p.specifications as any) || {};
+      
+      const userPrice = parseFloat(p.currentPrice.toString());
+      const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : null;
+      const gap = compPrice ? (compPrice - userPrice).toFixed(2) : "";
+
       return [
-        p.id,
-        p.sku || "",
-        `"${p.title.replace(/"/g, '""')}"`,
-        p.currentPrice,
+        formatCSVValue(p.sku),
+        formatCSVValue(p.title),
+        userPrice,
         p.currency,
-        p.brand || "",
-        p.model || "",
+        formatCSVValue(p.category),
+        formatCSVValue(p.brand),
+        formatCSVValue(p.model),
+        formatCSVValue(specs.ram),
+        formatCSVValue(specs.storage),
         p.inStock ? "Yes" : "No",
-        p.stockLevel ?? "",
-        bestMatch?.competitorProduct.currentPrice ?? "",
-        bestMatch?.competitorProduct.site?.baseUrl ?? "",
-        p.updatedAt.toISOString(),
+        compPrice || "",
+        formatCSVValue(bestMatch?.competitorProduct.site?.baseUrl),
+        gap
       ];
     });
 
@@ -87,7 +93,7 @@ export async function GET(_req: NextRequest) {
       tenantId,
       userId: session.user.id,
       userEmail: session.user.email!,
-      action: "EXPORT_PRODUCTS",
+      action: "EXPORT_PRODUCTS_BULK",
       entityId: "SYSTEM",
       ipAddress: getIpAddress(_req),
       details: { count: products.length },
@@ -96,13 +102,13 @@ export async function GET(_req: NextRequest) {
     return new NextResponse(csvContent, {
       headers: {
         "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="pricepilot-products-${new Date().toISOString().split("T")[0]}.csv"`,
+        "Content-Disposition": `attachment; filename="PricePilot-Tech-Catalog-${new Date().toISOString().split("T")[0]}.csv"`,
       },
     });
   } catch (error) {
     console.error("Export error:", error);
     return NextResponse.json(
-      { error: "Failed to export products" },
+      { error: "Failed to generate bulk export" },
       { status: 500 },
     );
   }
