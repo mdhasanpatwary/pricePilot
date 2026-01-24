@@ -1,5 +1,16 @@
 import { ScraperService } from "@/lib/services/scraper";
 
+// Mock Redis
+jest.mock("@upstash/redis", () => ({
+  Redis: {
+    fromEnv: jest.fn().mockReturnValue({
+      get: jest.fn(),
+      set: jest.fn(),
+      del: jest.fn(),
+    }),
+  },
+}));
+
 // Mock Playwright
 jest.mock("playwright", () => ({
   chromium: {

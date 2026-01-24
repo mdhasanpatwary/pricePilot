@@ -45,7 +45,6 @@ const KNOWN_SEARCH_PATTERNS: Record<string, string> = {
 import { Competitor } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,

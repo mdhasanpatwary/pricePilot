@@ -15,7 +15,7 @@ const config: Config = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   transformIgnorePatterns: [
-    "/node_modules/(?!(@auth/prisma-adapter|@prisma/client|undici|node-fetch|bullmq|msgpackr)/)",
+    "/node_modules/(?!(@auth/prisma-adapter|@prisma/client|undici|node-fetch|bullmq|msgpackr|@upstash/redis)/)",
   ],
   testMatch: ["**/__tests__/**/*.test.ts", "**/__tests__/**/*.test.tsx"],
   collectCoverageFrom: [

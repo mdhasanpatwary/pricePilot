@@ -11,7 +11,7 @@ const settingsSchema = z.object({
   searchQueryPattern: z.string().optional(),
 });
 
-async function handlePUT(req: NextRequest, { params }: { params: { id: string } }) {
+async function handlePUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -19,7 +19,7 @@ async function handlePUT(req: NextRequest, { params }: { params: { id: string } 
   }
 
   const tenantId = session.user.tenantId;
-  const siteId = params.id;
+  const { id: siteId } = await params;
 
   try {
     const body = await req.json();
@@ -65,6 +65,6 @@ async function handlePUT(req: NextRequest, { params }: { params: { id: string } 
   }
 }
 
-export async function PUT(req: NextRequest, context: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   return withRateLimit(req, "write", (r) => handlePUT(r, context));
 }

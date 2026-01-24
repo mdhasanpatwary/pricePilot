@@ -9,7 +9,6 @@ import {
   Server,
   Terminal,
   RefreshCw,
-  BadgeCent,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -397,8 +396,6 @@ function QueueCard({
   icon: any;
   color: "blue" | "indigo";
 }) {
-  const total = stats.counts.active + stats.counts.waiting + stats.counts.delayed;
-  
   return (
     <div className="border rounded-lg p-4 bg-card shadow-sm">
       <div className="flex items-center justify-between mb-2">
