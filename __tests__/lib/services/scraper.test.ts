@@ -23,6 +23,7 @@ jest.mock("playwright", () => ({
           $$eval: jest.fn().mockResolvedValue([]),
           url: jest.fn().mockReturnValue("https://example.com"),
         }),
+        addInitScript: jest.fn().mockResolvedValue({}),
         close: jest.fn().mockResolvedValue({}),
       }),
       close: jest.fn().mockResolvedValue({}),
