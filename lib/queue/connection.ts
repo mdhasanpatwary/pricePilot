@@ -15,18 +15,40 @@ export const getRedisConnection = () => {
   if (!_redisConnection) {
     _redisConnection = new Redis(REDIS_URL, {
       maxRetriesPerRequest: null, // Required by BullMQ
-      // Avoid excessive error logging during build if Redis is down
+      connectTimeout: 10000, // 10s connection timeout
+      lazyConnect: true, // Don't connect immediately
+      keepAlive: 30000, // Keep connection alive
+      family: 4, // Force IPv4
+      // Connection pool settings
+      enableAutoPipelining: true,
+      // Retry strategy with exponential backoff
       retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
+        const delay = Math.min(times * 100, 3000); // Max 3s delay
         return delay;
+      },
+      // Reconnect on failure
+      reconnectOnError(err) {
+        const targetError = "READONLY";
+        return err.message.includes(targetError);
       },
     });
 
     _redisConnection.on("error", (err: any) => {
       // Only log errors if not in build phase or if it's not a connection refused
-      // (Though it's hard to perfectly detect build phase here without extra env vars)
-      if (err.code !== "ECONNREFUSED") {
-        console.error("Redis Connection Error:", err);
+      if (err.code !== "ECONNREFUSED" && process.env.NODE_ENV !== "test") {
+        console.error("Redis Connection Error:", err.message);
+      }
+    });
+
+    _redisConnection.on("connect", () => {
+      if (process.env.NODE_ENV !== "test") {
+        console.log("✅ Redis connected successfully");
+      }
+    });
+
+    _redisConnection.on("reconnecting", () => {
+      if (process.env.NODE_ENV !== "test") {
+        console.log("🔄 Redis reconnecting...");
       }
     });
   }

@@ -224,9 +224,15 @@ export class BrowserPool {
 
     if (oldestKey) {
       const pooled = this.contexts.get(oldestKey)!;
-      await pooled.context.close();
-      this.contexts.delete(oldestKey);
-      logger.info(`[BrowserPool] Evicted context: ${oldestKey}`);
+      try {
+        await pooled.context.close();
+        this.contexts.delete(oldestKey);
+        logger.info(`[BrowserPool] Evicted context: ${oldestKey}`);
+      } catch (error) {
+        logger.error(`[BrowserPool] Failed to evict context ${oldestKey}:`, { error });
+        // Force remove from pool even if close failed
+        this.contexts.delete(oldestKey);
+      }
       return true;
     }
 
@@ -254,9 +260,15 @@ export class BrowserPool {
 
       for (const key of toRemove) {
         const pooled = this.contexts.get(key)!;
-        await pooled.context.close();
-        this.contexts.delete(key);
-        logger.info(`[BrowserPool] Cleaned up stale context: ${key}`);
+        try {
+          await pooled.context.close();
+          this.contexts.delete(key);
+          logger.info(`[BrowserPool] Cleaned up stale context: ${key}`);
+        } catch (error) {
+          logger.error(`[BrowserPool] Failed to close context ${key}:`, { error });
+          // Force remove from pool even if close failed to prevent memory leak
+          this.contexts.delete(key);
+        }
       }
 
       if (toRemove.length > 0) {
@@ -294,17 +306,28 @@ export class BrowserPool {
       this.cleanupInterval = null;
     }
 
+    const closePromises: Promise<void>[] = [];
     for (const [key, pooled] of this.contexts.entries()) {
-      await pooled.context.close();
-      logger.info(`[BrowserPool] Closed context: ${key}`);
+      closePromises.push(
+        pooled.context.close().catch((error) => {
+          logger.error(`[BrowserPool] Failed to close context ${key}:`, { error });
+        })
+      );
     }
 
+    // Wait for all contexts to close (or fail) before proceeding
+    await Promise.allSettled(closePromises);
     this.contexts.clear();
 
     if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      logger.info("[BrowserPool] Browser closed");
+      try {
+        await this.browser.close();
+        this.browser = null;
+        logger.info("[BrowserPool] Browser closed");
+      } catch (error) {
+        logger.error("[BrowserPool] Failed to close browser:", { error });
+        this.browser = null; // Force null even if close failed
+      }
     }
 
     BrowserPool.instance = null;

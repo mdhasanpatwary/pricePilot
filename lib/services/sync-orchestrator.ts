@@ -10,6 +10,7 @@ import { SystemConfigService } from "@/lib/config";
 import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
+import { circuitBreakerRegistry } from "@/lib/utils/circuit-breaker";
 
 export class SyncOrchestrator {
   /**
@@ -222,8 +223,8 @@ export class SyncOrchestrator {
         // Check if this specific site should still be syncing
         // (Since FULL sync locks all sites at once, we should check individual flags if user wants to stop one)
         const siteStatus = await prisma.site.findUnique({
-            where: { id: cp.siteId },
-            select: { isSyncing: true }
+          where: { id: cp.siteId },
+          select: { isSyncing: true }
         });
         if (siteStatus?.isSyncing === false) continue;
 
@@ -250,43 +251,58 @@ export class SyncOrchestrator {
             await new Promise(r => setTimeout(r, delay));
           }
 
-          const result = await scraper.scrapeProductPage(cp.url);
+          // Use circuit breaker for site-specific failures
+          const siteBreaker = circuitBreakerRegistry.getBreaker(`scraper-${cp.siteId}`, {
+            failureThreshold: 3,
+            recoveryTimeout: 300000, // 5 minutes
+          });
+
+          const result = await siteBreaker.execute(
+            () => scraper.scrapeProductPage(cp.url),
+            async () => {
+              logger.warn(`[SyncOrchestrator] Circuit breaker OPEN for site ${cp.siteId}, skipping scrape`);
+              return null;
+            }
+          );
+
           if (result?.price) {
             const res = result!;
             // ... (rest of the update logic)
-          await prisma.product.update({
-            where: { id: cp.id },
-            data: {
-              currentPrice: res.price,
-              inStock: res.inStock,
-              imageUrl: res.imageUrl || (cp as any).imageUrl,
-              specifications: res.specifications || (cp as any).specifications, // Save Specs
-              lastCrawledAt: new Date(),
-            } as any,
-          });
+            await prisma.$transaction(async (tx) => {
+              await tx.product.update({
+                where: { id: cp.id },
+                data: {
+                  currentPrice: res.price,
+                  inStock: res.inStock,
+                  imageUrl: res.imageUrl || (cp as any).imageUrl,
+                  specifications: res.specifications || (cp as any).specifications, // Save Specs
+                  lastCrawledAt: new Date(),
+                } as any,
+              });
 
-          if (res.imageUrl) {
-            logger.info(
-              `[Sync] Saved image for ${cp.title}: ${res.imageUrl!.substring(0, 50)}...`,
-            );
-          } else {
-            logger.info(`[Sync] No image found for ${cp.title}`);
-          }
+              await tx.priceHistory.create({
+                data: {
+                  productId: cp.id,
+                  price: res.price,
+                  recordedAt: new Date(),
+                },
+              });
+            });
 
-          await prisma.priceHistory.create({
-            data: {
-              productId: cp.id,
-              price: res.price,
-              recordedAt: new Date(),
-            },
-          });
+            if (res.imageUrl) {
+              logger.info(
+                `[Sync] Saved image for ${cp.title}: ${res.imageUrl!.substring(0, 50)}...`,
+              );
+            } else {
+              logger.info(`[Sync] No image found for ${cp.title}`);
+            }
 
             scrapedProductsMap.set(cp.id, res);
             scrappedCount++;
           }
         } catch (error) {
           if (error instanceof ScrapeBlockError && (error as ScrapeBlockError).isAdvanced) {
-             await this.handleSecurityBlock(cp.siteId, tenantId, cp.site.baseUrl, matches.length - scrappedCount);
+            await this.handleSecurityBlock(cp.siteId, tenantId, cp.site.baseUrl, matches.length - scrappedCount);
           }
           logger.error(`[SyncOrchestrator] Error scraping ${cp.url}:`, { error });
         }
@@ -386,18 +402,36 @@ export class SyncOrchestrator {
       : new Date();
 
     if (!isResuming) {
-      const updateResult = await prisma.site.updateMany({
-        where: {
-          id: siteId,
-          isSyncing: force ? undefined : false,
-        },
-        data: {
-          isSyncing: true,
-          syncLastAction: "Booting high-speed crawler...",
-          syncProcessed: 0,
-          syncTotal: 0,
-          syncStartedAt: syncSessionStart,
-        },
+      // Use a more robust atomic operation with explicit WHERE conditions
+      const updateResult = await prisma.$transaction(async (tx) => {
+        // First, verify the site exists and check its current state
+        const currentSite = await tx.site.findUnique({
+          where: { id: siteId },
+          select: { isSyncing: true, syncStartedAt: true },
+        });
+
+        if (!currentSite) {
+          throw new Error("Site not found");
+        }
+
+        if (currentSite.isSyncing && !force) {
+          return { count: 0 }; // Already syncing
+        }
+
+        // Atomic update with precise conditions
+        return await tx.site.updateMany({
+          where: {
+            id: siteId,
+            isSyncing: force ? undefined : false,
+          },
+          data: {
+            isSyncing: true,
+            syncLastAction: "Booting high-speed crawler...",
+            syncProcessed: 0,
+            syncTotal: 0,
+            syncStartedAt: syncSessionStart,
+          },
+        });
       });
 
       if (updateResult.count === 0 && !force) {
@@ -434,7 +468,7 @@ export class SyncOrchestrator {
       // Verification: Ensure the session is still marked as active in DB
       const verify = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true, syncStartedAt: true } });
       if (!verify?.isSyncing || verify.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-          return { success: true, message: "Resumed session already halted" };
+        return { success: true, message: "Resumed session already halted" };
       }
     }
     // ... (logs) ...
@@ -454,7 +488,7 @@ export class SyncOrchestrator {
       );
 
       if (discoveryRes.aborted) {
-          return { success: true, message: "Sync stopped during discovery" };
+        return { success: true, message: "Sync stopped during discovery" };
       }
 
       // Refresh the list of products after discovery
@@ -502,14 +536,14 @@ export class SyncOrchestrator {
       // Golden Rule Settings
       let isGoldenRule = (site as any).isAdvancedProtected;
       if (isGoldenRule && isCron && !this.isOffPeak()) {
-          await prisma.syncLog.create({
-              data: {
-                  siteId,
-                  message: "🛡️ Golden Rule: Off-peak hours only. Sync deferred to night.",
-                  level: "WARN"
-              }
-          });
-          return { success: true, message: "Sync deferred to off-peak" };
+        await prisma.syncLog.create({
+          data: {
+            siteId,
+            message: "🛡️ Golden Rule: Off-peak hours only. Sync deferred to night.",
+            level: "WARN"
+          }
+        });
+        return { success: true, message: "Sync deferred to off-peak" };
       }
 
       // Process in batches for better performance
@@ -556,16 +590,16 @@ export class SyncOrchestrator {
           batch.map(async (product) => {
             // Quick termination check inside the batch
             const batchStatus = await prisma.site.findUnique({
-                where: { id: siteId },
-                select: { isSyncing: true, syncStartedAt: true },
+              where: { id: siteId },
+              select: { isSyncing: true, syncStartedAt: true },
             });
             if (!batchStatus?.isSyncing || batchStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-                throw new Error("ABORTED");
+              throw new Error("ABORTED");
             }
 
             if (isGoldenRule) {
-               const delay = 8000 + Math.random() * 7000; // 8-15s
-               await new Promise(r => setTimeout(r, delay));
+              const delay = 8000 + Math.random() * 7000; // 8-15s
+              await new Promise(r => setTimeout(r, delay));
             }
             const result = await withRetry(
               () => scraper.scrapeProductPage(product.url || ""),
@@ -653,12 +687,12 @@ export class SyncOrchestrator {
 
             // Advanced Block Detection
             if (promiseResult.status === "rejected" && !isGoldenRule) {
-               const error = promiseResult.reason;
-               if (error instanceof ScrapeBlockError && error.isAdvanced) {
-                  const urlObj = new URL(site.baseUrl);
-                  await this.handleSecurityBlock(siteId, site.tenantId, urlObj.hostname, productsToScrape.length - processed);
-                  isGoldenRule = true;
-               }
+              const error = promiseResult.reason;
+              if (error instanceof ScrapeBlockError && error.isAdvanced) {
+                const urlObj = new URL(site.baseUrl);
+                await this.handleSecurityBlock(siteId, site.tenantId, urlObj.hostname, productsToScrape.length - processed);
+                isGoldenRule = true;
+              }
             }
 
             await prisma.syncLog.create({
@@ -679,12 +713,12 @@ export class SyncOrchestrator {
 
       // Re-check status before proceeding to rules
       const finalStatus = await prisma.site.findUnique({
-          where: { id: siteId },
-          select: { isSyncing: true, syncStartedAt: true }
+        where: { id: siteId },
+        select: { isSyncing: true, syncStartedAt: true }
       });
 
       if (!finalStatus?.isSyncing || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-          return { success: true, message: "Sync aborted before rules engine" };
+        return { success: true, message: "Sync aborted before rules engine" };
       }
 
       // Add completion summary
@@ -868,12 +902,12 @@ export class SyncOrchestrator {
 
       // Check if we should still be running
       const currentSiteStatus = await prisma.site.findUnique({
-          where: { id: siteId },
-          select: { isSyncing: true }
+        where: { id: siteId },
+        select: { isSyncing: true }
       });
       if (currentSiteStatus && !currentSiteStatus.isSyncing) {
-          logger.info(`[SyncOrchestrator] Retry aborted for site ${siteId}`);
-          break;
+        logger.info(`[SyncOrchestrator] Retry aborted for site ${siteId}`);
+        break;
       }
 
       // Update status to mark we are trying
@@ -929,7 +963,7 @@ export class SyncOrchestrator {
             },
           });
         } else {
-           await (prisma as any).scrapeRetry.updateMany({
+          await (prisma as any).scrapeRetry.updateMany({
             where: { userProductId: productId, siteId, status: "PENDING" },
             data: { status: "FAILED", reason: "Product not found on retry", updatedAt: new Date() }
           });
@@ -942,32 +976,32 @@ export class SyncOrchestrator {
           });
 
           if (retryRecord && retryRecord.retryCount < 3) {
-             const retryAfter = 10 + Math.floor(Math.random() * 10); // Longer delay: 10-20m
-             const nextAttempt = new Date(Date.now() + retryAfter * 60 * 1000);
+            const retryAfter = 10 + Math.floor(Math.random() * 10); // Longer delay: 10-20m
+            const nextAttempt = new Date(Date.now() + retryAfter * 60 * 1000);
 
-             await (prisma as any).scrapeRetry.update({
-               where: { id: retryRecord.id },
-               data: {
-                 retryCount: { increment: 1 },
-                 nextAttemptAt: nextAttempt,
-                 reason: error.provider || "BLOCK",
-               }
-             });
+            await (prisma as any).scrapeRetry.update({
+              where: { id: retryRecord.id },
+              data: {
+                retryCount: { increment: 1 },
+                nextAttemptAt: nextAttempt,
+                reason: error.provider || "BLOCK",
+              }
+            });
 
-             await getSyncQueue().add(QUEUE_NAMES.SYNC, {
-                type: "RETRY",
+            await getSyncQueue().add(QUEUE_NAMES.SYNC, {
+              type: "RETRY",
+              siteId,
+              tenantId: userProduct.tenantId,
+              productIds: [productId]
+            }, { delay: retryAfter * 60 * 1000 });
+
+            await prisma.syncLog.create({
+              data: {
                 siteId,
-                tenantId: userProduct.tenantId,
-                productIds: [productId]
-              }, { delay: retryAfter * 60 * 1000 });
-
-              await prisma.syncLog.create({
-                data: {
-                  siteId,
-                  message: `🛡️ [RETRY] STILL BLOCKED: "${userProduct.title.substring(0, 30)}...". Attempt ${retryRecord.retryCount + 1} scheduled.`,
-                  level: "WARN",
-                },
-              });
+                message: `🛡️ [RETRY] STILL BLOCKED: "${userProduct.title.substring(0, 30)}...". Attempt ${retryRecord.retryCount + 1} scheduled.`,
+                level: "WARN",
+              },
+            });
           } else {
             await (prisma as any).scrapeRetry.updateMany({
               where: { userProductId: productId, siteId, status: "PENDING" },
@@ -975,7 +1009,7 @@ export class SyncOrchestrator {
             });
           }
         } else {
-            await (prisma as any).scrapeRetry.updateMany({
+          await (prisma as any).scrapeRetry.updateMany({
             where: { userProductId: productId, siteId, status: "PENDING" },
             data: { status: "FAILED", reason: error.message, updatedAt: new Date() }
           });

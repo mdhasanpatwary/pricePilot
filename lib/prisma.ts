@@ -6,7 +6,10 @@ const connectionString = `${process.env.DATABASE_URL}`;
 
 const pool = new pg.Pool({
   connectionString,
-  max: 20, // Increase pool size for concurrent sync workers
+  max: 50, // Increased from 20 to handle concurrent sync workers
+  min: 5, // Minimum connections to keep alive
+  idleTimeoutMillis: 30000, // Close idle connections after 30s
+  connectionTimeoutMillis: 10000, // Timeout after 10s if no connection available
 });
 const adapter = new PrismaPg(pool);
 
@@ -16,7 +19,8 @@ export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
     adapter,
-    log: ["query"],
+    log: process.env.NODE_ENV === "production" ? ["error"] : ["query"], // Reduce logging in production
+    errorFormat: "pretty",
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

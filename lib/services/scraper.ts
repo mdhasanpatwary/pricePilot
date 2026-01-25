@@ -136,12 +136,16 @@ export class ScraperService {
     // Cache Key
     const cacheKey = `product:${url}`;
     const cache = CacheService.getInstance();
-    
+
     // 1. Try Cache
     const cached = await cache.get<ScrapedProduct>(cacheKey);
     if (cached) {
       logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
-      await context.close(); // Close immediately if cached
+      try {
+        await context.close(); // Close immediately if cached
+      } catch (error) {
+        logger.warn(`[ScraperService] Failed to close cached context:`, { error });
+      }
       return cached;
     }
 
@@ -156,23 +160,23 @@ export class ScraperService {
         try {
           const preFlight = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
           if (!preFlight.ok) {
-             if (preFlight.status === 403 || preFlight.status === 429) {
-                // If blocked on HEAD, launching a browser might actually work via stealth plugin, so continue.
-                logger.warn(`[Scraper] Pre-flight ${preFlight.status} on ${url}. Proceeding with stealth browser.`);
-             } else {
-                logger.warn(`[Scraper] 🛑 Pre-flight failed: ${preFlight.status} for ${url}. Aborting.`);
-                return null;
-             }
+            if (preFlight.status === 403 || preFlight.status === 429) {
+              // If blocked on HEAD, launching a browser might actually work via stealth plugin, so continue.
+              logger.warn(`[Scraper] Pre-flight ${preFlight.status} on ${url}. Proceeding with stealth browser.`);
+            } else {
+              logger.warn(`[Scraper] 🛑 Pre-flight failed: ${preFlight.status} for ${url}. Aborting.`);
+              return null;
+            }
           }
           const contentType = preFlight.headers.get("content-type");
           if (contentType && !contentType.includes("text/html")) {
-             logger.warn(`[Scraper] 🛑 Skipping non-HTML resource: ${contentType} at ${url}`);
-             return null;
+            logger.warn(`[Scraper] 🛑 Skipping non-HTML resource: ${contentType} at ${url}`);
+            return null;
           }
         } catch (e) {
-           // Network errors in preflight usually mean the site is down or blocking generic fetch
-           // We'll let the browser try as a fallback, but log it.
-           logger.warn(`[Scraper] Pre-flight network error: ${e}. Browser will attempt fallback.`);
+          // Network errors in preflight usually mean the site is down or blocking generic fetch
+          // We'll let the browser try as a fallback, but log it.
+          logger.warn(`[Scraper] Pre-flight network error: ${e}. Browser will attempt fallback.`);
         }
       }
 
@@ -189,7 +193,7 @@ export class ScraperService {
 
         // Dynamic Adjustment: If Cloudflare detected, try an extra long wait or specific stealth tactics
         if (securityInfo.provider === "CLOUDFLARE") {
-           await page.waitForTimeout(5000); // Wait for challenge to potentially resolve
+          await page.waitForTimeout(5000); // Wait for challenge to potentially resolve
         }
 
         if (securityInfo.isBlocked && securityInfo.provider !== "NONE") {
@@ -206,41 +210,41 @@ export class ScraperService {
       // Strategy 1: JSON-LD (Most Reliable)
       const jsonLdData = await this.extractFromJsonLd(page);
       if (jsonLdData && jsonLdData.price > 0) {
-         const result = { 
-            ...jsonLdData, 
-            url,
-            specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
-         };
-         // Validation
-         const validation = TechProductValidator.validateProduct(result);
-         if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
-         
-         await cache.set(cacheKey, result, profile.cacheTime);
-         return result;
+        const result = {
+          ...jsonLdData,
+          url,
+          specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
+        };
+        // Validation
+        const validation = TechProductValidator.validateProduct(result);
+        if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
+
+        await cache.set(cacheKey, result, profile.cacheTime);
+        return result;
       }
 
       // Strategy 2: OpenGraph
       const ogData = await this.extractFromOpenGraph(page);
       if (ogData && ogData.price > 0) {
-         const result = { 
-            ...ogData, 
-            url,
-            specifications: this.parseSpecifications(ogData.title),
-         };
-         await cache.set(cacheKey, result, profile.cacheTime);
-         return result;
+        const result = {
+          ...ogData,
+          url,
+          specifications: this.parseSpecifications(ogData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+        return result;
       }
 
       // Strategy 3: CSS Selector Fallback
       const cssData = await this.extractFromSelectors(page);
       if (cssData && cssData.price > 0) {
-         const result = { 
-            ...cssData, 
-            url, 
-            specifications: this.parseSpecifications(cssData.title),
-         };
-         await cache.set(cacheKey, result, profile.cacheTime);
-         return result;
+        const result = {
+          ...cssData,
+          url,
+          specifications: this.parseSpecifications(cssData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+        return result;
       }
 
       // Strategy 4: Dynamic Heuristic Extraction (NEW)
@@ -248,40 +252,64 @@ export class ScraperService {
       const heuristicData = await this.extractFromHeuristics(page);
       if (heuristicData && heuristicData.price > 0) {
         logger.info(`[ScraperService] Dynamic Heuristics saved the day for ${url}`);
-        const result = { 
-            ...heuristicData, 
-            url, 
-            // Heuristic extraction might fail to find title cleanly sometimes, but if it does:
-            specifications: this.parseSpecifications(heuristicData.title),
+        const result = {
+          ...heuristicData,
+          url,
+          // Heuristic extraction might fail to find title cleanly sometimes, but if it does:
+          specifications: this.parseSpecifications(heuristicData.title),
         };
-        
+
         // Validation Check
         const validation = TechProductValidator.validateProduct(result);
         if (!validation.isValid) {
-           logger.warn(`[ScraperService] ⚠️ Validation failed for ${url}: ${validation.errors.join(", ")}`);
-           // We might still return it, but maybe with a flag or just log it.
-           // For now, we return it but log warnings.
+          logger.warn(`[ScraperService] ⚠️ Validation failed for ${url}: ${validation.errors.join(", ")}`);
+          // We might still return it, but maybe with a flag or just log it.
+          // For now, we return it but log warnings.
         } else if (validation.warnings.length > 0) {
-           logger.info(`[ScraperService] ℹ️ Validation warnings for ${url}: ${validation.warnings.join(", ")}`);
+          logger.info(`[ScraperService] ℹ️ Validation warnings for ${url}: ${validation.warnings.join(", ")}`);
         }
 
         await cache.set(cacheKey, result, profile.cacheTime);
         return result;
       }
-      
+
       // ... existing strategies ...
-      
+
       if (process.env.NODE_ENV !== "test") {
         logger.warn(`Failed to scrape product from ${url} - No data found in any strategy.`);
       }
       return null;
     } catch (error) {
       if (error instanceof ScrapeBlockError) throw error;
+
       logger.error(`Error scraping ${url}:`, { error });
+
+      // Ensure context is properly closed on error
+      try {
+        if (context) {
+          await context.close();
+        }
+      } catch (closeError) {
+        logger.warn(`Failed to close context after error:`, { closeError });
+      }
+
       return null;
     } finally {
-      await page.close();
-      await this.browserPool.releaseContext(context);
+      // Final safety net - ensure context is closed
+      try {
+        if (context) {
+          await context.close();
+        }
+      } catch (finalCloseError) {
+        logger.warn(`Failed to close context in finally block:`, { finalCloseError });
+      }
+
+      // Release context back to pool
+      try {
+        await this.browserPool.releaseContext(context);
+      } catch (releaseError) {
+        logger.warn(`Failed to release context:`, { releaseError });
+      }
     }
   }
 
@@ -302,8 +330,8 @@ export class ScraperService {
       } else {
         const simpleRam = title.match(/\b(\d{1,3})\s*GB\b/i);
         if (simpleRam) {
-           const val = parseInt(simpleRam[1]);
-           if (val <= 64) specs.ram = `${val}GB`;
+          const val = parseInt(simpleRam[1]);
+          if (val <= 64) specs.ram = `${val}GB`;
         }
       }
     }
@@ -374,13 +402,13 @@ export class ScraperService {
       isBlocked = true;
       isAdvanced = true;
     } else if (status === 200 && (title.includes("trusted retail computer store") || title === "techland bd")) {
-       // SILENT BLOCK: Redirected to Home page but status is 200
-       const currentUrl = page.url();
-       if (currentUrl.includes("search") || currentUrl.includes("route=")) {
-          provider = "SILENT_HOME_REDIRECT";
-          isBlocked = true;
-          isAdvanced = true;
-       }
+      // SILENT BLOCK: Redirected to Home page but status is 200
+      const currentUrl = page.url();
+      if (currentUrl.includes("search") || currentUrl.includes("route=")) {
+        provider = "SILENT_HOME_REDIRECT";
+        isBlocked = true;
+        isAdvanced = true;
+      }
     }
 
     return { provider, isBlocked, isAdvanced, status };
@@ -549,8 +577,8 @@ export class ScraperService {
         brand: ogData.brand || undefined,
         inStock:
           ogData.availability !== "oos" &&
-          ogData.availability !== "out of stock" &&
-          ogData.availability !== "instock"
+            ogData.availability !== "out of stock" &&
+            ogData.availability !== "instock"
             ? true
             : ogData.availability === "instock",
         imageUrl: ogData.image || undefined,
@@ -629,7 +657,7 @@ export class ScraperService {
           return "";
         };
 
-         const stockText = getTextContent(oosSelectors).toLowerCase();
+        const stockText = getTextContent(oosSelectors).toLowerCase();
         const oosKeywords = [
           "out of stock",
           "sold out",
@@ -812,7 +840,7 @@ export class ScraperService {
       if (siteId) {
         await prisma.syncLog.create({
           data: { siteId, message, level }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
 
@@ -845,13 +873,13 @@ export class ScraperService {
 
         if (site?.searchQueryPattern) {
           const pattern = site.searchQueryPattern;
-          
+
           // If the pattern itself is a full URL, use it as base. Otherwise, append to baseUrl.
           let baseUrlToUse = baseUrl.replace(/\/$/, "");
           if (pattern.startsWith("http")) {
-             // If pattern is absolute, we ignore the passed baseUrl for the search part 
-             // but we still need to process the query replacement.
-             baseUrlToUse = "";
+            // If pattern is absolute, we ignore the passed baseUrl for the search part 
+            // but we still need to process the query replacement.
+            baseUrlToUse = "";
           }
 
           // Standard placeholder replacement: {query} or {q}
@@ -866,8 +894,8 @@ export class ScraperService {
               encodeURIComponent(cleanQuery).replace(/%20/g, "+"),
             );
           } else {
-             // Fallback: If no placeholder, just append query (rare)
-             searchUrl = baseUrlToUse + pattern + encodeURIComponent(cleanQuery);
+            // Fallback: If no placeholder, just append query (rare)
+            searchUrl = baseUrlToUse + pattern + encodeURIComponent(cleanQuery);
           }
           usedCustomPattern = true;
         }
@@ -899,11 +927,11 @@ export class ScraperService {
         await log(msg, "WARN");
 
         if (securityInfo.isAdvanced) {
-           throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
+          throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
         }
 
         if (securityInfo.provider === "CLOUDFLARE") {
-           await page.waitForTimeout(5000); // Wait for challenge
+          await page.waitForTimeout(5000); // Wait for challenge
         }
       }
 
@@ -977,7 +1005,7 @@ export class ScraperService {
       }> = [];
 
       const links = Array.from(document.querySelectorAll("a"));
-      
+
       // Helper to normalize text
       const clean = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -985,18 +1013,18 @@ export class ScraperService {
         const href = a.href.toLowerCase();
         const text = a.textContent?.trim() || "";
         const lowerText = text.toLowerCase();
-        
+
         // 1. Basic Filtering (Fail Fast)
         if (text.length < 4 && !href.includes("product_id=")) return;
         if (href.includes("javascript:") || href.includes("#")) return;
-        
+
         // Skip navigation/sort/compare links
-        const isJunk = 
-          href.includes("sort=") || href.includes("limit=") || 
-          href.includes("page=") || href.includes("order=") || 
-          href.includes("compare") || href.includes("wishlist") || 
+        const isJunk =
+          href.includes("sort=") || href.includes("limit=") ||
+          href.includes("page=") || href.includes("order=") ||
+          href.includes("compare") || href.includes("wishlist") ||
           href.includes("/account") || href.includes("/checkout");
-          
+
         if (isJunk) return;
 
         let score = 0;
@@ -1017,38 +1045,38 @@ export class ScraperService {
         if (productContainer) {
           score += 20;
           reasons.push("In Product Container");
-          
+
           // --- NEW: Price Detection ---
           // Check if parent container has something that looks like money
           if (productContainer.textContent && /([$\u09F3\u20B9]|BDT|TK)\s?\d+/i.test(productContainer.textContent)) {
-             score += 15;
-             reasons.push("Price Detected Nearby");
+            score += 15;
+            reasons.push("Price Detected Nearby");
           }
         }
 
         // --- NEW: Image Quality Check ---
         const img = a.querySelector("img");
         if (img) {
-           score += 10;
-           reasons.push("Has Image");
-           // Bonus: Alt text matches query?
-           if (q && img.alt) {
-              const altClean = clean(img.alt);
-              const qClean = clean(q);
-              if (altClean.includes(qClean) || qClean.includes(altClean)) {
-                 score += 15; 
-                 reasons.push("Image Alt Match");
-              }
-           }
+          score += 10;
+          reasons.push("Has Image");
+          // Bonus: Alt text matches query?
+          if (q && img.alt) {
+            const altClean = clean(img.alt);
+            const qClean = clean(q);
+            if (altClean.includes(qClean) || qClean.includes(altClean)) {
+              score += 15;
+              reasons.push("Image Alt Match");
+            }
+          }
         }
 
         // --- NEW: Text Quality Score ---
         if (text.length > 10 && text.length < 150) {
-           // Sweet spot for titles
-           score += 5;
+          // Sweet spot for titles
+          score += 5;
         } else if (text.length < 5) {
-           // "Buy", "More", "View" usually short
-           score -= 5;
+          // "Buy", "More", "View" usually short
+          score -= 5;
         }
 
         // 3. Query Match Score (40% Weight)
@@ -1057,7 +1085,7 @@ export class ScraperService {
           if (queryWords.length > 0) {
             const matchCount = queryWords.filter(w => lowerText.includes(w) || href.includes(w)).length;
             const matchRatio = matchCount / queryWords.length;
-            
+
             // Boost for full matches
             const boost = matchRatio === 1 ? 40 : (matchRatio * 30);
             score += boost;
@@ -1065,7 +1093,7 @@ export class ScraperService {
 
             // Special penalty: If query has words, but link text has NONE of them, strict penalty
             if (matchCount === 0 && !productContainer) {
-              score -= 50; 
+              score -= 50;
             }
           }
         }
@@ -1076,7 +1104,7 @@ export class ScraperService {
           href.includes("/p/") ||
           href.includes("/item/") ||
           (href.includes("/details/") && !href.includes("search"));
-        
+
         if (isProductUrl) {
           score += 20;
           reasons.push("Product URL Pattern");
@@ -1087,33 +1115,33 @@ export class ScraperService {
 
         // 5. Brand Match Bonus (20% Weight)
         if (q && brands) {
-           let queryBrand: string | null = null;
-           const qClean = clean(q);
-           
-           // Identify brand in query
-           for (const [key, data] of Object.entries(brands as Record<string, { aliases: string[] }>)) {
-             if (data.aliases.some(alias => qClean.includes(clean(alias)))) {
-               queryBrand = key;
-               break;
-             }
-           }
+          let queryBrand: string | null = null;
+          const qClean = clean(q);
 
-           if (queryBrand) {
-             const brandData = (brands as any)[queryBrand];
-             // Check if link text contains the brand
-             const linkHasBrand = brandData.aliases.some((alias: string) => clean(lowerText).includes(clean(alias)));
-             
-             if (linkHasBrand) {
-               score += 20;
-               reasons.push(`Brand Match (${queryBrand})`);
-             }
-           }
+          // Identify brand in query
+          for (const [key, data] of Object.entries(brands as Record<string, { aliases: string[] }>)) {
+            if (data.aliases.some(alias => qClean.includes(clean(alias)))) {
+              queryBrand = key;
+              break;
+            }
+          }
+
+          if (queryBrand) {
+            const brandData = (brands as any)[queryBrand];
+            // Check if link text contains the brand
+            const linkHasBrand = brandData.aliases.some((alias: string) => clean(lowerText).includes(clean(alias)));
+
+            if (linkHasBrand) {
+              score += 20;
+              reasons.push(`Brand Match (${queryBrand})`);
+            }
+          }
         }
-        
+
         // 6. Position Score (Small bias to top results)
         // Top 5 results get a small boost
         if (index < 5) {
-          score += (5 - index); 
+          score += (5 - index);
         }
 
         // Threshold to be considered a candidate
