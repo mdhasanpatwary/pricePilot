@@ -1,15 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { SystemHealthService } from "@/lib/services/system-health";
-import { verifyAdminAuth } from "@/lib/auth/admin";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 /**
  * GET /api/v1/admin/system-health
  * Get comprehensive system health status
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
     try {
-        const adminUser = await verifyAdminAuth(request);
-        if (!adminUser) {
+        const session = await getServerSession(authOptions);
+        if (!session?.user || (session.user as any).role !== "SUPER_ADMIN") {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
