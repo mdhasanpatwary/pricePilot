@@ -472,3 +472,45 @@ model ScrapeRetry {
   @@index([siteId])
   @@index([userProductId])
 }
+
+model ScrapingMetrics {
+  id                  String   @id @default(uuid())
+  site                String
+  timestamp           DateTime @default(now())
+  totalRequests       Int
+  successfulRequests  Int
+  blockedRequests     Int
+  challengedRequests  Int
+  successRate         Float
+  blockRate           Float
+  avgResponseTime     Float
+  
+  @@index([site, timestamp])
+}
+
+model ProxyMetrics {
+  id                  String   @id @default(uuid())
+  proxy               String
+  timestamp           DateTime @default(now())
+  totalRequests       Int
+  successfulRequests  Int
+  failedRequests      Int
+  avgResponseTime     Float
+  successRate         Float
+  
+  @@index([proxy, timestamp])
+}
+
+model ProxyHealth {
+  id              String   @id @default(uuid())
+  proxyUrl        String   @unique
+  proxyType       String
+  isHealthy       Boolean  @default(true)
+  failureCount    Int      @default(0)
+  successCount    Int      @default(0)
+  avgResponseTime Float    @default(0)
+  lastChecked     DateTime @default(now())
+  lastSuccess     DateTime @default(now())
+  
+  @@index([isHealthy])
+}

@@ -42,6 +42,43 @@ jest.mock("playwright", () => ({
   },
 }));
 
+// Mock playwright-extra
+jest.mock("playwright-extra", () => ({
+  chromium: {
+    use: jest.fn(),
+    launch: jest.fn().mockResolvedValue({
+      newContext: jest.fn().mockResolvedValue({
+        newPage: jest.fn().mockResolvedValue({
+          goto: jest.fn().mockResolvedValue({
+            status: jest.fn().mockReturnValue(200),
+          }),
+          title: jest.fn().mockResolvedValue("Test Page"),
+          content: jest
+            .fn()
+            .mockResolvedValue("<html><body>Test</body></html>"),
+          waitForTimeout: jest.fn().mockResolvedValue({}),
+          waitForSelector: jest.fn().mockResolvedValue({}),
+          close: jest.fn().mockResolvedValue({}),
+          evaluate: jest.fn().mockResolvedValue({}),
+          $: jest.fn().mockResolvedValue(null),
+          $$: jest.fn().mockResolvedValue([]),
+          $eval: jest.fn().mockResolvedValue("mock text"),
+          $$eval: jest.fn().mockResolvedValue([]),
+          url: jest.fn().mockReturnValue("https://example.com"),
+        }),
+        addInitScript: jest.fn().mockResolvedValue({}),
+        close: jest.fn().mockResolvedValue({}),
+      }),
+      close: jest.fn().mockResolvedValue({}),
+    }),
+  },
+}));
+
+// Mock stealth plugin
+jest.mock("puppeteer-extra-plugin-stealth", () => {
+  return jest.fn().mockReturnValue({});
+});
+
 // Mock Prisma
 jest.mock("@/lib/prisma", () => ({
   prisma: {
@@ -182,6 +219,159 @@ describe("ScraperService - Load Testing", () => {
     it("should fallback to CSS selectors when both fail", async () => {
       // This would require a mock server with standard HTML
       expect(true).toBe(true);
+    });
+  });
+
+  describe("Challenge Handler Integration", () => {
+    it("should detect and handle challenges during scraping", async () => {
+      // Verify that challenge handler is initialized
+      expect(scraper['challengeHandler']).toBeDefined();
+      
+      // Verify that challenge detection is called during scraping
+      const detectChallengeSpy = jest.spyOn(scraper['challengeHandler'], 'detectChallenge');
+      
+      await scraper.scrapeProductPage('https://example.com/product');
+      
+      // Challenge detection should be called
+      expect(detectChallengeSpy).toHaveBeenCalled();
+      
+      detectChallengeSpy.mockRestore();
+    }, 10000);
+
+    it("should record challenge attempts", async () => {
+      const recordSpy = jest.spyOn(scraper['challengeHandler'], 'recordChallengeAttempt');
+      
+      // Mock a challenge being detected
+      jest.spyOn(scraper['challengeHandler'], 'detectChallenge').mockResolvedValueOnce({
+        detected: true,
+        type: 'cloudflare',
+        solved: false,
+        attempts: 0,
+        duration: 100
+      });
+      
+      jest.spyOn(scraper['challengeHandler'], 'waitForChallenge').mockResolvedValueOnce({
+        detected: true,
+        type: 'cloudflare',
+        solved: true,
+        attempts: 2,
+        duration: 5000
+      });
+      
+      await scraper.scrapeProductPage('https://example.com/product').catch(() => {});
+      
+      // Challenge attempt should be recorded
+      expect(recordSpy).toHaveBeenCalled();
+      
+      recordSpy.mockRestore();
+    }, 10000);
+
+    it("should get challenge statistics", () => {
+      const stats = scraper.getChallengeStats('example.com');
+      
+      // Should return an array (may be empty if no challenges recorded)
+      expect(Array.isArray(stats)).toBe(true);
+    });
+  });
+
+  describe("MetricsTracker Integration", () => {
+    it("should initialize MetricsTracker", () => {
+      // Verify that metrics tracker is initialized
+      expect(scraper['metricsTracker']).toBeDefined();
+    });
+
+    it("should record request outcomes during scraping", async () => {
+      const recordSpy = jest.spyOn(scraper['metricsTracker'], 'recordRequest');
+      
+      await scraper.scrapeProductPage('https://example.com/product');
+      
+      // Request should be recorded
+      expect(recordSpy).toHaveBeenCalled();
+      
+      // Verify the call includes required fields
+      const callArgs = recordSpy.mock.calls[0];
+      expect(callArgs[0]).toBe('example.com'); // site
+      expect(typeof callArgs[1]).toBe('string'); // proxy
+      expect(callArgs[2]).toHaveProperty('success');
+      expect(callArgs[2]).toHaveProperty('blocked');
+      expect(callArgs[2]).toHaveProperty('challenged');
+      expect(callArgs[2]).toHaveProperty('responseTime');
+      expect(callArgs[2]).toHaveProperty('statusCode');
+      
+      recordSpy.mockRestore();
+    }, 10000);
+
+    it("should check thresholds after recording metrics", async () => {
+      const checkSpy = jest.spyOn(scraper['metricsTracker'], 'checkThresholds');
+      
+      await scraper.scrapeProductPage('https://example.com/product');
+      
+      // Thresholds should be checked
+      expect(checkSpy).toHaveBeenCalled();
+      
+      checkSpy.mockRestore();
+    }, 10000);
+
+    it("should get site metrics", async () => {
+      const metrics = await scraper.getSiteMetrics('example.com', '24h');
+      
+      // Should return metrics object
+      expect(metrics).toBeDefined();
+      expect(metrics).toHaveProperty('site');
+      expect(metrics).toHaveProperty('totalRequests');
+      expect(metrics).toHaveProperty('successRate');
+      expect(metrics).toHaveProperty('blockRate');
+    });
+
+    it("should get proxy metrics", async () => {
+      const metrics = await scraper.getProxyMetricsForProxy('http://proxy.example.com', '24h');
+      
+      // Should return metrics object
+      expect(metrics).toBeDefined();
+      expect(metrics).toHaveProperty('proxy');
+      expect(metrics).toHaveProperty('totalRequests');
+      expect(metrics).toHaveProperty('successRate');
+    });
+
+    it("should persist metrics on close", async () => {
+      const persistSpy = jest.spyOn(scraper['metricsTracker'], 'persistMetrics');
+      
+      await scraper.close();
+      
+      // Metrics should be persisted
+      expect(persistSpy).toHaveBeenCalled();
+      
+      persistSpy.mockRestore();
+      
+      // Re-initialize for other tests
+      scraper = new ScraperService();
+      await scraper.init();
+    }, 10000);
+
+    it("should stop auto-persist on close", async () => {
+      const stopSpy = jest.spyOn(scraper['metricsTracker'], 'stopAutoPersist');
+      
+      await scraper.close();
+      
+      // Auto-persist should be stopped
+      expect(stopSpy).toHaveBeenCalled();
+      
+      stopSpy.mockRestore();
+      
+      // Re-initialize for other tests
+      scraper = new ScraperService();
+      await scraper.init();
+    }, 10000);
+
+    it("should manually persist metrics", async () => {
+      const persistSpy = jest.spyOn(scraper['metricsTracker'], 'persistMetrics');
+      
+      await scraper.persistMetrics();
+      
+      // Metrics should be persisted
+      expect(persistSpy).toHaveBeenCalled();
+      
+      persistSpy.mockRestore();
     });
   });
 });

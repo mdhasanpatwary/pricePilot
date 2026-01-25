@@ -1,4 +1,6 @@
-import { chromium, Browser, BrowserContext } from "playwright";
+import { chromium as playwrightChromium, Browser, BrowserContext } from "playwright";
+import { chromium } from "playwright-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { logger } from "../logger";
 
 interface PooledContext {
@@ -6,6 +8,54 @@ interface PooledContext {
   inUse: boolean;
   createdAt: Date;
   lastUsedAt: Date;
+}
+
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+];
+
+const VIEWPORTS = [
+  { width: 1920, height: 1080 },
+  { width: 1440, height: 900 },
+  { width: 1366, height: 768 },
+  { width: 1536, height: 864 },
+];
+
+const TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Paris',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Australia/Sydney',
+];
+
+const LOCALES = [
+  'en-US',
+  'en-GB',
+  'en-CA',
+  'en-AU',
+  'fr-FR',
+  'de-DE',
+  'es-ES',
+  'ja-JP',
+];
+
+interface StealthOptions {
+  canvas?: boolean;
+  webgl?: boolean;
+  audio?: boolean;
+  fonts?: boolean;
+  webrtc?: boolean;
+  timezone?: boolean;
+  locale?: boolean;
+  battery?: boolean;
 }
 
 /**
@@ -44,22 +94,54 @@ export class BrowserPool {
     }
 
     this.maxContexts = maxContexts;
-    this.browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-blink-features=AutomationControlled",
-        "--ignore-certificate-errors",
-        "--no-first-run",
-        "--no-service-autorun",
-        "--password-store=basic",
-      ],
-    });
-
-    logger.info(`[BrowserPool] Initialized with max ${maxContexts} contexts`);
+    
+    try {
+      // Try to use playwright-extra with stealth plugin
+      chromium.use(StealthPlugin());
+      
+      this.browser = await chromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-blink-features=AutomationControlled",
+          "--ignore-certificate-errors",
+          "--no-first-run",
+          "--no-service-autorun",
+          "--password-store=basic",
+          "--disable-infobars",
+          "--window-position=0,0",
+          "--disable-extensions",
+        ],
+      });
+      
+      logger.info(`[BrowserPool] Initialized with playwright-extra stealth (max ${maxContexts} contexts)`);
+    } catch (error) {
+      // Fallback to basic stealth if playwright-extra fails
+      logger.warn("[BrowserPool] Failed to initialize with playwright-extra, falling back to basic stealth", { error });
+      
+      this.browser = await playwrightChromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-blink-features=AutomationControlled",
+          "--ignore-certificate-errors",
+          "--no-first-run",
+          "--no-service-autorun",
+          "--password-store=basic",
+          "--disable-infobars",
+          "--window-position=0,0",
+          "--disable-extensions",
+        ],
+      });
+      
+      logger.info(`[BrowserPool] Initialized with basic stealth (max ${maxContexts} contexts)`);
+    }
 
     // Start cleanup interval
     this.startCleanup();
@@ -71,6 +153,7 @@ export class BrowserPool {
   async acquireContext(
     userAgent?: string,
     proxy?: { server: string },
+    stealthOptions?: StealthOptions,
   ): Promise<BrowserContext> {
     if (!this.browser) {
       await this.init();
@@ -96,29 +179,51 @@ export class BrowserPool {
           "[BrowserPool] Pool limit reached, waiting for available context",
         );
         // Wait for a context to become available
-        return this.waitForAvailableContext(userAgent, proxy);
+        return this.waitForAvailableContext(userAgent, proxy, stealthOptions);
       }
     }
 
+    // Default stealth options - all enabled by default
+    const stealth: StealthOptions = {
+      canvas: true,
+      webgl: true,
+      audio: true,
+      fonts: true,
+      webrtc: true,
+      timezone: true,
+      locale: true,
+      battery: true,
+      ...stealthOptions,
+    };
+
+    // Randomize Fingerprints
+    const selectedUA = userAgent || USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    const viewport = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)];
+    const deviceScaleFactor = Math.random() > 0.5 ? 2 : 1;
+    const isWin = selectedUA.includes("Windows");
+    const platform = isWin ? "Win32" : (selectedUA.includes("Mac") ? "MacIntel" : "Linux x86_64");
+    
+    // Randomize timezone and locale if enabled
+    const timezone = stealth.timezone ? TIMEZONES[Math.floor(Math.random() * TIMEZONES.length)] : 'Asia/Dhaka';
+    const locale = stealth.locale ? LOCALES[Math.floor(Math.random() * LOCALES.length)] : 'en-US';
+
     // Create new context with realistic fingerprints
     const context = await this.browser!.newContext({
-      userAgent:
-        userAgent ||
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      userAgent: selectedUA,
       proxy,
-      viewport: { width: 1920, height: 1080 },
-      deviceScaleFactor: 1,
+      viewport,
+      deviceScaleFactor,
       hasTouch: false,
-      locale: 'en-US',
-      timezoneId: 'Asia/Dhaka',
+      locale,
+      timezoneId: timezone,
       extraHTTPHeaders: {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Language': `${locale},${locale.split('-')[0]};q=0.9`,
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+        'Sec-Ch-Ua': isWin ? '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"' : '"Not A(Brand";v="99", "Chromium";v="121"',
         'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Ch-Ua-Platform': isWin ? '"Windows"' : (platform.includes("Mac") ? '"macOS"' : '"Linux"'),
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'none',
@@ -127,12 +232,161 @@ export class BrowserPool {
       }
     });
 
-    // Stealth: Disable webdriver property
-    await context.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
-      });
-    });
+    // Advanced Stealth Init Scripts
+    await context.addInitScript((plat: string, stealthOpts: StealthOptions) => {
+      // 1. Mask Webdriver
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+      // 2. Mask Platform
+      Object.defineProperty(navigator, 'platform', { get: () => plat });
+
+      // 3. Mask Plugins
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+
+      // 4. Canvas fingerprinting protection
+      if (stealthOpts.canvas) {
+        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        
+        // Add noise to canvas data
+        const addNoise = (data: Uint8ClampedArray) => {
+          const noise = Math.random() * 0.1;
+          for (let i = 0; i < data.length; i += 4) {
+            data[i] = Math.min(255, data[i] + Math.floor(noise * 10));
+            data[i + 1] = Math.min(255, data[i + 1] + Math.floor(noise * 10));
+            data[i + 2] = Math.min(255, data[i + 2] + Math.floor(noise * 10));
+          }
+        };
+        
+        HTMLCanvasElement.prototype.toDataURL = function(...args: any[]) {
+          const context = this.getContext('2d');
+          if (context) {
+            const imageData = context.getImageData(0, 0, this.width, this.height);
+            addNoise(imageData.data);
+            context.putImageData(imageData, 0, 0);
+          }
+          return originalToDataURL.apply(this, args);
+        };
+        
+        CanvasRenderingContext2D.prototype.getImageData = function(...args: any[]) {
+          const imageData = originalGetImageData.apply(this, args);
+          addNoise(imageData.data);
+          return imageData;
+        };
+      }
+
+      // 5. WebGL Vendor/Renderer masking
+      if (stealthOpts.webgl) {
+        const getParameter = HTMLCanvasElement.prototype.getContext;
+        (HTMLCanvasElement.prototype as any).getContext = function(type: any, attributes: any) {
+          const context = getParameter.apply(this, [type, attributes]);
+          if (type === 'webgl' || type === 'experimental-webgl' || type === 'webgl2') {
+            const originalGetParameter = (context as any).getParameter;
+            (context as any).getParameter = function(parameter: any) {
+              // UNMASKED_VENDOR_WEBGL
+              if (parameter === 37445) return 'Google Inc. (Intel)';
+              // UNMASKED_RENDERER_WEBGL
+              if (parameter === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics (0x00009BC4) Direct3D11 vs_5_0 ps_5_0, D3D11)';
+              return originalGetParameter.apply(this, [parameter]);
+            };
+          }
+          return context;
+        };
+      }
+
+      // 6. Audio context fingerprinting protection
+      if (stealthOpts.audio) {
+        const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) {
+          const originalCreateOscillator = AudioContext.prototype.createOscillator;
+          AudioContext.prototype.createOscillator = function() {
+            const oscillator = originalCreateOscillator.apply(this, arguments);
+            const originalStart = oscillator.start;
+            oscillator.start = function(...args: any[]) {
+              // Add slight randomization to audio timing
+              const noise = Math.random() * 0.0001;
+              if (args[0] !== undefined) {
+                args[0] = args[0] + noise;
+              }
+              return originalStart.apply(this, args);
+            };
+            return oscillator;
+          };
+        }
+      }
+
+      // 7. Font fingerprinting protection
+      if (stealthOpts.fonts) {
+        // Mask font enumeration by returning consistent font list
+        const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+        const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
+        
+        if (originalOffsetWidth && originalOffsetHeight) {
+          Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+            get: function() {
+              const width = originalOffsetWidth.get?.call(this);
+              // Add small random variation to prevent font-based fingerprinting
+              return width ? width + (Math.random() - 0.5) * 0.01 : width;
+            }
+          });
+          
+          Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+            get: function() {
+              const height = originalOffsetHeight.get?.call(this);
+              return height ? height + (Math.random() - 0.5) * 0.01 : height;
+            }
+          });
+        }
+      }
+
+      // 8. WebRTC leak prevention
+      if (stealthOpts.webrtc) {
+        const originalGetUserMedia = navigator.mediaDevices?.getUserMedia;
+        if (originalGetUserMedia) {
+          (navigator.mediaDevices as any).getUserMedia = function() {
+            return Promise.reject(new Error('Permission denied'));
+          };
+        }
+        
+        // Block RTCPeerConnection
+        (window as any).RTCPeerConnection = undefined;
+        (window as any).webkitRTCPeerConnection = undefined;
+        (window as any).mozRTCPeerConnection = undefined;
+      }
+
+      // 9. Battery API masking
+      if (stealthOpts.battery) {
+        if ('getBattery' in navigator) {
+          (navigator as any).getBattery = () => Promise.resolve({
+            charging: true,
+            chargingTime: 0,
+            dischargingTime: Infinity,
+            level: 1,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => true,
+          });
+        }
+      }
+
+      // 10. Chrome runtime masking
+      (window as any).chrome = {
+        runtime: {},
+        loadTimes: function() { },
+        csi: function() { },
+        app: {}
+      };
+
+      // 11. Permissions masking
+      const originalQuery = window.navigator.permissions.query;
+      (window.navigator.permissions as any).query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      );
+
+    }, platform, stealth);
 
     const pooledContext: PooledContext = {
       context,
@@ -181,6 +435,7 @@ export class BrowserPool {
   private async waitForAvailableContext(
     userAgent?: string,
     proxy?: { server: string },
+    stealthOptions?: StealthOptions,
   ): Promise<BrowserContext> {
     return new Promise((resolve) => {
       const checkInterval = setInterval(async () => {
