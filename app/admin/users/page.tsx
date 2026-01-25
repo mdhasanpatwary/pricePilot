@@ -18,6 +18,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function UsersManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,12 +187,12 @@ export default function UsersManagementPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="relative w-full max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
+          <Input
             type="text"
             placeholder="Search by name, email, or company..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-background border border-input rounded-md py-1.5 pl-9 pr-3 text-sm focus:border-ring focus:ring-0 outline-none transition-all placeholder:text-muted-foreground shadow-sm"
+            className="pl-9"
           />
         </div>
         <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
@@ -211,7 +220,7 @@ export default function UsersManagementPage() {
                 <th className="px-6 py-4 font-bold text-muted-foreground">
                   Joined
                 </th>
-                <th className="px-6 py-4 font-bold text-muted-foreground text-right w-[100px]">
+                <th className="px-6 py-4 font-bold text-muted-foreground text-right w-25">
                   Actions
                 </th>
               </tr>
@@ -403,53 +412,55 @@ export default function UsersManagementPage() {
               className="p-6 flex flex-col gap-4"
             >
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                   Display Name
-                </label>
-                <input
+                </Label>
+                <Input
                   type="text"
                   value={editForm.name}
                   onChange={(e) =>
                     setEditForm({ ...editForm, name: e.target.value })
                   }
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors font-medium shadow-sm"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                   Organization Role
-                </label>
-                <select
+                </Label>
+                <Select
                   value={editForm.role}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, role: e.target.value })
+                  onValueChange={(value) =>
+                    setEditForm({ ...editForm, role: value })
                   }
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors font-bold shadow-sm appearance-none"
                 >
-                  <option value="VIEWER">Viewer (Read Only)</option>
-                  <option value="EDITOR">Editor (Manage Data)</option>
-                  <option value="ADMIN">Admin (Full Control)</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="VIEWER">Viewer (Read Only)</SelectItem>
+                    <SelectItem value="EDITOR">Editor (Manage Data)</SelectItem>
+                    <SelectItem value="ADMIN">Admin (Full Control)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                     Reset Password
-                  </label>
+                  </Label>
                   <span className="text-[9px] text-amber-600 font-bold uppercase tracking-tighter">
                     Leave blank to keep current
                   </span>
                 </div>
-                <input
+                <Input
                   type="password"
                   placeholder="New strong password..."
                   value={editForm.password}
                   onChange={(e) =>
                     setEditForm({ ...editForm, password: e.target.value })
                   }
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors font-medium shadow-sm"
                 />
               </div>
 

@@ -22,6 +22,9 @@ import {
   CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function DashboardContent() {
@@ -212,69 +215,66 @@ function DashboardContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
+          <Button
             disabled={isSyncing}
             onClick={handleRunSync}
-            className={cn(
-              "bg-primary text-primary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-primary/10",
-              isSyncing && "opacity-50 cursor-not-allowed",
-            )}
+            className="px-6 py-2.5"
           >
             {isSyncing ? "Syncing..." : "Run Global Sync"}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleExportReport}
-            className="bg-secondary text-secondary-foreground text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-secondary/80 transition-all border border-border"
+            variant="outline"
+            className="px-6 py-2.5"
           >
             Export Report
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statsConfig.map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2.5 bg-muted/50 rounded-lg">
-                <stat.icon className="w-5 h-5 text-foreground/70" />
+          <Card key={stat.label} className="p-6 shadow-sm hover:shadow-md transition-all">
+            <CardHeader className="p-0 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="p-2.5 bg-muted/50 rounded-lg">
+                  <stat.icon className="w-5 h-5 text-foreground/70" />
+                </div>
+                <div
+                  className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                    stat.trend === "up"
+                      ? "bg-success/10 text-success border-success/20"
+                      : stat.trend === "down"
+                        ? "bg-danger/10 text-danger border-danger/20"
+                        : "bg-muted text-muted-foreground border-border",
+                  )}
+                >
+                  {stat.change}
+                </div>
               </div>
-              <div
-                className={cn(
-                  "text-[10px] font-bold px-2 py-0.5 rounded-full border",
-                  stat.trend === "up"
-                    ? "bg-success/10 text-success border-success/20"
-                    : stat.trend === "down"
-                      ? "bg-danger/10 text-danger border-danger/20"
-                      : "bg-muted text-muted-foreground border-border",
-                )}
-              >
-                {stat.change}
-              </div>
-            </div>
+            </CardHeader>
             <div className="space-y-1">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 {stat.label}
               </p>
               <h3 className="text-3xl font-bold">{stat.value}</h3>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Position Summary */}
-        <div className="lg:col-span-1 bg-card border border-border rounded-xl p-8 shadow-sm">
-          <div className="mb-8">
-            <h4 className="text-lg font-bold">Position Summary</h4>
-            <p className="text-sm text-muted-foreground">
+        <Card className="p-8 shadow-sm">
+          <CardHeader className="p-0 mb-8">
+            <CardTitle className="text-lg font-bold">Position Summary</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
               Your market stance vs. competition
             </p>
-          </div>
+          </CardHeader>
           <div className="space-y-6">
             {positionData.map((item, i) => {
               const percentage = Math.round((item.value / total) * 100);
@@ -311,17 +311,19 @@ function DashboardContent() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Price Trend Chart */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-8 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
+        <Card className="p-8 shadow-sm">
+          <CardHeader className="p-0 mb-8">
             <div>
-              <h4 className="text-lg font-bold">Price Index Trend</h4>
-              <p className="text-sm text-muted-foreground">
+              <CardTitle className="text-lg font-bold">Price Index Trend</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
                 30-day market movement
               </p>
             </div>
+          </CardHeader>
+          <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-primary" />
@@ -404,21 +406,23 @@ function DashboardContent() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
         {/* Execution Queue */}
-        <div className="lg:col-span-3 bg-card border border-border rounded-xl p-8 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <h4 className="text-lg font-bold text-foreground">
-              Live Execution Queue
-            </h4>
-            <Link
-              href="/dashboard/activity"
-              className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full transition-all"
-            >
-              Full Log <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
+        <Card className="p-8 shadow-sm">
+          <CardHeader className="p-0 mb-8">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-bold text-foreground">
+                Live Execution Queue
+              </CardTitle>
+              <Link
+                href="/dashboard/activity"
+                className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-full transition-all"
+              >
+                Full Log <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </CardHeader>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
@@ -446,14 +450,14 @@ function DashboardContent() {
                       </div>
                     </td>
                     <td className="py-5 px-4">
-                      <span className="text-[10px] font-bold bg-muted px-2 py-0.5 rounded uppercase tracking-wider text-muted-foreground">
+                      <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">
                         {item.action}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-5 px-4">
-                      <span className="text-danger bg-danger/5 px-3 py-1 rounded-lg text-xs font-bold border border-danger/10">
+                      <Badge variant="destructive" className="text-xs font-bold">
                         {item.value}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-5 pl-4 text-right text-muted-foreground text-xs font-bold">
                       {item.time}
@@ -463,7 +467,7 @@ function DashboardContent() {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

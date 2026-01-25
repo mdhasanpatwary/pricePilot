@@ -4,6 +4,8 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Shield,
   Lock,
@@ -134,12 +136,12 @@ export default function LoginPage() {
                   Email
                 </label>
                 <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                  <input
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                  <Input
                     {...register("email")}
                     type="email"
                     className={cn(
-                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      "pl-12 pr-4",
                       errors.email &&
                         "border-destructive focus:ring-destructive/10",
                     )}
@@ -160,21 +162,23 @@ export default function LoginPage() {
                   </label>
                 </div>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                  <input
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                  <Input
                     {...register("password")}
                     type={showPassword ? "text" : "password"}
                     className={cn(
-                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      "pl-12 pr-12",
                       errors.password &&
                         "border-destructive focus:ring-destructive/10",
                     )}
                     placeholder="••••••••"
                   />
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors h-8 w-8"
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
                     }
@@ -184,7 +188,7 @@ export default function LoginPage() {
                     ) : (
                       <Eye className="w-4 h-4" />
                     )}
-                  </button>
+                  </Button>
                 </div>
                 {errors.password && (
                   <p className="text-xs text-destructive font-bold ml-1">
@@ -194,7 +198,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
               className="w-full premium-gradient text-primary-foreground font-black text-lg py-5 rounded-2xl transition-all flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-primary/20 glow-hover"
@@ -207,7 +211,7 @@ export default function LoginPage() {
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
           <div className="pt-8 space-y-4 border-t border-border">

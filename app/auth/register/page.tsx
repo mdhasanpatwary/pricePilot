@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Shield,
   Lock,
@@ -20,6 +22,7 @@ import {
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
 
 const registerSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),
@@ -142,16 +145,16 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
                   Company Name
-                </label>
+                </Label>
                 <div className="relative group">
-                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                  <input
+                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                  <Input
                     {...register("companyName")}
                     type="text"
                     className={cn(
-                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      "pl-12 pr-4",
                       errors.companyName &&
                         "border-destructive focus:ring-destructive/10",
                     )}
@@ -166,16 +169,16 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
                   Work Email
-                </label>
+                </Label>
                 <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                  <input
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                  <Input
                     {...register("email")}
                     type="email"
                     className={cn(
-                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      "pl-12 pr-4",
                       errors.email &&
                         "border-destructive focus:ring-destructive/10",
                     )}
@@ -190,25 +193,27 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
                   Password
-                </label>
+                </Label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                  <input
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                  <Input
                     {...register("password")}
                     type={showPassword ? "text" : "password"}
                     className={cn(
-                      "w-full bg-muted/30 border border-border rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-medium placeholder:text-muted-foreground/30",
+                      "pl-12 pr-12",
                       errors.password &&
                         "border-destructive focus:ring-destructive/10",
                     )}
                     placeholder="••••••••"
                   />
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors h-8 w-8"
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
                     }
@@ -218,7 +223,7 @@ export default function RegisterPage() {
                     ) : (
                       <Eye className="w-4 h-4" />
                     )}
-                  </button>
+                  </Button>
                 </div>
                 {errors.password && (
                   <p className="text-xs text-destructive font-bold ml-1">
@@ -228,7 +233,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={isLoading}
               className="w-full premium-gradient text-primary-foreground font-black text-lg py-5 rounded-2xl transition-all flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-primary/20 glow-hover"
@@ -241,7 +246,7 @@ export default function RegisterPage() {
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
           <div className="pt-8 space-y-4 border-t border-border text-center">

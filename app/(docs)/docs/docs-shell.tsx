@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   BookOpen,
   Puzzle,
@@ -113,8 +114,10 @@ export default function DocsLayoutShell({
                 Support
               </Link>
             </nav>
-            <button
-              className="md:hidden p-2 text-muted-foreground hover:text-primary"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? (
@@ -122,7 +125,7 @@ export default function DocsLayoutShell({
               ) : (
                 <Menu className="w-5 h-5" />
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </header>

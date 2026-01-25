@@ -29,6 +29,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Input } from "@/components/ui/input";
 
 const adminMenuItems = [
   { icon: Activity, label: "Platform Overview", href: "/admin" },
@@ -356,13 +357,13 @@ export default function AdminLayout({
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="space-y-1">
               <div className="relative">
-                <input
+                <Input
                   type={showAdminCode ? "text" : "password"}
                   value={adminCode}
                   onChange={(e) => setAdminCode(e.target.value)}
                   placeholder="••••••••••••"
                   className={cn(
-                    "w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md py-2 pl-3 pr-10 text-center text-sm font-medium outline-none focus:border-zinc-400 transition-all placeholder:text-zinc-300",
+                    "text-center pr-10",
                     error && "border-red-300 focus:border-red-300",
                   )}
                   autoFocus
@@ -416,7 +417,7 @@ export default function AdminLayout({
       {/* Sidebar - Mobile Overlay */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] lg:hidden"
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-100 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
@@ -424,7 +425,7 @@ export default function AdminLayout({
       {/* Sidebar - Mobile Drawer */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 w-64 bg-card border-r border-border z-[110] lg:hidden transition-transform duration-200",
+          "fixed inset-y-0 left-0 w-64 bg-card border-r border-border z-110 lg:hidden transition-transform duration-200",
           isSidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card } from "@/components/ui/card";
 
 function AnalyticsContent() {
   const searchParams = useSearchParams();
@@ -68,7 +69,7 @@ function AnalyticsContent() {
         const techData = await techRes.json();
         const compData = await compRes.json();
         const elasticData = await elasticRes.json();
-        
+
         setStats(summaryData);
         setHistory(historyData);
         setTechStats(techData);
@@ -190,7 +191,7 @@ function AnalyticsContent() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Position Distribution */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-6">
             <Target className="w-5 h-5 text-primary" />
             <h3 className="font-bold">Market Stance</h3>
@@ -240,10 +241,10 @@ function AnalyticsContent() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
 
         {/* Global Market Edge History */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-6 shadow-sm">
+        <Card className="lg:col-span-2 p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-success" />
@@ -310,11 +311,11 @@ function AnalyticsContent() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Category Intelligence Table */}
-      <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
+      <Card className="p-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h3 className="text-xl font-bold flex items-center gap-2">
@@ -392,7 +393,7 @@ function AnalyticsContent() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Insights Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -496,9 +497,9 @@ function AnalyticsContent() {
                                         </span>
                                     </div>
                                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                        <div 
-                                            className="h-full bg-primary" 
-                                            style={{ width: `${Math.min(100, (r.avgPrice / techStats.specInsights.ram[0].avgPrice) * 100)}%` }} 
+                                        <div
+                                            className="h-full bg-primary"
+                                            style={{ width: `${Math.min(100, (r.avgPrice / techStats.specInsights.ram[0].avgPrice) * 100)}%` }}
                                         />
                                     </div>
                                 </div>
@@ -516,9 +517,9 @@ function AnalyticsContent() {
                                         <span className="text-muted-foreground">{formatCurrency(s.avgPrice, currency)}</span>
                                     </div>
                                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                        <div 
-                                            className="h-full bg-indigo-500" 
-                                            style={{ width: `${Math.min(100, (s.avgPrice / techStats.specInsights.storage[0].avgPrice) * 100)}%` }} 
+                                        <div
+                                            className="h-full bg-indigo-500"
+                                            style={{ width: `${Math.min(100, (s.avgPrice / techStats.specInsights.storage[0].avgPrice) * 100)}%` }}
                                         />
                                     </div>
                                 </div>
@@ -550,19 +551,19 @@ function AnalyticsContent() {
                   <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={competitorStats.data}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border)/0.5)" />
-                          <XAxis 
-                            dataKey="category" 
-                            axisLine={false} 
-                            tickLine={false} 
-                            tick={{ fontSize: 10, fontWeight: 'bold' }} 
+                          <XAxis
+                            dataKey="category"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 10, fontWeight: 'bold' }}
                           />
-                          <YAxis 
-                            axisLine={false} 
-                            tickLine={false} 
+                          <YAxis
+                            axisLine={false}
+                            tickLine={false}
                             tick={{ fontSize: 10 }}
                             tickFormatter={(val) => `${val}`}
                           />
-                          <Tooltip 
+                          <Tooltip
                             cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
                             contentStyle={{ borderRadius: '12px', border: '1px solid hsl(var(--border))', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
                           />
@@ -570,11 +571,11 @@ function AnalyticsContent() {
                           {competitorStats.competitors.slice(0, 5).map((comp: any, idx: number) => {
                               const colors = ["hsl(var(--primary))", "hsl(var(--indigo-500))", "hsl(var(--blue-500))", "hsl(var(--slate-500))", "hsl(var(--zinc-500))"];
                               return (
-                                <Bar 
-                                    key={comp.id} 
-                                    dataKey={comp.name} 
-                                    fill={colors[idx] || colors[0]} 
-                                    radius={[4, 4, 0, 0]} 
+                                <Bar
+                                    key={comp.id}
+                                    dataKey={comp.name}
+                                    fill={colors[idx] || colors[0]}
+                                    radius={[4, 4, 0, 0]}
                                     barSize={20}
                                 />
                               );
@@ -596,8 +597,8 @@ function AnalyticsContent() {
                                           <Badge variant="secondary" className="text-[9px] font-black">{totalItems} Products Tracked</Badge>
                                       </div>
                                       <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                          <div 
-                                            className="h-full bg-primary/40" 
+                                          <div
+                                            className="h-full bg-primary/40"
                                             style={{ width: `${Math.min(100, (totalItems / 100) * 100)}%` }} // Scaling helper
                                           />
                                       </div>
@@ -610,7 +611,7 @@ function AnalyticsContent() {
                        <ShieldCheck className="w-10 h-10 text-primary mb-4 opacity-40" />
                        <h5 className="font-extrabold text-sm mb-2">Market Intelligence Note</h5>
                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          This data is aggregated from your active crawlers. Categories are mapped automatically based on competitor site structures. 
+                          This data is aggregated from your active crawlers. Categories are mapped automatically based on competitor site structures.
                           <b> Average Price</b> is calculated based on current listing data and does not reflect promotional flash sales unless detected during the last sync.
                        </p>
                   </div>
@@ -641,7 +642,7 @@ function AnalyticsContent() {
                 <div className="flex flex-col items-center justify-center space-y-4 py-6">
                     <div className="relative w-48 h-24 overflow-hidden">
                         <div className="absolute inset-0 border-[16px] border-muted rounded-t-full" />
-                        <div 
+                        <div
                             className="absolute inset-0 border-[16px] border-primary rounded-t-full origin-bottom transition-all duration-1000"
                             style={{ transform: `rotate(${(elasticityData.reactivityIndex / 100) * 180 - 180}deg)` }}
                         />
@@ -650,7 +651,7 @@ function AnalyticsContent() {
                         </div>
                     </div>
                     <p className="text-xs text-center text-muted-foreground max-w-[280px]">
-                        Your catalog has a <b>{elasticityData.sensitivityOverview.marketCorrelation}</b> correlation with market leaders. 
+                        Your catalog has a <b>{elasticityData.sensitivityOverview.marketCorrelation}</b> correlation with market leaders.
                         A higher index suggests proactive pricing strategies.
                     </p>
                 </div>

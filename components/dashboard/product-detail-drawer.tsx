@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Product } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ResponsiveContainer,
   LineChart,
@@ -85,14 +87,14 @@ export default function ProductDetailDrawer({
     <>
       <div
         className={cn(
-          "fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] transition-opacity duration-500",
+          "fixed inset-0 bg-black/40 backdrop-blur-sm z-100 transition-opacity duration-500",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={onClose}
       />
       <div
         className={cn(
-          "fixed top-0 right-0 h-full w-full max-w-2xl bg-card border-l border-border z-[101] shadow-2xl transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]",
+          "fixed top-0 right-0 h-full w-full max-w-2xl bg-card border-l border-border z-101 shadow-2xl transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]",
           isOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
@@ -123,12 +125,14 @@ export default function ProductDetailDrawer({
                 Crawlers
               </p>
             </div>
-            <button
+            <Button
               onClick={onClose}
-              className="p-3 bg-background hover:bg-muted border border-border rounded-2xl transition-all"
+              variant="outline"
+              size="icon"
+              className="p-3 rounded-2xl"
             >
               <X className="w-6 h-6" />
-            </button>
+            </Button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-12">
@@ -142,7 +146,7 @@ export default function ProductDetailDrawer({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-primary/5 border border-primary/20 rounded-[2rem] p-6 space-y-1">
+                <div className="bg-primary/5 border border-primary/20 rounded-4xl p-6 space-y-1">
                   <p className="text-[10px] font-black uppercase text-primary tracking-widest opacity-60">
                     Your Current Price
                   </p>
@@ -169,7 +173,7 @@ export default function ProductDetailDrawer({
                   product.allMatches.map((match, idx) => (
                     <div
                       key={idx}
-                      className="bg-muted/30 border border-border rounded-[2rem] p-6 space-y-1 hover:border-primary/20 transition-all"
+                      className="bg-muted/30 border border-border rounded-4xl p-6 space-y-1 hover:border-primary/20 transition-all"
                     >
                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest opacity-60">
                         {match.siteName}
@@ -198,7 +202,7 @@ export default function ProductDetailDrawer({
                     </div>
                   ))
                 ) : (
-                  <div className="col-span-1 md:col-span-2 py-10 text-center bg-muted/20 border border-dashed border-border rounded-[2rem]">
+                  <div className="col-span-1 md:col-span-2 py-10 text-center bg-muted/20 border border-dashed border-border rounded-4xl">
                     <p className="text-sm font-bold text-muted-foreground italic uppercase tracking-widest opacity-40">
                       No competitor matches found yet
                     </p>
@@ -232,7 +236,7 @@ export default function ProductDetailDrawer({
                 </div>
               </div>
 
-              <div className="h-[280px] w-full bg-muted/10 rounded-[2.5rem] border border-border p-6 overflow-hidden relative">
+              <div className="h-70 w-full bg-muted/10 rounded-[2.5rem] border border-border p-6 overflow-hidden relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
                     data={historyData}
@@ -307,20 +311,21 @@ export default function ProductDetailDrawer({
                   directly to their listing URL.
                 </p>
                 <div className="flex gap-2">
-                  <input
+                  <Input
                     type="url"
                     value={matchUrl}
                     onChange={(e) => setMatchUrl(e.target.value)}
                     placeholder="https://competitor.com/p/product-name"
-                    className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
+                    className="flex-1"
                   />
-                  <button
+                  <Button
                     onClick={handleLinkCompetitor}
                     disabled={isLinking || !matchUrl}
-                    className="bg-primary text-primary-foreground text-xs font-bold px-6 py-3 rounded-xl hover:opacity-90 transition-all disabled:opacity-50 shadow-lg shadow-primary/10"
+                    size="sm"
+                    className="px-6"
                   >
                     {isLinking ? "Linking..." : "Link"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -361,16 +366,20 @@ export default function ProductDetailDrawer({
 
             {/* Terminal Actions */}
             <div className="pt-8 flex items-center gap-4">
-              <button
+              <Button
                 onClick={() => onExecute?.(product.id)}
                 className="flex-1 premium-gradient text-primary-foreground font-black py-5 rounded-2xl shadow-xl shadow-primary/20 glow flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
                 <Zap className="w-5 h-5 fill-current" />
                 Execute Auto-Adjustment
-              </button>
-              <button className="p-5 bg-muted hover:bg-muted/80 text-foreground font-black rounded-2xl border border-border transition-all">
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="p-5 rounded-2xl"
+              >
                 <ChevronRight className="w-6 h-6" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

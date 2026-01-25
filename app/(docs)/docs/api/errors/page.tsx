@@ -1,5 +1,6 @@
 import Callout from "@/components/docs/callout";
 import { AlertCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
 // Link removed
 
 export default function ErrorsPage() {
@@ -31,7 +32,7 @@ export default function ErrorsPage() {
           servers.
         </p>
 
-        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <Card className="overflow-hidden shadow-sm">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
@@ -107,7 +108,7 @@ export default function ErrorsPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       </section>
 
       <section className="space-y-6 pt-6">

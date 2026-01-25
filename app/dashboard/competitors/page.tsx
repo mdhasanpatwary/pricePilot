@@ -20,6 +20,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -43,7 +45,6 @@ const KNOWN_SEARCH_PATTERNS: Record<string, string> = {
 };
 
 import { Competitor } from "@/lib/types";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -53,7 +54,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -404,13 +404,10 @@ export default function CompetitorsPage() {
           </label>
 
           {!isAdding && competitors.length < limits.competitorLimit && (
-            <button
-              onClick={() => setIsAdding(true)}
-              className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-all flex items-center gap-2"
-            >
+            <Button onClick={() => setIsAdding(true)}>
               <Plus className="w-4 h-4" />
               Add Site
-            </button>
+            </Button>
           )}
           {competitors.length >= limits.competitorLimit && !isAdding && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-lg">
@@ -444,17 +441,17 @@ export default function CompetitorsPage() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                   Website URL
-                </label>
+                </Label>
                 <div className="relative group">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
-                  <input
+                  <Input
                     {...register("url")}
                     type="text"
                     placeholder="https://competitor.com"
                     className={cn(
-                      "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
+                      "pl-10",
                       errors.url &&
                         "border-destructive focus:ring-destructive/20",
                     )}
@@ -469,9 +466,9 @@ export default function CompetitorsPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     Search Pattern (Optional)
-                  </label>
+                  </Label>
                   <div className="group relative">
                     <span className="text-[10px] text-primary hover:underline cursor-help font-bold uppercase tracking-tighter">What&apos;s this?</span>
                     <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-secondary border border-border rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">

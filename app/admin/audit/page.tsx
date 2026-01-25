@@ -142,7 +142,7 @@ export default function AuditSearchPage() {
                   {item.logs.priceUpdates.length > 0 ? (
                     item.logs.priceUpdates.map((log: any) => (
                       <div key={log.id} className="relative pl-6">
-                        <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-zinc-300 dark:bg-zinc-700" />
+                        <div className="absolute -left-1.25 top-1.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-zinc-300 dark:bg-zinc-700" />
                         <div className="flex items-center gap-2 text-sm font-mono mb-1">
                           <span className="text-muted-foreground line-through">
                             ৳{log.oldPrice}

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { 
-    Bug, 
-    AlertCircle, 
-    Terminal, 
-    Database, 
-    ShieldAlert, 
-    History, 
-    RefreshCw, 
-    ActivitySquare, 
+import {
+    Bug,
+    AlertCircle,
+    Terminal,
+    Database,
+    ShieldAlert,
+    History,
+    RefreshCw,
+    ActivitySquare,
     Layers,
     Play,
     Loader2,
@@ -146,15 +146,15 @@ export default function DebugCenterPage() {
             </div>
 
             {/* Content Areas */}
-            <div className="min-h-[500px]">
+            <div className="min-h-125">
                 {activeTab === "intelligence" && (
                     <IntelligenceView data={debugData} loading={isLoading} />
                 )}
                 {activeTab === "health" && (
-                    <HealthView 
-                        data={healthData} 
-                        loading={isRunningHealth} 
-                        onRun={runHealthCheck} 
+                    <HealthView
+                        data={healthData}
+                        loading={isRunningHealth}
+                        onRun={runHealthCheck}
                     />
                 )}
                 {activeTab === "inconsistencies" && (
@@ -175,9 +175,9 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
     return (
         <div className="grid gap-8 grid-cols-1 lg:grid-cols-2">
             {/* Sync Failures */}
-            <LogSection 
-                title="Crawler Failures" 
-                logs={data.logs.sync} 
+            <LogSection
+                title="Crawler Failures"
+                logs={data.logs.sync}
                 icon={Globe}
                 empty="No critical crawler events reported."
                 renderItem={(log: any) => (
@@ -197,9 +197,9 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
             />
 
             {/* Price Engine Failures */}
-            <LogSection 
-                title="Pricing Logic Errors" 
-                logs={data.logs.updates} 
+            <LogSection
+                title="Pricing Logic Errors"
+                logs={data.logs.updates}
                 icon={Target}
                 empty="Pricing engine is operating within parameters."
                 renderItem={(log: any) => (
@@ -217,9 +217,9 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
             />
 
             {/* Recent System Activity */}
-            <LogSection 
-                title="Administrative Context" 
-                logs={data.logs.audit} 
+            <LogSection
+                title="Administrative Context"
+                logs={data.logs.audit}
                 icon={History}
                 empty="No recent administrative events."
                 renderItem={(log: any) => (
@@ -239,9 +239,9 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
             />
 
             {/* Scrape Hard Retries */}
-            <LogSection 
-                title="Exhausted Retries" 
-                logs={data.logs.scraping} 
+            <LogSection
+                title="Exhausted Retries"
+                logs={data.logs.scraping}
                 icon={RefreshCw}
                 empty="No exhausted scrape tasks detected."
                 renderItem={(log: any) => (
@@ -261,7 +261,7 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
 
 function LogSection({ title, logs, icon: Icon, empty, renderItem }: any) {
     return (
-        <Card className="overflow-hidden flex flex-col h-[400px]">
+        <Card className="overflow-hidden flex flex-col h-100">
             <div className="p-4 bg-muted/20 border-b flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Icon className="w-4 h-4 text-muted-foreground" />
@@ -306,7 +306,7 @@ function HealthView({ data, loading, onRun }: any) {
                     <StatusCard title="Gateway Transit" icon={Globe} result={data.results.internet} />
                     <StatusCard title="Proxy Ingress" icon={Network} result={data.results.proxies} />
                     <StatusCard title="Store Adapters" icon={Layers} result={data.results.integrations} />
-                    
+
                     <div className="lg:col-span-1 border border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-2">
                         <ActivitySquare className="w-8 h-8 text-primary opacity-20" />
                         <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Global Latency</p>
@@ -333,8 +333,8 @@ function StatusCard({ title, icon: Icon, result }: any) {
                 <div className="p-2.5 bg-muted/50 rounded-xl group-hover:bg-primary/5 transition-colors">
                     <Icon className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
-                {isHealthy ? <CheckCircle className="text-green-500 w-5 h-5" /> : 
-                 isWarn ? <AlertCircle className="text-amber-500 w-5 h-5" /> : 
+                {isHealthy ? <CheckCircle className="text-green-500 w-5 h-5" /> :
+                 isWarn ? <AlertCircle className="text-amber-500 w-5 h-5" /> :
                  <XCircle className="text-red-500 w-5 h-5" />}
             </div>
             <div className="mt-4">

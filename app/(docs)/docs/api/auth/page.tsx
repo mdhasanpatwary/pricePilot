@@ -2,6 +2,7 @@ import CodeBlock from "@/components/docs/code-block";
 import Callout from "@/components/docs/callout";
 import { Shield, Lock, ArrowRight, Code } from "lucide-react";
 import Link from "next/link";
+import { Card } from "@/components/ui/card";
 
 export default function APIAuthPage() {
   return (
@@ -76,7 +77,7 @@ export default function APIAuthPage() {
           Security Standards
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-6 rounded-lg border border-border bg-card">
+          <Card className="p-6">
             <div className="flex items-center gap-3 mb-3">
               <Lock className="w-4 h-4 text-muted-foreground" />
               <h4 className="text-sm font-bold">HTTPS Only</h4>
@@ -85,8 +86,8 @@ export default function APIAuthPage() {
               We require HTTPS for all API requests to protect your data during
               transmission. Non-SSL requests will be rejected.
             </p>
-          </div>
-          <div className="p-6 rounded-lg border border-border bg-card">
+          </Card>
+          <Card className="p-6">
             <div className="flex items-center gap-3 mb-3">
               <Shield className="w-4 h-4 text-muted-foreground" />
               <h4 className="text-sm font-bold">Token Rotation</h4>
@@ -95,7 +96,7 @@ export default function APIAuthPage() {
               We recommend rotating your API tokens every 90 days. You can
               invalidate old tokens instantly in the dashboard.
             </p>
-          </div>
+          </Card>
         </div>
       </section>
 
@@ -110,7 +111,7 @@ export default function APIAuthPage() {
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <Card className="overflow-hidden">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
@@ -156,7 +157,7 @@ export default function APIAuthPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       </section>
 
       <div className="pt-10 flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-border mt-20">

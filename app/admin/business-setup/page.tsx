@@ -16,6 +16,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 interface ConfigItem {
   id: string;
@@ -250,7 +251,7 @@ export default function BusinessSetupPage() {
                         </div>
                       ) : (
                         <div className="relative">
-                          <input
+                          <Input
                             type={item.type === "number" ? "number" : "text"}
                             defaultValue={item.value}
                             onBlur={(e) => {
@@ -258,7 +259,7 @@ export default function BusinessSetupPage() {
                                 handleUpdate(item.key, e.target.value);
                               }
                             }}
-                            className="w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm font-medium focus:ring-1 focus:ring-primary focus:border-primary transition-all pr-10"
+                            className="pr-10"
                             placeholder="Enter value..."
                           />
                           <div className="absolute right-3 top-1/2 -translate-y-1/2">

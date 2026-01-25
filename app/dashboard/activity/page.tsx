@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card } from "@/components/ui/card";
 
 interface AuditLog {
   id: string;
@@ -102,7 +103,7 @@ export default function AuditLogsPage() {
                 : "Rejected match for:"}
             </span>
             {details.productTitle ? (
-              <div className="flex flex-col gap-0.5 max-w-[200px]">
+              <div className="flex flex-col gap-0.5 max-w-50">
                 <span className="text-[10px] text-primary font-medium line-clamp-1">
                   {details.productTitle}
                 </span>
@@ -113,7 +114,7 @@ export default function AuditLogsPage() {
                 )}
               </div>
             ) : (
-              <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-[180px]">
+              <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-45">
                 {details.matchId || log.entityId}
               </code>
             )}
@@ -167,7 +168,7 @@ export default function AuditLogsPage() {
       if (action.includes("INTEGRATION") || action.includes("COMPETITOR")) {
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-bold text-foreground truncate max-w-[200px]">
+            <span className="text-[11px] font-bold text-foreground truncate max-w-50">
               {details.url || details.baseUrl || "System Connection"}
             </span>
             {details.platform && (
@@ -206,7 +207,7 @@ export default function AuditLogsPage() {
             <span className="text-[11px] font-bold text-foreground uppercase tracking-tighter">
               Reference ID
             </span>
-            <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-[150px]">
+            <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono text-muted-foreground truncate w-fit max-w-37.5">
               {details.targetTenantId || details.id || log.entityId}
             </code>
           </div>
@@ -214,13 +215,13 @@ export default function AuditLogsPage() {
       }
 
       return (
-        <pre className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+        <pre className="text-[10px] text-muted-foreground truncate max-w-50">
           {log.details}
         </pre>
       );
     } catch (e) {
       return (
-        <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+        <span className="text-[10px] text-muted-foreground truncate max-w-50">
           {log.details}
         </span>
       );
@@ -317,7 +318,7 @@ export default function AuditLogsPage() {
         </button>
       </div>
 
-      <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
+      <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -386,7 +387,7 @@ export default function AuditLogsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

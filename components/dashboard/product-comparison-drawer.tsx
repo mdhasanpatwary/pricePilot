@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Product } from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface ProductComparisonDrawerProps {
   products: Product[];
@@ -41,14 +42,14 @@ export default function ProductComparisonDrawer({
     <>
       <div
         className={cn(
-          "fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] transition-opacity duration-500",
+          "fixed inset-0 bg-black/40 backdrop-blur-sm z-100 transition-opacity duration-500",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={onClose}
       />
       <div
         className={cn(
-          "fixed top-0 right-0 h-full w-full max-w-5xl bg-card border-l border-border z-[101] shadow-2xl transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col",
+          "fixed top-0 right-0 h-full w-full max-w-5xl bg-card border-l border-border z-101 shadow-2xl transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col",
           isOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
@@ -62,23 +63,25 @@ export default function ProductComparisonDrawer({
               Comparing {products.length} tech products across {allSpecKeys.length + 2} attributes.
             </p>
           </div>
-          <button
+          <Button
             onClick={onClose}
-            className="p-3 bg-background hover:bg-muted border border-border rounded-2xl transition-all"
+            variant="outline"
+            size="icon"
+            className="p-3 rounded-2xl"
           >
             <X className="w-6 h-6" />
-          </button>
+          </Button>
         </div>
 
         <div className="flex-1 overflow-auto">
           <table className="w-full border-collapse">
             <thead className="sticky top-0 z-10 bg-card border-b">
               <tr>
-                <th className="p-6 w-56 min-w-[220px] text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground border-r">
+                <th className="p-6 w-56 min-w-55 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground border-r">
                   Feature / Specs
                 </th>
                 {products.map((p) => (
-                  <th key={p.id} className="p-6 min-w-[240px] border-r align-top text-left">
+                  <th key={p.id} className="p-6 min-w-60 border-r align-top text-left">
                     <div className="space-y-4">
                       <div className="relative aspect-square w-24 rounded-2xl overflow-hidden border-2 border-border bg-muted shadow-sm">
                         {p.image ? (
@@ -89,7 +92,7 @@ export default function ProductComparisonDrawer({
                             className="object-cover"
                           />
                         ) : (
-                          <div className="flex items-center justify-center h-full"> 
+                          <div className="flex items-center justify-center h-full">
                             <Zap className="opacity-20 w-8 h-8" />
                           </div>
                         )}
@@ -164,19 +167,20 @@ export default function ProductComparisonDrawer({
         </div>
 
         <div className="p-8 border-t border-border bg-muted/10 flex justify-end gap-4 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
-          <button 
+          <Button
             onClick={onClose}
-            className="px-8 py-4 bg-muted hover:bg-muted/80 text-foreground font-black rounded-2xl border border-border transition-all uppercase tracking-widest text-[10px]"
+            variant="outline"
+            className="px-8 py-4 font-black rounded-2xl uppercase tracking-widest text-[10px]"
           >
             Collapse Comparison
-          </button>
-          <button 
-            onClick={() => window.print()} 
+          </Button>
+          <Button
+            onClick={() => window.print()}
             className="px-8 py-4 premium-gradient text-primary-foreground font-black rounded-2xl shadow-xl shadow-primary/20 flex items-center gap-3 uppercase tracking-widest text-[10px] transition-all active:scale-95"
           >
             <Download className="w-4 h-4" />
             Generate PDF
-          </button>
+          </Button>
         </div>
       </div>
     </>

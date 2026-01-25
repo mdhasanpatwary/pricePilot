@@ -23,8 +23,17 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const alertRuleSchema = z.object({
   id: z.string().optional(),
@@ -93,6 +102,7 @@ export default function AlertCenterPage() {
     reset,
     watch,
     setValue,
+    control,
     formState: { errors },
   } = useForm<AlertRuleFormValues>({
     resolver: zodResolver(alertRuleSchema) as any,
@@ -292,10 +302,10 @@ export default function AlertCenterPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                   <div className="space-y-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                         Sentinel Name
-                      </label>
-                      <input
+                      </Label>
+                      <Input
                         {...register("name")}
                         className={cn(
                           "w-full bg-muted/30 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-medium",
@@ -308,43 +318,59 @@ export default function AlertCenterPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                           Data Stream
-                        </label>
-                        <select
-                          {...register("type")}
-                          className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-medium appearance-none"
-                        >
-                          <option value="PRICE_CHANGE">Price Changes</option>
-                          <option value="STOCK_STATUS">Stock Status</option>
-                        </select>
+                        </Label>
+                        <Controller
+                          name="type"
+                          control={control}
+                          render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <SelectTrigger className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-medium appearance-none">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="PRICE_CHANGE">Price Changes</SelectItem>
+                                <SelectItem value="STOCK_STATUS">Stock Status</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                           Target Scope
-                        </label>
-                        <select
-                          {...register("target")}
-                          className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-medium appearance-none"
-                        >
-                          <option value="ALL_PRODUCTS">
-                            Across All Products
-                          </option>
-                          <option value="SINGLE_PRODUCT">
-                            Specific Product
-                          </option>
-                          <option value="CATEGORY">Target Category</option>
-                        </select>
+                        </Label>
+                        <Controller
+                          name="target"
+                          control={control}
+                          render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <SelectTrigger className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-medium appearance-none">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ALL_PRODUCTS">
+                                  Across All Products
+                                </SelectItem>
+                                <SelectItem value="SINGLE_PRODUCT">
+                                  Specific Product
+                                </SelectItem>
+                                <SelectItem value="CATEGORY">Target Category</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
                       </div>
                     </div>
 
                     {selectedTarget === "CATEGORY" && (
                       <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                           Category Name
-                        </label>
-                        <input
+                        </Label>
+                        <Input
                           {...register("targetId")}
                           className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all font-medium"
                           placeholder="e.g. Electronics"
@@ -354,12 +380,12 @@ export default function AlertCenterPage() {
 
                     {selectedTarget === "SINGLE_PRODUCT" && (
                       <div className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                           Search Product
-                        </label>
+                        </Label>
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <input
+                          <Input
                             type="text"
                             value={productQuery}
                             onChange={(e) => {
@@ -410,7 +436,7 @@ export default function AlertCenterPage() {
                   </div>
 
                   <div className="space-y-6">
-                    <div className="p-6 bg-primary/[0.03] border border-primary/20 rounded-2xl space-y-4">
+                    <div className="p-6 bg-primary/3 border border-primary/20 rounded-2xl space-y-4">
                       <div className="flex items-center gap-2 text-primary">
                         <Zap className="w-5 h-5 fill-current" />
                         <span className="text-[10px] font-black uppercase tracking-[0.2em]">
@@ -459,11 +485,11 @@ export default function AlertCenterPage() {
                           watch("condition"),
                         ) && (
                           <div className="space-y-2 animate-in zoom-in-95 duration-200">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
                               Value Threshold
-                            </label>
+                            </Label>
                             <div className="relative">
-                              <input
+                              <Input
                                 {...register("value", { valueAsNumber: true })}
                                 type="number"
                                 step="any"
@@ -527,7 +553,7 @@ export default function AlertCenterPage() {
           ) : rules.length === 0 && !isAdding ? (
             <div className="bg-card border-2 border-dashed border-border rounded-[2.5rem] p-24 flex flex-col items-center text-center">
               <div className="relative mb-10">
-                <div className="w-24 h-24 rounded-[2rem] bg-primary/10 flex items-center justify-center animate-pulse">
+                <div className="w-24 h-24 rounded-4xl bg-primary/10 flex items-center justify-center animate-pulse">
                   <Bell className="w-12 h-12 text-primary" />
                 </div>
                 <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary border-4 border-card flex items-center justify-center">

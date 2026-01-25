@@ -17,6 +17,7 @@ import {
   Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 interface ScraperStat {
   id: string;
@@ -427,14 +428,13 @@ export default function ScraperStatusPage() {
                   Use the pattern from the target site. The search term will be appended or inserted.
                   <br/>Example: <code>https://www.example.com/s?k=jacket+for+men</code>
                 </p>
-                <input
+                <Input
                   type="text"
                   value={editForm.searchQueryPattern}
                   onChange={(e) =>
                     setEditForm({ ...editForm, searchQueryPattern: e.target.value })
                   }
                   placeholder="https://example.com/search?q="
-                  className="w-full p-2 rounded border bg-background"
                 />
               </div>
             </div>

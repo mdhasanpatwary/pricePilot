@@ -2,6 +2,7 @@ import CodeBlock from "@/components/docs/code-block";
 import Callout from "@/components/docs/callout";
 import { Download, BookOpen, Check, Puzzle, Activity } from "lucide-react";
 import Link from "next/link";
+import { Card } from "@/components/ui/card";
 
 export default function LaravelDocsPage() {
   return (
@@ -40,7 +41,7 @@ export default function LaravelDocsPage() {
             </p>
           </div>
         </Link>
-        <div className="flex items-center gap-4 p-5 rounded-lg border border-border bg-card">
+        <Card className="flex items-center gap-4 p-5">
           <div className="p-2.5 bg-muted text-muted-foreground rounded-md">
             <BookOpen className="w-5 h-5" />
           </div>
@@ -50,7 +51,7 @@ export default function LaravelDocsPage() {
               Technical Spec
             </p>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Prerequisites */}
@@ -181,7 +182,7 @@ PRICEPILOT_ROUTE_PREFIX=pricepilot/v1`}
             Verification
           </h2>
         </div>
-        <div className="p-8 rounded-lg border border-border bg-card space-y-4 shadow-sm">
+        <Card className="p-8 space-y-4 shadow-sm">
           <div className="flex items-center gap-3 text-foreground">
             <Activity className="w-4 h-4 text-success" />
             <h4 className="text-base font-bold tracking-tight">
@@ -196,7 +197,7 @@ PRICEPILOT_ROUTE_PREFIX=pricepilot/v1`}
             language="bash"
             code={`curl -H "X-PricePilot-Token: YOUR_TOKEN" https://yourstore.com/pricepilot/v1/health`}
           />
-        </div>
+        </Card>
       </section>
 
       {/* Success Footer */}

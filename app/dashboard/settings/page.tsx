@@ -24,6 +24,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -1053,10 +1055,10 @@ export default function SettingsPage() {
                     <form onSubmit={handleAddMember} className="grid gap-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                          <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                             Full Name
-                          </label>
-                          <input
+                          </Label>
+                          <Input
                             required
                             value={memberForm.name}
                             onChange={(e) =>
@@ -1066,14 +1068,13 @@ export default function SettingsPage() {
                               })
                             }
                             placeholder="John Doe"
-                            className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-medium"
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                          <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                             Email Address
-                          </label>
-                          <input
+                          </Label>
+                          <Input
                             required
                             type="email"
                             value={memberForm.email}
@@ -1084,7 +1085,6 @@ export default function SettingsPage() {
                               })
                             }
                             placeholder="john@example.com"
-                            className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-medium"
                           />
                         </div>
                       </div>
@@ -1186,14 +1186,14 @@ export default function SettingsPage() {
                               <Zap className="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                              <p className="text-sm font-bold truncate max-w-[200px]">
+                              <p className="text-sm font-bold truncate max-w-50">
                                 {webhook.url}
                               </p>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-[10px] font-bold text-success uppercase">
                                   Active
                                 </span>
-                                <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                                <span className="text-[10px] text-muted-foreground truncate max-w-37.5">
                                   Secret: {webhook.secret ? "••••••••" : "None"}
                                 </span>
                               </div>
@@ -1619,7 +1619,7 @@ export default function SettingsPage() {
                             Reset All Data (Hard Reset)
                           </p>
                           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                            Permanently deletes ALL integrations (stores), competitor sites, products, rules, and history. 
+                            Permanently deletes ALL integrations (stores), competitor sites, products, rules, and history.
                             This will leave your account empty like a fresh install.
                           </p>
                         </div>

@@ -3,6 +3,7 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface CodeBlockProps {
   code: string;
@@ -35,8 +36,10 @@ export default function CodeBlock({ code, language, filename }: CodeBlockProps) 
           )}
         </div>
 
-        <button
+        <Button
           onClick={copyToClipboard}
+          variant="ghost"
+          size="sm"
           className={cn(
             "p-1 rounded-md transition-all hover:bg-muted-foreground/10",
             copied ? "text-success" : "text-muted-foreground/60"
@@ -44,7 +47,7 @@ export default function CodeBlock({ code, language, filename }: CodeBlockProps) 
           title="Copy to clipboard"
         >
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-        </button>
+        </Button>
       </div>
 
       <div className="relative">

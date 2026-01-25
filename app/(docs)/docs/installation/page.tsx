@@ -3,6 +3,7 @@ import { Puzzle, Globe, CheckCircle2, ArrowRight, Layers } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 export default function InstallationPage() {
   const platforms = [
@@ -54,7 +55,7 @@ export default function InstallationPage() {
       <section className="space-y-8">
         <h2 className="text-2xl font-bold tracking-tight">Methods</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-8 rounded-lg border border-border bg-card space-y-4 shadow-sm">
+          <Card className="p-8 space-y-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-muted text-muted-foreground rounded-md">
                 <Puzzle className="w-5 h-5" />
@@ -77,9 +78,9 @@ export default function InstallationPage() {
                 Perf
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="p-8 rounded-lg border border-border bg-card space-y-4 shadow-sm">
+          <Card className="p-8 space-y-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-muted text-muted-foreground rounded-md">
                 <Globe className="w-5 h-5" />
@@ -100,7 +101,7 @@ export default function InstallationPage() {
                 GraphQL Soon
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       </section>
 

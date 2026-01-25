@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { ThemeToggle } from "./theme-toggle";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Bell,
   Search,
@@ -115,12 +117,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
     <header className="sticky top-0 z-40 w-full bg-background border-b border-border">
       <div className="flex h-16 items-center justify-between px-6 lg:px-10">
         <div className="flex items-center gap-4">
-          <button
+          <Button
+            variant="outline"
+            size="icon"
             onClick={onMenuClick}
-            className="lg:hidden p-2 hover:bg-muted rounded-md transition-all border border-border"
+            className="lg:hidden"
           >
             <Menu className="w-5 h-5" />
-          </button>
+          </Button>
           <div className="hidden lg:flex flex-col">
             <h1 className="text-base font-semibold text-foreground">
               {getPageTitle()}
@@ -128,7 +132,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           </div>
           <div className="hidden md:flex items-center gap-2 bg-muted/50 border border-border px-3 py-1.5 rounded-md focus-within:ring-1 focus-within:ring-primary/20 transition-all ml-4">
             <Search className="w-4 h-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               placeholder="Search..."
               className="bg-transparent border-none outline-none text-sm w-48 font-medium placeholder:text-muted-foreground/50"
@@ -147,21 +151,23 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <ThemeToggle />
 
           <div className="relative">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => {
                 setIsNotificationsOpen(!isNotificationsOpen);
                 setIsProfileOpen(false);
               }}
               className={cn(
-                "p-2 text-muted-foreground hover:text-foreground transition-all relative rounded-md border border-transparent",
-                isNotificationsOpen && "bg-muted text-foreground border-border",
+                "relative",
+                isNotificationsOpen && "bg-muted",
               )}
             >
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-background animate-pulse" />
               )}
-            </button>
+            </Button>
 
             {isNotificationsOpen && (
               <>
@@ -173,15 +179,17 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
                     <h3 className="font-bold text-sm">Notifications</h3>
                     {unreadCount > 0 && (
-                      <button
+                      <Button
+                        variant="link"
+                        size="sm"
                         onClick={() => markAsRead()}
-                        className="text-[10px] font-black uppercase text-primary hover:underline"
+                        className="text-[10px] font-black uppercase text-primary hover:underline p-0 h-auto"
                       >
                         Mark all read
-                      </button>
+                      </Button>
                     )}
                   </div>
-                  <div className="max-h-[350px] overflow-y-auto">
+                  <div className="max-h-87.5 overflow-y-auto">
                     {notifications.length > 0 ? (
                       notifications.map((n) => {
                         const {
@@ -330,13 +338,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
                     ))}
                   </div>
                   <div className="p-2 border-t border-border bg-muted/10">
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={() => signOut()}
-                      className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-all"
+                      className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-all justify-start"
                     >
                       <LogOut className="w-4 h-4" />
                       End Session
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </>

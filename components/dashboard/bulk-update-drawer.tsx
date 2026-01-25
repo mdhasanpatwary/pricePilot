@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 import { z } from "zod";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 const bulkUpdateSchema = z.object({
   logicType: z.enum(["FIXED", "PERCENTAGE"]),
@@ -65,13 +68,13 @@ export default function BulkUpdateDrawer({
   return (
     <>
       <div
-        className="fixed inset-0 bg-background/80 backdrop-blur-md z-[100] animate-in fade-in duration-500"
+        className="fixed inset-0 bg-background/80 backdrop-blur-md z-100 animate-in fade-in duration-500"
         onClick={onClose}
       />
-      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-card border-l border-border z-[110] shadow-[0px_0px_100px_rgba(0,0,0,0.5)] animate-in slide-in-from-right duration-500 flex flex-col relative overflow-hidden">
+      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-card border-l border-border z-110 shadow-[0px_0px_100px_rgba(0,0,0,0.5)] animate-in slide-in-from-right duration-500 flex flex-col overflow-hidden">
         {/* Glow Decor */}
-        <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-[-100px] left-[-100px] w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute -top-25 -right-25 w-100 h-100 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute -bottom-25 -left-25 w-100 h-100 bg-purple-500/5 rounded-full blur-[100px] pointer-events-none" />
 
         <div className="p-10 border-b border-border flex items-center justify-between relative z-10 bg-background/30 backdrop-blur-xl">
           <div className="flex items-center gap-5">
@@ -113,7 +116,7 @@ export default function BulkUpdateDrawer({
                     setValue("logicType", "FIXED", { shouldValidate: true })
                   }
                   className={cn(
-                    "p-6 border-2 rounded-[2rem] flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
+                    "p-6 border-2 rounded-4xl flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
                     logicType === "FIXED"
                       ? "border-primary bg-primary/5 shadow-2xl shadow-primary/10"
                       : "border-border hover:border-primary/20 hover:bg-muted/50",
@@ -147,7 +150,7 @@ export default function BulkUpdateDrawer({
                     })
                   }
                   className={cn(
-                    "p-6 border-2 rounded-[2rem] flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
+                    "p-6 border-2 rounded-4xl flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
                     logicType === "PERCENTAGE"
                       ? "border-primary bg-primary/5 shadow-2xl shadow-primary/10"
                       : "border-border hover:border-primary/20 hover:bg-muted/50",
@@ -177,51 +180,53 @@ export default function BulkUpdateDrawer({
 
             <div className="space-y-8">
               <div className="space-y-4">
-                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-1">
-                  {logicType === "FIXED"
-                    ? "Reduction Value ($)"
-                    : "Spread Intensity (%)"}
-                </label>
-                <div className="relative group">
-                  <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground group-focus-within:text-primary transition-colors">
-                    {logicType === "FIXED" ? "$" : "%"}
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-1">
+                    {logicType === "FIXED"
+                      ? "Reduction Value ($)"
+                      : "Spread Intensity (%)"}
+                  </Label>
+                  <div className="relative group">
+                    <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground group-focus-within:text-primary transition-colors">
+                      {logicType === "FIXED" ? "$" : "%"}
+                    </div>
+                    <Input
+                      {...register("value", { valueAsNumber: true })}
+                      type="number"
+                      step="0.01"
+                      className={cn(
+                        "w-full bg-muted/30 border border-border rounded-3xl py-7 pl-14 pr-8 outline-none focus:border-primary/50 focus:ring-8 focus:ring-primary/5 transition-all font-black text-4xl tracking-tighter",
+                        errors.value &&
+                          "border-destructive focus:ring-destructive/5",
+                      )}
+                      placeholder="0.00"
+                    />
                   </div>
-                  <input
-                    {...register("value", { valueAsNumber: true })}
-                    type="number"
-                    step="0.01"
-                    className={cn(
-                      "w-full bg-muted/30 border border-border rounded-3xl py-7 pl-14 pr-8 outline-none focus:border-primary/50 focus:ring-8 focus:ring-primary/5 transition-all font-black text-4xl tracking-tighter",
-                      errors.value &&
-                        "border-destructive focus:ring-destructive/5",
-                    )}
-                    placeholder="0.00"
-                  />
+                  {errors.value && (
+                    <p className="text-xs text-destructive font-bold ml-1">
+                      {errors.value.message}
+                    </p>
+                  )}
                 </div>
-                {errors.value && (
-                  <p className="text-xs text-destructive font-bold ml-1">
-                    {errors.value.message}
-                  </p>
-                )}
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between ml-1">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
-                    Margin Lockdown
-                  </label>
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-warning/10 border border-warning/20 rounded-full">
-                    <Lock className="w-2.5 h-2.5 text-warning" />
-                    <span className="text-[8px] text-warning font-black uppercase tracking-widest">
-                      Safety Valve
-                    </span>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between ml-1">
+                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
+                      Margin Lockdown
+                    </Label>
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-warning/10 border border-warning/20 rounded-full">
+                      <Lock className="w-2.5 h-2.5 text-warning" />
+                      <span className="text-[8px] text-warning font-black uppercase tracking-widest">
+                        Safety Valve
+                      </span>
+                    </div>
                   </div>
-                </div>
                 <div className="relative group">
                   <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-xl text-muted-foreground group-focus-within:text-warning transition-colors">
                     $
                   </div>
-                  <input
+                  <Input
                     {...register("minPrice", { valueAsNumber: true })}
                     type="number"
                     step="0.01"
@@ -242,8 +247,8 @@ export default function BulkUpdateDrawer({
             </div>
           </div>
 
-          <div className="bg-primary/5 border border-primary/10 rounded-[2rem] p-8 space-y-4 relative overflow-hidden group/alert">
-            <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-primary/10 rounded-full blur-2xl group-hover/alert:scale-150 transition-transform duration-700" />
+          <div className="bg-primary/5 border border-primary/10 rounded-4xl p-8 space-y-4 relative overflow-hidden group/alert">
+            <div className="absolute -top-12.5 -right-12.5 w-32 h-32 bg-primary/10 rounded-full blur-2xl group-hover/alert:scale-150 transition-transform duration-700" />
             <div className="flex items-center gap-3 text-primary">
               <AlertTriangle className="w-5 h-5" />
               <span className="text-xs font-black uppercase tracking-[0.2em]">
@@ -266,13 +271,12 @@ export default function BulkUpdateDrawer({
                 {" "}
                 {logicType === "FIXED" ? `$${value}` : `${value}%`}
               </span>
-              .
             </p>
           </div>
         </form>
 
         <div className="p-10 border-t border-border bg-card/60 backdrop-blur-3xl relative z-10">
-          <button
+          <Button
             type="submit"
             form="bulk-update-form"
             disabled={loading}
@@ -288,7 +292,7 @@ export default function BulkUpdateDrawer({
                 </div>
               </>
             )}
-          </button>
+          </Button>
           <p className="text-[10px] text-center text-muted-foreground font-black uppercase tracking-[0.3em] mt-6 opacity-40">
             Auth req: administrator.sync_protocol_v2
           </p>

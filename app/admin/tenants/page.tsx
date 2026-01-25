@@ -9,7 +9,6 @@ import {
   RefreshCw,
   Plus,
   Trash2,
-  X,
   AlertTriangle,
   CheckCircle2,
   Globe,
@@ -17,6 +16,23 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export default function TenantsPage() {
   const [activeTab, setActiveTab] = useState("ALL");
@@ -27,7 +43,6 @@ export default function TenantsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // Modal states
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<any | null>(null);
   const [tenantToReset, setTenantToReset] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -87,7 +102,6 @@ export default function TenantsPage() {
       if (res.ok) {
         // Refresh full list to get all proper counts and emails
         await fetchTenants(true);
-        setIsCreateModalOpen(false);
         setCreateForm({
           name: "",
           planType: "BASIC",
@@ -209,12 +223,10 @@ export default function TenantsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => fetchTenants(true)}
-            className={cn(
-              "p-2 rounded-md border border-input bg-background hover:bg-muted transition-colors",
-              isRefreshing && "opacity-50",
-            )}
             disabled={isRefreshing}
             title="Refresh Data"
           >
@@ -224,15 +236,115 @@ export default function TenantsPage() {
                 isRefreshing && "animate-spin",
               )}
             />
-          </button>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
-            title="Create New Organization"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Tenant</span>
-          </button>
+          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button title="Create New Organization">
+                <Plus className="w-4 h-4" />
+                <span>Create Tenant</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create New Tenant</DialogTitle>
+              </DialogHeader>
+              <form
+                onSubmit={handleCreateTenant}
+                className="flex flex-col gap-4"
+              >
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-sm font-medium text-foreground">
+                    Company Name
+                  </Label>
+                  <Input
+                    required
+                    type="text"
+                    placeholder="e.g. Acme Corp"
+                    value={createForm.name}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, name: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-sm font-medium text-foreground">
+                    Pricing Plan
+                  </Label>
+                  <Select
+                    value={createForm.planType}
+                    onValueChange={(value) =>
+                      setCreateForm({ ...createForm, planType: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BASIC">Basic</SelectItem>
+                      <SelectItem value="PREMIUM">Premium</SelectItem>
+                      <SelectItem value="PRO">Pro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-sm font-medium text-foreground">
+                      Store Limit
+                    </Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={createForm.storeLimit}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          storeLimit: parseInt(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-sm font-medium text-foreground">
+                      Comp. Limit
+                    </Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={createForm.competitorLimit}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          competitorLimit: parseInt(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={isCreating}
+                    type="submit"
+                  >
+                    {isCreating ? (
+                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent animate-spin rounded-full" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4" />
+                    )}
+                    Create Tenant
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -240,30 +352,32 @@ export default function TenantsPage() {
         {/* Simple Tabs */}
         <div className="flex items-center gap-1 p-1 bg-muted rounded-md">
           {["ALL", "BASIC", "PREMIUM", "PRO"].map((tab) => (
-            <button
+            <Button
               key={tab}
+              variant={activeTab === tab ? "default" : "ghost"}
+              size="sm"
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-3 py-1.5 rounded text-xs font-medium capitalize transition-all",
+                "capitalize",
                 activeTab === tab
-                  ? "bg-background text-foreground shadow-sm"
+                  ? ""
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               {tab.toLowerCase()}
-            </button>
+            </Button>
           ))}
         </div>
 
         {/* Search */}
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
+          <Input
             type="text"
             placeholder="Search tenants..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-background border border-input rounded-md py-1.5 pl-9 pr-3 text-sm focus:border-ring focus:ring-0 outline-none transition-all placeholder:text-muted-foreground"
+            className="pl-9"
           />
         </div>
       </div>
@@ -295,7 +409,7 @@ export default function TenantsPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b border-border">
               <tr>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground w-[250px]">
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground w-62.5">
                   Organization
                 </th>
                 <th className="px-6 py-3 text-left font-medium text-muted-foreground">
@@ -338,7 +452,7 @@ export default function TenantsPage() {
                           Stores
                         </label>
                         <div className="relative">
-                          <input
+                          <Input
                             type="number"
                             defaultValue={tenant.storeLimit}
                             onBlur={(e) =>
@@ -348,7 +462,7 @@ export default function TenantsPage() {
                                 parseInt(e.target.value),
                               )
                             }
-                            className="w-16 bg-muted border border-input rounded px-2 py-1 text-xs text-center focus:border-ring outline-none transition-all"
+                            className="w-16 text-xs text-center"
                             title="Update store limit"
                           />
                           {updatingId === `${tenant.id}-storeLimit` && (
@@ -361,7 +475,7 @@ export default function TenantsPage() {
                           Comp
                         </label>
                         <div className="relative">
-                          <input
+                          <Input
                             type="number"
                             defaultValue={tenant.competitorLimit}
                             onBlur={(e) =>
@@ -371,7 +485,7 @@ export default function TenantsPage() {
                                 parseInt(e.target.value),
                               )
                             }
-                            className="w-16 bg-muted border border-input rounded px-2 py-1 text-xs text-center focus:border-ring outline-none transition-all"
+                            className="w-16 text-xs text-center"
                             title="Update competitor limit"
                           />
                           {updatingId === `${tenant.id}-competitorLimit` && (
@@ -458,29 +572,32 @@ export default function TenantsPage() {
 
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <select
+                      <Select
                         value={tenant.plan}
-                        onChange={(e) =>
+                        onValueChange={(value) =>
                           updateTenantField(
                             tenant.id,
                             "planType",
-                            e.target.value,
+                            value,
                           )
                         }
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-transparent outline-none cursor-pointer hover:bg-muted/50 transition-colors",
+                      >
+                        <SelectTrigger className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-transparent outline-none cursor-pointer hover:bg-muted/50 transition-colors h-auto",
                           tenant.plan === "PRO"
                             ? "text-primary border-primary/20"
                             : tenant.plan === "PREMIUM"
                               ? "text-amber-500 border-amber-500/20"
                               : "text-foreground border-border",
-                        )}
-                        title="Change Pricing Plan"
-                      >
-                        <option value="BASIC">BASIC</option>
-                        <option value="PREMIUM">PREMIUM</option>
-                        <option value="PRO">PRO</option>
-                      </select>
+                        )}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="BASIC">BASIC</SelectItem>
+                          <SelectItem value="PREMIUM">PREMIUM</SelectItem>
+                          <SelectItem value="PRO">PRO</SelectItem>
+                        </SelectContent>
+                      </Select>
                       {updatingId === `${tenant.id}-planType` && (
                         <div className="w-3 h-3 border border-primary border-t-transparent animate-spin rounded-full" />
                       )}
@@ -598,121 +715,6 @@ export default function TenantsPage() {
           </div>
         </div>
       </div>
-
-      {/* Create Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-md border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between p-6 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">
-                Create New Tenant
-              </h2>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleCreateTenant}
-              className="p-6 flex flex-col gap-4"
-            >
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-foreground">
-                  Company Name
-                </label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Acme Corp"
-                  value={createForm.name}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, name: e.target.value })
-                  }
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-foreground">
-                  Pricing Plan
-                </label>
-                <select
-                  value={createForm.planType}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, planType: e.target.value })
-                  }
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors appearance-none"
-                >
-                  <option value="BASIC">Basic</option>
-                  <option value="PREMIUM">Premium</option>
-                  <option value="PRO">Pro</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    Store Limit
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={createForm.storeLimit}
-                    onChange={(e) =>
-                      setCreateForm({
-                        ...createForm,
-                        storeLimit: parseInt(e.target.value),
-                      })
-                    }
-                    className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    Comp. Limit
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={createForm.competitorLimit}
-                    onChange={(e) =>
-                      setCreateForm({
-                        ...createForm,
-                        competitorLimit: parseInt(e.target.value),
-                      })
-                    }
-                    className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={isCreating}
-                  type="submit"
-                  className="bg-primary text-primary-foreground px-6 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
-                >
-                  {isCreating ? (
-                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent animate-spin rounded-full" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4" />
-                  )}
-                  Create Tenant
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Reset Confirmation Modal */}
       {tenantToReset && (

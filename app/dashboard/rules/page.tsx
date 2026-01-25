@@ -17,8 +17,18 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const ruleSchema = z.object({
   id: z.string().optional(),
@@ -58,6 +68,7 @@ export default function PricingRulesPage() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<RuleFormValues>({
     resolver: zodResolver(ruleSchema),
@@ -215,10 +226,10 @@ export default function PricingRulesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                     Rule Name
-                  </label>
-                  <input
+                  </Label>
+                  <Input
                     {...register("name")}
                     type="text"
                     className={cn(
@@ -236,10 +247,10 @@ export default function PricingRulesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                     Description
-                  </label>
-                  <textarea
+                  </Label>
+                  <Textarea
                     {...register("description")}
                     className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all h-24 resize-none"
                     placeholder="Describe when this rule should apply..."
@@ -249,27 +260,35 @@ export default function PricingRulesPage() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                     Strategy Type
-                  </label>
-                  <select
-                    {...register("strategy")}
-                    className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                  >
-                    <option value="UNDERCUT">Undercut ($ Amount)</option>
-                    <option value="MATCH">Exact Price Match</option>
-                    <option value="PERCENTAGE">Cheaper By %</option>
-                    <option value="MARGIN_LOCK">Margin Protection</option>
-                    <option value="THRESHOLD">Difference Threshold</option>
-                  </select>
+                  </Label>
+                  <Controller
+                    name="strategy"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger className="w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                          <SelectValue placeholder="Select strategy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="UNDERCUT">Undercut ($ Amount)</SelectItem>
+                          <SelectItem value="MATCH">Exact Price Match</SelectItem>
+                          <SelectItem value="PERCENTAGE">Cheaper By %</SelectItem>
+                          <SelectItem value="MARGIN_LOCK">Margin Protection</SelectItem>
+                          <SelectItem value="THRESHOLD">Difference Threshold</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                       Value
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       {...register("parameter", { valueAsNumber: true })}
                       type="number"
                       step="any"
@@ -278,6 +297,7 @@ export default function PricingRulesPage() {
                         errors.parameter &&
                           "border-destructive focus:ring-destructive/50",
                       )}
+                      placeholder="0.00"
                     />
                     {errors.parameter && (
                       <p className="text-xs text-destructive font-bold">

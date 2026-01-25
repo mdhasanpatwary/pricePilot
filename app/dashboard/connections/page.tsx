@@ -26,6 +26,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 const platforms = [
   { id: "SHOPIFY", name: "Shopify", icon: "/icons/platforms/shopify.svg" },
@@ -147,7 +150,7 @@ export default function ConnectionsPage() {
       if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
         baseUrl = `https://${baseUrl}`;
       }
-      
+
       const payload = {
         ...data,
         baseUrl,
@@ -186,7 +189,7 @@ export default function ConnectionsPage() {
               );
               if (currentSite) {
                 setProgressCount(currentSite.products);
-                
+
                 // If sync finished, stop polling and show final state
                 if (!currentSite.isSyncing && currentSite.lastSync) {
                   clearInterval(pollInterval);
@@ -261,7 +264,7 @@ export default function ConnectionsPage() {
     try {
       // Optimistically update UI
       setConnections(prev => prev.map(c => c.id === siteId ? { ...c, isSyncing: true, status: 'SYNCING' } : c));
-      
+
       const res = await fetch("/api/v1/integrations/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -469,12 +472,12 @@ export default function ConnectionsPage() {
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                    <Label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                       Store Base URL
-                    </label>
+                    </Label>
                     <div className="relative group">
                       <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                      <input
+                      <Input
                         {...register("baseUrl")}
                         type="url"
                         placeholder="https://yourstore.com"
@@ -493,12 +496,12 @@ export default function ConnectionsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
+                    <Label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                       Secure API Token (Optional)
-                    </label>
+                    </Label>
                     <div className="relative group">
                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                      <input
+                      <Input
                         {...register("apiToken")}
                         type={showApiToken ? "text" : "password"}
                         placeholder="Your PricePilot secret key"
@@ -508,17 +511,17 @@ export default function ConnectionsPage() {
                             "border-destructive focus:ring-destructive/20",
                         )}
                       />
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setShowApiToken(!showApiToken)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors h-6 w-6 p-0"
                       >
                         {showApiToken ? (
                           <EyeOff className="w-4 h-4" />
                         ) : (
                           <Eye className="w-4 h-4" />
                         )}
-                      </button>
+                      </Button>
                     </div>
                     {errors.apiToken && (
                       <p className="text-xs text-destructive font-bold">
@@ -551,23 +554,21 @@ export default function ConnectionsPage() {
                     </div>
                     <div className="relative group">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                      <input
+                      <Input
                         {...register("searchQueryPattern")}
                         type="text"
                         placeholder="https://mystore.com/search?q={query}"
-                        className={cn(
-                          "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
-                        )}
+                        className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
                       />
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 pt-2">
-                  <button
+                  <Button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 bg-primary text-primary-foreground font-bold py-2.5 rounded-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]"
+                    className="flex-1 font-bold py-2.5 rounded-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]"
                   >
                     {loading ? (
                       <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
@@ -577,7 +578,7 @@ export default function ConnectionsPage() {
                         Verify & Connect
                       </>
                     )}
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => {
@@ -700,8 +701,8 @@ export default function ConnectionsPage() {
                     onClick={() => conn.isSyncing ? handleStopSyncConnection(conn.id) : handleSyncConnection(conn.id)}
                     className={cn(
                       "p-2 rounded-md transition-all",
-                      conn.isSyncing 
-                        ? "bg-danger/10 text-danger hover:bg-danger/20" 
+                      conn.isSyncing
+                        ? "bg-danger/10 text-danger hover:bg-danger/20"
                         : "hover:bg-primary/10 hover:text-primary"
                     )}
                     title={conn.isSyncing ? "Stop Sync" : "Sync Products"}
@@ -769,7 +770,7 @@ export default function ConnectionsPage() {
                 </div>
 
                 {/* Terminal Body */}
-                <div className="p-0 font-mono text-[11px] h-[250px] flex flex-col bg-[#0a0a0a]">
+                <div className="p-0 font-mono text-[11px] h-62.5 flex flex-col bg-[#0a0a0a]">
                   <div className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-white/10">
                     {connections
                       .filter((c) => c.isSyncing)
@@ -813,9 +814,9 @@ export default function ConnectionsPage() {
                       ))}
                     <div ref={consoleEndRef} />
                   </div>
-                  
+
                   {/* Traffic Footer Strip */}
-                  <div className="bg-white/[0.02] border-t border-white/5 px-4 py-2 flex items-center justify-between">
+                  <div className="bg-white/2 border-t border-white/5 px-4 py-2 flex items-center justify-between">
                     <div className="flex gap-4 font-mono text-[9px] text-white/40 uppercase font-bold">
                       <span className="flex items-center gap-1">
                         <Loader2 className="w-2.5 h-2.5 animate-spin" />
@@ -832,7 +833,7 @@ export default function ConnectionsPage() {
           {connections.length < limits.storeLimit && (
             <button
               onClick={() => setIsAdding(true)}
-              className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-[220px]"
+              className="bg-muted/10 border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-center space-y-3 hover:border-primary/50 hover:bg-primary/5 transition-all group min-h-55"
             >
               <div className="w-10 h-10 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
                 <Plus className="w-5 h-5" />

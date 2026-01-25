@@ -91,19 +91,19 @@ export default function PriceReportPage() {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Re-fetch when filters change (server-side filtering is better for many items, 
-  // but for now we are mixing client/server. 
+  // Re-fetch when filters change (server-side filtering is better for many items,
+  // but for now we are mixing client/server.
   // Let's rely on the useEffect below to trigger fetch on key filter changes if we want server side,
   // OR keep client side. The current implementation was client side 'filteredData'.
   // However, `fetchProducts` is called ONLY on mount currently.
   // The user plan implies backend filtering. Let's make `fetchProducts` called on filter changes.
   useEffect(() => {
      // If we want server-side filtering, we should debounce and call fetchProducts.
-     // But `filteredData` logic below is client-side. 
-     // For hybrid approach: We fetch ALL products initially (as per original code), 
-     // then filter client side. 
-     // BUT the API update I just made supports server side. 
-     // Let's stick to client side for responsiveness if data < 1000 items, 
+     // But `filteredData` logic below is client-side.
+     // For hybrid approach: We fetch ALL products initially (as per original code),
+     // then filter client side.
+     // BUT the API update I just made supports server side.
+     // Let's stick to client side for responsiveness if data < 1000 items,
      // but since we added API params, let's use them?
      // Actually, let's keep the client-side 'filteredData' logic for immediate UI feedback
      // AND keep the API capable for the future or if we decide to switch.
@@ -152,7 +152,7 @@ export default function PriceReportPage() {
         (filterStock === "INSTOCK" ? item.inStock : !item.inStock);
       const matchesBrand = filterBrand === "ALL" || item.brand === filterBrand;
       const matchesSite = filterSite === "ALL" || item.siteName === filterSite;
-      
+
       const specs = item.specifications || {};
       const matchesRam = filterRam === "ALL" || specs.ram === filterRam;
       const matchesStorage = filterStorage === "ALL" || specs.storage === filterStorage;
@@ -216,7 +216,7 @@ export default function PriceReportPage() {
   const brands = Array.from(
     new Set(availableData.filter((p) => p.brand).map((p) => p.brand)),
   ).sort() as string[];
-  
+
   // Extract unique Specs for filters
   const ramOptions = Array.from(new Set(data.flatMap(p => p.specifications?.ram ? [p.specifications.ram] : []))).sort();
   const storageOptions = Array.from(new Set(data.flatMap(p => p.specifications?.storage ? [p.specifications.storage] : []))).sort();
@@ -344,9 +344,9 @@ export default function PriceReportPage() {
           `Import complete: ${result.created} created, ${result.updated} updated.`
         );
         if (result.errorCount > 0) {
-            toast.error(`${result.errorCount} rows failed. Check SKU/Price formatting.`, { 
+            toast.error(`${result.errorCount} rows failed. Check SKU/Price formatting.`, {
                 description: result.errors.join(', '),
-                duration: 5000 
+                duration: 5000
             });
         }
         fetchProducts();
@@ -401,18 +401,18 @@ export default function PriceReportPage() {
 
           {competitors.length > 1 && (
             <div className="relative group">
-              <select
-                value={refCompetitor}
-                onChange={(e) => setRefCompetitor(e.target.value)}
-                className="appearance-none bg-background border border-border rounded-md py-2 pl-3 pr-10 text-sm font-semibold hover:bg-muted/50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                {competitors.map((comp) => (
-                  <option key={comp} value={comp}>
-                    Compare: {cleanName(comp)}
-                  </option>
-                ))}
-              </select>
-              <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Select value={refCompetitor} onValueChange={setRefCompetitor}>
+                <SelectTrigger className="appearance-none bg-background border border-border rounded-md py-2 pl-3 pr-10 text-sm font-semibold hover:bg-muted/50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {competitors.map((comp) => (
+                    <SelectItem key={comp} value={comp}>
+                      Compare: {cleanName(comp)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
@@ -567,10 +567,10 @@ export default function PriceReportPage() {
             {isFilterOpen && (
               <>
                 <div
-                  className="fixed inset-0 z-[60]"
+                  className="fixed inset-0 z-60"
                   onClick={() => setIsFilterOpen(false)}
                 />
-                <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-2xl z-[70] p-5 space-y-5 animate-in slide-in-from-top-2 duration-200">
+                <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-2xl z-70 p-5 space-y-5 animate-in slide-in-from-top-2 duration-200">
                   <div className="flex items-center justify-between border-b border-border pb-3">
                     <h4 className="text-xs font-black uppercase tracking-widest">
                       Advanced Filters
@@ -806,7 +806,7 @@ export default function PriceReportPage() {
                     className={cn(
                       "border-b border-border/50 hover:bg-muted/30 transition-colors group cursor-pointer",
                       selectedItems.includes(item.id)
-                        ? "bg-primary/[0.02]"
+                        ? "bg-primary/2"
                         : "",
                     )}
                   >
@@ -916,7 +916,7 @@ export default function PriceReportPage() {
 
                     {competitors.length > 0 && (
                       <>
-                        <td className="py-4 px-6 text-center bg-primary/[0.01]">
+                        <td className="py-4 px-6 text-center bg-primary/1">
                           {(() => {
                             const match = item.allMatches?.find(
                               (m) => m.siteName === refCompetitor,
@@ -1111,7 +1111,7 @@ export default function PriceReportPage() {
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="h-8 w-[70px]">
+                <SelectTrigger className="h-8 w-17.5">
                   <SelectValue placeholder={itemsPerPage} />
                 </SelectTrigger>
                 <SelectContent side="top">

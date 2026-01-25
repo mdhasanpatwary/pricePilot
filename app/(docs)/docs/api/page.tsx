@@ -52,7 +52,7 @@ export default function APIDocsIndex() {
         </p>
       </div>
 
-      <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+      <div className="h-px bg-linear-to-r from-transparent via-border to-transparent" />
 
       {/* API Overview Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
