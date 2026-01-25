@@ -3,6 +3,14 @@ import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Bell,
@@ -22,14 +30,13 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn, formatTimeAgo } from "@/lib/utils";
 
-interface HeaderProps {
+interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
   onMenuClick?: () => void;
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -52,7 +59,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           setUnreadCount(0);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   useEffect(() => {
@@ -156,7 +163,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
               size="icon"
               onClick={() => {
                 setIsNotificationsOpen(!isNotificationsOpen);
-                setIsProfileOpen(false);
               }}
               className={cn(
                 "relative",
@@ -256,101 +262,84 @@ export default function Header({ onMenuClick }: HeaderProps) {
             )}
           </div>
 
-          <div className="relative">
-            <div
-              role="button"
-              onClick={() => {
-                setIsProfileOpen(!isProfileOpen);
-                setIsNotificationsOpen(false);
-              }}
-              className={cn(
-                "flex items-center gap-3 pl-4 border-l border-border group transition-all",
-                isProfileOpen ? "opacity-100" : "hover:opacity-80",
-              )}
-            >
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold leading-none">
-                  {session?.user?.name || "Acme Merchant"}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase font-black mt-1">
-                  Admin
-                </p>
-              </div>
-              <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-sm group-hover:border-primary/30 transition-all">
-                <Image
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${session?.user?.email || "User"}`}
-                  alt="User"
-                  width={36}
-                  height={36}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <ChevronDown
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div
                 className={cn(
-                  "w-4 h-4 text-muted-foreground transition-transform duration-300",
-                  isProfileOpen && "rotate-180",
+                  "flex items-center gap-3 pl-4 border-l border-border group transition-all cursor-pointer",
+                  "hover:opacity-80",
                 )}
-              />
-            </div>
-
-            {isProfileOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setIsProfileOpen(false)}
-                />
-                <div className="absolute right-0 mt-3 w-60 bg-card border border-border rounded-xl shadow-2xl z-20 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
-                  <div className="p-4 border-b border-border bg-muted/30">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mb-1">
-                      Account
-                    </p>
-                    <p className="text-xs font-bold truncate">
-                      {session?.user?.email}
-                    </p>
-                  </div>
-                  <div className="p-2">
-                    {[
-                      {
-                        icon: User,
-                        label: "View Profile",
-                        href: "/dashboard/settings?tab=general",
-                      },
-                      {
-                        icon: CreditCard,
-                        label: "Manage Billing",
-                        href: "/dashboard/settings?tab=billing",
-                      },
-                      {
-                        icon: Settings,
-                        label: "Global Settings",
-                        href: "/dashboard/settings",
-                      },
-                    ].map((item, i) => (
-                      <Link
-                        key={i}
-                        href={item.href}
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted text-sm font-medium text-muted-foreground hover:text-foreground transition-all"
-                      >
-                        <item.icon className="w-4 h-4" />
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                  <div className="p-2 border-t border-border bg-muted/10">
-                    <Button
-                      variant="ghost"
-                      onClick={() => signOut()}
-                      className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-all justify-start"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      End Session
-                    </Button>
-                  </div>
+              >
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-bold leading-none">
+                    {session?.user?.name || "Acme Merchant"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black mt-1">
+                    Admin
+                  </p>
                 </div>
-              </>
-            )}
-          </div>
+                <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-sm group-hover:border-primary/30 transition-all">
+                  <Image
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${session?.user?.email || "User"}`}
+                    alt="User"
+                    width={36}
+                    height={36}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform duration-300" />
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-60" align="end">
+              <DropdownMenuLabel className="p-4 border-b border-border bg-muted/30">
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mb-1">
+                  Account
+                </p>
+                <p className="text-xs font-bold truncate">
+                  {session?.user?.email}
+                </p>
+              </DropdownMenuLabel>
+              <div className="p-2">
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/dashboard/settings?tab=general"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer"
+                  >
+                    <User className="w-4 h-4" />
+                    View Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/dashboard/settings?tab=billing"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Manage Billing
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/dashboard/settings"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Global Settings
+                  </Link>
+                </DropdownMenuItem>
+              </div>
+              <DropdownMenuSeparator />
+              <div className="p-2">
+                <DropdownMenuItem
+                  onClick={() => signOut()}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  End Session
+                </DropdownMenuItem>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

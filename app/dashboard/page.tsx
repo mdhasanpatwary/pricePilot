@@ -22,10 +22,19 @@ import {
   CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+// shadcn/ui components
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -189,9 +198,9 @@ function DashboardContent() {
 
   const total =
     (positionSummary.cheapest || 0) +
-      (positionSummary.nearCheapest || 0) +
-      (positionSummary.neutral || 0) +
-      (positionSummary.expensive || 0) || 1;
+    (positionSummary.nearCheapest || 0) +
+    (positionSummary.neutral || 0) +
+    (positionSummary.expensive || 0) || 1;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -424,22 +433,22 @@ function DashboardContent() {
             </div>
           </CardHeader>
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
-                  <th className="pb-4 pr-4">Product / SKU</th>
-                  <th className="pb-4 px-4">Action Type</th>
-                  <th className="pb-4 px-4">Adjustment</th>
-                  <th className="pb-4 pl-4 text-right">Time Ago</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm font-medium">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+                  <TableHead className="pb-4 pr-4">Product / SKU</TableHead>
+                  <TableHead className="pb-4 px-4">Action Type</TableHead>
+                  <TableHead className="pb-4 px-4">Adjustment</TableHead>
+                  <TableHead className="pb-4 pl-4 text-right">Time Ago</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="text-sm font-medium">
                 {recentLogs.map((item, i) => (
-                  <tr
+                  <TableRow
                     key={i}
                     className="border-b border-border/50 group hover:bg-muted/30 transition-colors"
                   >
-                    <td className="py-5 pr-4">
+                    <TableCell className="py-5 pr-4">
                       <div>
                         <div className="text-foreground font-bold">
                           {item.name}
@@ -448,24 +457,24 @@ function DashboardContent() {
                           {item.sku}
                         </div>
                       </div>
-                    </td>
-                    <td className="py-5 px-4">
+                    </TableCell>
+                    <TableCell className="py-5 px-4">
                       <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">
                         {item.action}
                       </Badge>
-                    </td>
-                    <td className="py-5 px-4">
+                    </TableCell>
+                    <TableCell className="py-5 px-4">
                       <Badge variant="destructive" className="text-xs font-bold">
                         {item.value}
                       </Badge>
-                    </td>
-                    <td className="py-5 pl-4 text-right text-muted-foreground text-xs font-bold">
+                    </TableCell>
+                    <TableCell className="py-5 pl-4 text-right text-muted-foreground text-xs font-bold">
                       {item.time}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </Card>
       </div>

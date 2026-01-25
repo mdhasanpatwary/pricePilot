@@ -18,6 +18,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface ScraperStat {
   id: string;
@@ -233,23 +241,23 @@ export default function ScraperStatusPage() {
           </div>
 
           <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/30 border-b text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
-                  <th className="px-6 py-4 text-left">Target Domain</th>
-                  <th className="px-6 py-4 text-left">Tenant Info</th>
-                  <th className="px-6 py-4 text-left">Last Sync</th>
-                  <th className="px-6 py-4 text-center">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 border-b text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+                  <TableHead className="px-6 py-4 text-left">Target Domain</TableHead>
+                  <TableHead className="px-6 py-4 text-left">Tenant Info</TableHead>
+                  <TableHead className="px-6 py-4 text-left">Last Sync</TableHead>
+                  <TableHead className="px-6 py-4 text-center">Status</TableHead>
+                  <TableHead className="px-6 py-4 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y">
                 {data.scrapers.map((s, i) => (
-                  <tr
+                  <TableRow
                     key={i}
                     className="hover:bg-muted/30 transition-colors group"
                   >
-                    <td className="px-6 py-4">
+                    <TableCell className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-foreground">
                           {s.domain}
@@ -265,26 +273,26 @@ export default function ScraperStatusPage() {
                           {s.type}
                         </span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
                       <span className="text-xs text-muted-foreground font-medium">
                         {s.tenant}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
+                    </TableCell>
+                    <TableCell className="px-6 py-4">
                       <span className="text-xs text-muted-foreground font-mono">
                         {s.lastRun
                           ? new Date(s.lastRun).toLocaleString("en-GB", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              day: "2-digit",
-                              month: "short",
-                            })
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            day: "2-digit",
+                            month: "short",
+                          })
                           : "Never"}
                       </span>
-                    </td>
+                    </TableCell>
 
-                    <td className="px-6 py-4 text-center">
+                    <TableCell className="px-6 py-4 text-center">
                       <span
                         className={cn(
                           "inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border",
@@ -303,8 +311,8 @@ export default function ScraperStatusPage() {
                         />
                         {s.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
+                    </TableCell>
+                    <TableCell className="px-6 py-4 text-right">
                       <button
                         onClick={() => openEdit(s)}
                         className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground"
@@ -312,21 +320,21 @@ export default function ScraperStatusPage() {
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {data.scrapers.length === 0 && (
-                  <tr>
-                    <td
+                  <TableRow>
+                    <TableCell
                       colSpan={5}
                       className="px-6 py-12 text-center text-muted-foreground italic"
                     >
                       No scraping endpoints configured.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
 
@@ -426,7 +434,7 @@ export default function ScraperStatusPage() {
                 </label>
                 <p className="text-xs text-muted-foreground mb-2">
                   Use the pattern from the target site. The search term will be appended or inserted.
-                  <br/>Example: <code>https://www.example.com/s?k=jacket+for+men</code>
+                  <br />Example: <code>https://www.example.com/s?k=jacket+for+men</code>
                 </p>
                 <Input
                   type="text"

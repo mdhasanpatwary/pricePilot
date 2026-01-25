@@ -11,6 +11,14 @@ import {
   Loader2,
   Power,
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface ScheduledTask {
   id: string;
@@ -97,23 +105,23 @@ export default function SchedulerPage() {
         </div>
       ) : (
         <div className="border rounded-lg bg-card overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 border-b text-muted-foreground font-medium">
-              <tr>
-                <th className="px-6 py-4">Task Name</th>
-                <th className="px-6 py-4">Schedule</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Last Run</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
+          <Table>
+            <TableHeader className="bg-muted/50 border-b text-muted-foreground font-medium">
+              <TableRow>
+                <TableHead className="px-6 py-4">Task Name</TableHead>
+                <TableHead className="px-6 py-4">Schedule</TableHead>
+                <TableHead className="px-6 py-4">Status</TableHead>
+                <TableHead className="px-6 py-4">Last Run</TableHead>
+                <TableHead className="px-6 py-4 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y">
               {tasks.map((task) => (
-                <tr
+                <TableRow
                   key={task.id}
                   className="group hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div
                         className={`p-2 rounded-md ${task.enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
@@ -131,14 +139,14 @@ export default function SchedulerPage() {
                         </p>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <RotateCw className="w-3.5 h-3.5" />
                       <span>{task.schedule}</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
                     {task.status === "running" ? (
                       <div className="flex items-center gap-2 text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400 px-2.5 py-1 rounded-full w-fit">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -155,22 +163,21 @@ export default function SchedulerPage() {
                         <span className="text-xs font-medium">Idle</span>
                       </div>
                     )}
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Clock className="w-3.5 h-3.5" />
                       <span>{new Date(task.lastRun).toLocaleString()}</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleToggle(task.id)}
-                        className={`p-2 rounded-md transition-colors ${
-                          task.enabled
-                            ? "text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
-                            : "text-muted-foreground hover:bg-muted"
-                        }`}
+                        className={`p-2 rounded-md transition-colors ${task.enabled
+                          ? "text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30"
+                          : "text-muted-foreground hover:bg-muted"
+                          }`}
                         title={task.enabled ? "Pause Task" : "Enable Task"}
                       >
                         <Power className="w-4 h-4" />
@@ -190,11 +197,11 @@ export default function SchedulerPage() {
                         Run Now
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

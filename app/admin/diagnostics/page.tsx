@@ -12,8 +12,8 @@ import {
   Network,
   ShieldAlert,
   Play,
-  Loader2,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type DiagnosisStatus = "healthy" | "warning" | "failed" | "pending";
 
@@ -106,7 +106,7 @@ export default function DiagnosticsPage() {
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:opacity-90 disabled:opacity-50 transition-all"
         >
           {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Skeleton className="w-4 h-4 rounded-full" />
           ) : (
             <Play className="w-4 h-4" />
           )}
@@ -204,9 +204,8 @@ function StatusCard({
 }) {
   return (
     <div
-      className={`p-6 rounded-lg border bg-card ${
-        fullWidth ? "md:col-span-2" : ""
-      }`}
+      className={`p-6 rounded-lg border bg-card ${fullWidth ? "md:col-span-2" : ""
+        }`}
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">

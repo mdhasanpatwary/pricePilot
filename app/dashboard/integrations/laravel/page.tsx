@@ -13,6 +13,7 @@ import {
   Package,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function LaravelIntegrationPage() {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -100,7 +101,7 @@ export default function LaravelIntegrationPage() {
             >
               {isDownloading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  <Skeleton className="w-5 h-5 rounded-full" />
                   Downloading...
                 </>
               ) : (

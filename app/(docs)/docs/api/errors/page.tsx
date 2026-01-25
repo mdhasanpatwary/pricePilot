@@ -1,6 +1,14 @@
 import Callout from "@/components/docs/callout";
 import { AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 // Link removed
 
 export default function ErrorsPage() {
@@ -33,17 +41,17 @@ export default function ErrorsPage() {
         </p>
 
         <Card className="overflow-hidden shadow-sm">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-muted/50 border-b border-border">
-                <th className="px-6 py-4 font-bold text-foreground">Status</th>
-                <th className="px-6 py-4 font-bold text-foreground">Meaning</th>
-                <th className="px-6 py-4 font-bold text-foreground">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 border-b border-border">
+                <TableHead className="px-6 py-4 font-bold text-foreground">Status</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-foreground">Meaning</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-foreground">
                   Description
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border/50">
               {[
                 {
                   code: "200",
@@ -91,23 +99,23 @@ export default function ErrorsPage() {
                   desc: "Something went wrong on PricePilot's end.",
                 },
               ].map((row) => (
-                <tr
+                <TableRow
                   key={row.code}
                   className="hover:bg-muted/10 transition-colors"
                 >
-                  <td className="px-6 py-4 font-mono text-xs font-bold text-primary">
+                  <TableCell className="px-6 py-4 font-mono text-xs font-bold text-primary">
                     {row.code}
-                  </td>
-                  <td className="px-6 py-4 text-foreground font-semibold">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-foreground font-semibold">
                     {row.meaning}
-                  </td>
-                  <td className="px-6 py-4 text-muted-foreground italic leading-relaxed">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-muted-foreground italic leading-relaxed">
                     {row.desc}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </Card>
       </section>
 

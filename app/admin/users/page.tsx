@@ -27,6 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default function UsersManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -202,36 +210,36 @@ export default function UsersManagementPage() {
 
       <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="px-6 py-4 font-bold text-muted-foreground">
+          <Table>
+            <TableHeader className="bg-muted/50 border-b border-border">
+              <TableRow>
+                <TableHead className="px-6 py-4 font-bold text-muted-foreground">
                   User
-                </th>
-                <th className="px-6 py-4 font-bold text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-4 font-bold text-muted-foreground">
                   Organization
-                </th>
-                <th className="px-6 py-4 font-bold text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-4 font-bold text-muted-foreground">
                   Role
-                </th>
-                <th className="px-6 py-4 font-bold text-muted-foreground text-center">
+                </TableHead>
+                <TableHead className="px-6 py-4 font-bold text-muted-foreground text-center">
                   Sessions
-                </th>
-                <th className="px-6 py-4 font-bold text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-4 font-bold text-muted-foreground">
                   Joined
-                </th>
-                <th className="px-6 py-4 font-bold text-muted-foreground text-right w-25">
+                </TableHead>
+                <TableHead className="px-6 py-4 font-bold text-muted-foreground text-right w-25">
                   Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border">
               {paginatedUsers.map((user) => (
-                <tr
+                <TableRow
                   key={user.id}
                   className="group hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center">
                         <User className="w-4 h-4 text-muted-foreground" />
@@ -246,16 +254,16 @@ export default function UsersManagementPage() {
                         </span>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Building2 className="w-4 h-4" />
                       <span className="font-medium text-xs">
                         {user.tenantName}
                       </span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
                     <span
                       className={cn(
                         "text-[10px] font-black uppercase tracking-tighter px-2 py-0.5 rounded border shadow-sm",
@@ -273,8 +281,8 @@ export default function UsersManagementPage() {
                         Super
                       </span>
                     )}
-                  </td>
-                  <td className="px-6 py-4 text-center">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-center">
                     <div className="flex flex-col items-center">
                       <div className="flex items-center gap-1.5">
                         <div
@@ -294,13 +302,13 @@ export default function UsersManagementPage() {
                         Devices
                       </span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
                     <span className="text-xs text-muted-foreground">
                       {new Date(user.createdAt).toLocaleDateString()}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => {
@@ -326,21 +334,21 @@ export default function UsersManagementPage() {
                         </button>
                       )}
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {paginatedUsers.length === 0 && (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={6}
                     className="px-6 py-12 text-center text-muted-foreground font-medium"
                   >
                     No users found matching your criteria.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-muted/20">

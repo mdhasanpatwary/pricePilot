@@ -1,3 +1,5 @@
+import { EnhancedTableProps, EnhancedFormProps, EnhancedSheetProps } from "./types/shadcn-ui";
+
 export interface Product {
   id: string;
   sku: string;
@@ -52,4 +54,30 @@ export interface Competitor {
   isAdvancedProtected?: boolean;
   searchQueryPattern?: string | null;
   logs?: any[];
+}
+
+// Enhanced component interfaces that extend shadcn/ui types
+export interface ProductTableProps extends EnhancedTableProps<Product> {
+  currency: string;
+  onProductSelect?: (product: Product) => void;
+  onBulkUpdate?: (products: Product[]) => void;
+}
+
+export interface BulkUpdateFormProps extends EnhancedFormProps {
+  selectedCount: number;
+  onExecute: (logic: BulkUpdateFormValues) => Promise<void>;
+}
+
+export interface ProductDetailDrawerProps extends EnhancedSheetProps {
+  product: Product | null;
+  currency?: string;
+  onExecute?: (productId: string) => Promise<void>;
+  onRefresh?: () => void;
+}
+
+// Form data types with proper validation
+export interface BulkUpdateFormValues {
+  logicType: "FIXED" | "PERCENTAGE";
+  value: number;
+  minPrice?: number;
 }

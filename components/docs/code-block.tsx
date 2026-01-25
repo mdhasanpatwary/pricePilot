@@ -4,14 +4,25 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-interface CodeBlockProps {
+export interface CodeBlockProps extends React.HTMLAttributes<HTMLDivElement> {
   code: string;
   language?: string;
   filename?: string;
 }
 
-export default function CodeBlock({ code, language, filename }: CodeBlockProps) {
+/**
+ * CodeBlock component extending shadcn/ui Button for copy functionality
+ * Uses Badge for language/filename display and follows shadcn/ui styling patterns
+ */
+export default function CodeBlock({
+  code,
+  language,
+  filename,
+  className,
+  ...props
+}: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
   const copyToClipboard = () => {
@@ -21,18 +32,20 @@ export default function CodeBlock({ code, language, filename }: CodeBlockProps) 
   };
 
   return (
-    <div className="group relative my-8 rounded-md border border-border bg-muted/20 overflow-hidden">
+    <div className={cn(
+      "group relative my-8 rounded-md border border-border bg-muted/20 overflow-hidden",
+      className
+    )} {...props}>
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-muted/40">
         <div className="flex items-center gap-2">
-          {filename && (
-            <span className="text-[11px] font-bold text-foreground/60">
+          {filename ? (
+            <Badge variant="outline" className="text-[11px] font-bold">
               {filename}
-            </span>
-          )}
-          {!filename && (
-            <span className="text-[11px] font-bold text-muted-foreground/50 uppercase tracking-widest">
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[11px] font-bold uppercase tracking-widest">
               {language || "code"}
-            </span>
+            </Badge>
           )}
         </div>
 

@@ -25,9 +25,22 @@ import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
 import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
 import ProductComparisonDrawer from "@/components/dashboard/product-comparison-drawer";
 import { useDebounce, searchItems } from "@/lib/hooks/useSearch";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -35,9 +48,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 import { Product } from "@/lib/types";
+import {
+  ButtonClickHandler,
+  InputChangeHandler,
+  SelectChangeHandler
+} from "@/lib/types/shadcn-ui";
+import {
+  BUTTON_VARIANTS,
+  BADGE_VARIANTS
+} from "@/lib/utils/variant-helpers";
+import { FilterButton } from "@/components/ui/filter-button";
+import { PriceStatus } from "@/components/ui/status-indicator";
+import { commonInteractiveStyles } from "@/lib/utils/interactive-styles";
 
 export default function PriceReportPage() {
   const [data, setData] = useState<Product[]>([]);
@@ -98,17 +130,17 @@ export default function PriceReportPage() {
   // However, `fetchProducts` is called ONLY on mount currently.
   // The user plan implies backend filtering. Let's make `fetchProducts` called on filter changes.
   useEffect(() => {
-     // If we want server-side filtering, we should debounce and call fetchProducts.
-     // But `filteredData` logic below is client-side.
-     // For hybrid approach: We fetch ALL products initially (as per original code),
-     // then filter client side.
-     // BUT the API update I just made supports server side.
-     // Let's stick to client side for responsiveness if data < 1000 items,
-     // but since we added API params, let's use them?
-     // Actually, let's keep the client-side 'filteredData' logic for immediate UI feedback
-     // AND keep the API capable for the future or if we decide to switch.
-     // The original code fetched ONCE. Let's stick to that to avoid refactoring the whole paginator yet.
-     // So I will update `filteredData` to handle the new RAM/Storage filters.
+    // If we want server-side filtering, we should debounce and call fetchProducts.
+    // But `filteredData` logic below is client-side.
+    // For hybrid approach: We fetch ALL products initially (as per original code),
+    // then filter client side.
+    // BUT the API update I just made supports server side.
+    // Let's stick to client side for responsiveness if data < 1000 items,
+    // but since we added API params, let's use them?
+    // Actually, let's keep the client-side 'filteredData' logic for immediate UI feedback
+    // AND keep the API capable for the future or if we decide to switch.
+    // The original code fetched ONCE. Let's stick to that to avoid refactoring the whole paginator yet.
+    // So I will update `filteredData` to handle the new RAM/Storage filters.
   }, []);
 
   const handleDeleteProduct = async (id: string, title: string) => {
@@ -128,6 +160,110 @@ export default function PriceReportPage() {
     } catch (error) {
       toast.error("Connection error during deletion");
     }
+  };
+
+  const handleSearchChange: InputChangeHandler = (event) => {
+    setSearch(event.target.value);
+  };
+
+  const handleFilterSegmentClick = (segment: string) => {
+    setFilterSegment(segment);
+  };
+
+  const handleItemsPerPageChange: SelectChangeHandler<string> = (value) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1);
+  };
+
+  const handleProductRowClick = (product: Product) => {
+    setSelectedProduct(product);
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedItems.length === filteredData.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredData.map((i) => i.id));
+    }
+  };
+
+  const handleExport: ButtonClickHandler = () => {
+    toast.promise(
+      fetch("/api/v1/exports/products"),
+      {
+        loading: 'Assembling your technical intelligence catalog...',
+        success: (res) => {
+          if (res.ok) {
+            window.location.href = res.url;
+            return "Full tech catalog exported successfully";
+          }
+          throw new Error("Failed to generate export");
+        },
+        error: 'Export failed'
+      }
+    );
+  };
+
+  const handleDownloadTemplate: ButtonClickHandler = () => {
+    const headers = "SKU,Title,Current Price,Category,Brand,Model,RAM,Storage\n";
+    const example = "PP-MAC-M2-001,MacBook Air M2 13-inch,1199.00,Laptops,Apple,M2,16GB,512GB SSD\n";
+    const blob = new Blob([headers + example], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "PricePilot-Tech-Template.csv";
+    a.click();
+    toast.success("Tech template downloaded. Fill it with your hardware inventory.");
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/v1/imports/products", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(
+          `Import complete: ${result.created} created, ${result.updated} updated.`
+        );
+        if (result.errorCount > 0) {
+          toast.error(`${result.errorCount} rows failed. Check SKU/Price formatting.`, {
+            description: result.errors.join(', '),
+            duration: 5000
+          });
+        }
+        fetchProducts();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to import products");
+      }
+    } catch (error) {
+      toast.error("Network error during import");
+    } finally {
+      setIsImporting(false);
+      e.target.value = "";
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePreviousPage: ButtonClickHandler = () => {
+    setCurrentPage((prev) => Math.max(1, prev - 1));
+  };
+
+  const handleNextPage: ButtonClickHandler = () => {
+    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
 
   const filteredData = useMemo(() => {
@@ -280,86 +416,11 @@ export default function PriceReportPage() {
     return parts[0];
   };
 
-  const toggleSelectAll = () => {
-    if (selectedItems.length === filteredData.length) {
-      setSelectedItems([]);
-    } else {
-      setSelectedItems(filteredData.map((i) => i.id));
-    }
-  };
-
   const toggleItem = (event: React.MouseEvent, id: string) => {
     event.stopPropagation();
     setSelectedItems((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
-  };
-
-  const handleExport = () => {
-    toast.promise(
-        fetch("/api/v1/exports/products"),
-        {
-          loading: 'Assembling your technical intelligence catalog...',
-          success: (res) => {
-            if (res.ok) {
-              window.location.href = res.url;
-              return "Full tech catalog exported successfully";
-            }
-            throw new Error("Failed to generate export");
-          },
-          error: 'Export failed'
-        }
-    );
-  };
-
-  const downloadTemplate = () => {
-      const headers = "SKU,Title,Current Price,Category,Brand,Model,RAM,Storage\n";
-      const example = "PP-MAC-M2-001,MacBook Air M2 13-inch,1199.00,Laptops,Apple,M2,16GB,512GB SSD\n";
-      const blob = new Blob([headers + example], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = "PricePilot-Tech-Template.csv";
-      a.click();
-      toast.success("Tech template downloaded. Fill it with your hardware inventory.");
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("/api/v1/imports/products", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (res.ok) {
-        const result = await res.json();
-        toast.success(
-          `Import complete: ${result.created} created, ${result.updated} updated.`
-        );
-        if (result.errorCount > 0) {
-            toast.error(`${result.errorCount} rows failed. Check SKU/Price formatting.`, {
-                description: result.errors.join(', '),
-                duration: 5000
-            });
-        }
-        fetchProducts();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || "Failed to import products");
-      }
-    } catch (error) {
-      toast.error("Network error during import");
-    } finally {
-      setIsImporting(false);
-      e.target.value = "";
-    }
   };
 
   return (
@@ -374,7 +435,7 @@ export default function PriceReportPage() {
         <div className="flex items-center gap-3">
           {selectedItems.length > 1 && (
             <Button
-              variant="outline"
+              variant={BUTTON_VARIANTS.OUTLINE}
               onClick={(e) => {
                 e.stopPropagation();
                 setIsComparisonOpen(true);
@@ -388,6 +449,7 @@ export default function PriceReportPage() {
 
           {selectedItems.length > 0 && (
             <Button
+              variant={BUTTON_VARIANTS.PRIMARY}
               onClick={(e) => {
                 e.stopPropagation();
                 setIsUpdateDrawerOpen(true);
@@ -417,7 +479,7 @@ export default function PriceReportPage() {
           )}
 
           <Button
-            variant="outline"
+            variant={BUTTON_VARIANTS.OUTLINE}
             onClick={handleExport}
             className="gap-2"
           >
@@ -442,8 +504,8 @@ export default function PriceReportPage() {
           </label>
 
           <Button
-            variant="ghost"
-            onClick={downloadTemplate}
+            variant={BUTTON_VARIANTS.GHOST}
+            onClick={handleDownloadTemplate}
             className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
           >
             Get Template
@@ -458,296 +520,262 @@ export default function PriceReportPage() {
             type="text"
             placeholder="Search by SKU, Brand, or Model..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             className="pl-10"
           />
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 p-1 bg-muted/30 border border-border rounded-lg whitespace-nowrap overflow-x-auto max-w-[60vw] md:max-w-none no-scrollbar">
-            <button
-              onClick={() => setFilterSegment("ALL")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
-                filterSegment === "ALL"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setFilterSegment("CHEAPEST")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                filterSegment === "CHEAPEST"
-                  ? "bg-success/10 text-success shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-success" />
-              Cheapest ({dynamicStats.optimal})
-            </button>
-            <button
-              onClick={() => setFilterSegment("EXPENSIVE")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                filterSegment === "EXPENSIVE"
-                  ? "bg-danger/10 text-danger shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-danger" />
-              Expensive ({dynamicStats.atRisk})
-            </button>
-            <button
-              onClick={() => setFilterSegment("MATCHED")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                filterSegment === "MATCHED"
-                  ? "bg-muted text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-              Matched ({dynamicStats.parity})
-            </button>
-            <button
-              onClick={() => setFilterSegment("OOS")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                filterSegment === "OOS"
-                  ? "bg-amber-100/50 text-amber-600 shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Stock Out ({dynamicStats.competitorOos})
-            </button>
-            <button
-              onClick={() => setFilterSegment("NOT_FOUND")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2",
-                filterSegment === "NOT_FOUND"
-                  ? "bg-slate-100/50 text-slate-600 shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              Unmatched ({dynamicStats.notFound})
-            </button>
+            <FilterButton
+              segment="ALL"
+              label="All"
+              status="ALL"
+              isActive={filterSegment === "ALL"}
+              onClick={handleFilterSegmentClick}
+              showDot={false}
+            />
+            <FilterButton
+              segment="CHEAPEST"
+              label="Cheapest"
+              count={dynamicStats.optimal}
+              status="GREEN"
+              isActive={filterSegment === "CHEAPEST"}
+              onClick={handleFilterSegmentClick}
+            />
+            <FilterButton
+              segment="EXPENSIVE"
+              label="Expensive"
+              count={dynamicStats.atRisk}
+              status="RED"
+              isActive={filterSegment === "EXPENSIVE"}
+              onClick={handleFilterSegmentClick}
+            />
+            <FilterButton
+              segment="MATCHED"
+              label="Matched"
+              count={dynamicStats.parity}
+              status="NEUTRAL"
+              isActive={filterSegment === "MATCHED"}
+              onClick={handleFilterSegmentClick}
+            />
+            <FilterButton
+              segment="OOS"
+              label="Stock Out"
+              count={dynamicStats.competitorOos}
+              status="COMP_OOS"
+              isActive={filterSegment === "OOS"}
+              onClick={handleFilterSegmentClick}
+            />
+            <FilterButton
+              segment="NOT_FOUND"
+              label="Unmatched"
+              count={dynamicStats.notFound}
+              status="NOT_FOUND"
+              isActive={filterSegment === "NOT_FOUND"}
+              onClick={handleFilterSegmentClick}
+            />
           </div>
 
-          <div className="relative">
-            <Button
-              variant="outline"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsFilterOpen(!isFilterOpen);
-              }}
-              className={cn(
-                "gap-2",
-                filterCategory !== "ALL" ||
+          <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant={BUTTON_VARIANTS.OUTLINE}
+                className={cn(
+                  "gap-2",
+                  filterCategory !== "ALL" ||
+                    filterStock !== "ALL" ||
+                    filterBrand !== "ALL" ||
+                    filterSite !== "ALL"
+                    ? "border-primary text-primary bg-primary/5"
+                    : "border-border",
+                )}
+              >
+                <Filter className="w-4 h-4" />
+                {(filterCategory !== "ALL" ||
                   filterStock !== "ALL" ||
                   filterBrand !== "ALL" ||
-                  filterSite !== "ALL"
-                  ? "border-primary text-primary bg-primary/5"
-                  : "border-border",
-              )}
-            >
-              <Filter className="w-4 h-4" />
-              {(filterCategory !== "ALL" ||
-                filterStock !== "ALL" ||
-                filterBrand !== "ALL" ||
-                filterSite !== "ALL") && (
-                <span className="w-2 h-2 rounded-full bg-primary" />
-              )}
-            </Button>
+                  filterSite !== "ALL") && (
+                    <span className="w-2 h-2 rounded-full bg-primary" />
+                  )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-5 space-y-5" align="end">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <h4 className="text-xs font-black uppercase tracking-widest">
+                  Advanced Filters
+                </h4>
+                <button
+                  onClick={() => {
+                    setFilterCategory("ALL");
+                    setFilterStock("ALL");
+                    setFilterBrand("ALL");
+                    setFilterSite("ALL");
+                    setFilterRam("ALL");
+                    setFilterStorage("ALL");
+                  }}
+                  className="text-[10px] font-bold text-primary hover:underline uppercase tracking-tighter"
+                >
+                  Reset All
+                </button>
+              </div>
 
-            {isFilterOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-60"
-                  onClick={() => setIsFilterOpen(false)}
-                />
-                <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-2xl z-70 p-5 space-y-5 animate-in slide-in-from-top-2 duration-200">
-                  <div className="flex items-center justify-between border-b border-border pb-3">
-                    <h4 className="text-xs font-black uppercase tracking-widest">
-                      Advanced Filters
-                    </h4>
-                    <button
-                      onClick={() => {
-                        setFilterCategory("ALL");
-                        setFilterStock("ALL");
-                        setFilterBrand("ALL");
-                        setFilterSite("ALL");
-                        setFilterRam("ALL");
-                        setFilterStorage("ALL");
-                      }}
-                      className="text-[10px] font-bold text-primary hover:underline uppercase tracking-tighter"
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                    Store / Site
+                  </label>
+                  <Select
+                    value={filterSite}
+                    onValueChange={setFilterSite}
+                  >
+                    <SelectTrigger className="w-full h-9">
+                      <SelectValue placeholder="All Stores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Stores</SelectItem>
+                      {sites.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                    Category
+                  </label>
+                  <Select
+                    value={filterCategory}
+                    onValueChange={setFilterCategory}
+                  >
+                    <SelectTrigger className="w-full h-9">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Categories</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                    Inventory Status
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant={filterStock === "INSTOCK" ? BUTTON_VARIANTS.PRIMARY : BUTTON_VARIANTS.OUTLINE}
+                      size="sm"
+                      onClick={() => setFilterStock("INSTOCK")}
+                      className={cn(
+                        "h-9 text-xs",
+                        filterStock === "INSTOCK"
+                          ? "bg-success/10 border-success/30 text-success hover:bg-success/20 hover:text-success"
+                          : "text-muted-foreground"
+                      )}
                     >
-                      Reset All
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
-                        Store / Site
-                      </label>
-                      <Select
-                        value={filterSite}
-                        onValueChange={setFilterSite}
-                      >
-                        <SelectTrigger className="w-full h-9">
-                          <SelectValue placeholder="All Stores" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">All Stores</SelectItem>
-                          {sites.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
-                        Category
-                      </label>
-                      <Select
-                        value={filterCategory}
-                        onValueChange={setFilterCategory}
-                      >
-                        <SelectTrigger className="w-full h-9">
-                          <SelectValue placeholder="All Categories" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">All Categories</SelectItem>
-                          {categories.map((c) => (
-                            <SelectItem key={c} value={c}>
-                              {c}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
-                        Inventory Status
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant={filterStock === "INSTOCK" ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setFilterStock("INSTOCK")}
-                          className={cn(
-                            "h-9 text-xs",
-                            filterStock === "INSTOCK"
-                              ? "bg-success/10 border-success/30 text-success hover:bg-success/20 hover:text-success"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          In Stock
-                        </Button>
-                        <Button
-                          variant={filterStock === "OOS" ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setFilterStock("OOS")}
-                          className={cn(
-                            "h-9 text-xs",
-                            filterStock === "OOS"
-                              ? "bg-danger/10 border-danger/30 text-danger hover:bg-danger/20 hover:text-danger"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          Out of Stock
-                      </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
-                        Brand
-                      </label>
-                      <Select
-                        value={filterBrand}
-                        onValueChange={setFilterBrand}
-                      >
-                        <SelectTrigger className="w-full h-9">
-                          <SelectValue placeholder="All Brands" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">All Brands</SelectItem>
-                          {brands.map((b) => (
-                            <SelectItem key={b} value={b}>
-                              {b}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
-                            RAM
-                          </label>
-                          <Select
-                            value={filterRam}
-                            onValueChange={setFilterRam}
-                          >
-                            <SelectTrigger className="w-full h-9">
-                              <SelectValue placeholder="All RAM" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ALL">All RAM</SelectItem>
-                              {ramOptions.map((r) => (
-                                <SelectItem key={r} value={r}>{r}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
-                            Storage
-                          </label>
-                          <Select
-                            value={filterStorage}
-                            onValueChange={setFilterStorage}
-                          >
-                            <SelectTrigger className="w-full h-9">
-                              <SelectValue placeholder="All Storage" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ALL">All Storage</SelectItem>
-                              {storageOptions.map((s) => (
-                                <SelectItem key={s} value={s}>{s}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                    </div>
+                      In Stock
+                    </Button>
+                    <Button
+                      variant={filterStock === "OOS" ? BUTTON_VARIANTS.PRIMARY : BUTTON_VARIANTS.OUTLINE}
+                      size="sm"
+                      onClick={() => setFilterStock("OOS")}
+                      className={cn(
+                        "h-9 text-xs",
+                        filterStock === "OOS"
+                          ? "bg-danger/10 border-danger/30 text-danger hover:bg-danger/20 hover:text-danger"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      Out of Stock
+                    </Button>
                   </div>
                 </div>
-              </>
-            )}
-          </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                    Brand
+                  </label>
+                  <Select
+                    value={filterBrand}
+                    onValueChange={setFilterBrand}
+                  >
+                    <SelectTrigger className="w-full h-9">
+                      <SelectValue placeholder="All Brands" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Brands</SelectItem>
+                      {brands.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {b}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                      RAM
+                    </label>
+                    <Select
+                      value={filterRam}
+                      onValueChange={setFilterRam}
+                    >
+                      <SelectTrigger className="w-full h-9">
+                        <SelectValue placeholder="All RAM" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All RAM</SelectItem>
+                        {ramOptions.map((r) => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">
+                      Storage
+                    </label>
+                    <Select
+                      value={filterStorage}
+                      onValueChange={setFilterStorage}
+                    >
+                      <SelectTrigger className="w-full h-9">
+                        <SelectValue placeholder="All Storage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Storage</SelectItem>
+                        {storageOptions.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
       <Card className="overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                <th className="py-4 px-6 w-16 text-center">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                <TableHead className="py-4 px-6 w-16 text-center">
                   <div className="flex items-center justify-center gap-3">
                     <div
-                      onClick={toggleSelectAll}
+                      onClick={handleToggleSelectAll}
                       className={cn(
                         "w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer",
                         selectedItems.length === filteredData.length &&
@@ -763,54 +791,81 @@ export default function PriceReportPage() {
                     </div>
                     <span>SL</span>
                   </div>
-                </th>
-                <th className="py-4 px-6 min-w-[320px]">Product</th>
-                <th className="py-4 px-6">Specs</th>
-                <th className="py-4 px-6">Your Price</th>
+                </TableHead>
+                <TableHead className="py-4 px-6 min-w-[320px]">Product</TableHead>
+                <TableHead className="py-4 px-6">Specs</TableHead>
+                <TableHead className="py-4 px-6">Your Price</TableHead>
                 {competitors.length > 0 && (
                   <>
-                    <th className="py-4 px-6 text-center bg-primary/5 text-primary">
+                    <TableHead className="py-4 px-6 text-center bg-primary/5 text-primary">
                       {cleanName(refCompetitor)}
-                    </th>
-                    <th className="py-4 px-6 text-center">Gap</th>
+                    </TableHead>
+                    <TableHead className="py-4 px-6 text-center">Gap</TableHead>
                   </>
                 )}
-                <th className="py-4 px-6 text-center">Status</th>
-                <th className="py-4 px-6 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm font-medium">
+                <TableHead className="py-4 px-6 text-center">Status</TableHead>
+                <TableHead className="py-4 px-6 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="text-sm font-medium">
               {isLoading ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="py-20 text-center text-muted-foreground animate-pulse"
-                  >
-                    Loading your catalog...
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="py-4 px-6">
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded" />
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </TableCell>
+                    <TableCell className="py-4 px-6 text-center">
+                      <Skeleton className="h-6 w-20 rounded-full mx-auto" />
+                    </TableCell>
+                    <TableCell className="py-4 px-6 text-right">
+                      <Skeleton className="h-8 w-8 rounded ml-auto" />
+                    </TableCell>
+                  </TableRow>
+                ))
               ) : filteredData.length === 0 ? (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={8}
                     className="py-20 text-center text-muted-foreground"
                   >
                     No products found.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 paginatedData.map((item, index) => (
-                  <tr
+                  <TableRow
                     key={item.id}
-                    onClick={() => setSelectedProduct(item)}
+                    onClick={() => handleProductRowClick(item)}
                     className={cn(
-                      "border-b border-border/50 hover:bg-muted/30 transition-colors group cursor-pointer",
+                      commonInteractiveStyles.tableRow,
+                      "border-b border-border/50 group",
                       selectedItems.includes(item.id)
                         ? "bg-primary/2"
                         : "",
                     )}
                   >
-                    <td className="py-4 px-6">
+                    <TableCell className="py-4 px-6">
                       <div className="flex items-center justify-center gap-3">
                         <div
                           onClick={(e) => {
@@ -832,8 +887,8 @@ export default function PriceReportPage() {
                           {(currentPage - 1) * itemsPerPage + index + 1}
                         </span>
                       </div>
-                    </td>
-                    <td className="py-4 px-6">
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
                       <div className="flex items-center gap-4">
                         <div className="relative w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted border border-border">
                           {item.image ? (
@@ -876,33 +931,33 @@ export default function PriceReportPage() {
                               }
                             >
                               {item.inStock && item.yourPrice > 0 ? (
-                                <Badge variant="success" className="h-5 px-1.5 text-[9px]">In Stock</Badge>
+                                <Badge variant={BADGE_VARIANTS.SUCCESS} className="h-5 px-1.5 text-[9px]">In Stock</Badge>
                               ) : (
-                                <Badge variant="destructive" className="h-5 px-1.5 text-[9px]">Unavailable</Badge>
+                                <Badge variant={BADGE_VARIANTS.DESTRUCTIVE} className="h-5 px-1.5 text-[9px]">Unavailable</Badge>
                               )}
                             </span>
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="py-4 px-6">
-                        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                            {item.specifications?.ram && (
-                                <span className="inline-flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
-                                    {item.specifications.ram}
-                                </span>
-                            )}
-                            {item.specifications?.storage && (
-                                <span className="inline-flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
-                                    {item.specifications.storage}
-                                </span>
-                            )}
-                            {(!item.specifications?.ram && !item.specifications?.storage) && (
-                                <span className="opacity-30">-</span>
-                            )}
-                        </div>
-                    </td>
-                    <td className="py-4 px-6">
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
+                      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                        {item.specifications?.ram && (
+                          <span className="inline-flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
+                            {item.specifications.ram}
+                          </span>
+                        )}
+                        {item.specifications?.storage && (
+                          <span className="inline-flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
+                            {item.specifications.storage}
+                          </span>
+                        )}
+                        {(!item.specifications?.ram && !item.specifications?.storage) && (
+                          <span className="opacity-30">-</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4 px-6">
                       <span className="font-semibold text-foreground">
                         {item.yourPrice > 0 ? (
                           formatCurrency(item.yourPrice, currency)
@@ -912,11 +967,11 @@ export default function PriceReportPage() {
                           </span>
                         )}
                       </span>
-                    </td>
+                    </TableCell>
 
                     {competitors.length > 0 && (
                       <>
-                        <td className="py-4 px-6 text-center bg-primary/1">
+                        <TableCell className="py-4 px-6 text-center bg-primary/1">
                           {(() => {
                             const match = item.allMatches?.find(
                               (m) => m.siteName === refCompetitor,
@@ -942,9 +997,9 @@ export default function PriceReportPage() {
                               </div>
                             );
                           })()}
-                        </td>
+                        </TableCell>
 
-                        <td className="py-4 px-6 text-center">
+                        <TableCell className="py-4 px-6 text-center">
                           {(() => {
                             let diff = item.diff;
                             let compPrice = item.compPrice;
@@ -1000,10 +1055,10 @@ export default function PriceReportPage() {
                               </div>
                             );
                           })()}
-                        </td>
+                        </TableCell>
                       </>
                     )}
-                    <td className="py-4 px-6 text-center">
+                    <TableCell className="py-4 px-6 text-center">
                       {(() => {
                         let status = item.status;
                         let diff = item.diff;
@@ -1032,69 +1087,55 @@ export default function PriceReportPage() {
                         }
 
                         return (
-                          <div
-                            className={cn(
-                              "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
-                              status === "RED"
-                                ? "bg-danger/10 text-danger border-danger/20"
-                                : status === "GREEN"
-                                  ? "bg-success/10 text-success border-success/20"
-                                  : status === "COMP_OOS"
-                                    ? "bg-amber-100/50 text-amber-600 border-amber-200"
-                                    : "bg-muted text-muted-foreground border-border",
-                            )}
-                          >
-                            {status === "RED"
-                              ? "Expensive"
-                              : status === "GREEN"
-                                ? "Cheapest"
-                                : status === "COMP_OOS"
-                                  ? "Stock Out"
-                                  : "Matching"}
-                          </div>
+                          <PriceStatus
+                            status={status as "RED" | "GREEN" | "NEUTRAL" | "COMP_OOS" | "NOT_FOUND"}
+                            size="sm"
+                          />
                         );
                       })()}
-                    </td>
-                    <td className="py-4 px-6 text-right">
+                    </TableCell>
+                    <TableCell className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedProduct(item);
                           }}
-                          className="p-1.5 hover:bg-primary/10 hover:text-primary rounded-md text-muted-foreground transition-all"
+                          className={commonInteractiveStyles.iconButton}
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <div className="relative group/menu">
-                          <button
-                            className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-all"
-                            title="More Actions"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-                          <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-10 p-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <button
+                              className={commonInteractiveStyles.iconButton}
+                              title="More Actions"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-40" align="end">
+                            <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteProduct(item.id, item.title);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-danger hover:bg-danger/10 rounded-md transition-all"
+                              className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               Delete Product
-                            </button>
-                          </div>
-                        </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         {/* Pagination Footer */}
@@ -1106,10 +1147,7 @@ export default function PriceReportPage() {
               </span>
               <Select
                 value={itemsPerPage.toString()}
-                onValueChange={(val) => {
-                  setItemsPerPage(Number(val));
-                  setCurrentPage(1);
-                }}
+                onValueChange={handleItemsPerPageChange}
               >
                 <SelectTrigger className="h-8 w-17.5">
                   <SelectValue placeholder={itemsPerPage} />
@@ -1135,9 +1173,9 @@ export default function PriceReportPage() {
 
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant={BUTTON_VARIANTS.OUTLINE}
               size="icon"
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              onClick={handlePreviousPage}
               disabled={currentPage === 1}
               className="h-8 w-8"
             >
@@ -1156,9 +1194,9 @@ export default function PriceReportPage() {
                 return (
                   <Button
                     key={pageNum}
-                    variant={currentPage === pageNum ? "default" : "ghost"}
+                    variant={currentPage === pageNum ? BUTTON_VARIANTS.PRIMARY : BUTTON_VARIANTS.GHOST}
                     size="sm"
-                    onClick={() => setCurrentPage(pageNum)}
+                    onClick={() => handlePageChange(pageNum)}
                     className={cn(
                       "w-8 h-8 p-0 font-bold",
                       currentPage === pageNum ? "shadow-md" : "text-muted-foreground"
@@ -1170,11 +1208,9 @@ export default function PriceReportPage() {
               })}
             </div>
             <Button
-              variant="outline"
+              variant={BUTTON_VARIANTS.OUTLINE}
               size="icon"
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-              }
+              onClick={handleNextPage}
               disabled={currentPage === totalPages || totalPages === 0}
               className="h-8 w-8"
             >
@@ -1185,8 +1221,8 @@ export default function PriceReportPage() {
       </Card>
 
       <BulkUpdateDrawer
-        isOpen={isUpdateDrawerOpen}
-        onClose={() => setIsUpdateDrawerOpen(false)}
+        open={isUpdateDrawerOpen}
+        onOpenChange={setIsUpdateDrawerOpen}
         selectedCount={selectedItems.length}
         onExecute={async (_logic) => {
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -1200,8 +1236,8 @@ export default function PriceReportPage() {
       />
 
       <ProductDetailDrawer
-        isOpen={!!selectedProduct}
-        onClose={() => setSelectedProduct(null)}
+        open={!!selectedProduct}
+        onOpenChange={() => setSelectedProduct(null)}
         product={selectedProduct}
         currency={currency}
         onRefresh={fetchProducts}

@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  History,
   User,
-  CheckCircle2,
-  XCircle,
   Search,
   Filter,
   FileText,
@@ -14,6 +11,7 @@ import {
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { ActionStatus } from "@/components/ui/status-indicator";
 
 interface AuditLog {
   id: string;
@@ -58,28 +56,7 @@ export default function AuditLogsPage() {
   );
 
   const getActionBadge = (action: string) => {
-    if (action.includes("APPROVE")) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-          <CheckCircle2 className="w-3 h-3" />
-          Approved
-        </span>
-      );
-    }
-    if (action.includes("REJECT")) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 text-[10px] font-bold uppercase tracking-wider">
-          <XCircle className="w-3 h-3" />
-          Rejected
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider">
-        <History className="w-3 h-3" />
-        {action.replace("_", " ")}
-      </span>
-    );
+    return <ActionStatus action={action} size="sm" />;
   };
 
   const renderDetails = (log: AuditLog) => {

@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { X, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-interface AnnouncementBannerProps {
+export interface AnnouncementBannerProps extends React.HTMLAttributes<HTMLDivElement> {
   id: string;
   message: string;
   ctaText?: string;
@@ -13,12 +14,18 @@ interface AnnouncementBannerProps {
   variant?: "default" | "success" | "info";
 }
 
+/**
+ * AnnouncementBanner component extending shadcn/ui components
+ * Uses Badge variants for consistent styling and Button for interactions
+ */
 export default function AnnouncementBanner({
   id,
   message,
   ctaText,
   ctaLink,
   variant = "default",
+  className,
+  ...props
 }: AnnouncementBannerProps) {
   const [isVisible, setIsVisible] = useState(false);
 
@@ -48,7 +55,12 @@ export default function AnnouncementBanner({
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-4 px-4 py-3 rounded-lg border ${variantStyles[variant]} animate-in slide-in-from-top duration-500`}
+      className={cn(
+        "relative flex items-center justify-between gap-4 px-4 py-3 rounded-lg border animate-in slide-in-from-top duration-500",
+        variantStyles[variant],
+        className
+      )}
+      {...props}
     >
       <div className="flex items-center gap-3 flex-1">
         <Sparkles className="w-5 h-5 shrink-0" />

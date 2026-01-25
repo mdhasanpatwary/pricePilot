@@ -9,6 +9,14 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
   Shield,
   Lock,
   Mail,
@@ -21,8 +29,6 @@ import {
 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
 
 const registerSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),
@@ -37,11 +43,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormValues>({
+  const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
   });
 
@@ -142,112 +144,114 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
-                  Company Name
-                </Label>
-                <div className="relative group">
-                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
-                  <Input
-                    {...register("companyName")}
-                    type="text"
-                    className={cn(
-                      "pl-12 pr-4",
-                      errors.companyName &&
-                        "border-destructive focus:ring-destructive/10",
-                    )}
-                    placeholder="Acme Corp"
-                  />
-                </div>
-                {errors.companyName && (
-                  <p className="text-xs text-destructive font-bold ml-1">
-                    {errors.companyName.message}
-                  </p>
-                )}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="companyName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                        Company Name
+                      </FormLabel>
+                      <div className="relative group">
+                        <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="text"
+                            className="pl-12 pr-4"
+                            placeholder="Acme Corp"
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage className="text-xs font-bold ml-1" />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                        Work Email
+                      </FormLabel>
+                      <div className="relative group">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="email"
+                            className="pl-12 pr-4"
+                            placeholder="name@company.com"
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage className="text-xs font-bold ml-1" />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
+                        Password
+                      </FormLabel>
+                      <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type={showPassword ? "text" : "password"}
+                            className="pl-12 pr-12"
+                            placeholder="••••••••"
+                          />
+                        </FormControl>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors h-8 w-8"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
+                        >
+                          {showPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <FormMessage className="text-xs font-bold ml-1" />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
-                  Work Email
-                </Label>
-                <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
-                  <Input
-                    {...register("email")}
-                    type="email"
-                    className={cn(
-                      "pl-12 pr-4",
-                      errors.email &&
-                        "border-destructive focus:ring-destructive/10",
-                    )}
-                    placeholder="name@company.com"
-                  />
-                </div>
-                {errors.email && (
-                  <p className="text-xs text-destructive font-bold ml-1">
-                    {errors.email.message}
-                  </p>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full premium-gradient text-primary-foreground font-black text-lg py-5 rounded-2xl transition-all flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-primary/20 glow-hover"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <>
+                    Create Account
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </>
                 )}
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest ml-1">
-                  Password
-                </Label>
-                <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors z-10" />
-                  <Input
-                    {...register("password")}
-                    type={showPassword ? "text" : "password"}
-                    className={cn(
-                      "pl-12 pr-12",
-                      errors.password &&
-                        "border-destructive focus:ring-destructive/10",
-                    )}
-                    placeholder="••••••••"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors h-8 w-8"
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-                {errors.password && (
-                  <p className="text-xs text-destructive font-bold ml-1">
-                    {errors.password.message}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full premium-gradient text-primary-foreground font-black text-lg py-5 rounded-2xl transition-all flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-primary/20 glow-hover"
-            >
-              {isLoading ? (
-                <Loader2 className="w-6 h-6 animate-spin" />
-              ) : (
-                <>
-                  Create Account
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </Button>
-          </form>
+              </Button>
+            </form>
+          </Form>
 
           <div className="pt-8 space-y-4 border-t border-border text-center">
             <p className="text-sm text-muted-foreground font-medium">

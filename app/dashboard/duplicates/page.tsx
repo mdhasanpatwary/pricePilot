@@ -2,28 +2,28 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { 
-    Copy, 
-    ShieldAlert, 
-    Trash2, 
-    CheckCircle2, 
+import {
+    Copy,
+    ShieldAlert,
+    Trash2,
+    CheckCircle2,
     ExternalLink,
     Zap
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DuplicateDetectionPage() {
     const searchParams = useSearchParams();
     const impersonateId = searchParams.get("tenantId");
-    
+
     const [isLoading, setIsLoading] = useState(true);
     const [groups, setGroups] = useState<any[]>([]);
-    
+
     const fetchDuplicates = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -83,10 +83,10 @@ export default function DuplicateDetectionPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                   <Button variant="outline" size="sm" onClick={fetchDuplicates} disabled={isLoading}>
-                       <Zap className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
-                       Scan for Duplicates
-                   </Button>
+                    <Button variant="outline" size="sm" onClick={fetchDuplicates} disabled={isLoading}>
+                        <Zap className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+                        Scan for Duplicates
+                    </Button>
                 </div>
             </div>
 
@@ -126,15 +126,15 @@ export default function DuplicateDetectionPage() {
                                     <span className="text-sm font-bold truncate max-w-md">{group.anchor.title}</span>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                     <span className="text-[10px] font-bold text-muted-foreground uppercase">{group.anchor.site.name}</span>
-                                     <Button 
-                                        size="sm" 
-                                        onClick={() => handleMerge(group)} 
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase">{group.anchor.site.name}</span>
+                                    <Button
+                                        size="sm"
+                                        onClick={() => handleMerge(group)}
                                         className="h-8"
                                         disabled={isMerging === group.anchor.id}
-                                     >
+                                    >
                                         {isMerging === group.anchor.id ? "Merging..." : "Merge Duplicates"}
-                                     </Button>
+                                    </Button>
                                 </div>
                             </div>
                             <div className="p-6 space-y-4">
@@ -159,16 +159,16 @@ export default function DuplicateDetectionPage() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3 shrink-0">
-                                             <div className="text-right mr-4">
-                                                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Price</p>
-                                                 <p className="text-sm font-black">{formatCurrency(dup.currentPrice, group.anchor.currency)}</p>
-                                             </div>
-                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
-                                                 <Trash2 className="w-4 h-4" />
-                                             </Button>
-                                             <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                 <ExternalLink className="w-4 h-4" />
-                                             </Button>
+                                            <div className="text-right mr-4">
+                                                <p className="text-[10px] font-bold text-muted-foreground uppercase">Price</p>
+                                                <p className="text-sm font-black">{formatCurrency(dup.currentPrice, group.anchor.currency)}</p>
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                <ExternalLink className="w-4 h-4" />
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}

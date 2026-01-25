@@ -4,7 +4,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import {
-  X,
   TrendingUp,
   TrendingDown,
   History,
@@ -15,9 +14,23 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { componentStylePresets } from "@/lib/utils/custom-styling";
 import { Product } from "@/lib/types";
+import {
+  EnhancedSheetProps,
+  ButtonClickHandler,
+  InputChangeHandler
+} from "@/lib/types/shadcn-ui";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   ResponsiveContainer,
   LineChart,
@@ -28,9 +41,7 @@ import {
   CartesianGrid,
 } from "recharts";
 
-interface ProductDetailDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface ProductDetailDrawerProps extends EnhancedSheetProps {
   product: Product | null;
   onExecute?: (productId: string) => Promise<void>;
   onRefresh?: () => void;
@@ -48,8 +59,8 @@ const historyData = [
 ];
 
 export default function ProductDetailDrawer({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   product,
   onExecute,
   onRefresh,
@@ -58,7 +69,7 @@ export default function ProductDetailDrawer({
   const [matchUrl, setMatchUrl] = useState("");
   const [isLinking, setIsLinking] = useState(false);
 
-  const handleLinkCompetitor = async () => {
+  const handleLinkCompetitor: ButtonClickHandler = async () => {
     if (!matchUrl || !product) return;
     setIsLinking(true);
     try {
@@ -81,59 +92,39 @@ export default function ProductDetailDrawer({
     }
   };
 
+  const handleMatchUrlChange: InputChangeHandler = (event) => {
+    setMatchUrl(event.target.value);
+  };
+
   if (!product) return null;
 
   return (
-    <>
-      <div
-        className={cn(
-          "fixed inset-0 bg-black/40 backdrop-blur-sm z-100 transition-opacity duration-500",
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-        )}
-        onClick={onClose}
-      />
-      <div
-        className={cn(
-          "fixed top-0 right-0 h-full w-full max-w-2xl bg-card border-l border-border z-101 shadow-2xl transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          isOpen ? "translate-x-0" : "translate-x-full",
-        )}
-      >
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full max-w-2xl p-0 overflow-hidden">
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="p-8 md:p-10 border-b border-border flex items-start justify-between bg-muted/20">
+          <SheetHeader className="p-8 md:p-10 border-b border-border bg-muted/20">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-full border border-primary/20">
+                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">
                   SKU: {product.sku}
-                </span>
-                <span
-                  className={cn(
-                    "px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full",
-                    product.status === "RED"
-                      ? "bg-danger/10 text-danger"
-                      : "bg-success/10 text-success",
-                  )}
+                </Badge>
+                <Badge
+                  variant={product.status === "RED" ? "destructive" : "success"}
+                  className="text-[10px] font-black uppercase tracking-widest"
                 >
                   {product.status === "RED" ? "Action Required" : "Optimized"}
-                </span>
+                </Badge>
               </div>
-              <h2 className="text-3xl font-black tracking-tight">
+              <SheetTitle className="text-3xl font-black tracking-tight">
                 {product.title}
-              </h2>
-              <p className="text-muted-foreground font-medium flex items-center gap-2">
+              </SheetTitle>
+              <SheetDescription className="text-muted-foreground font-medium flex items-center gap-2">
                 <Globe className="w-4 h-4" /> Global Tracking Active via 8
                 Crawlers
-              </p>
+              </SheetDescription>
             </div>
-            <Button
-              onClick={onClose}
-              variant="outline"
-              size="icon"
-              className="p-3 rounded-2xl"
-            >
-              <X className="w-6 h-6" />
-            </Button>
-          </div>
+          </SheetHeader>
 
           <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-12">
             {/* Competitor Price Comparison */}
@@ -314,7 +305,7 @@ export default function ProductDetailDrawer({
                   <Input
                     type="url"
                     value={matchUrl}
-                    onChange={(e) => setMatchUrl(e.target.value)}
+                    onChange={handleMatchUrlChange}
                     placeholder="https://competitor.com/p/product-name"
                     className="flex-1"
                   />
@@ -368,7 +359,10 @@ export default function ProductDetailDrawer({
             <div className="pt-8 flex items-center gap-4">
               <Button
                 onClick={() => onExecute?.(product.id)}
-                className="flex-1 premium-gradient text-primary-foreground font-black py-5 rounded-2xl shadow-xl shadow-primary/20 glow flex items-center justify-center gap-2 active:scale-95 transition-all"
+                className={cn(
+                  "flex-1 font-black py-5 rounded-2xl flex items-center justify-center gap-2",
+                  componentStylePresets.premiumButton
+                )}
               >
                 <Zap className="w-5 h-5 fill-current" />
                 Execute Auto-Adjustment
@@ -383,7 +377,7 @@ export default function ProductDetailDrawer({
             </div>
           </div>
         </div>
-      </div>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }

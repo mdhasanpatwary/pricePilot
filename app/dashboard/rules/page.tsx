@@ -235,7 +235,7 @@ export default function PricingRulesPage() {
                     className={cn(
                       "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
                       errors.name &&
-                        "border-destructive focus:ring-destructive/50",
+                      "border-destructive focus:ring-destructive/50",
                     )}
                     placeholder="e.g. Aggressive Undercut"
                   />
@@ -295,7 +295,7 @@ export default function PricingRulesPage() {
                       className={cn(
                         "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
                         errors.parameter &&
-                          "border-destructive focus:ring-destructive/50",
+                        "border-destructive focus:ring-destructive/50",
                       )}
                       placeholder="0.00"
                     />
@@ -315,7 +315,7 @@ export default function PricingRulesPage() {
                       className={cn(
                         "w-full bg-muted/50 border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all",
                         errors.priority &&
-                          "border-destructive focus:ring-destructive/50",
+                        "border-destructive focus:ring-destructive/50",
                       )}
                     />
                     {errors.priority && (

@@ -33,6 +33,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default function TenantsPage() {
   const [activeTab, setActiveTab] = useState("ALL");
@@ -406,34 +414,34 @@ export default function TenantsPage() {
       {/* Clean Table */}
       <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground w-62.5">
+          <Table>
+            <TableHeader className="bg-muted/50 border-b border-border">
+              <TableRow>
+                <TableHead className="px-6 py-3 text-left font-medium text-muted-foreground w-62.5">
                   Organization
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-3 text-left font-medium text-muted-foreground">
                   Allocation (Limit)
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-3 text-left font-medium text-muted-foreground">
                   Usage
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-3 text-left font-medium text-muted-foreground">
                   Logins
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                </TableHead>
+                <TableHead className="px-6 py-3 text-left font-medium text-muted-foreground">
                   Plan
-                </th>
-                <th className="px-6 py-3 text-right font-medium text-muted-foreground"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+                </TableHead>
+                <TableHead className="px-6 py-3 text-right font-medium text-muted-foreground"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border">
               {paginatedTenants.map((tenant) => (
-                <tr
+                <TableRow
                   key={tenant.id}
                   className="group hover:bg-muted/50 transition-colors"
                 >
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className="font-medium text-foreground">
                         {tenant.name}
@@ -442,10 +450,10 @@ export default function TenantsPage() {
                         {tenant.email}
                       </span>
                     </div>
-                  </td>
+                  </TableCell>
 
                   {/* Limits */}
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-4">
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] uppercase text-muted-foreground font-medium">
@@ -494,10 +502,10 @@ export default function TenantsPage() {
                         </div>
                       </div>
                     </div>
-                  </td>
+                  </TableCell>
 
                   {/* Usage */}
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex flex-col gap-3 w-40">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between text-[10px] uppercase font-bold text-muted-foreground">
@@ -544,9 +552,9 @@ export default function TenantsPage() {
                         </div>
                       </div>
                     </div>
-                  </td>
+                  </TableCell>
 
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
@@ -568,9 +576,9 @@ export default function TenantsPage() {
                         </div>
                       </div>
                     </div>
-                  </td>
+                  </TableCell>
 
-                  <td className="px-6 py-4">
+                  <TableCell className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <Select
                         value={tenant.plan}
@@ -602,9 +610,9 @@ export default function TenantsPage() {
                         <div className="w-3 h-3 border border-primary border-t-transparent animate-spin rounded-full" />
                       )}
                     </div>
-                  </td>
+                  </TableCell>
 
-                  <td className="px-6 py-4 text-right">
+                  <TableCell className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2 text-muted-foreground">
                       {tenant.storeUrl && (
                         <a
@@ -639,12 +647,12 @@ export default function TenantsPage() {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {paginatedTenants.length === 0 && (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={5}
                     className="px-6 py-12 text-center text-muted-foreground"
                   >
@@ -662,11 +670,11 @@ export default function TenantsPage() {
                         </p>
                       </div>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-muted/30">

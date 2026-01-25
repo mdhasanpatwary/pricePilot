@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   BookOpen,
@@ -168,9 +169,9 @@ export default function DocsLayoutShell({
                       <div className="flex items-center gap-2">
                         {item.name}
                         {item.badge && (
-                          <span className="text-[9px] font-bold uppercase tracking-tighter text-muted-foreground/40 italic">
+                          <Badge variant="secondary" className="text-[9px] font-bold uppercase tracking-tighter">
                             {item.badge}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     </Link>

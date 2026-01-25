@@ -85,14 +85,7 @@ export default function ConnectionsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [progressCount, setProgressCount] = useState(0);
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors },
-  } = useForm<ConnectionFormValues>({
+  const form = useForm<ConnectionFormValues>({
     resolver: zodResolver(connectionSchema),
     defaultValues: {
       platform: "",
@@ -101,7 +94,7 @@ export default function ConnectionsPage() {
     },
   });
 
-  const selectedPlatform = watch("platform");
+  const selectedPlatform = form.watch("platform");
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll console to bottom
@@ -221,7 +214,7 @@ export default function ConnectionsPage() {
           console.error("Failed to trigger sync", syncErr);
         }
 
-        reset();
+        form.reset();
         fetchConnections();
       } else {
         const error = await res.json();
@@ -401,14 +394,14 @@ export default function ConnectionsPage() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {platforms.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() =>
-                        setValue("platform", p.id, { shouldValidate: true })
+                        form.setValue("platform", p.id, { shouldValidate: true })
                       }
                       className={cn(
                         "p-4 border rounded-md flex flex-col items-center gap-3 transition-all group relative",
@@ -437,38 +430,38 @@ export default function ConnectionsPage() {
                     </button>
                   ))}
                 </div>
-                {errors.platform && (
+                {form.formState.errors.platform && (
                   <p className="text-xs text-destructive font-bold">
-                    {errors.platform.message}
+                    {form.formState.errors.platform.message}
                   </p>
                 )}
                 {platforms.find((p) => p.id === selectedPlatform)
                   ?.downloadUrl && (
-                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col gap-3">
-                    <div className="flex items-start gap-3">
-                      <Download className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-bold text-primary">
-                          Integration Package Required
-                        </p>
-                        <p className="text-xs font-semibold text-primary/70 leading-relaxed uppercase tracking-tight">
-                          To connect Laravel, you first need to download and
-                          install our integration package on your store.
-                        </p>
+                    <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col gap-3">
+                      <div className="flex items-start gap-3">
+                        <Download className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-bold text-primary">
+                            Integration Package Required
+                          </p>
+                          <p className="text-xs font-semibold text-primary/70 leading-relaxed uppercase tracking-tight">
+                            To connect Laravel, you first need to download and
+                            install our integration package on your store.
+                          </p>
+                        </div>
                       </div>
+                      <Link
+                        href={
+                          platforms.find((p) => p.id === selectedPlatform)!
+                            .downloadUrl!
+                        }
+                        className="text-[10px] font-black uppercase tracking-tighter bg-primary text-primary-foreground px-4 py-2 rounded flex items-center justify-center gap-2 hover:opacity-90 transition-all self-start"
+                      >
+                        Go to Download & Instructions{" "}
+                        <ArrowUpRight className="w-3 h-3" />
+                      </Link>
                     </div>
-                    <Link
-                      href={
-                        platforms.find((p) => p.id === selectedPlatform)!
-                          .downloadUrl!
-                      }
-                      className="text-[10px] font-black uppercase tracking-tighter bg-primary text-primary-foreground px-4 py-2 rounded flex items-center justify-center gap-2 hover:opacity-90 transition-all self-start"
-                    >
-                      Go to Download & Instructions{" "}
-                      <ArrowUpRight className="w-3 h-3" />
-                    </Link>
-                  </div>
-                )}
+                  )}
 
                 <div className="space-y-4">
                   <div className="space-y-1.5">
@@ -478,19 +471,19 @@ export default function ConnectionsPage() {
                     <div className="relative group">
                       <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                       <Input
-                        {...register("baseUrl")}
+                        {...form.register("baseUrl")}
                         type="url"
                         placeholder="https://yourstore.com"
                         className={cn(
                           "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
-                          errors.baseUrl &&
-                            "border-destructive focus:ring-destructive/20",
+                          form.formState.errors.baseUrl &&
+                          "border-destructive focus:ring-destructive/20",
                         )}
                       />
                     </div>
-                    {errors.baseUrl && (
+                    {form.formState.errors.baseUrl && (
                       <p className="text-xs text-destructive font-bold">
-                        {errors.baseUrl.message}
+                        {form.formState.errors.baseUrl.message}
                       </p>
                     )}
                   </div>
@@ -502,13 +495,13 @@ export default function ConnectionsPage() {
                     <div className="relative group">
                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                       <Input
-                        {...register("apiToken")}
+                        {...form.register("apiToken")}
                         type={showApiToken ? "text" : "password"}
                         placeholder="Your PricePilot secret key"
                         className={cn(
                           "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-10 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
-                          errors.apiToken &&
-                            "border-destructive focus:ring-destructive/20",
+                          form.formState.errors.apiToken &&
+                          "border-destructive focus:ring-destructive/20",
                         )}
                       />
                       <Button
@@ -523,9 +516,9 @@ export default function ConnectionsPage() {
                         )}
                       </Button>
                     </div>
-                    {errors.apiToken && (
+                    {form.formState.errors.apiToken && (
                       <p className="text-xs text-destructive font-bold">
-                        {errors.apiToken.message}
+                        {form.formState.errors.apiToken.message}
                       </p>
                     )}
                   </div>
@@ -537,25 +530,25 @@ export default function ConnectionsPage() {
                       <div className="group relative">
                         <span className="text-[10px] text-primary hover:underline cursor-help font-extrabold uppercase tracking-tighter">Guide</span>
                         <div className="absolute bottom-full right-0 mb-2 w-72 p-3 bg-card border border-border rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover:opacity-100 transition-all z-50 pointer-events-none scale-95 group-hover:scale-100 origin-bottom-right">
-                           <div className="space-y-2">
-                             <p className="text-[10px] font-bold text-foreground">SITE-SPECIFIC SEARCH LOGIC</p>
-                             <p className="text-[10px] text-muted-foreground leading-relaxed font-medium">
-                               Specify how your store handles search queries. Use <code className="text-primary font-bold px-1 bg-primary/10 rounded">{`{query}`}</code> as a placeholder for the search term.
-                             </p>
-                             <div className="p-2 bg-muted rounded-lg space-y-1 border border-border">
-                               <p className="text-[9px] font-black text-muted-foreground uppercase">Example</p>
-                               <code className="text-[10px] break-all text-primary font-mono block leading-tight">
-                                 /search/advance/product/result/{"{query}"}
-                               </code>
-                             </div>
-                           </div>
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold text-foreground">SITE-SPECIFIC SEARCH LOGIC</p>
+                            <p className="text-[10px] text-muted-foreground leading-relaxed font-medium">
+                              Specify how your store handles search queries. Use <code className="text-primary font-bold px-1 bg-primary/10 rounded">{`{query}`}</code> as a placeholder for the search term.
+                            </p>
+                            <div className="p-2 bg-muted rounded-lg space-y-1 border border-border">
+                              <p className="text-[9px] font-black text-muted-foreground uppercase">Example</p>
+                              <code className="text-[10px] break-all text-primary font-mono block leading-tight">
+                                /search/advance/product/result/{"{query}"}
+                              </code>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                     <div className="relative group">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                       <Input
-                        {...register("searchQueryPattern")}
+                        {...form.register("searchQueryPattern")}
                         type="text"
                         placeholder="https://mystore.com/search?q={query}"
                         className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
@@ -583,7 +576,7 @@ export default function ConnectionsPage() {
                     type="button"
                     onClick={() => {
                       setIsAdding(false);
-                      reset();
+                      form.reset();
                     }}
                     className="flex-1 bg-secondary text-secondary-foreground font-bold py-2.5 rounded-md border border-border transition-all hover:bg-secondary/80"
                   >
@@ -793,10 +786,10 @@ export default function ConnectionsPage() {
                                     log.level === "SUCCESS"
                                       ? "text-green-500"
                                       : log.level === "ERROR"
-                                      ? "text-red-500"
-                                      : log.level === "WARN"
-                                      ? "text-amber-500"
-                                      : "text-blue-500"
+                                        ? "text-red-500"
+                                        : log.level === "WARN"
+                                          ? "text-amber-500"
+                                          : "text-blue-500"
                                   )}
                                 >
                                   {log.level}

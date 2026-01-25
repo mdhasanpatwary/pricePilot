@@ -224,16 +224,16 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
                 empty="No recent administrative events."
                 renderItem={(log: any) => (
                     <div key={log.id} className="p-3 border-b last:border-0 flex items-start gap-3">
-                         <div className="shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold">
-                             {log.userEmail[0].toUpperCase()}
-                         </div>
-                         <div className="flex-1 min-w-0">
-                             <div className="flex items-center justify-between">
-                                 <span className="text-xs font-bold truncate">{log.action}</span>
-                                 <span className="text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleTimeString()}</span>
-                             </div>
-                             <p className="text-[10px] text-muted-foreground truncate opacity-70">{log.userEmail}</p>
-                         </div>
+                        <div className="shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold">
+                            {log.userEmail[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold truncate">{log.action}</span>
+                                <span className="text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleTimeString()}</span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate opacity-70">{log.userEmail}</p>
+                        </div>
                     </div>
                 )}
             />
@@ -247,8 +247,8 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
                 renderItem={(log: any) => (
                     <div key={log.id} className="p-3 border-b last:border-0">
                         <div className="flex items-center gap-2 mb-1">
-                             <Badge variant="outline" className="text-[9px] bg-red-50 text-red-700 border-red-200">MAX_RETRIES</Badge>
-                             <span className="text-[10px] text-muted-foreground">{new Date(log.updatedAt).toLocaleTimeString()}</span>
+                            <Badge variant="outline" className="text-[9px] bg-red-50 text-red-700 border-red-200">MAX_RETRIES</Badge>
+                            <span className="text-[10px] text-muted-foreground">{new Date(log.updatedAt).toLocaleTimeString()}</span>
                         </div>
                         <p className="text-xs font-bold text-foreground/80">{log.userProduct.title}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 italic">{log.reason}</p>
@@ -269,13 +269,13 @@ function LogSection({ title, logs, icon: Icon, empty, renderItem }: any) {
                 </div>
                 <Badge variant="outline" className="text-[10px]">{logs.length}</Badge>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 overflow-y-auto">
                 {logs.length > 0 ? (
                     logs.map((log: any) => renderItem(log))
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-2 opacity-40">
-                         <Layers className="w-8 h-8" />
-                         <p className="text-xs font-medium">{empty}</p>
+                        <Layers className="w-8 h-8" />
+                        <p className="text-xs font-medium">{empty}</p>
                     </div>
                 )}
             </div>
@@ -334,16 +334,16 @@ function StatusCard({ title, icon: Icon, result }: any) {
                     <Icon className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
                 {isHealthy ? <CheckCircle className="text-green-500 w-5 h-5" /> :
-                 isWarn ? <AlertCircle className="text-amber-500 w-5 h-5" /> :
-                 <XCircle className="text-red-500 w-5 h-5" />}
+                    isWarn ? <AlertCircle className="text-amber-500 w-5 h-5" /> :
+                        <XCircle className="text-red-500 w-5 h-5" />}
             </div>
             <div className="mt-4">
                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">{title}</p>
                 <div className={cn(
                     "text-xs font-bold px-3 py-1.5 rounded-lg border",
                     isHealthy ? "bg-green-50 border-green-100 text-green-700" :
-                    isWarn ? "bg-amber-50 border-amber-100 text-amber-700" :
-                    "bg-red-50 border-red-100 text-red-700"
+                        isWarn ? "bg-amber-50 border-amber-100 text-amber-700" :
+                            "bg-red-50 border-red-100 text-red-700"
                 )}>
                     {result.message}
                 </div>
@@ -358,11 +358,11 @@ function InconsistencyView({ data, loading }: { data: any[]; loading: boolean })
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                 <ShieldAlert className="w-6 h-6 text-amber-600" />
-                 <div>
-                     <p className="text-sm font-bold text-amber-900 leading-none">Automated Anomaly Detection</p>
-                     <p className="text-xs text-amber-700 mt-1 opacity-80 font-medium">Our heuristics engine identifies data patterns that might indicate logic failures, stale intelligence, or integration gaps.</p>
-                 </div>
+                <ShieldAlert className="w-6 h-6 text-amber-600" />
+                <div>
+                    <p className="text-sm font-bold text-amber-900 leading-none">Automated Anomaly Detection</p>
+                    <p className="text-xs text-amber-700 mt-1 opacity-80 font-medium">Our heuristics engine identifies data patterns that might indicate logic failures, stale intelligence, or integration gaps.</p>
+                </div>
             </div>
 
             {data.length === 0 ? (
@@ -381,7 +381,7 @@ function InconsistencyView({ data, loading }: { data: any[]; loading: boolean })
                                         <Badge variant={item.severity === "CRITICAL" ? "destructive" : "warning"} className="text-[9px] font-black uppercase">
                                             {item.severity}
                                         </Badge>
-                                        <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">{item.type.replace('_',' ')}</span>
+                                        <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">{item.type.replace('_', ' ')}</span>
                                     </div>
                                     <h4 className="text-sm font-black">{item.message}</h4>
                                     <p className="text-xs text-muted-foreground font-medium italic">Impact: {item.impact}</p>

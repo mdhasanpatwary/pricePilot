@@ -10,6 +10,7 @@ import {
   Layout,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function OpenCartIntegrationPage() {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -97,7 +98,7 @@ export default function OpenCartIntegrationPage() {
             >
               {isDownloading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  <Skeleton className="w-5 h-5 rounded-full" />
                   Downloading...
                 </>
               ) : (

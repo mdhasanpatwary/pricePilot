@@ -1,21 +1,41 @@
 import { useState } from "react";
 import {
-  X,
   Settings2,
   ShieldCheck,
   TrendingDown,
-  Loader2,
   AlertTriangle,
   Lock,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  componentStylePresets,
+  customShadows,
+  backdropEffects,
+  decorativeBackgrounds,
+  statusDots
+} from "@/lib/utils/custom-styling";
 import { z } from "zod";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  BulkUpdateFormValues
+} from "@/lib/types";
+import {
+  ButtonClickHandler,
+  EnhancedSheetProps
+} from "@/lib/types/shadcn-ui";
 
 const bulkUpdateSchema = z.object({
   logicType: z.enum(["FIXED", "PERCENTAGE"]),
@@ -23,18 +43,14 @@ const bulkUpdateSchema = z.object({
   minPrice: z.number().optional(),
 });
 
-type BulkUpdateFormValues = z.infer<typeof bulkUpdateSchema>;
-
-interface BulkUpdateDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface BulkUpdateDrawerProps extends EnhancedSheetProps {
   selectedCount: number;
   onExecute: (logic: BulkUpdateFormValues) => Promise<void>;
 }
 
 export default function BulkUpdateDrawer({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   selectedCount,
   onExecute,
 }: BulkUpdateDrawerProps) {
@@ -63,41 +79,44 @@ export default function BulkUpdateDrawer({
     setLoading(false);
   };
 
-  if (!isOpen) return null;
+  const handleLogicTypeChange: ButtonClickHandler = (event) => {
+    event.preventDefault();
+    const logicType = event.currentTarget.dataset.logicType as "FIXED" | "PERCENTAGE";
+    setValue("logicType", logicType, { shouldValidate: true });
+  };
 
   return (
-    <>
-      <div
-        className="fixed inset-0 bg-background/80 backdrop-blur-md z-100 animate-in fade-in duration-500"
-        onClick={onClose}
-      />
-      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-card border-l border-border z-110 shadow-[0px_0px_100px_rgba(0,0,0,0.5)] animate-in slide-in-from-right duration-500 flex flex-col overflow-hidden">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className={cn(
+        "w-full max-w-xl overflow-hidden p-0 border-l border-border",
+        customShadows.overlay
+      )}>
         {/* Glow Decor */}
-        <div className="absolute -top-25 -right-25 w-100 h-100 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute -bottom-25 -left-25 w-100 h-100 bg-purple-500/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className={cn("absolute -top-25 -right-25 w-100 h-100 rounded-full blur-[100px] pointer-events-none", decorativeBackgrounds.primaryOverlay)} />
+        <div className={cn("absolute -bottom-25 -left-25 w-100 h-100 rounded-full blur-[100px] pointer-events-none", decorativeBackgrounds.warningOverlay)} />
 
-        <div className="p-10 border-b border-border flex items-center justify-between relative z-10 bg-background/30 backdrop-blur-xl">
+        <SheetHeader className={cn(
+          "p-10 border-b border-border relative z-10",
+          backdropEffects.glass
+        )}>
           <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-2xl shadow-primary/20 glow">
-              <Settings2 className="w-7 h-7 text-primary-foreground" />
+            <div className={cn(
+              "w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground",
+              customShadows.primaryGlow
+            )}>
+              <Settings2 className="w-7 h-7" />
             </div>
             <div className="space-y-0.5">
-              <h2 className="text-2xl font-black tracking-tight">
+              <SheetTitle className="text-2xl font-black tracking-tight">
                 Execution Engine
-              </h2>
-              <div className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+              </SheetTitle>
+              <SheetDescription className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                <div className={statusDots.active} />
                 Queue: {selectedCount} Strategic Targets
-              </div>
+              </SheetDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-3 hover:bg-muted rounded-full transition-all text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+        </SheetHeader>
 
         <form
           id="bulk-update-form"
@@ -112,9 +131,8 @@ export default function BulkUpdateDrawer({
               <div className="grid grid-cols-2 gap-6">
                 <button
                   type="button"
-                  onClick={() =>
-                    setValue("logicType", "FIXED", { shouldValidate: true })
-                  }
+                  data-logic-type="FIXED"
+                  onClick={handleLogicTypeChange}
                   className={cn(
                     "p-6 border-2 rounded-4xl flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
                     logicType === "FIXED"
@@ -144,11 +162,8 @@ export default function BulkUpdateDrawer({
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setValue("logicType", "PERCENTAGE", {
-                      shouldValidate: true,
-                    })
-                  }
+                  data-logic-type="PERCENTAGE"
+                  onClick={handleLogicTypeChange}
                   className={cn(
                     "p-6 border-2 rounded-4xl flex flex-col gap-4 transition-all text-left relative overflow-hidden group/opt",
                     logicType === "PERCENTAGE"
@@ -197,7 +212,7 @@ export default function BulkUpdateDrawer({
                       className={cn(
                         "w-full bg-muted/30 border border-border rounded-3xl py-7 pl-14 pr-8 outline-none focus:border-primary/50 focus:ring-8 focus:ring-primary/5 transition-all font-black text-4xl tracking-tighter",
                         errors.value &&
-                          "border-destructive focus:ring-destructive/5",
+                        "border-destructive focus:ring-destructive/5",
                       )}
                       placeholder="0.00"
                     />
@@ -210,18 +225,18 @@ export default function BulkUpdateDrawer({
                 </div>
               </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between ml-1">
-                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
-                      Margin Lockdown
-                    </Label>
-                    <div className="flex items-center gap-1.5 px-3 py-1 bg-warning/10 border border-warning/20 rounded-full">
-                      <Lock className="w-2.5 h-2.5 text-warning" />
-                      <span className="text-[8px] text-warning font-black uppercase tracking-widest">
-                        Safety Valve
-                      </span>
-                    </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between ml-1">
+                  <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
+                    Margin Lockdown
+                  </Label>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-warning/10 border border-warning/20 rounded-full">
+                    <Lock className="w-2.5 h-2.5 text-warning" />
+                    <span className="text-[8px] text-warning font-black uppercase tracking-widest">
+                      Safety Valve
+                    </span>
                   </div>
+                </div>
                 <div className="relative group">
                   <div className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-xl text-muted-foreground group-focus-within:text-warning transition-colors">
                     $
@@ -233,7 +248,7 @@ export default function BulkUpdateDrawer({
                     className={cn(
                       "w-full bg-muted/30 border border-border rounded-3xl py-6 pl-14 pr-8 outline-none focus:border-warning/30 focus:ring-8 focus:ring-warning/5 transition-all font-black text-2xl tracking-tight placeholder:text-muted-foreground/20",
                       errors.minPrice &&
-                        "border-destructive focus:ring-destructive/5",
+                      "border-destructive focus:ring-destructive/5",
                     )}
                     placeholder="Global Min Price"
                   />
@@ -280,10 +295,13 @@ export default function BulkUpdateDrawer({
             type="submit"
             form="bulk-update-form"
             disabled={loading}
-            className="w-full premium-gradient text-primary-foreground font-black py-7 rounded-[2.5rem] transition-all shadow-2xl shadow-primary/30 flex items-center justify-center gap-4 group disabled:opacity-50 active:scale-[0.98] text-xl glow"
+            className={cn(
+              "w-full font-black py-7 rounded-[2.5rem] flex items-center justify-center gap-4 group disabled:opacity-50 text-xl",
+              componentStylePresets.premiumButton
+            )}
           >
             {loading ? (
-              <Loader2 className="w-8 h-8 animate-spin" />
+              <Skeleton className="w-8 h-8 rounded-full" />
             ) : (
               <>
                 Confirm Execution
@@ -297,7 +315,7 @@ export default function BulkUpdateDrawer({
             Auth req: administrator.sync_protocol_v2
           </p>
         </div>
-      </div>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }

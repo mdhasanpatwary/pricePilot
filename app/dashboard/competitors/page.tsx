@@ -20,11 +20,19 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
 const competitorSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
@@ -45,7 +53,6 @@ const KNOWN_SEARCH_PATTERNS: Record<string, string> = {
 };
 
 import { Competitor } from "@/lib/types";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +61,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -77,12 +85,7 @@ export default function CompetitorsPage() {
     }
   }, [competitors, isAutoScroll]);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<CompetitorFormValues>({
+  const form = useForm<CompetitorFormValues>({
     resolver: zodResolver(competitorSchema),
   });
 
@@ -133,7 +136,7 @@ export default function CompetitorsPage() {
       if (res.ok) {
         toast.success("Crawler deployed successfully");
         setIsAdding(false);
-        reset();
+        form.reset();
         fetchCompetitors();
       } else {
         const result = await res.json();
@@ -220,10 +223,10 @@ export default function CompetitorsPage() {
           prev.map((c) =>
             c.id === id
               ? {
-                  ...c,
-                  isSyncing: false,
-                  status: c.status === "SYNCING" ? "ACTIVE" : c.status,
-                }
+                ...c,
+                isSyncing: false,
+                status: c.status === "SYNCING" ? "ACTIVE" : c.status,
+              }
               : c,
           ),
         );
@@ -439,100 +442,109 @@ export default function CompetitorsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                  Website URL
-                </Label>
-                <div className="relative group">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
-                  <Input
-                    {...register("url")}
-                    type="text"
-                    placeholder="https://competitor.com"
-                    className={cn(
-                      "pl-10",
-                      errors.url &&
-                        "border-destructive focus:ring-destructive/20",
-                    )}
-                  />
-                </div>
-                {errors.url && (
-                  <p className="text-xs text-destructive font-bold">
-                    {errors.url.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                    Search Pattern (Optional)
-                  </Label>
-                  <div className="group relative">
-                    <span className="text-[10px] text-primary hover:underline cursor-help font-bold uppercase tracking-tighter">What&apos;s this?</span>
-                    <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-secondary border border-border rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                       <p className="text-[10px] text-muted-foreground leading-relaxed">
-                         Specify how the site&apos;s search works. Use <code className="text-primary font-bold">{`{query}`}</code> as a placeholder.
-                         <br /><br />
-                         Example:<br />
-                         <code className="text-xs break-all bg-muted p-1 rounded block mt-1">
-                           /search/advance/product/result/{"{query}"}
-                         </code>
-                       </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="relative group">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
-                  <input
-                    {...register("searchQueryPattern")}
-                    type="text"
-                    placeholder="https://site.com/search?q={query}"
-                    className={cn(
-                      "w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium",
-                    )}
-                  />
-                </div>
-              </div>
-
-              <div className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <ShieldAlert className="w-4 h-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">
-                    Compliance
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  PricePilot only accesses public data and respects robots.txt
-                  to ensure store stability.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 pt-4">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-primary text-primary-foreground font-semibold py-2.5 rounded-md transition-all disabled:opacity-50 text-sm flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 fill-current" />
-                      Deploy Crawler
-                    </>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Website URL
+                      </FormLabel>
+                      <div className="relative group">
+                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="text"
+                            placeholder="https://competitor.com"
+                            className="pl-10"
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage className="text-xs font-bold" />
+                    </FormItem>
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="flex-1 bg-secondary text-secondary-foreground font-semibold py-2.5 rounded-md border border-border transition-all text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                />
+
+                <FormField
+                  control={form.control}
+                  name="searchQueryPattern"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between">
+                        <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                          Search Pattern (Optional)
+                        </FormLabel>
+                        <div className="group relative">
+                          <span className="text-[10px] text-primary hover:underline cursor-help font-bold uppercase tracking-tighter">What&apos;s this?</span>
+                          <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-secondary border border-border rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">
+                              Specify how the site&apos;s search works. Use <code className="text-primary font-bold">{`{query}`}</code> as a placeholder.
+                              <br /><br />
+                              Example:<br />
+                              <code className="text-xs break-all bg-muted p-1 rounded block mt-1">
+                                /search/advance/product/result/{"{query}"}
+                              </code>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="relative group">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
+                        <FormControl>
+                          <input
+                            {...field}
+                            type="text"
+                            placeholder="https://site.com/search?q={query}"
+                            className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage className="text-xs font-bold" />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <ShieldAlert className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">
+                      Compliance
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    PricePilot only accesses public data and respects robots.txt
+                    to ensure store stability.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-primary text-primary-foreground font-semibold py-2.5 rounded-md transition-all disabled:opacity-50 text-sm flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 fill-current" />
+                        Deploy Crawler
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="flex-1 bg-secondary text-secondary-foreground font-semibold py-2.5 rounded-md border border-border transition-all text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </Form>
           </div>
 
           <div className="hidden lg:block space-y-6">
@@ -670,7 +682,7 @@ export default function CompetitorsPage() {
                         {comp.isAdvancedProtected ? (
                           <div className="flex items-center gap-2 group cursor-help">
                             <div className="flex -space-x-1">
-                               <ShieldAlert className="w-5 h-5 text-warning fill-warning/20 drop-shadow-[0_0_8px_rgba(var(--warning-rgb),0.4)]" />
+                              <ShieldAlert className="w-5 h-5 text-warning fill-warning/20 drop-shadow-[0_0_8px_rgba(var(--warning-rgb),0.4)]" />
                             </div>
                             <div className="flex flex-col">
                               <span className="text-xs font-bold text-warning leading-tight">Advanced</span>
@@ -679,8 +691,8 @@ export default function CompetitorsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                             <ShieldCheck className="w-5 h-5 text-success/70" />
-                             <span className="text-[10px] font-semibold text-muted-foreground uppercase">Standard</span>
+                            <ShieldCheck className="w-5 h-5 text-success/70" />
+                            <span className="text-[10px] font-semibold text-muted-foreground uppercase">Standard</span>
                           </div>
                         )}
                       </td>
@@ -789,7 +801,7 @@ export default function CompetitorsPage() {
                                 : "hover:bg-primary/10 hover:text-primary",
                               (syncingSiteId === comp.id ||
                                 (comp.isSyncing && syncingSiteId !== null)) &&
-                                "opacity-50 cursor-not-allowed",
+                              "opacity-50 cursor-not-allowed",
                             )}
                             title={
                               comp.isSyncing ? "Stop Crawler" : "Force Sync"
@@ -1043,9 +1055,9 @@ export default function CompetitorsPage() {
                     <code className="block mt-1 bg-background border px-2 py-1 rounded">/search?keyword={"{query}"}</code>
                   </li>
                   {editingSite && KNOWN_SEARCH_PATTERNS[new URL(editingSite.url).hostname.replace("www.", "")] && (
-                     <li className="text-success font-medium">
-                       We detected a known site! A recommended pattern has been auto-filled.
-                     </li>
+                    <li className="text-success font-medium">
+                      We detected a known site! A recommended pattern has been auto-filled.
+                    </li>
                   )}
                 </ul>
               </div>

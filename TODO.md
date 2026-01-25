@@ -4,6 +4,8 @@
 > **Version:** 1.0.0 (Beta)
 Note:  don't execute the todo.md task from your own decision. ask me first.
 
+The agent MUST acknowledge this file before acting.
+
 ---
 
 ## 🧩 3. Missing Parts (The "Gap")
@@ -25,6 +27,7 @@ Note:  don't execute the todo.md task from your own decision. ask me first.
 * [x] Add a Debug page to the Admin Panel that centrally displays all system diagnostics—runtime errors, warnings, logs, failed requests, and detected inconsistencies—with clear categorization and timestamps for efficient debugging. diffentiate the monitor page with this page. if those serve same purpose then merge them. - Implemented (Unified Debug Hub & Health Assessment)
 * should care lint error warnings, test errors & build errors in code writing time.
 * integration site data kibabe update hove?
+* add "If you’re unsure, say you’re unsure. Don’t guess" in agent rule.
 
 
 * [x] in Match Approval page, should add competitor wise product filter tab. (Backend support added)
