@@ -64,7 +64,7 @@ export default function CompetitorsPage() {
   const [syncingSiteId, setSyncingSiteId] = useState<string | null>(null);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
+
   // Settings Modal State
   const [editingSite, setEditingSite] = useState<Competitor | null>(null);
   const [searchPatternInput, setSearchPatternInput] = useState("");
@@ -315,7 +315,7 @@ export default function CompetitorsPage() {
   // Open Settings Modal
   const openSettings = (site: Competitor) => {
     setEditingSite(site);
-    
+
     // If DB has a pattern, use it.
     if (site.searchQueryPattern) {
       setSearchPatternInput(site.searchQueryPattern);
@@ -619,7 +619,7 @@ export default function CompetitorsPage() {
                       key={comp.id}
                       className={cn(
                         "border-b border-border/50 hover:bg-muted/30 transition-colors",
-                        comp.isSyncing && "bg-primary/[0.02]",
+                        comp.isSyncing && "bg-primary/2",
                       )}
                     >
                       <td className="py-5 px-6">
@@ -737,7 +737,7 @@ export default function CompetitorsPage() {
                               }}
                             />
                             {comp.isSyncing && (
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                              <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
                             )}
                           </div>
                           {comp.isSyncing &&
@@ -883,7 +883,7 @@ export default function CompetitorsPage() {
                 </div>
 
                 {/* Terminal Body - Vercel Build Log Style */}
-                <div className="p-0 font-mono text-[11px] h-[300px] flex flex-col bg-[#0a0a0a]">
+                <div className="p-0 font-mono text-[11px] h-75 flex flex-col bg-[#0a0a0a]">
                   <div
                     ref={scrollContainerRef}
                     onScroll={(e) => {
@@ -965,7 +965,7 @@ export default function CompetitorsPage() {
                   </div>
 
                   {/* Traffic Footer Strip */}
-                  <div className="bg-white/[0.02] border-t border-white/5 px-4 py-2 flex items-center justify-between">
+                  <div className="bg-white/2 border-t border-white/5 px-4 py-2 flex items-center justify-between">
                     <div className="flex gap-4">
                       <div className="flex items-center gap-2">
                         <span className="text-[8px] text-white/30 uppercase">
@@ -1006,14 +1006,14 @@ export default function CompetitorsPage() {
       )}
       {/* Settings Modal */}
       <Dialog open={!!editingSite} onOpenChange={(open) => !open && setEditingSite(null)}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <DialogHeader>
             <DialogTitle>Configure Search Pattern</DialogTitle>
             <DialogDescription>
               Define how PricePilot searches for products on <strong>{editingSite?.name}</strong>.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid gap-6 py-4">
             <div className="space-y-4">
               <div className="space-y-2">

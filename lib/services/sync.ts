@@ -42,9 +42,9 @@ export class SyncService {
     const startTime = new Date();
     await prisma.site.update({
       where: { id: siteId },
-      data: { 
-        isSyncing: true, 
-        syncStartedAt: startTime, 
+      data: {
+        isSyncing: true,
+        syncStartedAt: startTime,
         syncProcessed: 0,
         syncLastAction: "Initializing sync..."
       },
@@ -74,7 +74,7 @@ export class SyncService {
 
       await prisma.site.update({
         where: { id: siteId },
-        data: { 
+        data: {
           syncTotal: externalProducts.length,
           syncLastAction: `Fetched ${externalProducts.length} products`
         },
@@ -169,7 +169,7 @@ export class SyncService {
           if (processed % 10 === 0) {
             await prisma.site.update({
               where: { id: siteId },
-              data: { 
+              data: {
                 syncProcessed: processed,
                 syncLastAction: `Processing products (${processed}/${externalProducts.length})`
               },
@@ -296,7 +296,7 @@ export class SyncService {
       // Normalize URL (avoid double slashes)
       const cleanBaseUrl = site.baseUrl.replace(/\/$/, "");
       const apiUrl = `${cleanBaseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`;
-      
+
       console.log(`[SyncService] Fetching from OpenCart: ${apiUrl}`);
 
       const response = await this.axiosRequestWithRetry<any>({
@@ -312,15 +312,15 @@ export class SyncService {
       }
 
       let responseData = response.data;
-      
+
       // Handle corrupted JSON responses (common when PHP errors or echoes are present)
       if (typeof responseData === "string") {
         console.warn(`[SyncService] Received string response instead of JSON object. Attempting to extract JSON...`);
         const jsonStart = responseData.indexOf('{"products"');
         const fallbackStart = responseData.indexOf('{');
-        
+
         const actualStart = jsonStart !== -1 ? jsonStart : fallbackStart;
-        
+
         if (actualStart !== -1) {
           try {
             // Find the last closing bracket to be safe
@@ -335,23 +335,23 @@ export class SyncService {
           }
         }
       }
-      
+
       if (!responseData) {
         console.warn(`[SyncService] Empty or invalid response from ${site.baseUrl}`);
         return [];
       }
 
-      const rawProducts = Array.isArray(responseData) 
-        ? responseData 
+      const rawProducts = Array.isArray(responseData)
+        ? responseData
         : (responseData.products || []);
-      
+
       console.log(`[SyncService] Fetched ${rawProducts.length} raw products from OpenCart: ${site.baseUrl}`);
-      
+
       // Log first product for debugging if exists
       if (rawProducts.length > 0) {
         console.log(`[SyncService] Sample product data:`, JSON.stringify(rawProducts[0]).substring(0, 200));
       }
-      
+
       const validProducts: OpenCartProduct[] = [];
 
       for (const item of rawProducts) {
@@ -663,9 +663,9 @@ export class SyncService {
          url: `${site.baseUrl}/admin/api/2023-01/products.json`,
          headers: { "X-Shopify-Access-Token": site.apiToken || "" }
       });
-      
+
       const shops = z.array(shopifyProductSchema).parse(response.data.products);
-      return shops.flatMap((p: any) => 
+      return shops.flatMap((p: any) =>
         p.variants.map((v: any) => ({
           external_id: v.id,
           sku: v.sku || null,
@@ -693,13 +693,13 @@ export class SyncService {
     try {
       const consumerKey = site.apiToken?.split(':')[0];
       const consumerSecret = site.apiToken?.split(':')[1];
-      
+
       const response = await this.axiosRequestWithRetry({
         method: 'GET',
         url: `${site.baseUrl}/wp-json/wc/v3/products`,
         params: { consumer_key: consumerKey, consumer_secret: consumerSecret, per_page: 100 }
       });
-      
+
       const products = z.array(wooCommerceProductSchema).parse(response.data);
       return products.map((p: any) => ({
         external_id: p.id,
@@ -733,7 +733,7 @@ export class SyncService {
         url: `${site.baseUrl}/rest/V1/products?searchCriteria[pageSize]=100`,
         headers: { "Authorization": `Bearer ${site.apiToken}` }
       });
-      
+
       const products = z.array(magentoProductSchema).parse(response.data.items);
       return products.map((p: any) => {
         const getAttr = (code: string) => p.custom_attributes.find((a: any) => a.attribute_code === code)?.value;
@@ -741,7 +741,7 @@ export class SyncService {
           external_id: p.id,
           sku: p.sku,
           title: p.name,
-          category: null, 
+          category: null,
           price: p.price,
           brand: getAttr('manufacturer'),
           model: getAttr('model_number'),
@@ -763,14 +763,14 @@ export class SyncService {
   /**
    * Tech Spec Extraction Helper
    */
-  private static extractTechSpecs(tags: string, body: string, variant: any): Record<string, string> {
+  private static extractTechSpecs(tags: string, _body: string, variant: any): Record<string, string> {
       const specs: Record<string, string> = {};
-      
+
       // 1. Try from variant options
       const optStr = `${variant.option1} ${variant.option2} ${variant.option3}`.toLowerCase();
       const ramMatch = optStr.match(/(\d+gb|\d+g) ram/i) || optStr.match(/(\d+)gb/i);
       if (ramMatch) specs.ram = ramMatch[0].toUpperCase();
-      
+
       // 2. Try from tags (e.g. "Spec:16GB RAM")
       const tagList = tags.split(',').map(t => t.trim().toLowerCase());
       const ramTag = tagList.find(t => t.includes('ram'));

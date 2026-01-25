@@ -19,6 +19,26 @@ if (typeof global.setImmediate === 'undefined') {
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
+// Suppress console logs during tests for cleaner output
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+const originalConsoleInfo = console.info;
+
+beforeAll(() => {
+  console.log = jest.fn();
+  console.error = jest.fn();
+  console.warn = jest.fn();
+  console.info = jest.fn();
+});
+
+afterAll(() => {
+  console.log = originalConsoleLog;
+  console.error = originalConsoleError;
+  console.warn = originalConsoleWarn;
+  console.info = originalConsoleInfo;
+});
+
 // Next.js 13+ APIs like NextRequest/NextResponse require a Fetch API polyfill
 if (typeof global.fetch === 'undefined') {
   global.fetch = fetch;
