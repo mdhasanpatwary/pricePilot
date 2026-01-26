@@ -1,6 +1,24 @@
 import { Redis } from "ioredis";
 
-const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+// Support both direct REDIS_URL and Upstash REST credentials
+const getRedisUrl = () => {
+  if (process.env.REDIS_URL) {
+    return process.env.REDIS_URL;
+  }
+  
+  // If using Upstash, construct the connection URL
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    // Extract host from REST URL (e.g., https://harmless-macaque-50376.upstash.io -> harmless-macaque-50376.upstash.io)
+    const restUrl = process.env.UPSTASH_REDIS_REST_URL.replace('https://', '').replace('http://', '');
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    // Upstash uses rediss:// (SSL) with password authentication
+    return `rediss://default:${token}@${restUrl}:6379`;
+  }
+  
+  return "redis://localhost:6379";
+};
+
+const REDIS_URL = getRedisUrl();
 
 let _redisConnection: Redis | undefined;
 

@@ -24,9 +24,10 @@ The agent MUST acknowledge this file before acting.
 * should care lint error warnings, test errors & build errors in code writing time.
 * integration site data kibabe update hove?
 * add "If you’re unsure, say you’re unsure. Don’t guess" in agent rule.
+* scraping start korle previous log delete hoye jabe. and new session log show korbe.
 
 
 
 
-## Just Asking
+## I would like to know
 * jokhon scraper ekta url search diye multiple result pai, tokhon oi result gulo theke kivabe best result ta select kore?

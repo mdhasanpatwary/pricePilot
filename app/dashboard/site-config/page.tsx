@@ -268,9 +268,10 @@ export default function TenantSiteConfigPage() {
                     <div className="flex items-center gap-3">
                         <Info className="w-5 h-5 text-muted-foreground" />
                         <div>
-                            <p className="text-sm font-medium">
-                                Current Plan: <Badge variant="outline">{planType}</Badge>
-                            </p>
+                            <div className="text-sm font-medium flex items-center gap-2">
+                                <span>Current Plan:</span>
+                                <Badge variant="outline">{planType}</Badge>
+                            </div>
                             <p className="text-xs text-muted-foreground mt-1">
                                 Your plan determines the allowed delay ranges for scraping configuration
                             </p>

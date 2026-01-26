@@ -64,6 +64,7 @@ interface MonitorResponse {
 export default function ScrapingMonitorDashboard() {
   const [data, setData] = useState<MonitorResponse["data"] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(
@@ -74,15 +75,30 @@ export default function ScrapingMonitorDashboard() {
 
   const fetchMonitorData = useCallback(async () => {
     try {
+      setError(null);
       const res = await fetch("/api/v1/admin/active-sessions");
       if (res.ok) {
         const json: MonitorResponse = await res.json();
         setData(json.data);
         setLastUpdated(new Date());
       } else {
-        console.error("Failed to fetch monitor data");
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        const errorMessage = res.status === 401 
+          ? "Unauthorized: Admin access required"
+          : res.status === 500
+          ? `Server error: ${errorData.error || "Internal server error"}`
+          : `Failed to fetch data: ${errorData.error || res.statusText}`;
+        
+        setError(errorMessage);
+        console.error("Failed to fetch monitor data:", {
+          status: res.status,
+          statusText: res.statusText,
+          error: errorData
+        });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Network error";
+      setError(`Connection error: ${errorMessage}`);
       console.error("Error fetching monitor data:", error);
     } finally {
       setLoading(false);
@@ -121,6 +137,36 @@ export default function ScrapingMonitorDashboard() {
             Loading real-time monitor...
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Real-Time Scraping Monitor
+          </h1>
+          <p className="text-muted-foreground">
+            Monitor active scraping sessions and real-time activity
+          </p>
+        </div>
+        <Card className="p-8">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="rounded-full bg-destructive/10 p-3">
+              <XCircle className="w-8 h-8 text-destructive" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Failed to Load Monitor Data</h3>
+              <p className="text-sm text-muted-foreground mb-4">{error}</p>
+              <Button onClick={fetchMonitorData} variant="outline">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
     );
   }

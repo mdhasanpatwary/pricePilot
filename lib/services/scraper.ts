@@ -257,8 +257,18 @@ export class ScraperService {
 
     // Acquire context from pool
     const startTime = Date.now();
-    const context = await this.browserPool.acquireContext(userAgent, proxy);
-    const page = await context.newPage();
+    let context: any = null;
+    let page: any = null;
+    
+    try {
+      context = await this.browserPool.acquireContext(userAgent, proxy);
+      page = await context.newPage();
+    } catch (error) {
+      logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
+      // Release concurrent slot before returning
+      siteProfileManager.releaseConcurrentSlot(hostname);
+      return null;
+    }
 
     // Cache Key
     const cacheKey = `product:${url}`;
@@ -269,8 +279,13 @@ export class ScraperService {
       const cached = await cache.get<ScrapedProduct>(cacheKey);
       if (cached) {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
-        await context.close().catch(() => { });
+        // Close page and release context (don't close context)
+        if (page) {
+          await page.close().catch(() => { });
+        }
         await this.browserPool.releaseContext(context).catch(() => { });
+        // Release concurrent slot
+        siteProfileManager.releaseConcurrentSlot(hostname);
         return cached;
       }
     }
@@ -393,8 +408,13 @@ export class ScraperService {
 
         if (retryCount < maxRetries) {
           logger.info(`[ScraperService] 🔄 Retrying with different proxy...`);
-          await context.close().catch(() => { });
+          // Close page and release context (don't close context)
+          if (page) {
+            await page.close().catch(() => { });
+          }
           await this.browserPool.releaseContext(context).catch(() => { });
+          // Release concurrent slot before retry
+          siteProfileManager.releaseConcurrentSlot(hostname);
           return this.scrapeProductPage(url, retryCount + 1);
         }
 
@@ -574,8 +594,18 @@ export class ScraperService {
       logger.error(`Error scraping ${url}:`, { error });
       return null;
     } finally {
-      await context.close().catch(() => { });
-      await this.browserPool.releaseContext(context).catch(() => { });
+      // Close page first, then release context (don't close context)
+      if (page) {
+        await page.close().catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to close page for ${url}:`, { error: err });
+        });
+      }
+      
+      if (context) {
+        await this.browserPool.releaseContext(context).catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to release context for ${url}:`, { error: err });
+        });
+      }
 
       // Release concurrent request slot
       siteProfileManager.releaseConcurrentSlot(hostname);
@@ -1172,8 +1202,17 @@ export class ScraperService {
   ): Promise<ScrapedProduct | null> {
     await this.init();
     const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-    const context = await this.browserPool.acquireContext(userAgent);
-    const page = await context.newPage();
+    
+    let context: any = null;
+    let page: any = null;
+    
+    try {
+      context = await this.browserPool.acquireContext(userAgent);
+      page = await context.newPage();
+    } catch (error) {
+      logger.error(`[ScraperService] Failed to acquire context or create page for search:`, { error });
+      return null;
+    }
 
     const log = async (message: string, level: "INFO" | "WARN" | "ERROR" | "SUCCESS" = "INFO") => {
       if (siteId) {
@@ -1252,6 +1291,9 @@ export class ScraperService {
       );
       await log(`🔍 Searching: ${searchUrl}`, "INFO");
 
+      // Add small random delay before navigation (more human-like)
+      await page.waitForTimeout(Math.random() * 1000 + 500); // 500-1500ms
+
       // Ryans/Startech are heavy on JS, use networkidle if possible or longer wait
       const response = await page.goto(searchUrl, {
         waitUntil: "domcontentloaded",
@@ -1265,12 +1307,21 @@ export class ScraperService {
         logger.warn(`[ScraperService] ${msg}`);
         await log(msg, "WARN");
 
-        if (securityInfo.isAdvanced) {
-          throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
-        }
-
+        // Try to wait for Cloudflare challenge before throwing error
         if (securityInfo.provider === "CLOUDFLARE") {
-          await page.waitForTimeout(5000); // Wait for challenge
+          logger.info("[ScraperService] Waiting for Cloudflare challenge to complete...");
+          await page.waitForTimeout(8000); // Wait longer for challenge
+          
+          // Check if challenge was solved
+          const recheckSecurity = await this.analyzeSecurity(page, response);
+          if (!recheckSecurity.isBlocked) {
+            logger.info("[ScraperService] ✅ Cloudflare challenge passed!");
+          } else {
+            // Still blocked, throw error
+            throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
+          }
+        } else if (securityInfo.isAdvanced) {
+          throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
         }
       }
 
@@ -1383,8 +1434,18 @@ export class ScraperService {
       logger.error(`[ScraperService] Search failed for ${query}:`, { error });
       return null;
     } finally {
-      await page.close();
-      await this.browserPool.releaseContext(context);
+      // Close page first, then release context (don't close context)
+      if (page) {
+        await page.close().catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to close search page:`, { error: err });
+        });
+      }
+      
+      if (context) {
+        await this.browserPool.releaseContext(context).catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to release search context:`, { error: err });
+        });
+      }
     }
   }
 

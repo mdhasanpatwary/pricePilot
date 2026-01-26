@@ -164,10 +164,26 @@ export class BrowserPool {
     const pooled = this.contexts.get(contextKey);
 
     if (pooled && !pooled.inUse) {
-      pooled.inUse = true;
-      pooled.lastUsedAt = new Date();
-      logger.info(`[BrowserPool] Reusing context: ${contextKey}`);
-      return pooled.context;
+      // Check if context is still valid before reusing
+      try {
+        // Try to get pages to verify context is still open
+        const pages = pooled.context.pages();
+        // Also verify the browser is still connected
+        if (pages && this.browser && this.browser.isConnected()) {
+          pooled.inUse = true;
+          pooled.lastUsedAt = new Date();
+          logger.info(`[BrowserPool] Reusing context: ${contextKey}`);
+          return pooled.context;
+        } else {
+          // Context or browser is not valid
+          logger.warn(`[BrowserPool] Context ${contextKey} is invalid (browser disconnected or no pages), removing from pool`);
+          this.contexts.delete(contextKey);
+        }
+      } catch (error) {
+        // Context is closed, remove it from pool
+        logger.warn(`[BrowserPool] Context ${contextKey} was closed, removing from pool`);
+        this.contexts.delete(contextKey);
+      }
     }
 
     // Check if we've hit the pool limit
@@ -408,6 +424,16 @@ export class BrowserPool {
   async releaseContext(context: BrowserContext) {
     for (const [key, pooled] of this.contexts.entries()) {
       if (pooled.context === context) {
+        // Close all pages in the context before releasing
+        try {
+          const pages = context.pages();
+          for (const page of pages) {
+            await page.close().catch(() => {});
+          }
+        } catch (error) {
+          logger.warn(`[BrowserPool] Failed to close pages for context ${key}:`, { error });
+        }
+        
         pooled.inUse = false;
         pooled.lastUsedAt = new Date();
         logger.info(`[BrowserPool] Released context: ${key}`);

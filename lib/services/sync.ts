@@ -40,6 +40,10 @@ export class SyncService {
     if (!site) throw new Error("Site not found");
 
     const startTime = new Date();
+    
+    // Clear previous logs before starting new sync session
+    await prisma.syncLog.deleteMany({ where: { siteId } });
+    
     await prisma.site.update({
       where: { id: siteId },
       data: {

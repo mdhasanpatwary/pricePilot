@@ -6,10 +6,12 @@ const connectionString = `${process.env.DATABASE_URL}`;
 
 const pool = new pg.Pool({
   connectionString,
-  max: 50, // Increased from 20 to handle concurrent sync workers
-  min: 5, // Minimum connections to keep alive
-  idleTimeoutMillis: 30000, // Close idle connections after 30s
-  connectionTimeoutMillis: 10000, // Timeout after 10s if no connection available
+  max: 20, // Reduced for Neon pooler limits
+  min: 2, // Lower minimum for serverless
+  idleTimeoutMillis: 60000, // Keep connections alive longer
+  connectionTimeoutMillis: 30000, // Increased timeout for Neon cold starts
+  allowExitOnIdle: true, // Allow pool to close when idle
+  statement_timeout: 20000, // 20s query timeout
 });
 const adapter = new PrismaPg(pool);
 

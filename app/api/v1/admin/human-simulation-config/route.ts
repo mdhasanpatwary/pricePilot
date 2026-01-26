@@ -52,8 +52,16 @@ export async function GET() {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
-        if (!session?.user || (session.user as any).role !== "SUPER_ADMIN") {
+        if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // Check if user is super admin or regular admin
+        const user = session.user as any;
+        const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
+        
+        if (!isAdmin) {
+            return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
         }
 
         // Fetch configuration from database
@@ -126,8 +134,16 @@ export async function POST(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
-        if (!session?.user || (session.user as any).role !== "SUPER_ADMIN") {
+        if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // Check if user is super admin or regular admin
+        const user = session.user as any;
+        const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
+        
+        if (!isAdmin) {
+            return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
         }
 
         // Parse request body

@@ -169,6 +169,11 @@ export class SyncOrchestrator {
         },
       });
 
+      // Clear previous logs for all competitor sites before starting new session
+      for (const site of competitorSites) {
+        await prisma.syncLog.deleteMany({ where: { siteId: site.id } });
+      }
+
       for (const site of competitorSites) {
         // Optimization: Instead of doing everything here, dispatch individual jobs
         // to the queue so multiple workers can pick them up in parallel.
