@@ -19,6 +19,7 @@ import {
   Bell,
   Zap,
   Copy,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
@@ -35,6 +36,8 @@ const menuItems = [
     href: "/dashboard/analytics",
   },
   { icon: Users, label: "Competitors", href: "/dashboard/competitors" },
+  { icon: Activity, label: "Scraping Metrics", href: "/dashboard/metrics" },
+  { icon: Settings, label: "Site Configuration", href: "/dashboard/site-config" },
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
   { icon: Zap, label: "Pricing Rules", href: "/dashboard/rules" },
   { icon: Bell, label: "Alert Center", href: "/dashboard/alerts" },

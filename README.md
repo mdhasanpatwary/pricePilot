@@ -8,10 +8,11 @@ PricePilot is a professional-grade SaaS platform designed for high-velocity merc
 
 ## 🚀 Key Strategic Pillars
 
-*   **⚡ Real-Time Intelligence**: Automated crawlers hunt for competitor price movements every 15 minutes.
+*   **⚡ Real-Time Intelligence**: Automated crawlers with advanced stealth capabilities hunt for competitor price movements.
 *   **🎯 Tactical Execution**: Apply aggressive undercutting or margin-safe index scaling via the Execution Engine.
 *   **📊 Market Command**: A high-fidelity dashboard provides a "Position Summary" of your standing (Cheapest, Neutral, Expensive).
 *   **🔒 Enterprise Security**: Multi-tenant architecture with robust JWT-based route protection and encrypted API sync.
+*   **🕵️ Advanced Stealth**: Intelligent proxy management, challenge detection, and human behavior simulation to bypass anti-bot systems.
 
 ---
 
@@ -52,10 +53,22 @@ graph TD
 ### 2. Environment Configuration
 Create a `.env` file in the root directory:
 ```env
+# Database
 DATABASE_URL="your_postgresql_connection_string"
+
+# Authentication
 NEXTAUTH_SECRET="your_secure_random_hash"
 NEXTAUTH_URL="http://localhost:3000"
+
+# Advanced Scraping (Optional)
+SCRAPER_PROXIES="http://proxy1:8080,http://proxy2:8080"
+PROXY_USERNAME="your_proxy_username"
+PROXY_PASSWORD="your_proxy_password"
+STEALTH_LEVEL="advanced"
+BLOCK_RATE_THRESHOLD="0.3"
 ```
+
+See [docs/STEALTH_SCRAPING.md](docs/STEALTH_SCRAPING.md) for complete configuration options.
 
 ### 3. Installation & Database Sync
 ```bash
@@ -69,6 +82,25 @@ npx prisma db push
 # Start the command center
 npm run dev
 ```
+
+---
+
+## 📚 Documentation
+
+### User Guides
+- **[Main Documentation](DOCUMENTATION.md)**: Complete user guide for merchants and administrators
+- **[Admin Dashboard Guide](docs/ADMIN_GUIDE.md)**: Step-by-step guide for admin monitoring dashboards
+- **[Tenant Dashboard Guide](docs/TENANT_GUIDE.md)**: Guide for tenant metrics and configuration
+
+### Technical Documentation
+- **[Architecture Guide](docs/ARCHITECTURE.md)**: System architecture and component overview
+- **[Stealth Scraping Guide](docs/STEALTH_SCRAPING.md)**: Advanced scraping features and configuration
+- **[Monitoring UI Guide](docs/MONITORING_UI.md)**: Comprehensive monitoring dashboard documentation
+- **[API Reference](docs/API_MONITORING.md)**: Monitoring API endpoint reference
+- **[Site Profile Examples](docs/SITE_PROFILE_EXAMPLES.md)**: Configuration examples for various scenarios
+- **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)**: Complete environment variable reference
+- **[Deployment Guide](docs/DEPLOYMENT.md)**: Production deployment instructions
+- **[Runbook](docs/RUNBOOK.md)**: Operational procedures and troubleshooting
 
 ---
 

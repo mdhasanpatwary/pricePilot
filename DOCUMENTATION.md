@@ -12,9 +12,10 @@ Welcome to PricePilot - Your intelligent e-commerce pricing automation platform.
 2. [Getting Started](#getting-started)
 3. [Platform Integrations](#platform-integrations)
 4. [Features Overview](#features-overview)
-5. [API Reference](#api-reference)
-6. [FAQ](#faq)
-7. [Support](#support)
+5. [Monitoring & Analytics](#monitoring--analytics)
+6. [API Reference](#api-reference)
+7. [FAQ](#faq)
+8. [Support](#support)
 
 ---
 
@@ -283,6 +284,101 @@ Create sophisticated pricing strategies:
 - Price trend charts
 - Competitor comparison
 - Market share insights
+
+---
+
+## 📊 Monitoring & Analytics
+
+### Admin Monitoring Dashboards
+
+PricePilot provides comprehensive monitoring tools for platform administrators:
+
+#### Proxy Health Dashboard
+Monitor your proxy pool in real-time:
+- View health status of all proxies
+- Track success rates and response times
+- Identify and replace unhealthy proxies
+- Filter metrics by time range (24h, 7d, 30d)
+
+**Access**: Admin Panel → Proxy Health
+
+#### Challenge Detection Dashboard
+Monitor anti-bot challenge handling:
+- Track challenge detection rates by site
+- View solve rates for different challenge types
+- Identify sites with low solve rates
+- Analyze challenge trends over time
+
+**Access**: Admin Panel → Challenge Stats
+
+#### Scraping Metrics Dashboard
+Comprehensive scraping performance metrics:
+- Platform-wide success and block rates
+- Per-site performance breakdown
+- Trend charts and visualizations
+- Export data to CSV/JSON
+
+**Access**: Admin Panel → Scraping Metrics
+
+#### Real-Time Monitor
+Live view of active scraping sessions:
+- See all active scraping sessions
+- Monitor session status and progress
+- Track proxy usage and challenges
+- Auto-refresh every 5 seconds
+
+**Access**: Admin Panel → Monitor
+
+#### Human Simulation Settings
+Configure global human behavior simulation:
+- Adjust typing speeds and delays
+- Configure mouse movement patterns
+- Set form interaction behavior
+- Apply changes instantly
+
+**Access**: Admin Panel → Human Simulation
+
+#### Site Profile Management
+Create custom scraping profiles per site:
+- Set rate limits and delays
+- Configure session warmup
+- Use pre-built templates (Cloudflare, PerimeterX, DataDome)
+- Apply profiles automatically
+
+**Access**: Admin Panel → Site Profiles
+
+#### Alert Management
+Stay informed about critical issues:
+- View system alerts by severity
+- Get notified of high block rates
+- Monitor proxy failures
+- Acknowledge and track alerts
+
+**Access**: Admin Panel → Alerts
+
+### Tenant Monitoring
+
+Tenants have access to their own monitoring dashboards:
+
+#### Metrics Dashboard
+View your scraping performance:
+- Overall success and block rates
+- Per-site health status
+- Challenge detection summary
+- Actionable recommendations
+
+**Access**: Dashboard → Metrics
+
+#### Site Configuration
+Configure your scraping settings:
+- Enable/disable session warmup
+- Adjust delay ranges (within plan limits)
+- Preview impact on performance
+- Apply changes instantly
+
+**Access**: Dashboard → Site Config
+
+For detailed monitoring documentation, see [Monitoring UI Guide](docs/MONITORING_UI.md).
 
 ---
 

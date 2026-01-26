@@ -60,9 +60,9 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-32 pb-28 px-6 overflow-hidden">
         {/* Background Decor */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full -z-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-from)_0%,_transparent_70%)] from-primary/10 via-transparent to-transparent opacity-50" />
-        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] animate-pulse-soft" />
-        <div className="absolute top-40 -left-60 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[100px] animate-pulse-soft" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full -z-10 bg-[radial-gradient(circle_at_center,var(--tw-gradient-from)_0%,transparent_70%)] from-primary/10 via-transparent to-transparent opacity-50" />
+        <div className="absolute -top-40 -right-40 w-150 h-150 bg-primary/20 rounded-full blur-[120px] animate-pulse-soft" />
+        <div className="absolute top-40 -left-60 w-125 h-125 bg-purple-500/10 rounded-full blur-[100px] animate-pulse-soft" />
 
         <div className="max-w-6xl mx-auto text-center space-y-12">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.2em] animate-bounce-subtle shadow-sm">
@@ -72,7 +72,7 @@ export default function LandingPage() {
 
           <h1 className="text-7xl md:text-[9rem] font-black tracking-tight leading-[0.85] text-foreground">
             Win Every <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-accent animate-shimmer">
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-primary via-purple-500 to-accent animate-shimmer">
               Price Battle
             </span>
           </h1>
@@ -86,12 +86,12 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-10">
             <Link
               href="/auth/register"
-              className="w-full sm:w-auto premium-gradient px-12 py-6 rounded-[2rem] text-xl font-black text-primary-foreground glow-hover flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
+              className="w-full sm:w-auto premium-gradient px-12 py-6 rounded-4xl text-xl font-black text-primary-foreground glow-hover flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-primary/20"
             >
               Start Scaling Now
               <ArrowRight className="w-6 h-6" />
             </Link>
-            <button className="w-full sm:w-auto bg-card/50 backdrop-blur-md border border-border px-12 py-6 rounded-[2rem] text-xl font-black hover:bg-muted transition-all active:scale-95">
+            <button className="w-full sm:w-auto bg-card/50 backdrop-blur-md border border-border px-12 py-6 rounded-4xl text-xl font-black hover:bg-muted transition-all active:scale-95">
               Watch Demo
             </button>
           </div>
@@ -168,7 +168,7 @@ export default function LandingPage() {
             ].map((f, i) => (
               <div
                 key={i}
-                className="group bg-card border border-border p-10 rounded-[2.5rem] hover:border-primary/40 hover:bg-primary/[0.01] transition-all hover:-translate-y-3 shadow-xl shadow-black/[0.02] relative overflow-hidden"
+                className="group bg-card border border-border p-10 rounded-[2.5rem] hover:border-primary/40 hover:bg-primary/1 transition-all hover:-translate-y-3 shadow-xl shadow-black/2 relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-primary/10 transition-colors" />
                 <div className="w-16 h-16 rounded-2xl bg-muted border border-border flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-primary-foreground group-hover:glow transition-all duration-500 text-primary">
@@ -190,8 +190,8 @@ export default function LandingPage() {
       <section className="py-40 px-6">
         <div className="max-w-6xl mx-auto premium-gradient rounded-[4rem] p-16 md:p-32 text-center text-white glow relative overflow-hidden group shadow-3xl shadow-primary/20">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 pointer-events-none" />
-          <div className="absolute top-[-100px] left-[-100px] w-96 h-96 bg-white/10 rounded-full blur-[120px] animate-pulse-soft" />
-          <div className="absolute bottom-[-100px] right-[-100px] w-96 h-96 bg-accent/20 rounded-full blur-[120px] animate-pulse-soft" />
+          <div className="absolute -top-25 -left-25 w-96 h-96 bg-white/10 rounded-full blur-[120px] animate-pulse-soft" />
+          <div className="absolute -bottom-25 -right-25 w-96 h-96 bg-accent/20 rounded-full blur-[120px] animate-pulse-soft" />
 
           <div className="relative z-10 space-y-12">
             <h2 className="text-5xl md:text-8xl font-black tracking-tight leading-[0.9]">
@@ -205,7 +205,7 @@ export default function LandingPage() {
             <div className="pt-8">
               <Link
                 href="/auth/register"
-                className="inline-flex items-center gap-4 bg-background text-foreground px-14 py-7 rounded-[2rem] font-black text-2xl hover:scale-105 active:scale-95 transition-all shadow-2xl hover:shadow-background/10"
+                className="inline-flex items-center gap-4 bg-background text-foreground px-14 py-7 rounded-4xl font-black text-2xl hover:scale-105 active:scale-95 transition-all shadow-2xl hover:shadow-background/10"
               >
                 Get Early Access
                 <ArrowRight className="w-8 h-8" />

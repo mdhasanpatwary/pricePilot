@@ -94,11 +94,11 @@ export class BrowserPool {
     }
 
     this.maxContexts = maxContexts;
-    
+
     try {
       // Try to use playwright-extra with stealth plugin
       chromium.use(StealthPlugin());
-      
+
       this.browser = await chromium.launch({
         headless: true,
         args: [
@@ -116,12 +116,12 @@ export class BrowserPool {
           "--disable-extensions",
         ],
       });
-      
+
       logger.info(`[BrowserPool] Initialized with playwright-extra stealth (max ${maxContexts} contexts)`);
     } catch (error) {
       // Fallback to basic stealth if playwright-extra fails
       logger.warn("[BrowserPool] Failed to initialize with playwright-extra, falling back to basic stealth", { error });
-      
+
       this.browser = await playwrightChromium.launch({
         headless: true,
         args: [
@@ -139,7 +139,7 @@ export class BrowserPool {
           "--disable-extensions",
         ],
       });
-      
+
       logger.info(`[BrowserPool] Initialized with basic stealth (max ${maxContexts} contexts)`);
     }
 
@@ -202,7 +202,7 @@ export class BrowserPool {
     const deviceScaleFactor = Math.random() > 0.5 ? 2 : 1;
     const isWin = selectedUA.includes("Windows");
     const platform = isWin ? "Win32" : (selectedUA.includes("Mac") ? "MacIntel" : "Linux x86_64");
-    
+
     // Randomize timezone and locale if enabled
     const timezone = stealth.timezone ? TIMEZONES[Math.floor(Math.random() * TIMEZONES.length)] : 'Asia/Dhaka';
     const locale = stealth.locale ? LOCALES[Math.floor(Math.random() * LOCALES.length)] : 'en-US';
@@ -233,7 +233,7 @@ export class BrowserPool {
     });
 
     // Advanced Stealth Init Scripts
-    await context.addInitScript((plat: string, stealthOpts: StealthOptions) => {
+    await context.addInitScript(({ plat, stealthOpts }: { plat: string, stealthOpts: StealthOptions }) => {
       // 1. Mask Webdriver
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 
@@ -246,9 +246,9 @@ export class BrowserPool {
       // 4. Canvas fingerprinting protection
       if (stealthOpts.canvas) {
         const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+        // const originalToBlob = HTMLCanvasElement.prototype.toBlob; // Reserved for future use
         const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-        
+
         // Add noise to canvas data
         const addNoise = (data: Uint8ClampedArray) => {
           const noise = Math.random() * 0.1;
@@ -258,19 +258,19 @@ export class BrowserPool {
             data[i + 2] = Math.min(255, data[i + 2] + Math.floor(noise * 10));
           }
         };
-        
-        HTMLCanvasElement.prototype.toDataURL = function(...args: any[]) {
+
+        HTMLCanvasElement.prototype.toDataURL = function (...args: any[]) {
           const context = this.getContext('2d');
           if (context) {
             const imageData = context.getImageData(0, 0, this.width, this.height);
             addNoise(imageData.data);
             context.putImageData(imageData, 0, 0);
           }
-          return originalToDataURL.apply(this, args);
+          return originalToDataURL.apply(this, args as [type?: string, quality?: number]);
         };
-        
-        CanvasRenderingContext2D.prototype.getImageData = function(...args: any[]) {
-          const imageData = originalGetImageData.apply(this, args);
+
+        CanvasRenderingContext2D.prototype.getImageData = function (...args: any[]) {
+          const imageData = originalGetImageData.apply(this, args as [sx: number, sy: number, sw: number, sh: number, settings?: ImageDataSettings]);
           addNoise(imageData.data);
           return imageData;
         };
@@ -279,11 +279,11 @@ export class BrowserPool {
       // 5. WebGL Vendor/Renderer masking
       if (stealthOpts.webgl) {
         const getParameter = HTMLCanvasElement.prototype.getContext;
-        (HTMLCanvasElement.prototype as any).getContext = function(type: any, attributes: any) {
+        (HTMLCanvasElement.prototype as any).getContext = function (type: any, attributes: any) {
           const context = getParameter.apply(this, [type, attributes]);
           if (type === 'webgl' || type === 'experimental-webgl' || type === 'webgl2') {
             const originalGetParameter = (context as any).getParameter;
-            (context as any).getParameter = function(parameter: any) {
+            (context as any).getParameter = function (parameter: any) {
               // UNMASKED_VENDOR_WEBGL
               if (parameter === 37445) return 'Google Inc. (Intel)';
               // UNMASKED_RENDERER_WEBGL
@@ -300,10 +300,10 @@ export class BrowserPool {
         const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
         if (AudioContext) {
           const originalCreateOscillator = AudioContext.prototype.createOscillator;
-          AudioContext.prototype.createOscillator = function() {
+          AudioContext.prototype.createOscillator = function () {
             const oscillator = originalCreateOscillator.apply(this, arguments);
             const originalStart = oscillator.start;
-            oscillator.start = function(...args: any[]) {
+            oscillator.start = function (...args: any[]) {
               // Add slight randomization to audio timing
               const noise = Math.random() * 0.0001;
               if (args[0] !== undefined) {
@@ -321,18 +321,18 @@ export class BrowserPool {
         // Mask font enumeration by returning consistent font list
         const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
         const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
-        
+
         if (originalOffsetWidth && originalOffsetHeight) {
           Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-            get: function() {
+            get: function () {
               const width = originalOffsetWidth.get?.call(this);
               // Add small random variation to prevent font-based fingerprinting
               return width ? width + (Math.random() - 0.5) * 0.01 : width;
             }
           });
-          
+
           Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-            get: function() {
+            get: function () {
               const height = originalOffsetHeight.get?.call(this);
               return height ? height + (Math.random() - 0.5) * 0.01 : height;
             }
@@ -342,13 +342,12 @@ export class BrowserPool {
 
       // 8. WebRTC leak prevention
       if (stealthOpts.webrtc) {
-        const originalGetUserMedia = navigator.mediaDevices?.getUserMedia;
-        if (originalGetUserMedia) {
-          (navigator.mediaDevices as any).getUserMedia = function() {
+        if (navigator.mediaDevices) {
+          (navigator.mediaDevices as any).getUserMedia = function () {
             return Promise.reject(new Error('Permission denied'));
           };
         }
-        
+
         // Block RTCPeerConnection
         (window as any).RTCPeerConnection = undefined;
         (window as any).webkitRTCPeerConnection = undefined;
@@ -363,8 +362,8 @@ export class BrowserPool {
             chargingTime: 0,
             dischargingTime: Infinity,
             level: 1,
-            addEventListener: () => {},
-            removeEventListener: () => {},
+            addEventListener: () => { },
+            removeEventListener: () => { },
             dispatchEvent: () => true,
           });
         }
@@ -373,8 +372,8 @@ export class BrowserPool {
       // 10. Chrome runtime masking
       (window as any).chrome = {
         runtime: {},
-        loadTimes: function() { },
-        csi: function() { },
+        loadTimes: function () { },
+        csi: function () { },
         app: {}
       };
 
@@ -386,7 +385,7 @@ export class BrowserPool {
           originalQuery(parameters)
       );
 
-    }, platform, stealth);
+    }, { plat: platform, stealthOpts: stealth });
 
     const pooledContext: PooledContext = {
       context,
@@ -435,7 +434,7 @@ export class BrowserPool {
   private async waitForAvailableContext(
     userAgent?: string,
     proxy?: { server: string },
-    stealthOptions?: StealthOptions,
+    _stealthOptions?: StealthOptions,
   ): Promise<BrowserContext> {
     return new Promise((resolve) => {
       const checkInterval = setInterval(async () => {

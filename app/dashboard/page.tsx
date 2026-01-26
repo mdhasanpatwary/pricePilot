@@ -348,7 +348,7 @@ function DashboardContent() {
               </div>
             </div>
           </div>
-          <div className="h-[280px] w-full">
+          <div className="h-70 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={chartData}
@@ -503,9 +503,9 @@ export default function DashboardOverview() {
             ))}
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Skeleton className="lg:col-span-1 h-[400px] rounded-xl" />
-            <Skeleton className="lg:col-span-2 h-[400px] rounded-xl" />
-            <Skeleton className="lg:col-span-3 h-[300px] rounded-xl" />
+            <Skeleton className="lg:col-span-1 h-100 rounded-xl" />
+            <Skeleton className="lg:col-span-2 h-100 rounded-xl" />
+            <Skeleton className="lg:col-span-3 h-75 rounded-xl" />
           </div>
         </div>
       }

@@ -1,432 +1,663 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Activity,
-  CheckCircle,
-  Clock,
-  Loader2,
-  Server,
-  Terminal,
   RefreshCw,
+  Clock,
+  Filter,
+  Eye,
+  Server,
+  Shield,
+  CheckCircle,
+  XCircle,
+  Loader2,
 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
-interface SyncLog {
+interface ActiveSession {
   id: string;
-  message: string;
-  level: "INFO" | "WARN" | "ERROR" | "SUCCESS";
-  createdAt: string;
+  site: string;
+  tenant: string;
+  startTime: Date;
+  requestsCompleted: number;
+  requestsTotal: number;
+  status: "running" | "waiting_challenge" | "completed" | "failed";
+  currentProxy: string | null;
+  challengeType: string | null;
+  challengeStatus: "waiting" | "solved" | "failed" | null;
 }
 
-interface SyncSession {
-  id: string;
-  baseUrl: string;
-  type: string;
-  platform: string;
-  isSyncing: boolean;
-  syncTotal: number;
-  syncProcessed: number;
-  syncLastAction: string | null;
-  syncStartedAt: string | null;
-  lastSyncAt: string | null;
-  tenant: {
-    companyName: string;
+interface MonitorStats {
+  activeSessions: number;
+  requestsPerMinute: number;
+  avgSessionDuration: number;
+}
+
+interface MonitorResponse {
+  success: boolean;
+  data: {
+    stats: MonitorStats;
+    sessions: ActiveSession[];
   };
-  syncLogs: SyncLog[];
 }
 
-interface QueueJob {
-  id: string;
-  name: string;
-  data: any;
-  progress: number;
-  timestamp: number;
-  failedReason?: string;
-}
-
-interface QueueStats {
-  name: string;
-  counts: {
-    active: number;
-    completed: number;
-    failed: number;
-    delayed: number;
-    waiting: number;
-  };
-  activeJobs: QueueJob[];
-  recentFailures?: QueueJob[];
-}
-
-interface AllQueueStats {
-  sync: QueueStats;
-  notifications: QueueStats;
-}
-
-export default function LiveSyncMonitor() {
-  const [sessions, setSessions] = useState<SyncSession[]>([]);
-  const [queueStats, setQueueStats] = useState<AllQueueStats | null>(null);
+export default function ScrapingMonitorDashboard() {
+  const [data, setData] = useState<MonitorResponse["data"] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(
+    null
+  );
+  const [filterTenant, setFilterTenant] = useState<string>("all");
+  const [filterSite, setFilterSite] = useState<string>("all");
 
-  const fetchSyncData = async () => {
+  const fetchMonitorData = useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/admin/sync-monitor");
+      const res = await fetch("/api/v1/admin/active-sessions");
       if (res.ok) {
-        const data = await res.json();
-        setSessions(data);
+        const json: MonitorResponse = await res.json();
+        setData(json.data);
         setLastUpdated(new Date());
-      }
-
-      const queueRes = await fetch("/api/v1/admin/queue-status");
-      if (queueRes.ok) {
-        const queueData = await queueRes.json();
-        setQueueStats(queueData);
+      } else {
+        console.error("Failed to fetch monitor data");
       }
     } catch (error) {
-      console.error("Failed to fetch sync data:", error);
+      console.error("Error fetching monitor data:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchSyncData();
+    fetchMonitorData();
+  }, [fetchMonitorData]);
 
-    let interval: NodeJS.Timeout;
-    if (autoRefresh) {
-      interval = setInterval(fetchSyncData, 3000); // 3 seconds poll
-    }
+  // Auto-refresh every 5 seconds
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      fetchMonitorData();
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [autoRefresh]);
+  }, [autoRefresh, fetchMonitorData]);
+
+  const handleRefresh = () => {
+    fetchMonitorData();
+  };
+
+  const handleSessionClick = (session: ActiveSession) => {
+    setSelectedSession(session);
+  };
+
+  if (loading && !data) {
+    return (
+      <div className="flex h-[50vh] w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="text-sm text-muted-foreground font-medium">
+            Loading real-time monitor...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = data?.stats;
+  const sessions = data?.sessions || [];
+
+  // Get unique tenants and sites for filters
+  const uniqueTenants = Array.from(new Set(sessions.map((s) => s.tenant)));
+  const uniqueSites = Array.from(new Set(sessions.map((s) => s.site)));
+
+  // Apply filters
+  const filteredSessions = sessions.filter((session) => {
+    if (filterTenant !== "all" && session.tenant !== filterTenant) {
+      return false;
+    }
+    if (filterSite !== "all" && session.site !== filterSite) {
+      return false;
+    }
+    return true;
+  });
+
+  const getStatusBadge = (status: ActiveSession["status"]) => {
+    switch (status) {
+      case "running":
+        return (
+          <Badge variant="success" className="flex items-center gap-1 w-fit">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            Running
+          </Badge>
+        );
+      case "waiting_challenge":
+        return (
+          <Badge variant="warning" className="flex items-center gap-1 w-fit">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Challenge
+          </Badge>
+        );
+      case "completed":
+        return (
+          <Badge variant="default" className="flex items-center gap-1 w-fit">
+            <CheckCircle className="w-3 h-3" />
+            Completed
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+            <XCircle className="w-3 h-3" />
+            Failed
+          </Badge>
+        );
+    }
+  };
+
+  const getChallengeStatusBadge = (
+    challengeStatus: ActiveSession["challengeStatus"]
+  ) => {
+    if (!challengeStatus) return null;
+
+    switch (challengeStatus) {
+      case "waiting":
+        return (
+          <Badge variant="warning" className="text-xs">
+            Waiting
+          </Badge>
+        );
+      case "solved":
+        return (
+          <Badge variant="success" className="text-xs">
+            Solved
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive" className="text-xs">
+            Failed
+          </Badge>
+        );
+    }
+  };
+
+  const formatDuration = (startTime: Date) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const durationMs = now.getTime() - start.getTime();
+    const seconds = Math.floor(durationMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Live Sync Monitor
+            Real-Time Scraping Monitor
           </h1>
           <p className="text-muted-foreground">
-            Real-time tracking of active scraper sessions and synchronization
-            logs.
+            Monitor active scraping sessions and real-time activity
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md">
-            {loading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            )}
-            <span>
-              Updated:{" "}
-              {lastUpdated ? lastUpdated.toLocaleTimeString() : "Never"}
-            </span>
+          {lastUpdated && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Updated: {lastUpdated.toLocaleTimeString()}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-md">
+            <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">
+              Auto-refresh
+            </Label>
+            <Switch
+              id="auto-refresh"
+              checked={autoRefresh}
+              onCheckedChange={setAutoRefresh}
+            />
           </div>
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              autoRefresh
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            disabled={autoRefresh}
+            aria-label="Manually refresh session data"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 ${autoRefresh ? "animate-spin" : ""}`}
+              className={cn("w-4 h-4", autoRefresh && "animate-spin")}
+              aria-hidden="true"
             />
-            {autoRefresh ? "Live Updates On" : "Live Updates Off"}
-          </button>
+            Refresh
+          </Button>
         </div>
       </div>
 
-      {/* Queue Health Section */}
-      {queueStats && (
-        <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <QueueCard stats={queueStats.sync} icon={RefreshCw} color="blue" />
-            <QueueCard
-              stats={queueStats.notifications}
-              icon={Activity}
-              color="indigo"
-            />
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Active Jobs List */}
-            <div className="border rounded-lg bg-card overflow-hidden h-fit">
-              <div className="bg-muted/50 px-4 py-3 border-b flex items-center justify-between">
-                <h3 className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
-                   <Terminal className="w-4 h-4" />
-                   Active Worker Processes
-                </h3>
-                <Badge variant="outline" className="text-[10px]">{queueStats.sync.activeJobs.length + queueStats.notifications.activeJobs.length} Running</Badge>
-              </div>
-              <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
-                {[...queueStats.sync.activeJobs, ...queueStats.notifications.activeJobs].length === 0 ? (
-                  <p className="p-10 text-center text-sm text-muted-foreground italic">No active jobs in flight</p>
-                ) : (
-                  [...queueStats.sync.activeJobs, ...queueStats.notifications.activeJobs].map(job => (
-                    <div key={job.id} className="p-3 hover:bg-muted/30 transition-colors flex items-center justify-between group">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <code className="text-[10px] bg-zinc-100 dark:bg-zinc-800 px-1 rounded font-mono text-muted-foreground">#{job.id.substring(0,8)}</code>
-                          <span className="text-xs font-bold">{job.data.type || job.name}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">
-                          {job.data.siteId || job.data.tenantId || "System Core"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                         <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-muted-foreground">{new Date(job.timestamp).toLocaleTimeString()}</span>
-                            {job.progress > 0 && <span className="text-[10px] font-bold text-primary">{job.progress}%</span>}
-                         </div>
-                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+      {/* Stats Cards - Responsive: 1 col mobile, 3 col tablet+ */}
+      {stats && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Active Sessions
+              </p>
+              <Activity className="w-4 h-4 text-muted-foreground" />
             </div>
-
-            {/* Recent Failures List */}
-            <div className="border rounded-lg bg-card overflow-hidden h-fit">
-              <div className="bg-red-50 dark:bg-red-950/20 px-4 py-3 border-b flex items-center justify-between">
-                <h3 className="font-bold text-sm uppercase tracking-wider text-red-600 dark:text-red-400 flex items-center gap-2">
-                   <Activity className="w-4 h-4" />
-                   Recent Failure Logs
-                </h3>
-              </div>
-              <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
-                {!queueStats.sync.recentFailures || queueStats.sync.recentFailures.length === 0 ? (
-                  <p className="p-10 text-center text-sm text-muted-foreground italic">No recent failures detected</p>
-                ) : (
-                  queueStats.sync.recentFailures.map(job => (
-                    <div key={job.id} className="p-3 bg-red-50/30 dark:bg-red-950/5 hover:bg-red-50/50 transition-colors">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-red-700 dark:text-red-400">{job.data.type || job.name}</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(job.timestamp).toLocaleTimeString()}</span>
-                      </div>
-                      <p className="text-[10px] text-red-600 dark:text-red-400 font-mono line-clamp-2 bg-red-100/50 dark:bg-red-900/20 p-2 rounded border border-red-200/50 dark:border-red-900/50">
-                        {job.failedReason}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-foreground">
+                {stats.activeSessions}
+              </span>
+              {stats.activeSessions > 0 && (
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          </Card>
 
-      {loading && sessions.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-          <Loader2 className="w-10 h-10 animate-spin mb-4 text-primary" />
-          <p>Connecting to Sync Orchestrator...</p>
-        </div>
-      ) : sessions.length === 0 ? (
-        <div className="border border-dashed rounded-lg p-12 text-center text-muted-foreground">
-          <Activity className="w-10 h-10 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium text-foreground">
-            No sync activity found
-          </p>
-          <p className="text-sm">
-            There are no active sync sessions and no recent history.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-6">
-          {sessions.map((session) => (
-            <SyncCard key={session.id} session={session} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Requests/Minute
+              </p>
+              <Activity className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-foreground">
+                {stats.requestsPerMinute}
+              </span>
+              <span className="text-xs text-muted-foreground">req/min</span>
+            </div>
+          </Card>
 
-function SyncCard({ session }: { session: SyncSession }) {
-  const isRunning = session.isSyncing;
-  const progress =
-    session.syncTotal > 0
-      ? Math.round((session.syncProcessed / session.syncTotal) * 100)
-      : 0;
-
-  return (
-    <div
-      className={`border rounded-lg overflow-hidden bg-card transition-all ${
-        isRunning
-          ? "shadow-md ring-1 ring-primary/20 border-primary/30"
-          : "shadow-sm opacity-90 hover:opacity-100"
-      }`}
-    >
-      {/* Header */}
-      <div className="bg-muted/30 px-6 py-4 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div
-            className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-              isRunning
-                ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-                : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-            }`}
-          >
-            {isRunning ? (
-              <Activity className="w-5 h-5 animate-pulse" />
-            ) : (
-              <CheckCircle className="w-5 h-5" />
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground">
-                {session.tenant.companyName}
-              </h3>
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-                  session.type === "COMPETITOR"
-                    ? "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900"
-                    : "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900"
-                }`}
-              >
-                {session.type}
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Avg Session Duration
+              </p>
+              <Clock className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-foreground">
+                {Math.floor(stats.avgSessionDuration / 60)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                min {stats.avgSessionDuration % 60}s
               </span>
             </div>
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5 font-mono mt-0.5">
-              <Server className="w-3 h-3" />
-              {session.baseUrl}
-            </p>
+          </Card>
+        </div>
+      )}
+
+      {/* Filters */}
+      {sessions.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters:</span>
+            </div>
+            <Select value={filterTenant} onValueChange={setFilterTenant}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All Tenants" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tenants</SelectItem>
+                {uniqueTenants.map((tenant) => (
+                  <SelectItem key={tenant} value={tenant}>
+                    {tenant}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterSite} onValueChange={setFilterSite}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All Sites" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {uniqueSites.map((site) => (
+                  <SelectItem key={site} value={site}>
+                    {site}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(filterTenant !== "all" || filterSite !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterTenant("all");
+                  setFilterSite("all");
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
           </div>
+        </Card>
+      )}
+
+      {/* Active Sessions Table */}
+      <Card>
+        <div className="border-b bg-muted/50 px-6 py-4">
+          <h3 className="font-semibold text-sm uppercase tracking-wider flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Active Scraping Sessions
+            {autoRefresh && (
+              <span className="text-xs text-muted-foreground font-normal normal-case">
+                (Auto-refreshing every 5 seconds)
+              </span>
+            )}
+          </h3>
         </div>
 
-        <div className="flex items-center gap-6">
-          {isRunning ? (
-            <div className="text-right">
-              <p className="text-sm font-medium text-primary flex items-center gap-1.5 justify-end">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Syncing Now
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Started: {new Date(session.syncStartedAt!).toLocaleTimeString()}
-              </p>
-            </div>
-          ) : (
-            <div className="text-right">
-              <p className="text-sm font-medium text-foreground">Completed</p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
-                <Clock className="w-3 h-3" />
-                {session.lastSyncAt
-                  ? new Date(session.lastSyncAt).toLocaleString()
-                  : "N/A"}
-              </p>
-            </div>
-          )}
+        <div className="overflow-x-auto -mx-6 sm:mx-0">
+          <table className="w-full text-sm min-w-[1000px]">
+            <thead className="bg-muted/30 border-b border-border">
+              <tr>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Site
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Tenant
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Duration
+                </th>
+                <th className="px-6 py-3 text-right font-medium text-muted-foreground">
+                  Progress
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Proxy
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-muted-foreground">
+                  Challenge
+                </th>
+                <th className="px-6 py-3 text-center font-medium text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border bg-card">
+              {filteredSessions.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-6 py-12 text-center text-muted-foreground"
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <Activity className="w-10 h-10 opacity-50" />
+                      <p className="font-medium">
+                        No active scraping sessions
+                      </p>
+                      <p className="text-xs">
+                        Sessions will appear here when scraping is in progress
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredSessions.map((session) => (
+                  <tr
+                    key={session.id}
+                    className="hover:bg-muted/50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      {getStatusBadge(session.status)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                        {session.site}
+                      </code>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm">{session.tenant}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs font-mono">
+                          {formatDuration(session.startTime)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs font-mono">
+                          {session.requestsCompleted} /{" "}
+                          {session.requestsTotal}
+                        </span>
+                        {session.requestsTotal > 0 && (
+                          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 transition-all"
+                              style={{
+                                width: `${(session.requestsCompleted /
+                                  session.requestsTotal) *
+                                  100
+                                  }%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {session.currentProxy ? (
+                        <div className="flex items-center gap-2">
+                          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                            {session.currentProxy.substring(0, 30)}
+                            {session.currentProxy.length > 30 && "..."}
+                          </code>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          No proxy
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {session.challengeType ? (
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-3.5 h-3.5 text-muted-foreground" />
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs">
+                              {session.challengeType}
+                            </span>
+                            {getChallengeStatusBadge(
+                              session.challengeStatus
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          None
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSessionClick(session)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </Card>
 
-      {/* Progress Section */}
-      <div className="px-6 py-4 border-b">
-        <div className="flex justify-between text-sm mb-2">
-          <span className="text-muted-foreground">Progress</span>
-          <span className="font-medium font-mono">
-            {session.syncProcessed} / {session.syncTotal} ({progress}%)
-          </span>
-        </div>
-        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-          <div
-            className={`h-full transition-all duration-500 ease-out rounded-full ${
-              isRunning ? "bg-primary" : "bg-green-500"
-            }`}
-            style={{ width: `${session.syncTotal === 0 ? 0 : progress}%` }}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground mt-2 truncate font-mono">
-          Last Action: {session.syncLastAction || "Idle"}
-        </p>
-      </div>
-
-      {/* Logs Console */}
-      <div className="bg-zinc-950 text-zinc-300 p-0 text-xs font-mono h-[200px] overflow-y-auto flex flex-col-reverse relative group">
-        <div className="absolute top-2 right-2 px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 pointer-events-none">
-          <Terminal className="w-3 h-3" />
-          Console Output
-        </div>
-
-        <div className="flex flex-col gap-0.5 p-4 min-h-full justify-end">
-          {session.syncLogs.length > 0 ? (
-            session.syncLogs.map((log) => (
-              <div key={log.id} className="flex gap-2">
-                <span className="text-zinc-500 shrink-0 select-none">
-                  [{new Date(log.createdAt).toLocaleTimeString().split(" ")[0]}]
-                </span>
-                <span
-                  className={
-                    log.level === "ERROR"
-                      ? "text-red-400 font-bold"
-                      : log.level === "WARN"
-                        ? "text-yellow-400"
-                        : log.level === "SUCCESS"
-                          ? "text-green-400"
-                          : "text-zinc-300"
-                  }
-                >
-                  {log.message}
-                </span>
+      {/* Session Detail Modal */}
+      <Dialog
+        open={selectedSession !== null}
+        onOpenChange={(open) => !open && setSelectedSession(null)}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Session Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about the scraping session
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSession && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Status
+                  </p>
+                  {getStatusBadge(selectedSession.status)}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Session ID
+                  </p>
+                  <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                    {selectedSession.id}
+                  </code>
+                </div>
               </div>
-            ))
-          ) : (
-            <div className="text-zinc-600 italic text-center py-10">
-              No logs available for this session.
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                  Site
+                </p>
+                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
+                  {selectedSession.site}
+                </code>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                  Tenant
+                </p>
+                <p className="text-sm">{selectedSession.tenant}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Start Time
+                  </p>
+                  <p className="text-sm">
+                    {new Date(selectedSession.startTime).toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Duration
+                  </p>
+                  <p className="text-sm">
+                    {formatDuration(selectedSession.startTime)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Progress
+                </p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Requests Completed</span>
+                    <span className="font-mono">
+                      {selectedSession.requestsCompleted} /{" "}
+                      {selectedSession.requestsTotal}
+                    </span>
+                  </div>
+                  {selectedSession.requestsTotal > 0 && (
+                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 transition-all"
+                        style={{
+                          width: `${(selectedSession.requestsCompleted /
+                            selectedSession.requestsTotal) *
+                            100
+                            }%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedSession.currentProxy && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Current Proxy
+                  </p>
+                  <code className="text-sm bg-muted px-2 py-1 rounded font-mono break-all">
+                    {selectedSession.currentProxy}
+                  </code>
+                </div>
+              )}
+
+              {selectedSession.challengeType && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                    Challenge Information
+                  </p>
+                  <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Challenge Type</span>
+                      <Badge variant="outline">
+                        {selectedSession.challengeType}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Challenge Status</span>
+                      {getChallengeStatusBadge(
+                        selectedSession.challengeStatus
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function QueueCard({
-  stats,
-  icon: Icon,
-  color,
-}: {
-  stats: QueueStats;
-  icon: any;
-  color: "blue" | "indigo";
-}) {
-  return (
-    <div className="border rounded-lg p-4 bg-card shadow-sm">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
-          <Icon className={`w-4 h-4 text-${color}-500`} />
-          {stats.name}
-        </h3>
-        {stats.counts.failed > 0 && (
-          <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">
-            {stats.counts.failed} Fails
-          </span>
-        )}
-      </div>
-      <div className="flex items-end gap-2 mb-1">
-        <span className="text-2xl font-bold">{stats.counts.active}</span>
-        <span className="text-sm text-muted-foreground mb-1">Active</span>
-      </div>
-      <div className="flex gap-2 text-xs text-muted-foreground mt-3 pt-3 border-t">
-        <div className="flex flex-col">
-          <span className="font-medium">{stats.counts.waiting}</span>
-          <span className="text-[10px]">Waiting</span>
-        </div>
-        <div className="flex flex-col border-l pl-2">
-          <span className="font-medium">{stats.counts.delayed}</span>
-          <span className="text-[10px]">Delayed</span>
-        </div>
-        <div className="flex flex-col border-l pl-2">
-          <span className="font-medium text-green-600">{stats.counts.completed}</span>
-          <span className="text-[10px]">Done</span>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

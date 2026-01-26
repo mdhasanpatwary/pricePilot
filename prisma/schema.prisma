@@ -514,3 +514,60 @@ model ProxyHealth {
   
   @@index([isHealthy])
 }
+
+model ChallengeAttempt {
+  id              String   @id @default(uuid())
+  site            String
+  challengeType   String   // e.g., "Cloudflare", "reCAPTCHA", "Turnstile", "PerimeterX", "DataDome"
+  solved          Boolean
+  duration        Int      // Duration in milliseconds
+  timestamp       DateTime @default(now())
+  
+  @@index([site, timestamp])
+  @@index([challengeType, timestamp])
+}
+
+model SiteProfile {
+  id                    String   @id @default(uuid())
+  domain                String   @unique
+  requestsPerMinute     Int      @default(10)
+  concurrentRequests    Int      @default(2)
+  minDelay              Int      @default(1000)
+  maxDelay              Int      @default(3000)
+  delayMultiplier       Float    @default(1.0)
+  sessionWarmupEnabled  Boolean  @default(false)
+  sessionWarmupPaths    String[] @default([])
+  referrerChainEnabled  Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([domain])
+}
+
+model Alert {
+  id              String    @id @default(uuid())
+  severity        String    // 'critical', 'warning', 'info'
+  type            String    // 'high_block_rate', 'proxy_failure', 'low_solve_rate'
+  message         String
+  site            String?
+  proxyUrl        String?
+  acknowledged    Boolean   @default(false)
+  acknowledgedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  
+  @@index([acknowledged, createdAt])
+  @@index([severity])
+}
+
+model HumanSimulationConfig {
+  id                      String   @id @default(uuid())
+  typingMinDelay          Int      @default(50)
+  typingMaxDelay          Int      @default(150)
+  actionPauseMin          Int      @default(100)
+  actionPauseMax          Int      @default(2000)
+  mouseMovementEnabled    Boolean  @default(true)
+  naturalCurvesEnabled    Boolean  @default(true)
+  pauseBetweenFields      Int      @default(500)
+  simulateCorrections     Boolean  @default(true)
+  updatedAt               DateTime @updatedAt
+}

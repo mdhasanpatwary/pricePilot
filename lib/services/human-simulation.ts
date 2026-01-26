@@ -16,23 +16,23 @@ export class HumanSimulation {
   static async simulateMouseMove(page: Page) {
     try {
       const viewport = page.viewportSize() || { width: 1280, height: 720 };
-      
+
       // Start from current position or a random point
       let startX = Math.random() * viewport.width;
       let startY = Math.random() * viewport.height;
 
       // Move to 2-4 random points
       const points = Math.floor(Math.random() * 3) + 2;
-      
+
       for (let i = 0; i < points; i++) {
         const targetX = Math.random() * viewport.width;
         const targetY = Math.random() * viewport.height;
-        
+
         await this.moveMouseBezier(page, startX, startY, targetX, targetY);
-        
+
         startX = targetX;
         startY = targetY;
-        
+
         // Small pause between movements
         await this.delay(100, 500);
       }
@@ -47,7 +47,7 @@ export class HumanSimulation {
   static async simulateScroll(page: Page) {
     try {
       const scrollPoints = Math.floor(Math.random() * 5) + 3;
-      
+
       for (let i = 0; i < scrollPoints; i++) {
         const scrollAmount = Math.floor(Math.random() * 400) + 100;
         await page.evaluate((amount) => {
@@ -56,7 +56,7 @@ export class HumanSimulation {
             behavior: 'smooth'
           });
         }, scrollAmount);
-        
+
         // Random pause during scrolling
         await this.delay(500, 2000);
       }
@@ -85,7 +85,7 @@ export class HumanSimulation {
       // Quadratic Bezier formula: (1-t)^2*P0 + 2(1-t)t*P1 + t^2*P2
       const x = Math.pow(1 - t, 2) * startX + 2 * (1 - t) * t * cpX + Math.pow(t, 2) * endX;
       const y = Math.pow(1 - t, 2) * startY + 2 * (1 - t) * t * cpY + Math.pow(t, 2) * endY;
-      
+
       await page.mouse.move(x, y);
       // Small jitter in speed
       if (i % 5 === 0) await this.delay(5, 15);
@@ -113,13 +113,22 @@ export class HumanSimulation {
     } catch (error) {
       logger.warn(`[HumanSimulation] Smart click failed for ${selector}`, { error });
       // Fallback to standard click
-      await page.click(selector).catch(() => {});
+      await page.click(selector).catch(() => { });
     }
   }
 
   /**
-   * Type text character-by-character with realistic human-like delays
-   * Requirements: 4.1, 4.6
+   * Type text character-by-character with realistic human-like delays.
+   * Each character is typed with a random delay between 50-150ms.
+   * 
+   * @param page - Playwright page object
+   * @param selector - CSS selector for the input element
+   * @param text - Text to type
+   * 
+   * @example
+   * ```typescript
+   * await HumanSimulation.typeText(page, '#search-input', 'laptop');
+   * ```
    */
   static async typeText(page: Page, selector: string, text: string): Promise<void> {
     try {
@@ -137,34 +146,46 @@ export class HumanSimulation {
     } catch (error) {
       logger.warn(`[HumanSimulation] Type text failed for ${selector}`, { error });
       // Fallback to standard type
-      await page.fill(selector, text).catch(() => {});
+      await page.fill(selector, text).catch(() => { });
     }
   }
 
   /**
-   * Fill form with realistic patterns including pauses and focus changes
-   * Requirements: 4.2
+   * Fill form with realistic patterns including pauses and focus changes.
+   * Simulates realistic form filling behavior with delays between fields.
+   * 
+   * @param page - Playwright page object
+   * @param formData - Object mapping selectors to values
+   * 
+   * @example
+   * ```typescript
+   * await HumanSimulation.fillForm(page, {
+   *   '#name': 'John Doe',
+   *   '#email': 'john@example.com',
+   *   '#message': 'Hello world'
+   * });
+   * ```
    */
   static async fillForm(page: Page, formData: Record<string, string>): Promise<void> {
     try {
       const fields = Object.entries(formData);
-      
+
       for (let i = 0; i < fields.length; i++) {
         const [selector, value] = fields[i];
-        
+
         // Pause before interacting with field
         await this.delay(200, 600);
-        
+
         // Focus on the field (simulates user clicking/tabbing to field)
         await page.focus(selector);
         await this.delay(100, 300);
-        
+
         // Type the value with realistic timing
         await this.typeText(page, selector, value);
-        
+
         // Pause after filling field (simulates user thinking/reviewing)
         await this.delay(300, 800);
-        
+
         // Simulate focus change to next field or blur
         if (i < fields.length - 1) {
           // Focus will naturally move to next field in next iteration
@@ -182,8 +203,15 @@ export class HumanSimulation {
   }
 
   /**
-   * Simulate tab focus events on the page
-   * Requirements: 4.3
+   * Simulate tab focus events on the page.
+   * Triggers window blur and focus events to simulate user switching tabs.
+   * 
+   * @param page - Playwright page object
+   * 
+   * @example
+   * ```typescript
+   * await HumanSimulation.simulateTabFocus(page);
+   * ```
    */
   static async simulateTabFocus(page: Page): Promise<void> {
     try {
@@ -191,9 +219,9 @@ export class HumanSimulation {
       await page.evaluate(() => {
         window.dispatchEvent(new Event('blur'));
       });
-      
+
       await this.delay(500, 1500);
-      
+
       // Simulate window regaining focus
       await page.evaluate(() => {
         window.dispatchEvent(new Event('focus'));
@@ -204,8 +232,16 @@ export class HumanSimulation {
   }
 
   /**
-   * Hover over an element with natural mouse movement
-   * Requirements: 4.5
+   * Hover over an element with natural mouse movement.
+   * Moves mouse along a Bezier curve to the element and pauses briefly.
+   * 
+   * @param page - Playwright page object
+   * @param selector - CSS selector for the element to hover
+   * 
+   * @example
+   * ```typescript
+   * await HumanSimulation.hoverElement(page, '.product-card');
+   * ```
    */
   static async hoverElement(page: Page, selector: string): Promise<void> {
     try {
@@ -232,7 +268,7 @@ export class HumanSimulation {
 
       // Move mouse with natural Bezier curve
       await this.moveMouseBezier(page, startX, startY, targetX, targetY);
-      
+
       // Pause briefly while hovering
       await this.delay(200, 600);
     } catch (error) {
@@ -241,22 +277,34 @@ export class HumanSimulation {
   }
 
   /**
-   * Random pause with weighted distribution favoring shorter pauses
-   * Requirements: 4.4
+   * Random pause with weighted distribution favoring shorter pauses.
+   * Uses exponential distribution to create more realistic timing patterns.
+   * 
+   * @param min - Minimum pause duration in milliseconds (default: 100)
+   * @param max - Maximum pause duration in milliseconds (default: 2000)
+   * 
+   * @example
+   * ```typescript
+   * // Random pause between 100-2000ms (favoring shorter pauses)
+   * await HumanSimulation.randomPause();
+   * 
+   * // Custom range
+   * await HumanSimulation.randomPause(500, 1500);
+   * ```
    */
   static async randomPause(min: number = 100, max: number = 2000): Promise<void> {
     try {
       // Use weighted distribution favoring shorter pauses
       // Generate random number between 0 and 1
       const random = Math.random();
-      
+
       // Apply exponential distribution to favor shorter pauses
       // Using power of 2 to create stronger bias toward shorter values
       const weighted = Math.pow(random, 2);
-      
+
       // Map to range [min, max]
       const duration = Math.floor(weighted * (max - min) + min);
-      
+
       await new Promise((resolve) => setTimeout(resolve, duration));
     } catch (error) {
       logger.warn("[HumanSimulation] Random pause failed", { error });

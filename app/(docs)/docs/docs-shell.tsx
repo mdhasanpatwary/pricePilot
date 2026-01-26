@@ -78,7 +78,7 @@ export default function DocsLayoutShell({
     <div className="flex flex-col min-h-screen w-full bg-background selection:bg-primary/10">
       {/* Top Header */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background">
-        <div className="container flex h-14 items-center justify-between max-w-[1400px] mx-auto px-4 md:px-6">
+        <div className="container flex h-14 items-center justify-between max-w-350 mx-auto px-4 md:px-6">
           <div className="flex items-center gap-4 md:gap-8">
             <Link href="/" className="flex items-center space-x-2.5">
               <span className="font-bold tracking-tight text-foreground uppercase border-r border-border pr-2.5 mr-0.5">
@@ -131,11 +131,11 @@ export default function DocsLayoutShell({
         </div>
       </header>
 
-      <div className="flex flex-1 container max-w-[1400px] mx-auto px-4 md:px-6">
+      <div className="flex flex-1 container max-w-350 mx-auto px-4 md:px-6">
         {/* Sidebar */}
         <aside
           className={cn(
-            "fixed inset-0 top-14 z-30 flex-shrink-0 w-64 border-r border-border bg-background transition-transform md:sticky md:block md:translate-x-0 overflow-y-auto pt-8 pb-10 pr-4",
+            "fixed inset-0 top-14 z-30 shrink-0 w-64 border-r border-border bg-background transition-transform md:sticky md:block md:translate-x-0 overflow-y-auto pt-8 pb-10 pr-4",
             isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
@@ -183,12 +183,12 @@ export default function DocsLayoutShell({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 py-10 md:px-10 lg:px-14 w-full max-w-[850px] mx-auto">
+        <main className="flex-1 py-10 md:px-10 lg:px-14 w-full max-w-212.5 mx-auto">
           {children}
         </main>
 
         {/* Right Sidebar (Table of Contents) */}
-        <aside className="hidden xl:block w-56 flex-shrink-0 py-10 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-l border-border pl-6">
+        <aside className="hidden xl:block w-56 shrink-0 py-10 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-l border-border pl-6">
           <div className="space-y-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/70">
               On this page

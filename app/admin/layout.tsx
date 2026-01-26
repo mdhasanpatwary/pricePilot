@@ -25,14 +25,17 @@ import {
   Microscope,
   Eye,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 const adminMenuItems = [
   { icon: Activity, label: "Platform Overview", href: "/admin" },
+  { icon: AlertTriangle, label: "Alerts", href: "/admin/alerts", badge: true },
   { icon: Building2, label: "Tenants (Merchants)", href: "/admin/tenants" },
   { icon: ShieldCheck, label: "Users Management", href: "/admin/users" },
   {
@@ -43,11 +46,16 @@ const adminMenuItems = [
       { label: "System Status", href: "/admin/scrapers", icon: Database },
       { label: "Engine Health", href: "/admin/health", icon: HeartPulse },
       { label: "Live Monitor", href: "/admin/monitor", icon: RefreshCw },
+      { label: "Scraping Metrics", href: "/admin/scraping-metrics", icon: Activity },
+      { label: "Proxy Health", href: "/admin/proxy-health", icon: Activity },
+      { label: "Challenge Stats", href: "/admin/challenge-stats", icon: ShieldCheck },
       {
         label: "Profiles & Proxy",
         href: "/admin/scraper-profiles",
         icon: Settings,
       },
+      { label: "Site Profiles", href: "/admin/site-profiles", icon: Settings },
+      { label: "Human Simulation", href: "/admin/human-simulation", icon: Settings },
       { label: "Engine Playground", href: "/admin/playground", icon: Bug },
     ],
   },
@@ -86,6 +94,7 @@ function AdminSidebar({
   onClose?: () => void;
 }) {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
 
   // Auto-expand menus that contain the active path
   useEffect(() => {
@@ -103,6 +112,26 @@ function AdminSidebar({
       return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
     });
   }, [pathname]);
+
+  // Fetch unacknowledged alert count
+  useEffect(() => {
+    const fetchAlertCount = async () => {
+      try {
+        const res = await fetch("/api/v1/admin/alerts?acknowledged=false");
+        if (res.ok) {
+          const data = await res.json();
+          setUnacknowledgedCount(data.unacknowledgedCount || 0);
+        }
+      } catch (error) {
+        console.error("Failed to fetch alert count:", error);
+      }
+    };
+
+    fetchAlertCount();
+    // Poll every 30 seconds for updates
+    const interval = setInterval(fetchAlertCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus((prev) =>
@@ -213,7 +242,12 @@ function AdminSidebar({
                         : "text-muted-foreground",
                     )}
                   />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && unacknowledgedCount > 0 && (
+                    <Badge variant="destructive" className="ml-auto text-[10px] px-1.5 py-0">
+                      {unacknowledgedCount}
+                    </Badge>
+                  )}
                 </Link>
               )}
             </div>

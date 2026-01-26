@@ -1,0 +1,169 @@
+
+> price-pilot@0.1.0 test
+> jest
+
+PASS __tests__/lib/services/scraper-e2e-integration.test.ts
+  ● Console
+
+    console.log
+      [2026-01-26T10:25:41.382Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:41.412Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:41.412Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:65:19)
+
+PASS __tests__/lib/form-functionality-preservation.test.tsx
+PASS __tests__/lib/drawer-functionality-preservation.test.tsx
+PASS __tests__/lib/accessibility-testing.test.tsx
+PASS __tests__/lib/new-component-functionality.test.tsx
+PASS __tests__/lib/navigation-functionality-preservation.test.tsx
+PASS __tests__/lib/services/metrics-integration.test.ts
+  ● Console
+
+    console.log
+      [2026-01-26T10:25:42.894Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:42.896Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:42.897Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:65:19)
+
+PASS __tests__/app/api/integrations.test.ts
+PASS __tests__/lib/config/site-profiles.test.ts
+  ● Console
+
+    console.log
+      [2026-01-26T10:25:43.046Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:43.048Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:43.048Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:65:19)
+
+PASS __tests__/lib/simple-interaction-testing.test.tsx
+PASS __tests__/lib/services/proxy-manager.test.ts
+PASS __tests__/lib/services/matching.test.ts
+PASS __tests__/lib/services/metrics-tracker.test.ts
+PASS __tests__/lib/services/rules-engine.test.ts
+FAIL __tests__/lib/services/scraper.test.ts
+  ● Test suite failed to run
+
+      x Expression expected
+         ,-[/Applications/MAMP/htdocs/PricePilot/__tests__/lib/services/scraper.test.ts:384:1]
+     381 |     persistSpy.mockRestore();
+     382 |   });
+     383 | });
+     384 | });
+         : ^
+         `----
+
+
+    Caused by:
+        Syntax Error
+
+      at Object.transformSync (node_modules/next/src/build/swc/index.ts:1460:25)
+      at transformSync (node_modules/next/src/build/swc/index.ts:1591:19)
+      at Object.process (node_modules/next/src/build/swc/jest-transformer.ts:105:25)
+      at ScriptTransformer.transformSource (node_modules/@jest/transform/build/index.js:422:31)
+      at ScriptTransformer._transformAndBuildScript (node_modules/@jest/transform/build/index.js:519:40)
+      at ScriptTransformer.transform (node_modules/@jest/transform/build/index.js:558:19)
+
+PASS __tests__/lib/services/challenge-handler.test.ts (8.333 s)
+FAIL __tests__/lib/services/evasion.test.ts (19.379 s)
+  ● Console
+
+    console.log
+      [2026-01-26T10:25:41.383Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:41.421Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:41.421Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:65:19)
+
+  ● Advanced Evasion Features › should attempt to scrape a page and call human simulation
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      146 |
+      147 |     expect(result).not.toBeNull();
+    > 148 |     expect(mockPage.mouse.move).toHaveBeenCalled();
+          |                                 ^
+      149 |     expect(mockPage.evaluate).toHaveBeenCalled(); // For scrolling
+      150 |   }, 10000);
+      151 |
+
+      at Object.toHaveBeenCalled (__tests__/lib/services/evasion.test.ts:148:33)
+
+  ● Advanced Evasion Features › should retry when blocked
+
+    thrown: "Exceeded timeout of 10000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      150 |   }, 10000);
+      151 |
+    > 152 |   it("should retry when blocked", async () => {
+          |   ^
+      153 |     const analyzeSpy = jest.spyOn(ScraperService.prototype as any, 'analyzeSecurity');
+      154 |     analyzeSpy
+      155 |       .mockResolvedValueOnce({ isBlocked: true, provider: 'CLOUDFLARE' })
+
+      at it (__tests__/lib/services/evasion.test.ts:152:3)
+      at Object.describe (__tests__/lib/services/evasion.test.ts:132:1)
+
+PASS __tests__/lib/services/human-simulation.test.ts (42.206 s)
+PASS __tests__/lib/services/scraper-backward-compatibility.test.ts (188.658 s)
+  ● Console
+
+    console.log
+      [2026-01-26T10:25:41.386Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:41.407Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:65:19)
+
+    console.log
+      [2026-01-26T10:25:41.408Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:65:19)
+
+
+Test Suites: 2 failed, 17 passed, 19 total
+Tests:       2 failed, 226 passed, 228 total
+Snapshots:   0 total
+Time:        189.559 s, estimated 199 s
+Ran all test suites.

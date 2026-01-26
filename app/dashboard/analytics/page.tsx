@@ -130,11 +130,11 @@ function AnalyticsContent() {
           <Skeleton className="h-10 w-32" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Skeleton className="h-[300px] rounded-xl" />
-          <Skeleton className="h-[300px] rounded-xl" />
-          <Skeleton className="h-[300px] rounded-xl" />
+          <Skeleton className="h-75 rounded-xl" />
+          <Skeleton className="h-75 rounded-xl" />
+          <Skeleton className="h-75 rounded-xl" />
         </div>
-        <Skeleton className="h-[400px] w-full rounded-xl" />
+        <Skeleton className="h-100 w-full rounded-xl" />
       </div>
     );
   }
@@ -204,7 +204,7 @@ function AnalyticsContent() {
             <Target className="w-5 h-5 text-primary" />
             <h3 className="font-bold">Market Stance</h3>
           </div>
-          <div className="h-[250px] w-full">
+          <div className="h-62.5 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -262,7 +262,7 @@ function AnalyticsContent() {
               Last 30 Days
             </div>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-75 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={history}
@@ -344,7 +344,7 @@ function AnalyticsContent() {
                 <TableHead className="pb-4">Products</TableHead>
                 <TableHead className="pb-4">Cheapest (%)</TableHead>
                 <TableHead className="pb-4">Expensive (%)</TableHead>
-                <TableHead className="pb-4 w-[200px]">Market Stance</TableHead>
+                <TableHead className="pb-4 w-50">Market Stance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="text-sm">
@@ -555,7 +555,7 @@ function AnalyticsContent() {
             </div>
           </div>
 
-          <div className="h-[400px] w-full mt-4">
+          <div className="h-100 w-full mt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={competitorStats.data}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border)/0.5)" />
@@ -615,7 +615,7 @@ function AnalyticsContent() {
                 })}
               </div>
             </div>
-            <div className="bg-primary/[0.03] border border-primary/10 rounded-2xl p-6 flex flex-col justify-center">
+            <div className="bg-primary/3 border border-primary/10 rounded-2xl p-6 flex flex-col justify-center">
               <ShieldCheck className="w-10 h-10 text-primary mb-4 opacity-40" />
               <h5 className="font-extrabold text-sm mb-2">Market Intelligence Note</h5>
               <p className="text-xs text-muted-foreground leading-relaxed">
@@ -649,16 +649,16 @@ function AnalyticsContent() {
 
             <div className="flex flex-col items-center justify-center space-y-4 py-6">
               <div className="relative w-48 h-24 overflow-hidden">
-                <div className="absolute inset-0 border-[16px] border-muted rounded-t-full" />
+                <div className="absolute inset-0 border-16 border-muted rounded-t-full" />
                 <div
-                  className="absolute inset-0 border-[16px] border-primary rounded-t-full origin-bottom transition-all duration-1000"
+                  className="absolute inset-0 border-16 border-primary rounded-t-full origin-bottom transition-all duration-1000"
                   style={{ transform: `rotate(${(elasticityData.reactivityIndex / 100) * 180 - 180}deg)` }}
                 />
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-3xl font-black text-foreground">
                   {elasticityData.reactivityIndex}%
                 </div>
               </div>
-              <p className="text-xs text-center text-muted-foreground max-w-[280px]">
+              <p className="text-xs text-center text-muted-foreground max-w-70">
                 Your catalog has a <b>{elasticityData.sensitivityOverview.marketCorrelation}</b> correlation with market leaders.
                 A higher index suggests proactive pricing strategies.
               </p>

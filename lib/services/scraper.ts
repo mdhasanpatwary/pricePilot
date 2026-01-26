@@ -3,13 +3,14 @@ import { logger } from "../logger";
 import { BrowserPool } from "./browser-pool";
 import { prisma } from "@/lib/prisma";
 import { TECH_BRANDS } from "../data/brands";
-import { getSiteProfile } from "../config/site-profiles";
+import { getSiteProfile, siteProfileManager } from "../config/site-profiles";
 import { CacheService } from "./cache";
 import { TechProductValidator } from "./validation";
 import { HumanSimulation } from "./human-simulation";
 import { ProxyManager, ProxyConfig } from "./proxy-manager";
 import { ChallengeHandler } from "./challenge-handler";
 import { MetricsTracker } from "./metrics-tracker";
+import { configurationManager } from "./config-manager";
 
 interface ScrapedProduct {
   title: string;
@@ -79,24 +80,53 @@ export class ScraperService {
     this.browserPool = BrowserPool.getInstance();
     this.challengeHandler = new ChallengeHandler();
     this.metricsTracker = new MetricsTracker();
-    
-    const proxyEnv = process.env.SCRAPER_PROXIES;
-    if (proxyEnv) {
-      this.proxies = proxyEnv
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean);
+
+    // Load configuration from ConfigurationManager
+    const config = configurationManager.getConfiguration();
+
+    if (config.proxies.length > 0) {
+      this.proxies = config.proxies.map(p => p.url);
       logger.info(
-        `[ScraperService] Initialized with ${this.proxies.length} proxies.`,
+        `[ScraperService] Initialized with ${this.proxies.length} proxies from ConfigurationManager.`,
       );
-      
-      // Initialize ProxyManager with parsed proxies
-      const proxyConfigs: ProxyConfig[] = this.proxies.map(url => ({
-        url,
-        type: 'unknown' as const,
-      }));
-      this.proxyManager = new ProxyManager(proxyConfigs);
-      logger.info(`[ScraperService] ProxyManager initialized with ${proxyConfigs.length} proxies`);
+
+      // Initialize ProxyManager with proxies from configuration
+      this.proxyManager = new ProxyManager(config.proxies);
+      logger.info(`[ScraperService] ProxyManager initialized with ${config.proxies.length} proxies`);
+    } else {
+      logger.info('[ScraperService] No proxies configured, operating in direct mode');
+    }
+
+    // Register for configuration changes
+    configurationManager.onConfigChange((newConfig) => {
+      this.handleConfigurationChange(newConfig);
+    });
+  }
+
+  /**
+   * Handle configuration changes at runtime
+   */
+  private handleConfigurationChange(newConfig: any): void {
+    logger.info('[ScraperService] Configuration changed, updating proxy manager');
+
+    // Update proxies
+    if (newConfig.proxies.length > 0) {
+      this.proxies = newConfig.proxies.map((p: ProxyConfig) => p.url);
+
+      // Recreate ProxyManager with new proxies
+      if (this.proxyManager) {
+        this.proxyManager.destroy();
+      }
+      this.proxyManager = new ProxyManager(newConfig.proxies);
+      logger.info(`[ScraperService] ProxyManager updated with ${newConfig.proxies.length} proxies`);
+    } else {
+      // No proxies configured
+      if (this.proxyManager) {
+        this.proxyManager.destroy();
+        this.proxyManager = null;
+      }
+      this.proxies = [];
+      logger.info('[ScraperService] Proxies removed, operating in direct mode');
     }
   }
 
@@ -113,7 +143,7 @@ export class ScraperService {
       logger.warn('[ScraperService] No healthy proxies available from ProxyManager');
       return { url: '', config: null };
     }
-    
+
     // Fallback to simple rotation if ProxyManager not available
     if (this.proxies.length === 0) {
       return { url: '', config: null };
@@ -139,9 +169,9 @@ export class ScraperService {
     await this.metricsTracker.persistMetrics().catch((error) => {
       logger.error('Failed to persist metrics on close', { error });
     });
-    
+
     this.metricsTracker.stopAutoPersist();
-    
+
     await this.browserPool.close();
     if (this.proxyManager) {
       this.proxyManager.destroy();
@@ -210,6 +240,21 @@ export class ScraperService {
       logger.info(`[ScraperService] Attempt ${retryCount + 1} using proxy for ${url}: ${proxyUrl}`);
     }
 
+    // Extract hostname for rate limiting
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname;
+    } catch (error) {
+      logger.error(`[ScraperService] Invalid URL: ${url}`, { error });
+      return null;
+    }
+
+    // Enforce rate limiting before acquiring browser context
+    await siteProfileManager.waitForRateLimit(hostname);
+
+    // Acquire concurrent request slot
+    await siteProfileManager.acquireConcurrentSlot(hostname);
+
     // Acquire context from pool
     const startTime = Date.now();
     const context = await this.browserPool.acquireContext(userAgent, proxy);
@@ -224,20 +269,10 @@ export class ScraperService {
       const cached = await cache.get<ScrapedProduct>(cacheKey);
       if (cached) {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
-        await context.close().catch(() => {});
-        await this.browserPool.releaseContext(context).catch(() => {});
+        await context.close().catch(() => { });
+        await this.browserPool.releaseContext(context).catch(() => { });
         return cached;
       }
-    }
-
-    let hostname: string;
-    try {
-      hostname = new URL(url).hostname;
-    } catch (error) {
-      logger.error(`[ScraperService] Invalid URL: ${url}`, { error });
-      await context.close().catch(() => {});
-      await this.browserPool.releaseContext(context).catch(() => {});
-      return null;
     }
 
     let wasBlocked = false;
@@ -246,6 +281,11 @@ export class ScraperService {
 
     try {
       const profile = getSiteProfile(hostname);
+
+      // Session warmup if enabled
+      if (profile.sessionWarmup?.enabled) {
+        await this.performSessionWarmup(page, hostname, profile);
+      }
 
       if (profile.strategy !== 'full-js') {
         try {
@@ -262,31 +302,42 @@ export class ScraperService {
         }
       }
 
-      // 1. Navigate
+      // 1. Navigate with referrer chain if enabled
+      const referrer = profile.referrerChain?.enabled ? siteProfileManager.getReferrer(hostname) : undefined;
+
+      if (referrer) {
+        await page.setExtraHTTPHeaders({ 'Referer': referrer });
+      }
+
       const response = await page.goto(url, {
         waitUntil: profile.strategy === 'full-js' ? 'networkidle' : 'domcontentloaded',
         timeout: 30000,
       });
 
+      // Track this navigation for future referrer chain
+      if (profile.referrerChain?.enabled) {
+        siteProfileManager.trackNavigation(hostname, url);
+      }
+
       statusCode = response?.status() || 0;
 
       // 2. Challenge Detection and Handling
       const challengeResult = await this.challengeHandler.detectChallenge(page);
-      
+
       if (challengeResult.detected) {
         wasChallenged = true;
         logger.info(`[ScraperService] Challenge detected: ${challengeResult.type} on ${hostname}`);
-        
+
         // Wait for challenge to complete
         const waitResult = await this.challengeHandler.waitForChallenge(page, 60000);
-        
+
         // Record challenge attempt
         this.challengeHandler.recordChallengeAttempt(hostname, waitResult);
-        
+
         if (!waitResult.solved) {
           wasBlocked = true;
           logger.warn(`[ScraperService] Challenge not solved for ${hostname}`);
-          
+
           // Record metrics for failed challenge
           const responseTime = Date.now() - startTime;
           this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
@@ -296,23 +347,23 @@ export class ScraperService {
             responseTime,
             statusCode,
           });
-          
+
           // Check thresholds and log alerts
           this.metricsTracker.checkThresholds();
-          
+
           // Record proxy failure if using ProxyManager
           if (proxyConfig && this.proxyManager) {
             this.proxyManager.recordFailure(proxyConfig, new Error(`Challenge not solved: ${waitResult.type}`));
           }
-          
+
           // Check if fallback should be triggered
           if (this.challengeHandler.shouldTriggerFallback(hostname)) {
             logger.warn(`[ScraperService] Fallback strategy triggered for ${hostname}`);
           }
-          
+
           throw new ScrapeBlockError(waitResult.type, url, true);
         }
-        
+
         logger.info(`[ScraperService] Challenge solved successfully for ${hostname}`);
       }
 
@@ -321,7 +372,7 @@ export class ScraperService {
       if (securityInfo.isBlocked) {
         wasBlocked = true;
         logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryCount + 1})`);
-        
+
         // Record metrics for blocked request
         const responseTime = Date.now() - startTime;
         this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
@@ -331,46 +382,46 @@ export class ScraperService {
           responseTime,
           statusCode,
         });
-        
+
         // Check thresholds and log alerts
         this.metricsTracker.checkThresholds();
-        
+
         // Record proxy failure if using ProxyManager
         if (proxyConfig && this.proxyManager) {
           this.proxyManager.recordFailure(proxyConfig, new Error(`Blocked by ${securityInfo.provider}`));
         }
-        
+
         if (retryCount < maxRetries) {
           logger.info(`[ScraperService] 🔄 Retrying with different proxy...`);
-          await context.close().catch(() => {});
-          await this.browserPool.releaseContext(context).catch(() => {});
+          await context.close().catch(() => { });
+          await this.browserPool.releaseContext(context).catch(() => { });
           return this.scrapeProductPage(url, retryCount + 1);
         }
-        
+
         throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
       }
 
       // 4. Enhanced Human Simulation
       logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
-      
+
       // Random pause before starting interactions
       await HumanSimulation.randomPause(300, 800);
-      
+
       // Simulate natural mouse movement
       await HumanSimulation.simulateMouseMove(page);
-      
+
       // Random pause between actions
       await HumanSimulation.randomPause(200, 600);
-      
+
       // Simulate scrolling behavior
       await HumanSimulation.simulateScroll(page);
-      
+
       // Random pause between actions
       await HumanSimulation.randomPause(300, 900);
-      
+
       // Simulate tab focus to appear more human-like
       await HumanSimulation.simulateTabFocus(page);
-      
+
       // Final random pause before extraction
       await HumanSimulation.randomPause(400, 1000);
 
@@ -389,7 +440,7 @@ export class ScraperService {
         const validation = TechProductValidator.validateProduct(result);
         if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
         await cache.set(cacheKey, result, profile.cacheTime);
-        
+
         // Record successful metrics
         const responseTime = Date.now() - startTime;
         this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
@@ -399,12 +450,12 @@ export class ScraperService {
           responseTime,
           statusCode,
         });
-        
+
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
-        
+
         return result;
       }
 
@@ -416,7 +467,7 @@ export class ScraperService {
           specifications: this.parseSpecifications(ogData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
-        
+
         // Record successful metrics
         const responseTime = Date.now() - startTime;
         this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
@@ -426,12 +477,12 @@ export class ScraperService {
           responseTime,
           statusCode,
         });
-        
+
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
-        
+
         return result;
       }
 
@@ -443,7 +494,7 @@ export class ScraperService {
           specifications: this.parseSpecifications(cssData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
-        
+
         // Record successful metrics
         const responseTime = Date.now() - startTime;
         this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
@@ -453,12 +504,12 @@ export class ScraperService {
           responseTime,
           statusCode,
         });
-        
+
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
-        
+
         return result;
       }
 
@@ -470,7 +521,7 @@ export class ScraperService {
           specifications: this.parseSpecifications(heuristicData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
-        
+
         // Record successful metrics
         const responseTime = Date.now() - startTime;
         this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
@@ -480,12 +531,12 @@ export class ScraperService {
           responseTime,
           statusCode,
         });
-        
+
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
-        
+
         return result;
       }
 
@@ -510,21 +561,94 @@ export class ScraperService {
         responseTime,
         statusCode,
       });
-      
+
       // Check thresholds and log alerts
       this.metricsTracker.checkThresholds();
-      
+
       // Record proxy failure if using ProxyManager
       if (proxyConfig && this.proxyManager && !(error instanceof ScrapeBlockError)) {
         this.proxyManager.recordFailure(proxyConfig, error as Error);
       }
-      
+
       if (error instanceof ScrapeBlockError) throw error;
       logger.error(`Error scraping ${url}:`, { error });
       return null;
     } finally {
-      await context.close().catch(() => {});
-      await this.browserPool.releaseContext(context).catch(() => {});
+      await context.close().catch(() => { });
+      await this.browserPool.releaseContext(context).catch(() => { });
+
+      // Release concurrent request slot
+      siteProfileManager.releaseConcurrentSlot(hostname);
+    }
+  }
+
+  /**
+   * Perform session warmup by visiting homepage and configured paths
+   * This makes the scraping session appear more natural
+   */
+  private async performSessionWarmup(page: Page, hostname: string, profile: any): Promise<void> {
+    try {
+      logger.info(`[ScraperService] 🔥 Performing session warmup for ${hostname}`);
+
+      const protocol = page.url().startsWith('https') ? 'https' : 'http';
+      const baseUrl = `${protocol}://${hostname}`;
+
+      // Visit homepage if configured
+      if (profile.sessionWarmup.visitHomepage) {
+        const homepageUrl = profile.referrerChain?.startUrl || baseUrl;
+
+        await page.goto(homepageUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 15000
+        }).catch((error) => {
+          logger.warn(`[ScraperService] Homepage warmup failed: ${error.message}`);
+        });
+
+        // Track navigation for referrer chain
+        if (profile.referrerChain?.enabled) {
+          siteProfileManager.trackNavigation(hostname, homepageUrl);
+        }
+
+        // Realistic delay after homepage visit
+        await HumanSimulation.randomPause(1000, 3000);
+
+        // Simulate some human behavior on homepage
+        await HumanSimulation.simulateMouseMove(page).catch(() => { });
+        await HumanSimulation.randomPause(500, 1500);
+        await HumanSimulation.simulateScroll(page).catch(() => { });
+        await HumanSimulation.randomPause(800, 2000);
+      }
+
+      // Visit additional warmup paths if configured
+      if (profile.sessionWarmup.visitPaths && profile.sessionWarmup.visitPaths.length > 0) {
+        for (const path of profile.sessionWarmup.visitPaths) {
+          const warmupUrl = `${baseUrl}${path}`;
+
+          await page.goto(warmupUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: 15000
+          }).catch((error) => {
+            logger.warn(`[ScraperService] Warmup path ${path} failed: ${error.message}`);
+          });
+
+          // Track navigation for referrer chain
+          if (profile.referrerChain?.enabled) {
+            siteProfileManager.trackNavigation(hostname, warmupUrl);
+          }
+
+          // Realistic delay between warmup pages
+          await HumanSimulation.randomPause(1500, 3500);
+
+          // Simulate human behavior
+          await HumanSimulation.simulateMouseMove(page).catch(() => { });
+          await HumanSimulation.randomPause(400, 1000);
+        }
+      }
+
+      logger.info(`[ScraperService] ✅ Session warmup completed for ${hostname}`);
+    } catch (error) {
+      logger.warn(`[ScraperService] Session warmup error for ${hostname}:`, { error });
+      // Don't fail the scraping if warmup fails
     }
   }
 
@@ -1160,22 +1284,22 @@ export class ScraperService {
 
       // 2.5 Enhanced Human Simulation for Search Page
       logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
-      
+
       // Random pause before starting interactions
       await HumanSimulation.randomPause(200, 600);
-      
+
       // Simulate natural mouse movement
       await HumanSimulation.simulateMouseMove(page);
-      
+
       // Random pause between actions
       await HumanSimulation.randomPause(150, 400);
-      
+
       // Simulate scrolling to view results
       await HumanSimulation.simulateScroll(page);
-      
+
       // Random pause to simulate reading/reviewing results
       await HumanSimulation.randomPause(500, 1200);
-      
+
       // Simulate hovering over product items (if they exist)
       const productSelectors = [
         '.product-thumb a',
@@ -1184,7 +1308,7 @@ export class ScraperService {
         '.card a',
         '.product-item a'
       ];
-      
+
       for (const selector of productSelectors) {
         const elements = await page.$$(selector);
         if (elements.length > 0) {
@@ -1214,7 +1338,7 @@ export class ScraperService {
 
       if (productLink) {
         logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink}`);
-        
+
         // Simulate hovering over the product link before navigating
         // This makes the behavior more human-like
         try {
@@ -1226,7 +1350,7 @@ export class ScraperService {
         } catch (e) {
           // Continue even if hover fails
         }
-        
+
         return await this.scrapeProductPage(productLink);
       }
 
