@@ -27,6 +27,13 @@ class Logger {
   }
 
   /**
+   * Log debug messages
+   */
+  debug(message: string, context?: LogContext) {
+    this.log("debug", message, context);
+  }
+
+  /**
    * Log errors with optional stack trace
    */
   error(message: string | Error, context?: LogContext) {

@@ -2,6 +2,7 @@ import { chromium as playwrightChromium, Browser, BrowserContext } from "playwri
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { logger } from "../logger";
+import { getAllUserAgents } from "../config/user-agents";
 
 interface PooledContext {
   context: BrowserContext;
@@ -10,13 +11,8 @@ interface PooledContext {
   lastUsedAt: Date;
 }
 
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
-];
+// Get user agents from centralized configuration
+const USER_AGENTS = getAllUserAgents();
 
 const VIEWPORTS = [
   { width: 1920, height: 1080 },
@@ -428,12 +424,12 @@ export class BrowserPool {
         try {
           const pages = context.pages();
           for (const page of pages) {
-            await page.close().catch(() => {});
+            await page.close().catch(() => { });
           }
         } catch (error) {
           logger.warn(`[BrowserPool] Failed to close pages for context ${key}:`, { error });
         }
-        
+
         pooled.inUse = false;
         pooled.lastUsedAt = new Date();
         logger.info(`[BrowserPool] Released context: ${key}`);

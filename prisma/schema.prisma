@@ -571,3 +571,48 @@ model HumanSimulationConfig {
   simulateCorrections     Boolean  @default(true)
   updatedAt               DateTime @updatedAt
 }
+
+model CaptchaSolveAttempt {
+  id              String   @id @default(uuid())
+  site            String
+  captchaType     String   // 'recaptcha_v2', 'recaptcha_v3', 'hcaptcha', 'turnstile'
+  success         Boolean
+  solveTime       Int      // milliseconds
+  cost            Float    // credits used
+  errorMessage    String?
+  timestamp       DateTime @default(now())
+  
+  @@index([site, timestamp])
+  @@index([captchaType, timestamp])
+}
+
+model RetryQueue {
+  id              String   @id @default(uuid())
+  tenantId        String
+  siteId          String
+  productId       String
+  url             String
+  retryCount      Int      @default(0)
+  maxRetries      Int      @default(4)
+  nextRetryAt     DateTime
+  lastAttemptAt   DateTime?
+  lastError       String?
+  status          String   @default("PENDING") // PENDING, IN_PROGRESS, SUCCESS, FAILED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([status, nextRetryAt])
+  @@index([tenantId, siteId])
+}
+
+model ConcurrencyState {
+  id                  String   @id @default(uuid())
+  site                String   @unique
+  currentConcurrency  Int      @default(3)
+  activeRequests      Int      @default(0)
+  lastAdjustedAt      DateTime @default(now())
+  adjustmentReason    String?
+  
+  @@index([site])
+}
+

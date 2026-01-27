@@ -59,6 +59,232 @@ Secret code for super admin access. Used for initial setup and emergency access.
 
 ## Advanced Scraping Variables
 
+### Captcha Solver Configuration
+
+```env
+CAPTCHA_SOLVER_ENABLED="false"
+```
+
+Enable or disable captcha solving integration with 2Captcha service.
+
+**Options**:
+- `true`: Enable captcha solving (requires API key)
+- `false`: Disable captcha solving (default)
+
+**Default**: `false`
+
+**Recommendation**: Enable only if you have a 2Captcha account and need to solve captchas.
+
+```env
+CAPTCHA_SOLVER_API_KEY=""
+```
+
+API key for 2Captcha service. Required when `CAPTCHA_SOLVER_ENABLED` is `true`.
+
+**Format**: String (your 2Captcha API key)
+
+**Security**: Keep this key secret. Never commit to version control.
+
+**Get API Key**: Sign up at https://2captcha.com and find your API key in the dashboard.
+
+```env
+CAPTCHA_SOLVER_TIMEOUT="120000"
+```
+
+Maximum time in milliseconds to wait for captcha solution.
+
+**Format**: Integer (milliseconds)
+
+**Default**: `120000` (2 minutes)
+
+**Range**: 10000-300000 (10 seconds to 5 minutes)
+
+**Recommendation**: 
+- Simple captchas: 60000 (1 minute)
+- Complex captchas: 120000-180000 (2-3 minutes)
+
+### Retry Strategy Configuration
+
+```env
+RETRY_MAX_ATTEMPTS="3"
+```
+
+Maximum number of retry attempts for failed scraping requests.
+
+**Format**: Integer
+
+**Default**: `3`
+
+**Range**: 1-10
+
+**Recommendation**: 
+- Stable sites: 2-3 attempts
+- Unstable sites: 3-5 attempts
+
+```env
+RETRY_INITIAL_DELAY="1000"
+```
+
+Initial delay in milliseconds before first retry attempt.
+
+**Format**: Integer (milliseconds)
+
+**Default**: `1000` (1 second)
+
+**Range**: 100-10000 (0.1 to 10 seconds)
+
+**Recommendation**: 
+- Fast sites: 500-1000ms
+- Slow sites: 2000-5000ms
+
+```env
+RETRY_MAX_DELAY="30000"
+```
+
+Maximum delay in milliseconds between retry attempts (caps exponential backoff).
+
+**Format**: Integer (milliseconds)
+
+**Default**: `30000` (30 seconds)
+
+**Range**: 1000-300000 (1 second to 5 minutes)
+
+**Recommendation**: 
+- Quick retries: 10000-30000ms
+- Patient retries: 60000-120000ms
+
+```env
+RETRY_BACKOFF_MULTIPLIER="2"
+```
+
+Multiplier for exponential backoff calculation.
+
+**Format**: Decimal
+
+**Default**: `2`
+
+**Range**: 1.1-5
+
+**Formula**: `delay = initialDelay * (multiplier ^ attempt)`
+
+**Recommendation**: 
+- Aggressive: 1.5-2
+- Conservative: 2-3
+
+### Concurrency Configuration
+
+```env
+CONCURRENCY_MIN="1"
+```
+
+Minimum number of concurrent requests per site.
+
+**Format**: Integer
+
+**Default**: `1`
+
+**Range**: 1-100
+
+**Recommendation**: Always keep at 1 to ensure at least one request can be made.
+
+```env
+CONCURRENCY_MAX="10"
+```
+
+Maximum number of concurrent requests per site.
+
+**Format**: Integer
+
+**Default**: `10`
+
+**Range**: 1-100
+
+**Recommendation**: 
+- Small sites: 3-5
+- Large sites: 10-20
+- Be respectful of site resources
+
+```env
+CONCURRENCY_INITIAL="3"
+```
+
+Initial number of concurrent requests per site.
+
+**Format**: Integer
+
+**Default**: `3`
+
+**Range**: 1-100 (must be between CONCURRENCY_MIN and CONCURRENCY_MAX)
+
+**Recommendation**: 
+- Conservative: 2-3
+- Moderate: 3-5
+- Aggressive: 5-10
+
+### Alert Thresholds Configuration
+
+```env
+ALERT_BLOCK_RATE_THRESHOLD="0.3"
+```
+
+Block rate threshold for creating critical alerts.
+
+**Format**: Decimal between 0 and 1 (e.g., 0.3 = 30%)
+
+**Default**: `0.3` (30%)
+
+**Recommendation**: 
+- Strict: 0.2 (20%)
+- Moderate: 0.3 (30%)
+- Lenient: 0.4-0.5 (40-50%)
+
+```env
+ALERT_SOLVE_RATE_THRESHOLD="0.7"
+```
+
+Minimum captcha solve rate before creating warning alerts.
+
+**Format**: Decimal between 0 and 1 (e.g., 0.7 = 70%)
+
+**Default**: `0.7` (70%)
+
+**Recommendation**: 
+- Strict: 0.8 (80%)
+- Moderate: 0.7 (70%)
+- Lenient: 0.6 (60%)
+
+```env
+ALERT_PROXY_FAILURE_THRESHOLD="0.5"
+```
+
+Proxy failure rate threshold for creating warning alerts.
+
+**Format**: Decimal between 0 and 1 (e.g., 0.5 = 50%)
+
+**Default**: `0.5` (50%)
+
+**Recommendation**: 
+- Strict: 0.3-0.4 (30-40%)
+- Moderate: 0.5 (50%)
+- Lenient: 0.6-0.7 (60-70%)
+
+```env
+ALERT_RESPONSE_TIME_THRESHOLD="5000"
+```
+
+Response time threshold in milliseconds for performance alerts.
+
+**Format**: Integer (milliseconds)
+
+**Default**: `5000` (5 seconds)
+
+**Range**: 1000-60000 (1 to 60 seconds)
+
+**Recommendation**: 
+- Fast sites: 2000-3000ms
+- Normal sites: 5000ms
+- Slow sites: 10000ms
+
 ### Proxy Configuration
 
 ```env
@@ -221,6 +447,11 @@ NEXTAUTH_URL="http://localhost:3000"
 
 # Admin
 SUPER_ADMIN_LOGIN_CODE="ADMIN123"
+
+# Resilience Features (Optional - defaults will be used)
+CAPTCHA_SOLVER_ENABLED="false"
+RETRY_MAX_ATTEMPTS="3"
+CONCURRENCY_INITIAL="3"
 ```
 
 ### Full Configuration (Production)
@@ -238,6 +469,28 @@ REDIS_URL="rediss://default:password@redis.example.com:6379"
 
 # Admin
 SUPER_ADMIN_LOGIN_CODE="your_secret_code"
+
+# Captcha Solver
+CAPTCHA_SOLVER_ENABLED="true"
+CAPTCHA_SOLVER_API_KEY="your_2captcha_api_key"
+CAPTCHA_SOLVER_TIMEOUT="120000"
+
+# Retry Strategy
+RETRY_MAX_ATTEMPTS="3"
+RETRY_INITIAL_DELAY="1000"
+RETRY_MAX_DELAY="30000"
+RETRY_BACKOFF_MULTIPLIER="2"
+
+# Concurrency
+CONCURRENCY_MIN="1"
+CONCURRENCY_MAX="10"
+CONCURRENCY_INITIAL="3"
+
+# Alert Thresholds
+ALERT_BLOCK_RATE_THRESHOLD="0.3"
+ALERT_SOLVE_RATE_THRESHOLD="0.7"
+ALERT_PROXY_FAILURE_THRESHOLD="0.5"
+ALERT_RESPONSE_TIME_THRESHOLD="5000"
 
 # Proxies
 SCRAPER_PROXIES="http://proxy1.example.com:8080,http://proxy2.example.com:8080"
@@ -320,6 +573,29 @@ const required = [
 
 // Optional variables with defaults
 const optional = {
+  // Captcha Solver
+  CAPTCHA_SOLVER_ENABLED: 'false',
+  CAPTCHA_SOLVER_API_KEY: '',
+  CAPTCHA_SOLVER_TIMEOUT: '120000',
+  
+  // Retry Strategy
+  RETRY_MAX_ATTEMPTS: '3',
+  RETRY_INITIAL_DELAY: '1000',
+  RETRY_MAX_DELAY: '30000',
+  RETRY_BACKOFF_MULTIPLIER: '2',
+  
+  // Concurrency
+  CONCURRENCY_MIN: '1',
+  CONCURRENCY_MAX: '10',
+  CONCURRENCY_INITIAL: '3',
+  
+  // Alert Thresholds
+  ALERT_BLOCK_RATE_THRESHOLD: '0.3',
+  ALERT_SOLVE_RATE_THRESHOLD: '0.7',
+  ALERT_PROXY_FAILURE_THRESHOLD: '0.5',
+  ALERT_RESPONSE_TIME_THRESHOLD: '5000',
+  
+  // Legacy Stealth
   STEALTH_LEVEL: 'advanced',
   BLOCK_RATE_THRESHOLD: '0.3',
   METRICS_PERSIST_INTERVAL: '300000',
@@ -330,3 +606,30 @@ const optional = {
 ```
 
 Missing required variables will cause the application to fail on startup with a clear error message.
+
+### Configuration Validation Rules
+
+The resilience configuration module (`lib/config/resilience-config.ts`) validates all values:
+
+1. **Type Validation**: Ensures numbers are valid, booleans are true/false
+2. **Range Validation**: Enforces min/max bounds for numeric values
+3. **Logical Validation**: Ensures max > min, initial is between min and max
+4. **Warning Logs**: Logs warnings for invalid values and uses defaults
+5. **Startup Logging**: Logs complete configuration on application startup
+
+**Example Validation**:
+- `CONCURRENCY_MAX` must be >= `CONCURRENCY_MIN`
+- `CONCURRENCY_INITIAL` must be between `CONCURRENCY_MIN` and `CONCURRENCY_MAX`
+- `RETRY_MAX_DELAY` must be >= `RETRY_INITIAL_DELAY`
+- Alert thresholds must be between 0 and 1
+- Timeouts must be positive integers
+
+**Access Configuration**:
+```typescript
+import { getResilienceConfig } from '@/lib/config/resilience-config';
+
+const config = getResilienceConfig();
+console.log(config.retryStrategy.maxAttempts); // 3
+console.log(config.concurrency.initial); // 3
+console.log(config.alertThresholds.blockRateThreshold); // 0.3
+```

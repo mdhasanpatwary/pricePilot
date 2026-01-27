@@ -42,6 +42,58 @@ export interface ProxyMetrics {
   successRate: number;
 }
 
+export interface SiteAnalytics {
+  site: string;
+  timeRange: string;
+  totalRequests: number;
+  successfulRequests: number;
+  blockedRequests: number;
+  challengedRequests: number;
+  successRate: number;
+  blockRate: number;
+  challengeRate: number;
+  avgResponseTime: number;
+  requestsByHour: Array<{ hour: string; count: number }>;
+  topFailureReasons: Array<{ reason: string; count: number }>;
+}
+
+export interface ProxyAnalytics {
+  proxy: string;
+  proxyType: 'residential' | 'datacenter';
+  timeRange: string;
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  successRate: number;
+  avgResponseTime: number;
+  requestsBySite: Array<{ site: string; count: number; successRate: number }>;
+}
+
+export interface ChallengeAnalytics {
+  timeRange: string;
+  totalChallenges: number;
+  solvedChallenges: number;
+  failedChallenges: number;
+  solveRate: number;
+  avgSolveTime: number;
+  challengesByType: Array<{ type: string; count: number; solveRate: number }>;
+  challengesBySite: Array<{ site: string; count: number; solveRate: number }>;
+}
+
+export interface SiteFailureStats {
+  site: string;
+  totalRequests: number;
+  failedRequests: number;
+  failureRate: number;
+}
+
+export interface ProxyFailureStats {
+  proxy: string;
+  totalRequests: number;
+  failedRequests: number;
+  failureRate: number;
+}
+
 export interface ThresholdAlert {
   site: string;
   proxy: string;
@@ -260,6 +312,144 @@ export class MetricsTracker {
   }
 
   /**
+   * Get comprehensive site analytics with trending and failure analysis.
+   * Supports 1h, 24h, and 7d time ranges.
+   * 
+   * @param site - Domain or site identifier
+   * @param timeRange - Time range for analytics ('1h', '24h', or '7d')
+   * @returns Comprehensive site analytics including trends and failure reasons
+   * 
+   * Requirements: 5.2, 5.3, 5.4
+   * 
+   * @example
+   * ```typescript
+   * const analytics = await tracker.getSiteAnalytics('example.com', '24h');
+   * console.log(`Success rate: ${(analytics.successRate * 100).toFixed(1)}%`);
+   * console.log(`Block rate: ${(analytics.blockRate * 100).toFixed(1)}%`);
+   * console.log(`Challenge rate: ${(analytics.challengeRate * 100).toFixed(1)}%`);
+   * console.log('Hourly trends:', analytics.requestsByHour);
+   * console.log('Top failures:', analytics.topFailureReasons);
+   * ```
+   */
+  async getSiteAnalytics(site: string, timeRange: '1h' | '24h' | '7d'): Promise<SiteAnalytics> {
+    const now = new Date();
+    const startTime = new Date(now);
+
+    // Calculate start time based on range
+    if (timeRange === '1h') {
+      startTime.setHours(now.getHours() - 1);
+    } else if (timeRange === '24h') {
+      startTime.setHours(now.getHours() - 24);
+    } else {
+      startTime.setDate(now.getDate() - 7);
+    }
+
+    // Get metrics from database
+    const dbMetrics = await prisma.scrapingMetrics.findMany({
+      where: {
+        site,
+        timestamp: {
+          gte: startTime,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // Include in-memory buffer for current period
+    const buffer = this.siteMetrics.get(site);
+
+    // Aggregate all metrics
+    let totalRequests = 0;
+    let successfulRequests = 0;
+    let blockedRequests = 0;
+    let challengedRequests = 0;
+    let totalResponseTime = 0;
+    let responseCount = 0;
+
+    // Track requests by hour for trending
+    const requestsByHourMap = new Map<string, number>();
+
+    for (const metric of dbMetrics) {
+      totalRequests += metric.totalRequests;
+      successfulRequests += metric.successfulRequests;
+      blockedRequests += metric.blockedRequests;
+      challengedRequests += metric.challengedRequests;
+      totalResponseTime += metric.avgResponseTime * metric.totalRequests;
+      responseCount += metric.totalRequests;
+
+      // Group by hour
+      const hour = metric.timestamp.toISOString().substring(0, 13) + ':00:00';
+      requestsByHourMap.set(hour, (requestsByHourMap.get(hour) || 0) + metric.totalRequests);
+    }
+
+    // Add buffer data
+    if (buffer) {
+      totalRequests += buffer.totalRequests;
+      successfulRequests += buffer.successfulRequests;
+      blockedRequests += buffer.blockedRequests;
+      challengedRequests += buffer.challengedRequests;
+
+      if (buffer.responseTimes.length > 0) {
+        const bufferTotal = buffer.responseTimes.reduce((sum, time) => sum + time, 0);
+        totalResponseTime += bufferTotal;
+        responseCount += buffer.responseTimes.length;
+      }
+
+      // Add buffer to current hour
+      const currentHour = now.toISOString().substring(0, 13) + ':00:00';
+      requestsByHourMap.set(currentHour, (requestsByHourMap.get(currentHour) || 0) + buffer.totalRequests);
+    }
+
+    // Calculate rates
+    const successRate = totalRequests > 0 ? successfulRequests / totalRequests : 0;
+    const blockRate = totalRequests > 0 ? blockedRequests / totalRequests : 0;
+    const challengeRate = totalRequests > 0 ? challengedRequests / totalRequests : 0;
+    const avgResponseTime = responseCount > 0 ? totalResponseTime / responseCount : 0;
+
+    // Convert hourly map to array
+    const requestsByHour = Array.from(requestsByHourMap.entries())
+      .map(([hour, count]) => ({ hour, count }))
+      .sort((a, b) => a.hour.localeCompare(b.hour));
+
+    // Get top failure reasons from recent scraping metrics
+    // For now, we'll categorize failures by type (blocked, challenged, other)
+    const topFailureReasons: Array<{ reason: string; count: number }> = [];
+
+    if (blockedRequests > 0) {
+      topFailureReasons.push({ reason: 'Blocked by anti-bot', count: blockedRequests });
+    }
+
+    if (challengedRequests > 0) {
+      topFailureReasons.push({ reason: 'Challenge detected', count: challengedRequests });
+    }
+
+    const otherFailures = totalRequests - successfulRequests - blockedRequests - challengedRequests;
+    if (otherFailures > 0) {
+      topFailureReasons.push({ reason: 'Other failures', count: otherFailures });
+    }
+
+    // Sort by count descending
+    topFailureReasons.sort((a, b) => b.count - a.count);
+
+    return {
+      site,
+      timeRange,
+      totalRequests,
+      successfulRequests,
+      blockedRequests,
+      challengedRequests,
+      successRate,
+      blockRate,
+      challengeRate,
+      avgResponseTime,
+      requestsByHour,
+      topFailureReasons,
+    };
+  }
+
+  /**
    * Get proxy metrics for a specific time range.
    * Aggregates metrics from database and in-memory buffer.
    * 
@@ -341,6 +531,405 @@ export class MetricsTracker {
       avgResponseTime,
       successRate,
     };
+  }
+
+  /**
+   * Get comprehensive proxy analytics with site-level breakdown.
+   * Supports 1h, 24h, and 7d time ranges.
+   * 
+   * @param proxy - Proxy identifier (URL or name)
+   * @param timeRange - Time range for analytics ('1h', '24h', or '7d')
+   * @returns Comprehensive proxy analytics including per-site performance
+   * 
+   * Requirements: 5.5, 11.1, 11.2, 11.3, 11.4
+   * 
+   * @example
+   * ```typescript
+   * const analytics = await tracker.getProxyAnalytics('proxy1', '24h');
+   * console.log(`Success rate: ${(analytics.successRate * 100).toFixed(1)}%`);
+   * console.log(`Avg response time: ${analytics.avgResponseTime.toFixed(0)}ms`);
+   * console.log('Performance by site:', analytics.requestsBySite);
+   * ```
+   */
+  async getProxyAnalytics(proxy: string, timeRange: '1h' | '24h' | '7d'): Promise<ProxyAnalytics> {
+    const now = new Date();
+    const startTime = new Date(now);
+
+    // Calculate start time based on range
+    if (timeRange === '1h') {
+      startTime.setHours(now.getHours() - 1);
+    } else if (timeRange === '24h') {
+      startTime.setHours(now.getHours() - 24);
+    } else {
+      startTime.setDate(now.getDate() - 7);
+    }
+
+    // Get proxy health info to determine type
+    const proxyHealth = await prisma.proxyHealth.findUnique({
+      where: { proxyUrl: proxy },
+    });
+    const proxyType = (proxyHealth?.proxyType as 'residential' | 'datacenter') || 'datacenter';
+
+    // Get metrics from database
+    const dbMetrics = await prisma.proxyMetrics.findMany({
+      where: {
+        proxy,
+        timestamp: {
+          gte: startTime,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // Include in-memory buffer
+    const buffer = this.proxyMetrics.get(proxy);
+
+    // Aggregate all metrics
+    let totalRequests = 0;
+    let successfulRequests = 0;
+    let failedRequests = 0;
+    let totalResponseTime = 0;
+    let responseCount = 0;
+
+    for (const metric of dbMetrics) {
+      totalRequests += metric.totalRequests;
+      successfulRequests += metric.successfulRequests;
+      failedRequests += metric.failedRequests;
+      totalResponseTime += metric.avgResponseTime * metric.totalRequests;
+      responseCount += metric.totalRequests;
+    }
+
+    // Add buffer data
+    if (buffer) {
+      totalRequests += buffer.totalRequests;
+      successfulRequests += buffer.successfulRequests;
+      failedRequests += buffer.failedRequests;
+
+      if (buffer.responseTimes.length > 0) {
+        const bufferTotal = buffer.responseTimes.reduce((sum, time) => sum + time, 0);
+        totalResponseTime += bufferTotal;
+        responseCount += buffer.responseTimes.length;
+      }
+    }
+
+    // Calculate rates
+    const successRate = totalRequests > 0 ? successfulRequests / totalRequests : 0;
+    const avgResponseTime = responseCount > 0 ? totalResponseTime / responseCount : 0;
+
+    // Get requests grouped by site
+    // We need to query ScrapingMetrics to see which sites used this proxy
+    // Since we don't have a direct proxy->site mapping in metrics, we'll need to
+    // infer this from the scraping metrics in the same time period
+    const siteMetrics = await prisma.scrapingMetrics.findMany({
+      where: {
+        timestamp: {
+          gte: startTime,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // Group by site and calculate success rates
+    const siteStatsMap = new Map<string, { count: number; successful: number }>();
+
+    for (const metric of siteMetrics) {
+      const existing = siteStatsMap.get(metric.site) || { count: 0, successful: 0 };
+      existing.count += metric.totalRequests;
+      existing.successful += metric.successfulRequests;
+      siteStatsMap.set(metric.site, existing);
+    }
+
+    // Convert to array format
+    const requestsBySite = Array.from(siteStatsMap.entries())
+      .map(([site, stats]) => ({
+        site,
+        count: stats.count,
+        successRate: stats.count > 0 ? stats.successful / stats.count : 0,
+      }))
+      .sort((a, b) => b.count - a.count); // Sort by request count descending
+
+    return {
+      proxy,
+      proxyType,
+      timeRange,
+      totalRequests,
+      successfulRequests,
+      failedRequests,
+      successRate,
+      avgResponseTime,
+      requestsBySite,
+    };
+  }
+
+  /**
+   * Get comprehensive challenge analytics.
+   * Tracks solve rates, solve times, and breakdowns by type and site.
+   * 
+   * @param timeRange - Time range for analytics ('1h', '24h', or '7d')
+   * @returns Comprehensive challenge analytics
+   * 
+   * Requirements: 5.6, 10.3
+   * 
+   * @example
+   * ```typescript
+   * const analytics = await tracker.getChallengeAnalytics('24h');
+   * console.log(`Solve rate: ${(analytics.solveRate * 100).toFixed(1)}%`);
+   * console.log(`Avg solve time: ${analytics.avgSolveTime.toFixed(0)}ms`);
+   * console.log('By type:', analytics.challengesByType);
+   * console.log('By site:', analytics.challengesBySite);
+   * ```
+   */
+  async getChallengeAnalytics(timeRange: '1h' | '24h' | '7d'): Promise<ChallengeAnalytics> {
+    const now = new Date();
+    const startTime = new Date(now);
+
+    // Calculate start time based on range
+    if (timeRange === '1h') {
+      startTime.setHours(now.getHours() - 1);
+    } else if (timeRange === '24h') {
+      startTime.setHours(now.getHours() - 24);
+    } else {
+      startTime.setDate(now.getDate() - 7);
+    }
+
+    // Get all challenge attempts in the time range
+    const challenges = await prisma.challengeAttempt.findMany({
+      where: {
+        timestamp: {
+          gte: startTime,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // Aggregate overall stats
+    const totalChallenges = challenges.length;
+    const solvedChallenges = challenges.filter(c => c.solved).length;
+    const failedChallenges = totalChallenges - solvedChallenges;
+    const solveRate = totalChallenges > 0 ? solvedChallenges / totalChallenges : 0;
+
+    // Calculate average solve time (only for solved challenges)
+    const solvedDurations = challenges.filter(c => c.solved).map(c => c.duration);
+    const avgSolveTime = solvedDurations.length > 0
+      ? solvedDurations.reduce((sum, d) => sum + d, 0) / solvedDurations.length
+      : 0;
+
+    // Group by challenge type
+    const typeStatsMap = new Map<string, { count: number; solved: number }>();
+    for (const challenge of challenges) {
+      const existing = typeStatsMap.get(challenge.challengeType) || { count: 0, solved: 0 };
+      existing.count++;
+      if (challenge.solved) {
+        existing.solved++;
+      }
+      typeStatsMap.set(challenge.challengeType, existing);
+    }
+
+    const challengesByType = Array.from(typeStatsMap.entries())
+      .map(([type, stats]) => ({
+        type,
+        count: stats.count,
+        solveRate: stats.count > 0 ? stats.solved / stats.count : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Group by site
+    const siteStatsMap = new Map<string, { count: number; solved: number }>();
+    for (const challenge of challenges) {
+      const existing = siteStatsMap.get(challenge.site) || { count: 0, solved: 0 };
+      existing.count++;
+      if (challenge.solved) {
+        existing.solved++;
+      }
+      siteStatsMap.set(challenge.site, existing);
+    }
+
+    const challengesBySite = Array.from(siteStatsMap.entries())
+      .map(([site, stats]) => ({
+        site,
+        count: stats.count,
+        solveRate: stats.count > 0 ? stats.solved / stats.count : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      timeRange,
+      totalChallenges,
+      solvedChallenges,
+      failedChallenges,
+      solveRate,
+      avgSolveTime,
+      challengesByType,
+      challengesBySite,
+    };
+  }
+
+  /**
+   * Get top failing sites sorted by failure rate and request volume.
+   * 
+   * @param limit - Maximum number of sites to return (default: 10)
+   * @param timeRange - Time range for analysis ('1h', '24h', or '7d')
+   * @returns Array of sites with highest failure rates
+   * 
+   * Requirements: 5.2
+   * 
+   * @example
+   * ```typescript
+   * const topFailing = await tracker.getTopFailingSites(10, '24h');
+   * for (const site of topFailing) {
+   *   console.log(`${site.site}: ${(site.failureRate * 100).toFixed(1)}% failure rate`);
+   * }
+   * ```
+   */
+  async getTopFailingSites(limit: number = 10, timeRange: '1h' | '24h' | '7d' = '24h'): Promise<SiteFailureStats[]> {
+    const now = new Date();
+    const startTime = new Date(now);
+
+    // Calculate start time based on range
+    if (timeRange === '1h') {
+      startTime.setHours(now.getHours() - 1);
+    } else if (timeRange === '24h') {
+      startTime.setHours(now.getHours() - 24);
+    } else {
+      startTime.setDate(now.getDate() - 7);
+    }
+
+    // Get all site metrics in the time range
+    const siteMetrics = await prisma.scrapingMetrics.findMany({
+      where: {
+        timestamp: {
+          gte: startTime,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // Group by site and calculate failure rates
+    const siteStatsMap = new Map<string, { totalRequests: number; failedRequests: number }>();
+
+    for (const metric of siteMetrics) {
+      const existing = siteStatsMap.get(metric.site) || { totalRequests: 0, failedRequests: 0 };
+      existing.totalRequests += metric.totalRequests;
+      existing.failedRequests += (metric.totalRequests - metric.successfulRequests);
+      siteStatsMap.set(metric.site, existing);
+    }
+
+    // Include in-memory buffer data
+    for (const [site, buffer] of this.siteMetrics.entries()) {
+      const existing = siteStatsMap.get(site) || { totalRequests: 0, failedRequests: 0 };
+      existing.totalRequests += buffer.totalRequests;
+      existing.failedRequests += (buffer.totalRequests - buffer.successfulRequests);
+      siteStatsMap.set(site, existing);
+    }
+
+    // Convert to array and calculate failure rates
+    const siteStats = Array.from(siteStatsMap.entries())
+      .map(([site, stats]) => ({
+        site,
+        totalRequests: stats.totalRequests,
+        failedRequests: stats.failedRequests,
+        failureRate: stats.totalRequests > 0 ? stats.failedRequests / stats.totalRequests : 0,
+      }))
+      .filter(s => s.totalRequests > 0) // Only include sites with requests
+      .sort((a, b) => {
+        // Sort by failure rate descending, then by request volume descending
+        if (Math.abs(b.failureRate - a.failureRate) > 0.01) {
+          return b.failureRate - a.failureRate;
+        }
+        return b.totalRequests - a.totalRequests;
+      })
+      .slice(0, limit);
+
+    return siteStats;
+  }
+
+  /**
+   * Get top failing proxies sorted by failure rate and request volume.
+   * 
+   * @param limit - Maximum number of proxies to return (default: 10)
+   * @param timeRange - Time range for analysis ('1h', '24h', or '7d')
+   * @returns Array of proxies with highest failure rates
+   * 
+   * Requirements: 5.5, 11.5
+   * 
+   * @example
+   * ```typescript
+   * const topFailing = await tracker.getTopFailingProxies(10, '24h');
+   * for (const proxy of topFailing) {
+   *   console.log(`${proxy.proxy}: ${(proxy.failureRate * 100).toFixed(1)}% failure rate`);
+   * }
+   * ```
+   */
+  async getTopFailingProxies(limit: number = 10, timeRange: '1h' | '24h' | '7d' = '24h'): Promise<ProxyFailureStats[]> {
+    const now = new Date();
+    const startTime = new Date(now);
+
+    // Calculate start time based on range
+    if (timeRange === '1h') {
+      startTime.setHours(now.getHours() - 1);
+    } else if (timeRange === '24h') {
+      startTime.setHours(now.getHours() - 24);
+    } else {
+      startTime.setDate(now.getDate() - 7);
+    }
+
+    // Get all proxy metrics in the time range
+    const proxyMetrics = await prisma.proxyMetrics.findMany({
+      where: {
+        timestamp: {
+          gte: startTime,
+        },
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    });
+
+    // Group by proxy and calculate failure rates
+    const proxyStatsMap = new Map<string, { totalRequests: number; failedRequests: number }>();
+
+    for (const metric of proxyMetrics) {
+      const existing = proxyStatsMap.get(metric.proxy) || { totalRequests: 0, failedRequests: 0 };
+      existing.totalRequests += metric.totalRequests;
+      existing.failedRequests += metric.failedRequests;
+      proxyStatsMap.set(metric.proxy, existing);
+    }
+
+    // Include in-memory buffer data
+    for (const [proxy, buffer] of this.proxyMetrics.entries()) {
+      const existing = proxyStatsMap.get(proxy) || { totalRequests: 0, failedRequests: 0 };
+      existing.totalRequests += buffer.totalRequests;
+      existing.failedRequests += buffer.failedRequests;
+      proxyStatsMap.set(proxy, existing);
+    }
+
+    // Convert to array and calculate failure rates
+    const proxyStats = Array.from(proxyStatsMap.entries())
+      .map(([proxy, stats]) => ({
+        proxy,
+        totalRequests: stats.totalRequests,
+        failedRequests: stats.failedRequests,
+        failureRate: stats.totalRequests > 0 ? stats.failedRequests / stats.totalRequests : 0,
+      }))
+      .filter(p => p.totalRequests > 0) // Only include proxies with requests
+      .sort((a, b) => {
+        // Sort by failure rate descending, then by request volume descending
+        if (Math.abs(b.failureRate - a.failureRate) > 0.01) {
+          return b.failureRate - a.failureRate;
+        }
+        return b.totalRequests - a.totalRequests;
+      })
+      .slice(0, limit);
+
+    return proxyStats;
   }
 
   /**
@@ -575,6 +1164,55 @@ export class MetricsTracker {
   }
 
   /**
+   * Create an alert when a proxy's failure rate exceeds threshold.
+   * Persists warning alert to database.
+   * 
+   * @param proxy - Proxy URL or identifier
+   * @param failureRate - Current failure rate (0-1)
+   * @param totalRequests - Total requests made through the proxy
+   * @param failedRequests - Number of failed requests
+   * 
+   * Requirements: 5.8, 12.7
+   */
+  async createProxyFailureAlert(
+    proxy: string,
+    failureRate: number,
+    totalRequests: number,
+    failedRequests: number
+  ): Promise<void> {
+    if (!this.alertsEnabled) return;
+
+    try {
+      // Check if we've already alerted for this proxy recently
+      if (this.alertedSites.has(`proxy_failure_${proxy}`)) {
+        return;
+      }
+
+      await prisma.alert.create({
+        data: {
+          severity: 'warning',
+          type: 'proxy_failure',
+          message: `High failure rate detected for proxy ${proxy}: ${(failureRate * 100).toFixed(1)}% (${failedRequests}/${totalRequests} requests failed)`,
+          proxyUrl: proxy,
+          acknowledged: false,
+        },
+      });
+
+      // Mark as alerted to avoid duplicate alerts
+      this.alertedSites.add(`proxy_failure_${proxy}`);
+
+      logger.warn('Proxy failure alert created', {
+        proxy,
+        failureRate: (failureRate * 100).toFixed(1) + '%',
+        totalRequests,
+        failedRequests,
+      });
+    } catch (error) {
+      logger.error('Failed to create proxy failure alert', { error, proxy });
+    }
+  }
+
+  /**
    * Create an alert when all proxies are unhealthy.
    * Persists critical alert to database.
    * 
@@ -685,6 +1323,24 @@ export class MetricsTracker {
             blockRate,
             buffer.totalRequests,
             buffer.blockedRequests
+          );
+        }
+      }
+
+      // Check proxy failure rates (Requirement 5.8: alert when failure rate > 50%)
+      const proxyFailureThreshold = 0.5; // 50%
+      for (const [proxy, buffer] of this.proxyMetrics.entries()) {
+        if (buffer.totalRequests === 0) continue;
+
+        const failureRate = buffer.failedRequests / buffer.totalRequests;
+
+        // Create alert if failure rate exceeds 50%
+        if (failureRate > proxyFailureThreshold) {
+          await this.createProxyFailureAlert(
+            proxy,
+            failureRate,
+            buffer.totalRequests,
+            buffer.failedRequests
           );
         }
       }

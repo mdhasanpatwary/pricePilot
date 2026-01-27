@@ -381,3 +381,45 @@ describe("ScraperService - Load Testing", () => {
     });
   });
 });
+
+describe('ScraperService - CaptchaSolver Integration', () => {
+  it('should initialize CaptchaSolver when enabled', () => {
+    // Set environment variables
+    process.env.CAPTCHA_SOLVER_ENABLED = 'true';
+    process.env.CAPTCHA_SOLVER_API_KEY = 'test-api-key';
+
+    const scraperWithCaptcha = new ScraperService();
+
+    // CaptchaSolver should be initialized
+    expect(scraperWithCaptcha['captchaSolver']).toBeDefined();
+
+    // Clean up
+    delete process.env.CAPTCHA_SOLVER_ENABLED;
+    delete process.env.CAPTCHA_SOLVER_API_KEY;
+  });
+
+  it('should not initialize CaptchaSolver when disabled', () => {
+    // Ensure environment variables are not set
+    delete process.env.CAPTCHA_SOLVER_ENABLED;
+    delete process.env.CAPTCHA_SOLVER_API_KEY;
+
+    const scraperWithoutCaptcha = new ScraperService();
+
+    // CaptchaSolver should not be initialized
+    expect(scraperWithoutCaptcha['captchaSolver']).toBeNull();
+  });
+
+  it('should not initialize CaptchaSolver when API key is missing', () => {
+    // Set enabled but no API key
+    process.env.CAPTCHA_SOLVER_ENABLED = 'true';
+    delete process.env.CAPTCHA_SOLVER_API_KEY;
+
+    const scraperWithoutKey = new ScraperService();
+
+    // CaptchaSolver should not be initialized
+    expect(scraperWithoutKey['captchaSolver']).toBeNull();
+
+    // Clean up
+    delete process.env.CAPTCHA_SOLVER_ENABLED;
+  });
+});

@@ -11,6 +11,12 @@ import { ProxyManager, ProxyConfig } from "./proxy-manager";
 import { ChallengeHandler } from "./challenge-handler";
 import { MetricsTracker } from "./metrics-tracker";
 import { configurationManager } from "./config-manager";
+import { RetryStrategy, RetryContext } from "./retry-strategy";
+import { RetryQueueService } from "./retry-queue";
+import { ConcurrencyLimiter } from "./concurrency-limiter";
+import { CaptchaSolver } from "./captcha-solver";
+import { getAllUserAgents, getRandomUserAgentExcluding } from "../config/user-agents";
+import { getUserAgentTracker } from "./user-agent-tracker";
 
 interface ScrapedProduct {
   title: string;
@@ -61,12 +67,8 @@ const SEARCH_STRATEGIES: Record<
 const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
   `${baseUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}`;
 
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
-];
+// Get user agents from centralized configuration
+const USER_AGENTS = getAllUserAgents();
 
 export class ScraperService {
   private browserPool: BrowserPool;
@@ -75,11 +77,42 @@ export class ScraperService {
   private proxyManager: ProxyManager | null = null;
   private challengeHandler: ChallengeHandler;
   private metricsTracker: MetricsTracker;
+  private retryStrategy: RetryStrategy;
+  private retryQueueService: RetryQueueService;
+  private concurrencyLimiter: ConcurrencyLimiter;
+  private captchaSolver: CaptchaSolver | null = null;
 
   constructor() {
     this.browserPool = BrowserPool.getInstance();
     this.challengeHandler = new ChallengeHandler();
     this.metricsTracker = new MetricsTracker();
+    this.retryQueueService = RetryQueueService.getInstance();
+    this.retryStrategy = new RetryStrategy({
+      maxRetries: 3,
+      initialDelay: 1000,
+      maxDelay: 30000,
+      backoffMultiplier: 2,
+      jitter: true,
+    });
+    this.concurrencyLimiter = new ConcurrencyLimiter({
+      minConcurrency: parseInt(process.env.CONCURRENCY_MIN || '1', 10),
+      maxConcurrency: parseInt(process.env.CONCURRENCY_MAX || '10', 10),
+      initialConcurrency: parseInt(process.env.CONCURRENCY_INITIAL || '3', 10),
+    });
+
+    // Initialize CaptchaSolver if enabled
+    const captchaEnabled = process.env.CAPTCHA_SOLVER_ENABLED === 'true';
+    const captchaApiKey = process.env.CAPTCHA_SOLVER_API_KEY;
+
+    if (captchaEnabled && captchaApiKey) {
+      this.captchaSolver = new CaptchaSolver({
+        apiKey: captchaApiKey,
+        timeout: parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || '120000', 10),
+      });
+      logger.info('[ScraperService] CaptchaSolver initialized');
+    } else {
+      logger.info('[ScraperService] CaptchaSolver disabled or API key not configured');
+    }
 
     // Load configuration from ConfigurationManager
     const config = configurationManager.getConfiguration();
@@ -154,6 +187,20 @@ export class ScraperService {
   }
 
   /**
+   * Get next user agent, excluding the previous one if provided
+   * This ensures user agent rotation on retry attempts
+   * Requirements: 9.1, 9.3
+   */
+  private getNextUserAgent(previousUserAgent?: string): string {
+    if (!previousUserAgent) {
+      return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    }
+
+    // Use centralized function to exclude previous user agent
+    return getRandomUserAgentExcluding(previousUserAgent);
+  }
+
+  /**
    * Initialize the browser pool
    */
   async init() {
@@ -186,6 +233,71 @@ export class ScraperService {
   }
 
   /**
+   * Adjust concurrency based on recent site metrics
+   * Called after each request to dynamically adapt to site behavior
+   * Requirement 6.6
+   */
+  private async adjustConcurrencyForSite(hostname: string, statusCode: number): Promise<void> {
+    try {
+      // Get recent metrics for the site
+      const metrics = await this.metricsTracker.getSiteMetrics(hostname, '24h');
+
+      if (!metrics || metrics.totalRequests === 0) {
+        return; // Not enough data yet
+      }
+
+      // Handle immediate rate limit (HTTP 429)
+      // Requirement 6.1
+      if (statusCode === 429) {
+        this.concurrencyLimiter.reduceImmediately(hostname, 'HTTP 429 Rate Limit');
+        return;
+      }
+
+      // Calculate metrics for adjustment
+      const siteMetrics = {
+        blockRate: metrics.blockRate,
+        successRate: metrics.successRate,
+        avgResponseTime: metrics.avgResponseTime,
+        recentRequests: metrics.totalRequests,
+      };
+
+      // Adjust concurrency based on metrics
+      this.concurrencyLimiter.adjustConcurrency(hostname, siteMetrics);
+    } catch (error) {
+      logger.error(`[ScraperService] Failed to adjust concurrency for ${hostname}`, { error });
+    }
+  }
+
+  /**
+   * Record metrics and user agent tracking for a request
+   * Helper method to centralize tracking logic
+   * Requirements: 5.1, 9.4
+   */
+  private recordRequestMetrics(
+    hostname: string,
+    proxyUrl: string,
+    userAgent: string,
+    success: boolean,
+    blocked: boolean,
+    challenged: boolean,
+    responseTime: number,
+    statusCode: number
+  ): void {
+    // Record metrics
+    this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
+      success,
+      blocked,
+      challenged,
+      responseTime,
+      statusCode,
+    });
+
+    // Track user agent success rate
+    // Requirement 9.4
+    getUserAgentTracker().recordRequest(userAgent, success);
+  }
+
+  /**
    * Get proxy statistics (if ProxyManager is enabled)
    */
   getProxyStats() {
@@ -193,6 +305,21 @@ export class ScraperService {
       return this.proxyManager.getProxyStats();
     }
     return null;
+  }
+
+  /**
+   * Get user agent statistics
+   * Requirements: 9.4
+   */
+  getUserAgentStats() {
+    return getUserAgentTracker().getSummary();
+  }
+
+  /**
+   * Get concurrency statistics
+   */
+  getConcurrencyStats() {
+    return this.concurrencyLimiter.getStats();
   }
 
   /**
@@ -226,18 +353,90 @@ export class ScraperService {
   /**
    * Scrape a competitor product page with retry logic and human simulation
    */
-  async scrapeProductPage(url: string, retryCount = 0): Promise<ScrapedProduct | null> {
+  async scrapeProductPage(url: string): Promise<ScrapedProduct | null> {
     await this.init();
 
-    const maxRetries = 2; // Total 3 attempts
+    // Use RetryStrategy to handle retries with exponential backoff
+    return this.retryStrategy.executeWithRetry(
+      async (context: RetryContext) => {
+        return this._scrapeProductPageInternal(url, context);
+      },
+      (error: Error) => {
+        // Use the RetryStrategy's error classification
+        return this.retryStrategy.shouldRetryError(error);
+      }
+    );
+  }
+
+  /**
+   * Scrape a product page with retry queue integration
+   * If immediate retries fail, adds the request to the retry queue for later processing
+   * Implements Requirements 8.1, 8.5
+   * 
+   * @param url Product URL to scrape
+   * @param tenantId Tenant ID
+   * @param siteId Site ID
+   * @param productId Product ID
+   * @returns Scraped product data or null
+   */
+  async scrapeProductPageWithRetryQueue(
+    url: string,
+    tenantId: string,
+    siteId: string,
+    productId: string
+  ): Promise<ScrapedProduct | null> {
+    try {
+      // Attempt to scrape with immediate retries
+      const result = await this.scrapeProductPage(url);
+      return result;
+    } catch (error) {
+      // All immediate retries exhausted, add to retry queue
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.warn(
+        `[ScraperService] All immediate retries exhausted for ${url}, adding to retry queue`,
+        { error: errorMessage, productId }
+      );
+
+      try {
+        await this.retryQueueService.addToRetryQueue({
+          tenantId,
+          siteId,
+          productId,
+          url,
+          error: errorMessage,
+        });
+
+        logger.info(`[ScraperService] Added product ${productId} to retry queue`);
+      } catch (queueError) {
+        logger.error(
+          `[ScraperService] Failed to add product ${productId} to retry queue`,
+          { error: queueError }
+        );
+      }
+
+      // Return null to indicate failure
+      return null;
+    }
+  }
+
+  /**
+   * Internal method to scrape a product page (single attempt)
+   * Called by RetryStrategy with retry context for proxy/user agent rotation
+   */
+  private async _scrapeProductPageInternal(
+    url: string,
+    retryContext: RetryContext
+  ): Promise<ScrapedProduct | null> {
     const proxyResult = await this.getNextProxy();
     const proxyUrl = proxyResult.url;
     const proxyConfig = proxyResult.config;
-    const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    // Rotate user agent on each retry attempt
+    const userAgent = this.getNextUserAgent(retryContext.previousUserAgent);
     const proxy = proxyUrl ? { server: proxyUrl } : undefined;
 
     if (proxyUrl) {
-      logger.info(`[ScraperService] Attempt ${retryCount + 1} using proxy for ${url}: ${proxyUrl}`);
+      logger.info(`[ScraperService] Attempt ${retryContext.attempt} using proxy for ${url}: ${proxyUrl}`);
     }
 
     // Extract hostname for rate limiting
@@ -252,22 +451,23 @@ export class ScraperService {
     // Enforce rate limiting before acquiring browser context
     await siteProfileManager.waitForRateLimit(hostname);
 
-    // Acquire concurrent request slot
-    await siteProfileManager.acquireConcurrentSlot(hostname);
+    // Acquire concurrent request slot using ConcurrencyLimiter
+    // Requirement 6.6
+    await this.concurrencyLimiter.acquireSlot(hostname);
 
     // Acquire context from pool
     const startTime = Date.now();
     let context: any = null;
     let page: any = null;
-    
+
     try {
       context = await this.browserPool.acquireContext(userAgent, proxy);
       page = await context.newPage();
     } catch (error) {
       logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
-      // Release concurrent slot before returning
-      siteProfileManager.releaseConcurrentSlot(hostname);
-      return null;
+      // Release concurrent slot before throwing
+      this.concurrencyLimiter.releaseSlot(hostname);
+      throw error; // Throw to trigger retry
     }
 
     // Cache Key
@@ -275,7 +475,7 @@ export class ScraperService {
     const cache = CacheService.getInstance();
 
     // 1. Try Cache (only on first attempt)
-    if (retryCount === 0) {
+    if (retryContext.attempt === 1) {
       const cached = await cache.get<ScrapedProduct>(cacheKey);
       if (cached) {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
@@ -285,7 +485,7 @@ export class ScraperService {
         }
         await this.browserPool.releaseContext(context).catch(() => { });
         // Release concurrent slot
-        siteProfileManager.releaseConcurrentSlot(hostname);
+        this.concurrencyLimiter.releaseSlot(hostname);
         return cached;
       }
     }
@@ -355,13 +555,19 @@ export class ScraperService {
 
           // Record metrics for failed challenge
           const responseTime = Date.now() - startTime;
-          this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-            success: false,
-            blocked: true,
-            challenged: true,
+          this.recordRequestMetrics(
+            hostname,
+            proxyUrl,
+            userAgent,
+            false, // success
+            true,  // blocked
+            true,  // challenged
             responseTime,
-            statusCode,
-          });
+            statusCode
+          );
+
+          // Adjust concurrency based on metrics
+          await this.adjustConcurrencyForSite(hostname, statusCode);
 
           // Check thresholds and log alerts
           this.metricsTracker.checkThresholds();
@@ -376,27 +582,142 @@ export class ScraperService {
             logger.warn(`[ScraperService] Fallback strategy triggered for ${hostname}`);
           }
 
+          // Update retry context for rotation
+          retryContext.previousProxy = proxyUrl;
+          retryContext.previousUserAgent = userAgent;
+
           throw new ScrapeBlockError(waitResult.type, url, true);
         }
 
         logger.info(`[ScraperService] Challenge solved successfully for ${hostname}`);
       }
 
+      // 2.5. Captcha Detection and Solving
+      // After challenge detection, check for captcha type
+      // Requirements 4.1, 4.2, 4.3
+      if (this.captchaSolver) {
+        const captchaRequest = await this.captchaSolver.detectCaptchaType(page);
+
+        if (captchaRequest) {
+          logger.info(`[ScraperService] Captcha detected: ${captchaRequest.type} on ${hostname}`);
+
+          // Attempt to solve captcha with retry logic (up to 3 attempts)
+          // Requirement 4.4
+          let captchaSolved = false;
+          const maxCaptchaAttempts = 3;
+
+          for (let captchaAttempt = 1; captchaAttempt <= maxCaptchaAttempts; captchaAttempt++) {
+            logger.info(`[ScraperService] Attempting to solve captcha (attempt ${captchaAttempt}/${maxCaptchaAttempts})`);
+
+            // Solve captcha using 2Captcha API
+            // Requirement 4.1, 4.2
+            const solveResult = await this.captchaSolver.solveCaptcha(captchaRequest, hostname);
+
+            if (solveResult.success && solveResult.token) {
+              logger.info(`[ScraperService] Captcha solved successfully in ${solveResult.solveTime}ms (cost: $${solveResult.cost.toFixed(4)})`);
+
+              // Inject solution token into page
+              // Requirement 4.3
+              await this.captchaSolver.injectSolution(page, solveResult.token, captchaRequest.type);
+
+              // Wait for page to reload/update after solution injection
+              await page.waitForTimeout(2000);
+
+              // Verify captcha was cleared by checking if it's still present
+              const recheckCaptcha = await this.captchaSolver.detectCaptchaType(page);
+              if (!recheckCaptcha) {
+                captchaSolved = true;
+                logger.info(`[ScraperService] Captcha cleared successfully`);
+
+                // Record successful captcha solve as a challenge attempt
+                // Requirement 10.1, 10.2
+                this.challengeHandler.recordChallengeAttempt(hostname, {
+                  detected: true,
+                  type: captchaRequest.type as any,
+                  solved: true,
+                  attempts: captchaAttempt,
+                  duration: solveResult.solveTime,
+                });
+
+                break;
+              } else {
+                logger.warn(`[ScraperService] Captcha still present after solution injection`);
+              }
+            } else {
+              logger.warn(`[ScraperService] Captcha solve failed: ${solveResult.error}`);
+            }
+          }
+
+          // If all captcha solve attempts failed, mark request as blocked
+          // Requirement 4.4
+          if (!captchaSolved) {
+            wasBlocked = true;
+            logger.error(`[ScraperService] All captcha solve attempts failed for ${hostname}`);
+
+            // Record failed captcha solve as a challenge attempt
+            // Requirement 10.1, 10.2
+            this.challengeHandler.recordChallengeAttempt(hostname, {
+              detected: true,
+              type: captchaRequest.type as any,
+              solved: false,
+              attempts: maxCaptchaAttempts,
+              duration: Date.now() - startTime,
+            });
+
+            // Record metrics for failed captcha
+            const responseTime = Date.now() - startTime;
+            this.recordRequestMetrics(
+              hostname,
+              proxyUrl,
+              userAgent,
+              false, // success
+              true,  // blocked
+              true,  // challenged
+              responseTime,
+              statusCode
+            );
+
+            // Adjust concurrency based on metrics
+            await this.adjustConcurrencyForSite(hostname, statusCode);
+
+            // Check thresholds and log alerts
+            this.metricsTracker.checkThresholds();
+
+            // Record proxy failure if using ProxyManager
+            if (proxyConfig && this.proxyManager) {
+              this.proxyManager.recordFailure(proxyConfig, new Error(`Captcha solve failed after ${maxCaptchaAttempts} attempts`));
+            }
+
+            // Update retry context for rotation
+            retryContext.previousProxy = proxyUrl;
+            retryContext.previousUserAgent = userAgent;
+
+            throw new ScrapeBlockError('captcha', url, true);
+          }
+        }
+      }
+
       // 3. Security Analysis
       const securityInfo = await this.analyzeSecurity(page, response);
       if (securityInfo.isBlocked) {
         wasBlocked = true;
-        logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryCount + 1})`);
+        logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`);
 
         // Record metrics for blocked request
         const responseTime = Date.now() - startTime;
-        this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-          success: false,
-          blocked: true,
-          challenged: wasChallenged,
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          false, // success
+          true,  // blocked
+          wasChallenged,
           responseTime,
-          statusCode,
-        });
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
 
         // Check thresholds and log alerts
         this.metricsTracker.checkThresholds();
@@ -406,17 +727,9 @@ export class ScraperService {
           this.proxyManager.recordFailure(proxyConfig, new Error(`Blocked by ${securityInfo.provider}`));
         }
 
-        if (retryCount < maxRetries) {
-          logger.info(`[ScraperService] 🔄 Retrying with different proxy...`);
-          // Close page and release context (don't close context)
-          if (page) {
-            await page.close().catch(() => { });
-          }
-          await this.browserPool.releaseContext(context).catch(() => { });
-          // Release concurrent slot before retry
-          siteProfileManager.releaseConcurrentSlot(hostname);
-          return this.scrapeProductPage(url, retryCount + 1);
-        }
+        // Update retry context for rotation
+        retryContext.previousProxy = proxyUrl;
+        retryContext.previousUserAgent = userAgent;
 
         throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
       }
@@ -463,13 +776,19 @@ export class ScraperService {
 
         // Record successful metrics
         const responseTime = Date.now() - startTime;
-        this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-          success: true,
-          blocked: false,
-          challenged: wasChallenged,
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
           responseTime,
-          statusCode,
-        });
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
 
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
@@ -490,13 +809,19 @@ export class ScraperService {
 
         // Record successful metrics
         const responseTime = Date.now() - startTime;
-        this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-          success: true,
-          blocked: false,
-          challenged: wasChallenged,
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
           responseTime,
-          statusCode,
-        });
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
 
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
@@ -517,13 +842,19 @@ export class ScraperService {
 
         // Record successful metrics
         const responseTime = Date.now() - startTime;
-        this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-          success: true,
-          blocked: false,
-          challenged: wasChallenged,
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
           responseTime,
-          statusCode,
-        });
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
 
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
@@ -544,13 +875,19 @@ export class ScraperService {
 
         // Record successful metrics
         const responseTime = Date.now() - startTime;
-        this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-          success: true,
-          blocked: false,
-          challenged: wasChallenged,
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
           responseTime,
-          statusCode,
-        });
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
 
         // Record proxy success if using ProxyManager
         if (proxyConfig && this.proxyManager) {
@@ -562,25 +899,37 @@ export class ScraperService {
 
       // No data extracted - record as failed request
       const responseTime = Date.now() - startTime;
-      this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-        success: false,
-        blocked: false,
-        challenged: wasChallenged,
+      this.recordRequestMetrics(
+        hostname,
+        proxyUrl,
+        userAgent,
+        false, // success
+        false, // blocked
+        wasChallenged,
         responseTime,
-        statusCode,
-      });
+        statusCode
+      );
+
+      // Adjust concurrency based on metrics
+      await this.adjustConcurrencyForSite(hostname, statusCode);
 
       return null;
     } catch (error) {
       // Record metrics for error
-      const responseTime = Date.now() - startTime;
-      this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
-        success: false,
-        blocked: wasBlocked,
-        challenged: wasChallenged,
-        responseTime,
-        statusCode,
-      });
+      const errorResponseTime = Date.now() - startTime;
+      this.recordRequestMetrics(
+        hostname,
+        proxyUrl,
+        userAgent,
+        false, // success
+        wasBlocked,
+        wasChallenged,
+        errorResponseTime,
+        statusCode
+      );
+
+      // Adjust concurrency based on metrics
+      await this.adjustConcurrencyForSite(hostname, statusCode);
 
       // Check thresholds and log alerts
       this.metricsTracker.checkThresholds();
@@ -590,9 +939,11 @@ export class ScraperService {
         this.proxyManager.recordFailure(proxyConfig, error as Error);
       }
 
-      if (error instanceof ScrapeBlockError) throw error;
-      logger.error(`Error scraping ${url}:`, { error });
-      return null;
+      // Update retry context for rotation
+      retryContext.previousProxy = proxyUrl;
+      retryContext.previousUserAgent = userAgent;
+
+      throw error; // Re-throw to let RetryStrategy handle it
     } finally {
       // Close page first, then release context (don't close context)
       if (page) {
@@ -600,7 +951,7 @@ export class ScraperService {
           logger.warn(`[ScraperService] Failed to close page for ${url}:`, { error: err });
         });
       }
-      
+
       if (context) {
         await this.browserPool.releaseContext(context).catch((err: Error) => {
           logger.warn(`[ScraperService] Failed to release context for ${url}:`, { error: err });
@@ -608,7 +959,7 @@ export class ScraperService {
       }
 
       // Release concurrent request slot
-      siteProfileManager.releaseConcurrentSlot(hostname);
+      this.concurrencyLimiter.releaseSlot(hostname);
     }
   }
 
@@ -1202,10 +1553,10 @@ export class ScraperService {
   ): Promise<ScrapedProduct | null> {
     await this.init();
     const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-    
+
     let context: any = null;
     let page: any = null;
-    
+
     try {
       context = await this.browserPool.acquireContext(userAgent);
       page = await context.newPage();
@@ -1303,15 +1654,15 @@ export class ScraperService {
       // --- NEW: Security Pre-check ---
       const securityInfo = await this.analyzeSecurity(page, response);
       if (securityInfo.isBlocked) {
-        const msg = `🛡️ [Scraper] Blocked by ${securityInfo.provider} at ${hostname}`;
-        logger.warn(`[ScraperService] ${msg}`);
+        const msg = `🛡️[Scraper] Blocked by ${securityInfo.provider} at ${hostname} `;
+        logger.warn(`[ScraperService] ${msg} `);
         await log(msg, "WARN");
 
         // Try to wait for Cloudflare challenge before throwing error
         if (securityInfo.provider === "CLOUDFLARE") {
           logger.info("[ScraperService] Waiting for Cloudflare challenge to complete...");
           await page.waitForTimeout(8000); // Wait longer for challenge
-          
+
           // Check if challenge was solved
           const recheckSecurity = await this.analyzeSecurity(page, response);
           if (!recheckSecurity.isBlocked) {
@@ -1368,7 +1719,7 @@ export class ScraperService {
           for (let i = 0; i < hoverCount; i++) {
             const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
             try {
-              await HumanSimulation.hoverElement(page, `${selector}:nth-child(${randomIndex + 1})`);
+              await HumanSimulation.hoverElement(page, `${selector}: nth - child(${randomIndex + 1})`);
               await HumanSimulation.randomPause(300, 800);
             } catch (e) {
               // Continue if hover fails
@@ -1382,20 +1733,20 @@ export class ScraperService {
       let productLink = await this.evaluateProductLink(page, cleanQuery);
 
       if (productLink) {
-        logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink}`);
+        logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
       } else {
         logger.warn(`[ScraperService] ⚠️ Direct search returned no results for: "${cleanQuery}"`);
       }
 
       if (productLink) {
-        logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink}`);
+        logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink} `);
 
         // Simulate hovering over the product link before navigating
         // This makes the behavior more human-like
         try {
-          const linkElement = await page.$(`a[href="${productLink}"]`);
+          const linkElement = await page.$(`a[href = "${productLink}"]`);
           if (linkElement) {
-            await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
+            await HumanSimulation.hoverElement(page, `a[href = "${productLink}"]`);
             await HumanSimulation.randomPause(200, 500);
           }
         } catch (e) {
@@ -1407,7 +1758,7 @@ export class ScraperService {
 
       // Fallback Strategy: Query Simplification
       if (!query.includes("__RETRY__") && cleanQuery.split(" ").length > 3) {
-        logger.info(`[ScraperService] 🔄 No results. Attempting query simplification...`);
+        logger.info(`[ScraperService] 🔄 No results.Attempting query simplification...`);
 
         const stopWords = [
           "with", "graphics", "processor", "edition", "gaming", "desktop",
@@ -1431,19 +1782,19 @@ export class ScraperService {
       return null;
     } catch (error) {
       if (error instanceof ScrapeBlockError) throw error;
-      logger.error(`[ScraperService] Search failed for ${query}:`, { error });
+      logger.error(`[ScraperService] Search failed for ${query}: `, { error });
       return null;
     } finally {
       // Close page first, then release context (don't close context)
       if (page) {
         await page.close().catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to close search page:`, { error: err });
+          logger.warn(`[ScraperService] Failed to close search page: `, { error: err });
         });
       }
-      
+
       if (context) {
         await this.browserPool.releaseContext(context).catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to release search context:`, { error: err });
+          logger.warn(`[ScraperService] Failed to release search context: `, { error: err });
         });
       }
     }
@@ -1547,7 +1898,7 @@ export class ScraperService {
             // Boost for full matches
             const boost = matchRatio === 1 ? 40 : (matchRatio * 30);
             score += boost;
-            reasons.push(`Query Match: ${Math.round(matchRatio * 100)}%`);
+            reasons.push(`Query Match: ${Math.round(matchRatio * 100)}% `);
 
             // Special penalty: If query has words, but link text has NONE of them, strict penalty
             if (matchCount === 0 && !productContainer) {
@@ -1591,7 +1942,7 @@ export class ScraperService {
 
             if (linkHasBrand) {
               score += 20;
-              reasons.push(`Brand Match (${queryBrand})`);
+              reasons.push(`Brand Match(${queryBrand})`);
             }
           }
         }
