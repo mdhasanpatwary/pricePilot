@@ -563,3 +563,59 @@ export type LaravelProduct = z.infer<typeof laravelProductSchema>;
 export type ShopifyProduct = z.infer<typeof shopifyProductSchema>;
 export type WooCommerceProduct = z.infer<typeof wooCommerceProductSchema>;
 export type MagentoProduct = z.infer<typeof magentoProductSchema>;
+
+// ============================================================================
+// PROXY SIMULATOR SCHEMAS
+// ============================================================================
+
+export const proxyConfigSchema = z.object({
+  url: z.string().trim().min(5, "Proxy URL must be at least 5 characters"),
+  type: z.enum(["residential", "datacenter"], {
+    message: "Proxy type must be either 'residential' or 'datacenter'",
+  }),
+});
+
+export const simulationConfigSchema = z.object({
+  scenario: z.enum(
+    [
+      "rotation",
+      "failure",
+      "exclusion",
+      "prioritization",
+      "recovery",
+      "cascading_failure",
+      "all_fail",
+      "single_success",
+      "intermittent",
+    ],
+    {
+      message: "Invalid simulation scenario",
+    }
+  ),
+  targetSite: urlSchema,
+  proxyPool: z
+    .array(proxyConfigSchema)
+    .min(1, "Proxy pool must contain at least one proxy")
+    .max(50, "Proxy pool cannot exceed 50 proxies"),
+  failureRate: z
+    .number()
+    .min(0, "Failure rate must be between 0 and 1")
+    .max(1, "Failure rate must be between 0 and 1")
+    .optional(),
+  failureType: z
+    .enum(["timeout", "connection_refused", "http_error", "challenge"])
+    .optional(),
+  requestCount: z
+    .number()
+    .int("Request count must be an integer")
+    .min(1, "Request count must be at least 1")
+    .max(1000, "Request count cannot exceed 1000"),
+  delayBetweenRequests: z
+    .number()
+    .int("Delay must be an integer")
+    .min(0, "Delay cannot be negative")
+    .max(10000, "Delay cannot exceed 10 seconds")
+    .optional(),
+});
+
+export type SimulationConfigInput = z.infer<typeof simulationConfigSchema>;

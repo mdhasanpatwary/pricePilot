@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Globe,
   Smartphone,
+  Bug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -625,6 +626,13 @@ export default function TenantsPage() {
                           <Globe className="w-4 h-4" />
                         </a>
                       )}
+                      <Link
+                        href={`/admin/debug/tenant/${tenant.id}`}
+                        className="p-1.5 hover:text-blue-500 hover:bg-blue-500/10 rounded-md transition-all"
+                        title="Debug Tenant (View Sessions, Errors, Config)"
+                      >
+                        <Bug className="w-4 h-4" />
+                      </Link>
                       <Link
                         href={`/dashboard?tenantId=${tenant.id}`}
                         className="p-1.5 hover:text-foreground hover:bg-muted rounded-md transition-all"

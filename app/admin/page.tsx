@@ -7,10 +7,14 @@ import {
   Zap,
   ExternalLink,
   ShieldAlert,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import RealTimeMonitor from "@/components/admin/real-time-monitor";
+import MetricsDashboard from "@/components/admin/metrics-dashboard";
 
 export default function AdminDashboard() {
   const [data, setData] = useState<any>(null);
@@ -117,143 +121,171 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Onboarding Table */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">
-              Recent Tenants
-            </h3>
-            <Button variant="ghost" size="sm" asChild>
-              <a href="/admin/tenants">View All</a>
-            </Button>
-          </div>
+      {/* Tabbed Interface for Real-Time Monitoring and Metrics */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="overview">
+            <Activity className="w-4 h-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="live">
+            <Activity className="w-4 h-4 mr-2" />
+            Live Monitor
+          </TabsTrigger>
+          <TabsTrigger value="metrics">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Metrics
+          </TabsTrigger>
+        </TabsList>
 
-          <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 border-b border-border">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground w-[40%]">
-                    Organization
-                  </th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                    Plan
-                  </th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {recentTenants.map((merchant: any, i: number) => (
-                  <tr key={i} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-3 text-foreground">
-                      <div className="font-medium">{merchant.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {merchant.email}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border border-border">
-                        {merchant.plan}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "flex items-center gap-1.5 text-xs font-medium",
-                          merchant.status === "ACTIVE"
-                            ? "text-emerald-600 dark:text-emerald-500"
-                            : "text-amber-600 dark:text-amber-500",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "w-1.5 h-1.5 rounded-full",
-                            merchant.status === "ACTIVE"
-                              ? "bg-emerald-500"
-                              : "bg-amber-500",
-                          )}
-                        />
-                        {merchant.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button className="text-muted-foreground hover:text-foreground">
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {recentTenants.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-4 py-8 text-center text-muted-foreground"
-                    >
-                      No recent activity
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* System Events */}
-        <div className="space-y-4">
-          <h3 className="text-base font-semibold text-foreground">
-            System Events
-          </h3>
-          <Card className="p-4 space-y-6">
-            {[
-              {
-                title: "Proxy Latency Spike (US-East)",
-                type: "alert",
-                time: "12m ago",
-              },
-              {
-                title: "Tenant Upgrade: Acme Corp",
-                type: "notice",
-                time: "45m ago",
-              },
-              {
-                title: "Automated Backup Success",
-                type: "success",
-                time: "2h ago",
-              },
-            ].map((event, i) => (
-              <div key={i} className="flex gap-3">
-                <div
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full mt-2 shrink-0",
-                    event.type === "alert"
-                      ? "bg-red-500"
-                      : event.type === "notice"
-                        ? "bg-blue-500"
-                        : "bg-emerald-500",
-                  )}
-                />
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {event.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {event.time}
-                  </p>
-                </div>
+        <TabsContent value="overview" className="mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Recent Onboarding Table */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-foreground">
+                  Recent Tenants
+                </h3>
+                <Button variant="ghost" size="sm" asChild>
+                  <a href="/admin/tenants">View All</a>
+                </Button>
               </div>
-            ))}
 
-            <Button variant="outline" size="sm" className="w-full" asChild>
-              <a href="/admin/monitor">View Event Logs</a>
-            </Button>
-          </Card>
-        </div>
-      </div>
+              <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b border-border">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground w-[40%]">
+                        Organization
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        Plan
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border bg-card">
+                    {recentTenants.map((merchant: any, i: number) => (
+                      <tr key={i} className="hover:bg-muted/50 transition-colors">
+                        <td className="px-4 py-3 text-foreground">
+                          <div className="font-medium">{merchant.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {merchant.email}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground border border-border">
+                            {merchant.plan}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={cn(
+                              "flex items-center gap-1.5 text-xs font-medium",
+                              merchant.status === "ACTIVE"
+                                ? "text-emerald-600 dark:text-emerald-500"
+                                : "text-amber-600 dark:text-amber-500",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                merchant.status === "ACTIVE"
+                                  ? "bg-emerald-500"
+                                  : "bg-amber-500",
+                              )}
+                            />
+                            {merchant.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button className="text-muted-foreground hover:text-foreground">
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {recentTenants.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-4 py-8 text-center text-muted-foreground"
+                        >
+                          No recent activity
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* System Events */}
+            <div className="space-y-4">
+              <h3 className="text-base font-semibold text-foreground">
+                System Events
+              </h3>
+              <Card className="p-4 space-y-6">
+                {[
+                  {
+                    title: "Proxy Latency Spike (US-East)",
+                    type: "alert",
+                    time: "12m ago",
+                  },
+                  {
+                    title: "Tenant Upgrade: Acme Corp",
+                    type: "notice",
+                    time: "45m ago",
+                  },
+                  {
+                    title: "Automated Backup Success",
+                    type: "success",
+                    time: "2h ago",
+                  },
+                ].map((event, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full mt-2 shrink-0",
+                        event.type === "alert"
+                          ? "bg-red-500"
+                          : event.type === "notice"
+                            ? "bg-blue-500"
+                            : "bg-emerald-500",
+                      )}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {event.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {event.time}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <a href="/admin/monitoring?tab=live">View Event Logs</a>
+                </Button>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="live" className="mt-6">
+          <RealTimeMonitor />
+        </TabsContent>
+
+        <TabsContent value="metrics" className="mt-6">
+          <MetricsDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

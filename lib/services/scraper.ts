@@ -17,6 +17,7 @@ import { ConcurrencyLimiter } from "./concurrency-limiter";
 import { CaptchaSolver } from "./captcha-solver";
 import { getAllUserAgents, getRandomUserAgentExcluding } from "../config/user-agents";
 import { getUserAgentTracker } from "./user-agent-tracker";
+import { sessionTracker } from "./session-tracker";
 
 interface ScrapedProduct {
   title: string;
@@ -377,17 +378,25 @@ export class ScraperService {
    * @param tenantId Tenant ID
    * @param siteId Site ID
    * @param productId Product ID
+   * @param tenantName Optional tenant name for session tracking
    * @returns Scraped product data or null
    */
   async scrapeProductPageWithRetryQueue(
     url: string,
     tenantId: string,
     siteId: string,
-    productId: string
+    productId: string,
+    tenantName?: string
   ): Promise<ScrapedProduct | null> {
     try {
-      // Attempt to scrape with immediate retries
-      const result = await this.scrapeProductPage(url);
+      // Attempt to scrape with immediate retries and session tracking
+      const result = await this.scrapeProductPageWithTracking(
+        url,
+        tenantId,
+        siteId,
+        productId,
+        tenantName
+      );
       return result;
     } catch (error) {
       // All immediate retries exhausted, add to retry queue
@@ -417,6 +426,81 @@ export class ScraperService {
 
       // Return null to indicate failure
       return null;
+    }
+  }
+
+  /**
+   * Scrape a product page with session tracking
+   * Creates a session, tracks all lifecycle stages, and completes the session
+   * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
+   * 
+   * @param url Product URL to scrape
+   * @param tenantId Tenant ID
+   * @param _siteId Site ID (unused but required for interface compatibility)
+   * @param _productId Product ID (unused but required for interface compatibility)
+   * @param tenantName Optional tenant name for session tracking
+   * @returns Scraped product data or null
+   */
+  async scrapeProductPageWithTracking(
+    url: string,
+    tenantId: string,
+    _siteId: string,
+    _productId: string,
+    tenantName?: string
+  ): Promise<ScrapedProduct | null> {
+    await this.init();
+
+    // Extract hostname for session tracking
+    let siteUrl: string;
+    try {
+      const urlObj = new URL(url);
+      siteUrl = `${urlObj.protocol}//${urlObj.hostname}`;
+    } catch (error) {
+      logger.error(`[ScraperService] Invalid URL: ${url}`, { error });
+      return null;
+    }
+
+    // Get tenant name if not provided
+    const displayTenantName = tenantName || tenantId;
+
+    // Create session for tracking
+    // Requirement 2.1: Session initialization with target URL, proxy, and tenant info
+    const sessionId = await sessionTracker.createSession(
+      tenantId,
+      displayTenantName,
+      siteUrl,
+      url
+    );
+
+    try {
+      // Use RetryStrategy to handle retries with exponential backoff
+      const result = await this.retryStrategy.executeWithRetry(
+        async (context: RetryContext) => {
+          return this._scrapeProductPageInternalWithTracking(url, context, sessionId);
+        },
+        (error: Error) => {
+          // Record error in session
+          sessionTracker.recordError(sessionId, error);
+          // Use the RetryStrategy's error classification
+          return this.retryStrategy.shouldRetryError(error);
+        }
+      );
+
+      // Complete session successfully
+      // Requirement 2.5: Session completion with final status and data quality metrics
+      await sessionTracker.completeSession(sessionId, true, {
+        extractedData: result,
+      });
+
+      return result;
+    } catch (error) {
+      // Record final error
+      await sessionTracker.recordError(sessionId, error as Error);
+
+      // Complete session with failure
+      await sessionTracker.completeSession(sessionId, false);
+
+      throw error;
     }
   }
 
@@ -915,6 +999,667 @@ export class ScraperService {
 
       return null;
     } catch (error) {
+      // Record metrics for error
+      const errorResponseTime = Date.now() - startTime;
+      this.recordRequestMetrics(
+        hostname,
+        proxyUrl,
+        userAgent,
+        false, // success
+        wasBlocked,
+        wasChallenged,
+        errorResponseTime,
+        statusCode
+      );
+
+      // Adjust concurrency based on metrics
+      await this.adjustConcurrencyForSite(hostname, statusCode);
+
+      // Check thresholds and log alerts
+      this.metricsTracker.checkThresholds();
+
+      // Record proxy failure if using ProxyManager
+      if (proxyConfig && this.proxyManager && !(error instanceof ScrapeBlockError)) {
+        this.proxyManager.recordFailure(proxyConfig, error as Error);
+      }
+
+      // Update retry context for rotation
+      retryContext.previousProxy = proxyUrl;
+      retryContext.previousUserAgent = userAgent;
+
+      throw error; // Re-throw to let RetryStrategy handle it
+    } finally {
+      // Close page first, then release context (don't close context)
+      if (page) {
+        await page.close().catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to close page for ${url}:`, { error: err });
+        });
+      }
+
+      if (context) {
+        await this.browserPool.releaseContext(context).catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to release context for ${url}:`, { error: err });
+        });
+      }
+
+      // Release concurrent request slot
+      this.concurrencyLimiter.releaseSlot(hostname);
+    }
+  }
+
+  /**
+   * Internal method to scrape a product page with session tracking (single attempt)
+   * Called by RetryStrategy with retry context for proxy/user agent rotation
+   * Tracks all lifecycle stages in the session
+   * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
+   */
+  private async _scrapeProductPageInternalWithTracking(
+    url: string,
+    retryContext: RetryContext,
+    sessionId: string
+  ): Promise<ScrapedProduct | null> {
+    const navigationStartTime = Date.now();
+
+    // Requirement 2.1: Track proxy selection
+    const proxyResult = await this.getNextProxy();
+    const proxyUrl = proxyResult.url;
+    const proxyConfig = proxyResult.config;
+
+    // Rotate user agent on each retry attempt
+    const userAgent = this.getNextUserAgent(retryContext.previousUserAgent);
+    const proxy = proxyUrl ? { server: proxyUrl } : undefined;
+
+    // Update session with proxy selection
+    await sessionTracker.updateStage(sessionId, 'proxy_selection', {
+      proxy: proxyUrl || 'direct',
+      userAgent,
+    });
+
+    if (proxyUrl) {
+      logger.info(`[ScraperService] Attempt ${retryContext.attempt} using proxy for ${url}: ${proxyUrl}`);
+    }
+
+    // Extract hostname for rate limiting
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname;
+    } catch (error) {
+      logger.error(`[ScraperService] Invalid URL: ${url}`, { error });
+      await sessionTracker.recordError(sessionId, error as Error);
+      return null;
+    }
+
+    // Enforce rate limiting before acquiring browser context
+    await siteProfileManager.waitForRateLimit(hostname);
+
+    // Acquire concurrent request slot using ConcurrencyLimiter
+    await this.concurrencyLimiter.acquireSlot(hostname);
+
+    // Acquire context from pool
+    const startTime = Date.now();
+    let context: any = null;
+    let page: any = null;
+
+    try {
+      context = await this.browserPool.acquireContext(userAgent, proxy);
+      page = await context.newPage();
+    } catch (error) {
+      logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
+      await sessionTracker.recordError(sessionId, error as Error);
+      // Release concurrent slot before throwing
+      this.concurrencyLimiter.releaseSlot(hostname);
+      throw error; // Throw to trigger retry
+    }
+
+    // Cache Key
+    const cacheKey = `product:${url}`;
+    const cache = CacheService.getInstance();
+
+    // 1. Try Cache (only on first attempt)
+    if (retryContext.attempt === 1) {
+      const cached = await cache.get<ScrapedProduct>(cacheKey);
+      if (cached) {
+        logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
+        // Close page and release context
+        if (page) {
+          await page.close().catch(() => { });
+        }
+        await this.browserPool.releaseContext(context).catch(() => { });
+        // Release concurrent slot
+        this.concurrencyLimiter.releaseSlot(hostname);
+        return cached;
+      }
+    }
+
+    let wasBlocked = false;
+    let wasChallenged = false;
+    let statusCode = 0;
+    let challengeSolveStartTime = 0;
+    let extractionStartTime = 0;
+
+    try {
+      const profile = getSiteProfile(hostname);
+
+      // Session warmup if enabled
+      if (profile.sessionWarmup?.enabled) {
+        await this.performSessionWarmup(page, hostname, profile);
+      }
+
+      if (profile.strategy !== 'full-js') {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const preFlight = await fetch(url, { method: "HEAD", signal: controller.signal });
+          clearTimeout(timeout);
+          if (!preFlight.ok && preFlight.status !== 403 && preFlight.status !== 429) {
+            logger.warn(`[Scraper] 🛑 Pre-flight failed: ${preFlight.status} for ${url}.`);
+            return null;
+          }
+        } catch (e) {
+          logger.warn(`[Scraper] Pre-flight net error: ${e}.`);
+        }
+      }
+
+      // Requirement 2.2: Track navigation
+      await sessionTracker.updateStage(sessionId, 'navigation', {
+        requestsCompleted: 0,
+        requestsTotal: 1,
+      });
+
+      // 1. Navigate with referrer chain if enabled
+      const referrer = profile.referrerChain?.enabled ? siteProfileManager.getReferrer(hostname) : undefined;
+
+      if (referrer) {
+        await page.setExtraHTTPHeaders({ 'Referer': referrer });
+      }
+
+      const response = await page.goto(url, {
+        waitUntil: profile.strategy === 'full-js' ? 'networkidle' : 'domcontentloaded',
+        timeout: 30000,
+      });
+
+      const navigationTime = Date.now() - navigationStartTime;
+
+      // Track this navigation for future referrer chain
+      if (profile.referrerChain?.enabled) {
+        siteProfileManager.trackNavigation(hostname, url);
+      }
+
+      statusCode = response?.status() || 0;
+
+      // Update session with navigation complete
+      await sessionTracker.updateStage(sessionId, 'navigation', {
+        requestsCompleted: 1,
+        requestsTotal: 1,
+        metrics: { navigationTime },
+      });
+
+      // Requirement 2.3: Track challenge detection
+      const challengeResult = await this.challengeHandler.detectChallenge(page);
+
+      if (challengeResult.detected) {
+        wasChallenged = true;
+        challengeSolveStartTime = Date.now();
+
+        logger.info(`[ScraperService] Challenge detected: ${challengeResult.type} on ${hostname}`);
+
+        // Update session with challenge detection
+        await sessionTracker.updateStage(sessionId, 'challenge_detection', {
+          challengeType: challengeResult.type,
+          challengeStatus: 'waiting',
+        });
+
+        // Wait for challenge to complete
+        await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+          challengeType: challengeResult.type,
+          challengeStatus: 'solving',
+        });
+
+        const waitResult = await this.challengeHandler.waitForChallenge(page, 60000);
+
+        const challengeSolveTime = Date.now() - challengeSolveStartTime;
+
+        // Record challenge attempt
+        this.challengeHandler.recordChallengeAttempt(hostname, waitResult);
+
+        if (!waitResult.solved) {
+          wasBlocked = true;
+          logger.warn(`[ScraperService] Challenge not solved for ${hostname}`);
+
+          // Update session with failed challenge
+          await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+            challengeType: waitResult.type,
+            challengeStatus: 'failed',
+            metrics: { challengeSolveTime },
+          });
+
+          // Record metrics for failed challenge
+          const responseTime = Date.now() - startTime;
+          this.recordRequestMetrics(
+            hostname,
+            proxyUrl,
+            userAgent,
+            false, // success
+            true,  // blocked
+            true,  // challenged
+            responseTime,
+            statusCode
+          );
+
+          // Adjust concurrency based on metrics
+          await this.adjustConcurrencyForSite(hostname, statusCode);
+
+          // Check thresholds and log alerts
+          this.metricsTracker.checkThresholds();
+
+          // Record proxy failure if using ProxyManager
+          if (proxyConfig && this.proxyManager) {
+            this.proxyManager.recordFailure(proxyConfig, new Error(`Challenge not solved: ${waitResult.type}`));
+          }
+
+          // Check if fallback should be triggered
+          if (this.challengeHandler.shouldTriggerFallback(hostname)) {
+            logger.warn(`[ScraperService] Fallback strategy triggered for ${hostname}`);
+          }
+
+          // Update retry context for rotation
+          retryContext.previousProxy = proxyUrl;
+          retryContext.previousUserAgent = userAgent;
+
+          throw new ScrapeBlockError(waitResult.type, url, true);
+        }
+
+        // Update session with solved challenge
+        await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+          challengeType: waitResult.type,
+          challengeStatus: 'solved',
+          metrics: { challengeSolveTime },
+        });
+
+        logger.info(`[ScraperService] Challenge solved successfully for ${hostname}`);
+      }
+
+      // 2.5. Captcha Detection and Solving
+      if (this.captchaSolver) {
+        const captchaRequest = await this.captchaSolver.detectCaptchaType(page);
+
+        if (captchaRequest) {
+          wasChallenged = true;
+          challengeSolveStartTime = Date.now();
+
+          logger.info(`[ScraperService] Captcha detected: ${captchaRequest.type} on ${hostname}`);
+
+          // Update session with captcha detection
+          await sessionTracker.updateStage(sessionId, 'challenge_detection', {
+            challengeType: captchaRequest.type,
+            challengeStatus: 'waiting',
+          });
+
+          // Attempt to solve captcha with retry logic (up to 3 attempts)
+          let captchaSolved = false;
+          const maxCaptchaAttempts = 3;
+
+          await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+            challengeType: captchaRequest.type,
+            challengeStatus: 'solving',
+          });
+
+          for (let captchaAttempt = 1; captchaAttempt <= maxCaptchaAttempts; captchaAttempt++) {
+            logger.info(`[ScraperService] Attempting to solve captcha (attempt ${captchaAttempt}/${maxCaptchaAttempts})`);
+
+            // Solve captcha using 2Captcha API
+            const solveResult = await this.captchaSolver.solveCaptcha(captchaRequest, hostname);
+
+            if (solveResult.success && solveResult.token) {
+              logger.info(`[ScraperService] Captcha solved successfully in ${solveResult.solveTime}ms (cost: ${solveResult.cost.toFixed(4)})`);
+
+              // Inject solution token into page
+              await this.captchaSolver.injectSolution(page, solveResult.token, captchaRequest.type);
+
+              // Wait for page to reload/update after solution injection
+              await page.waitForTimeout(2000);
+
+              // Verify captcha was cleared by checking if it's still present
+              const recheckCaptcha = await this.captchaSolver.detectCaptchaType(page);
+              if (!recheckCaptcha) {
+                captchaSolved = true;
+                const challengeSolveTime = Date.now() - challengeSolveStartTime;
+
+                logger.info(`[ScraperService] Captcha cleared successfully`);
+
+                // Update session with solved captcha
+                await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+                  challengeType: captchaRequest.type,
+                  challengeStatus: 'solved',
+                  metrics: { challengeSolveTime },
+                });
+
+                // Record successful captcha solve as a challenge attempt
+                this.challengeHandler.recordChallengeAttempt(hostname, {
+                  detected: true,
+                  type: captchaRequest.type as any,
+                  solved: true,
+                  attempts: captchaAttempt,
+                  duration: solveResult.solveTime,
+                });
+
+                break;
+              } else {
+                logger.warn(`[ScraperService] Captcha still present after solution injection`);
+              }
+            } else {
+              logger.warn(`[ScraperService] Captcha solve failed: ${solveResult.error}`);
+            }
+          }
+
+          // If all captcha solve attempts failed, mark request as blocked
+          if (!captchaSolved) {
+            wasBlocked = true;
+            const challengeSolveTime = Date.now() - challengeSolveStartTime;
+
+            logger.error(`[ScraperService] All captcha solve attempts failed for ${hostname}`);
+
+            // Update session with failed captcha
+            await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+              challengeType: captchaRequest.type,
+              challengeStatus: 'failed',
+              metrics: { challengeSolveTime },
+            });
+
+            // Record failed captcha solve as a challenge attempt
+            this.challengeHandler.recordChallengeAttempt(hostname, {
+              detected: true,
+              type: captchaRequest.type as any,
+              solved: false,
+              attempts: maxCaptchaAttempts,
+              duration: Date.now() - startTime,
+            });
+
+            // Record metrics for failed captcha
+            const responseTime = Date.now() - startTime;
+            this.recordRequestMetrics(
+              hostname,
+              proxyUrl,
+              userAgent,
+              false, // success
+              true,  // blocked
+              true,  // challenged
+              responseTime,
+              statusCode
+            );
+
+            // Adjust concurrency based on metrics
+            await this.adjustConcurrencyForSite(hostname, statusCode);
+
+            // Check thresholds and log alerts
+            this.metricsTracker.checkThresholds();
+
+            // Record proxy failure if using ProxyManager
+            if (proxyConfig && this.proxyManager) {
+              this.proxyManager.recordFailure(proxyConfig, new Error(`Captcha solve failed after ${maxCaptchaAttempts} attempts`));
+            }
+
+            // Update retry context for rotation
+            retryContext.previousProxy = proxyUrl;
+            retryContext.previousUserAgent = userAgent;
+
+            throw new ScrapeBlockError('captcha', url, true);
+          }
+        }
+      }
+
+      // 3. Security Analysis
+      const securityInfo = await this.analyzeSecurity(page, response);
+      if (securityInfo.isBlocked) {
+        wasBlocked = true;
+        logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`);
+
+        // Record metrics for blocked request
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          false, // success
+          true,  // blocked
+          wasChallenged,
+          responseTime,
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
+
+        // Check thresholds and log alerts
+        this.metricsTracker.checkThresholds();
+
+        // Record proxy failure if using ProxyManager
+        if (proxyConfig && this.proxyManager) {
+          this.proxyManager.recordFailure(proxyConfig, new Error(`Blocked by ${securityInfo.provider}`));
+        }
+
+        // Update retry context for rotation
+        retryContext.previousProxy = proxyUrl;
+        retryContext.previousUserAgent = userAgent;
+
+        throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
+      }
+
+      // 4. Enhanced Human Simulation
+      logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
+
+      // Random pause before starting interactions
+      await HumanSimulation.randomPause(300, 800);
+
+      // Simulate natural mouse movement
+      await HumanSimulation.simulateMouseMove(page);
+
+      // Random pause between actions
+      await HumanSimulation.randomPause(200, 600);
+
+      // Simulate scrolling behavior
+      await HumanSimulation.simulateScroll(page);
+
+      // Random pause between actions
+      await HumanSimulation.randomPause(300, 900);
+
+      // Simulate tab focus to appear more human-like
+      await HumanSimulation.simulateTabFocus(page);
+
+      // Final random pause before extraction
+      await HumanSimulation.randomPause(400, 1000);
+
+      // Wait for profile specific time
+      await page.waitForTimeout(profile.waitTime);
+
+      // Requirement 2.4: Track data extraction
+      extractionStartTime = Date.now();
+      await sessionTracker.updateStage(sessionId, 'data_extraction');
+
+      // 5. Extraction Strategies
+      const jsonLdData = await this.extractFromJsonLd(page);
+      if (jsonLdData && jsonLdData.price > 0) {
+        const extractionTime = Date.now() - extractionStartTime;
+        const result = {
+          ...jsonLdData,
+          url,
+          specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
+        };
+        const validation = TechProductValidator.validateProduct(result);
+        if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
+        await cache.set(cacheKey, result, profile.cacheTime);
+
+        // Update session with extraction complete
+        await sessionTracker.updateStage(sessionId, 'validation', {
+          extractedData: result,
+          metrics: { extractionTime },
+        });
+
+        // Record successful metrics
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
+          responseTime,
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
+
+        // Record proxy success if using ProxyManager
+        if (proxyConfig && this.proxyManager) {
+          this.proxyManager.recordSuccess(proxyConfig, responseTime);
+        }
+
+        return result;
+      }
+
+      const ogData = await this.extractFromOpenGraph(page);
+      if (ogData && ogData.price > 0) {
+        const extractionTime = Date.now() - extractionStartTime;
+        const result = {
+          ...ogData,
+          url,
+          specifications: this.parseSpecifications(ogData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+
+        // Update session with extraction complete
+        await sessionTracker.updateStage(sessionId, 'validation', {
+          extractedData: result,
+          metrics: { extractionTime },
+        });
+
+        // Record successful metrics
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
+          responseTime,
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
+
+        // Record proxy success if using ProxyManager
+        if (proxyConfig && this.proxyManager) {
+          this.proxyManager.recordSuccess(proxyConfig, responseTime);
+        }
+
+        return result;
+      }
+
+      const cssData = await this.extractFromSelectors(page);
+      if (cssData && cssData.price > 0) {
+        const extractionTime = Date.now() - extractionStartTime;
+        const result = {
+          ...cssData,
+          url,
+          specifications: this.parseSpecifications(cssData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+
+        // Update session with extraction complete
+        await sessionTracker.updateStage(sessionId, 'validation', {
+          extractedData: result,
+          metrics: { extractionTime },
+        });
+
+        // Record successful metrics
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
+          responseTime,
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
+
+        // Record proxy success if using ProxyManager
+        if (proxyConfig && this.proxyManager) {
+          this.proxyManager.recordSuccess(proxyConfig, responseTime);
+        }
+
+        return result;
+      }
+
+      const heuristicData = await this.extractFromHeuristics(page);
+      if (heuristicData && heuristicData.price > 0) {
+        const extractionTime = Date.now() - extractionStartTime;
+        const result = {
+          ...heuristicData,
+          url,
+          specifications: this.parseSpecifications(heuristicData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+
+        // Update session with extraction complete
+        await sessionTracker.updateStage(sessionId, 'validation', {
+          extractedData: result,
+          metrics: { extractionTime },
+        });
+
+        // Record successful metrics
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(
+          hostname,
+          proxyUrl,
+          userAgent,
+          true,  // success
+          false, // blocked
+          wasChallenged,
+          responseTime,
+          statusCode
+        );
+
+        // Adjust concurrency based on metrics
+        await this.adjustConcurrencyForSite(hostname, statusCode);
+
+        // Record proxy success if using ProxyManager
+        if (proxyConfig && this.proxyManager) {
+          this.proxyManager.recordSuccess(proxyConfig, responseTime);
+        }
+
+        return result;
+      }
+
+      // No data extracted - record as failed request
+      const responseTime = Date.now() - startTime;
+      this.recordRequestMetrics(
+        hostname,
+        proxyUrl,
+        userAgent,
+        false, // success
+        false, // blocked
+        wasChallenged,
+        responseTime,
+        statusCode
+      );
+
+      // Adjust concurrency based on metrics
+      await this.adjustConcurrencyForSite(hostname, statusCode);
+
+      return null;
+    } catch (error) {
+      // Requirement 2.5: Track errors
+      await sessionTracker.recordError(sessionId, error as Error);
+
       // Record metrics for error
       const errorResponseTime = Date.now() - startTime;
       this.recordRequestMetrics(

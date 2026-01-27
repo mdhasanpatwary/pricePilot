@@ -616,3 +616,62 @@ model ConcurrencyState {
   @@index([site])
 }
 
+model ScrapingSession {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  tenantName          String
+  siteUrl             String
+  targetUrl           String
+  status              String   // 'initializing', 'running', 'waiting_challenge', 'completed', 'failed'
+  currentStage        String   // 'proxy_selection', 'navigation', 'challenge_detection', 'challenge_solving', 'data_extraction', 'validation'
+  proxyUsed           String?
+  userAgent           String?
+  requestsCompleted   Int      @default(0)
+  requestsTotal       Int      @default(0)
+  challengeType       String?
+  challengeStatus     String?  // 'waiting', 'solving', 'solved', 'failed'
+  extractedData       Json?
+  errors              Json?    // Array of error objects
+  metrics             Json?    // Session metrics object
+  startTime           DateTime @default(now())
+  endTime             DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@index([tenantId])
+  @@index([status])
+  @@index([startTime])
+}
+
+model SimulationResult {
+  id              String   @id @default(uuid())
+  scenario        String   // 'rotation', 'failure', 'exclusion', 'prioritization', 'recovery', 'cascading_failure', 'all_fail', 'single_success', 'intermittent'
+  config          Json     // Simulation configuration
+  requests        Json     // Array of request results
+  summary         Json     // Summary statistics
+  recommendations Json?    // Array of recommendation strings
+  startTime       DateTime
+  endTime         DateTime
+  createdAt       DateTime @default(now())
+  
+  @@index([scenario])
+  @@index([createdAt])
+}
+
+model SystemAlert {
+  id              String    @id @default(uuid())
+  alertType       String    // Type of alert
+  severity        String    // 'critical', 'warning', 'info'
+  title           String
+  message         String    @db.Text
+  context         Json?     // Additional context data
+  acknowledged    Boolean   @default(false)
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+  createdAt       DateTime  @default(now())
+  
+  @@index([acknowledged])
+  @@index([createdAt])
+  @@index([severity])
+}
+

@@ -1,89 +1,50 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { alertRepository } from "@/lib/services/alert-repository";
+
 /**
- * Admin Alert Acknowledgment API Endpoint
+ * POST /api/v1/admin/alerts/[id]/acknowledge
+ * Acknowledge a system alert
  * 
- * POST /api/v1/admin/alerts/:id/acknowledge
- * - Mark alert as acknowledged in database
- * - Update acknowledgedAt timestamp
- * - Return updated alert
- * 
- * Requirements: 12.5
+ * Requirements: 11.2
  */
-
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { logger } from '@/lib/logger';
-
 export async function POST(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        // Authenticate and verify admin role
         const session = await getServerSession(authOptions);
         if (!session?.user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const user = session.user as any;
+        const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
+
+        if (!isAdmin) {
             return NextResponse.json(
-                { error: 'Unauthorized', message: 'Authentication required' },
+                { error: "Unauthorized - Admin access required" },
                 { status: 401 }
             );
         }
 
-        // Check if user is super admin
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { isSuperAdmin: true },
-        });
-
-        if (!user?.isSuperAdmin) {
-            return NextResponse.json(
-                { error: 'Forbidden', message: 'Admin access required' },
-                { status: 403 }
-            );
-        }
-
         const { id: alertId } = await params;
+        const acknowledgedBy = user.email || user.id;
 
-        // Check if alert exists
-        const existingAlert = await prisma.alert.findUnique({
-            where: { id: alertId },
-        });
-
-        if (!existingAlert) {
-            return NextResponse.json(
-                { error: 'Not Found', message: 'Alert not found' },
-                { status: 404 }
-            );
-        }
-
-        // Update alert to acknowledged
-        const updatedAlert = await prisma.alert.update({
-            where: { id: alertId },
-            data: {
-                acknowledged: true,
-                acknowledgedAt: new Date(),
-            },
-        });
-
-        logger.info('Alert acknowledged', {
-            userId: session.user.id,
-            alertId,
-            alertType: updatedAlert.type,
-            severity: updatedAlert.severity,
-        });
+        const alert = await alertRepository.acknowledgeAlert(alertId, acknowledgedBy);
 
         return NextResponse.json({
             success: true,
-            alert: updatedAlert,
+            data: alert,
         });
     } catch (error) {
-        const errorParams = await params;
-        logger.error('Failed to acknowledge alert', { error, alertId: errorParams.id });
+        console.error("[Acknowledge Alert API] Error:", error);
         return NextResponse.json(
             {
-                error: 'Internal Server Error',
-                message: 'Failed to acknowledge alert',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                success: false,
+                error: "Failed to acknowledge alert",
+                details: error instanceof Error ? error.message : "Unknown error",
             },
             { status: 500 }
         );

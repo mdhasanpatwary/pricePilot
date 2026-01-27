@@ -19,19 +19,22 @@ import {
   ArrowLeft,
   FileText,
   Bug,
-  RefreshCw,
   CalendarClock,
   HeartPulse,
   Microscope,
   Eye,
   EyeOff,
   AlertTriangle,
+  Server,
+  BarChart3,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { registerServiceWorker } from "@/lib/utils/service-worker-registration";
 
 const adminMenuItems = [
   { icon: Activity, label: "Platform Overview", href: "/admin" },
@@ -39,16 +42,35 @@ const adminMenuItems = [
   { icon: Building2, label: "Tenants (Merchants)", href: "/admin/tenants" },
   { icon: ShieldCheck, label: "Users Management", href: "/admin/users" },
   {
+    icon: Eye,
+    label: "Monitoring Hub",
+    href: "/admin/monitoring",
+    children: [
+      { label: "Live Monitor", href: "/admin/monitoring?tab=live", icon: Eye },
+      { label: "Session Control", href: "/admin/monitoring?tab=control", icon: Settings },
+      { label: "System Health", href: "/admin/monitoring?tab=health", icon: HeartPulse },
+      { label: "Debug Center", href: "/admin/monitoring?tab=debug", icon: Bug },
+      { label: "Diagnostics", href: "/admin/monitoring?tab=diagnostics", icon: Activity },
+    ],
+  },
+  {
+    icon: Database,
+    label: "Analytics Hub",
+    href: "/admin/analytics",
+    children: [
+      { label: "Dashboard", href: "/admin/analytics?tab=dashboard", icon: BarChart3 },
+      { label: "Scraper Status", href: "/admin/analytics?tab=overview", icon: Database },
+      { label: "Scraping Metrics", href: "/admin/analytics?tab=metrics", icon: Activity },
+      { label: "Proxy Health", href: "/admin/analytics?tab=proxies", icon: Server },
+      { label: "Challenge Stats", href: "/admin/analytics?tab=challenges", icon: ShieldCheck },
+    ],
+  },
+  {
     icon: Database,
     label: "Scraping Engine",
-    href: "/admin/scrapers", // Default link if clicked
+    href: "/admin/scrapers",
     children: [
-      { label: "System Status", href: "/admin/scrapers", icon: Database },
-      { label: "Engine Health", href: "/admin/health", icon: HeartPulse },
-      { label: "Live Monitor", href: "/admin/monitor", icon: RefreshCw },
-      { label: "Scraping Metrics", href: "/admin/scraping-metrics", icon: Activity },
-      { label: "Proxy Health", href: "/admin/proxy-health", icon: Activity },
-      { label: "Challenge Stats", href: "/admin/challenge-stats", icon: ShieldCheck },
+      { label: "Proxy Simulator", href: "/admin/simulator", icon: Microscope },
       {
         label: "Profiles & Proxy",
         href: "/admin/scraper-profiles",
@@ -60,7 +82,6 @@ const adminMenuItems = [
     ],
   },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
-  { icon: Bug, label: "System Debug Center", href: "/admin/debug" },
   {
     icon: Settings2,
     label: "Business Setup (Logic)",
@@ -312,6 +333,19 @@ export default function AdminLayout({
     if (verified === "true") {
       setIsVerified(true);
     }
+
+    // Register service worker for offline capability
+    registerServiceWorker({
+      onSuccess: () => {
+        console.log("Service worker registered successfully");
+      },
+      onUpdate: () => {
+        console.log("New service worker available");
+      },
+      onError: (error) => {
+        console.error("Service worker registration failed:", error);
+      },
+    });
   }, []);
 
   const handleVerify = async (e: React.FormEvent) => {
@@ -493,7 +527,9 @@ export default function AdminLayout({
         </header>
 
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">{children}</div>
+          <div className="max-w-7xl mx-auto">
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </div>
         </main>
       </div>
     </div>
