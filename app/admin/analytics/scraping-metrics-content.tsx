@@ -1,3 +1,5 @@
-// Re-export the scraping metrics page content
+// The scraping metrics content is now part of the MetricsDashboard component
 // This allows us to use it within the analytics hub tabs
-export { default as ScrapingMetricsContent } from "../_original-pages/scraping-metrics-page";
+import MetricsDashboard from "@/components/admin/metrics-dashboard";
+
+export { MetricsDashboard as ScrapingMetricsContent };

@@ -16,9 +16,9 @@ The Stealth Monitoring UI provides comprehensive dashboards and management inter
 
 ## Admin Panel Features
 
-### 1. Proxy Health Dashboard
+### 2. Proxy Health Dashboard
 
-**Location**: `/admin/proxy-health`
+**Location**: `/admin/analytics?tab=proxies`
 
 Monitor the health and performance of your proxy pool in real-time.
 
@@ -45,9 +45,9 @@ Monitor the health and performance of your proxy pool in real-time.
 - 🔴 **Unhealthy**: Success rate < 70% or multiple consecutive failures
 - ⚠️ **Degraded**: Success rate between 50-70%
 
-### 2. Challenge Detection Dashboard
+### 3. Challenge Detection Dashboard
 
-**Location**: `/admin/challenge-stats`
+**Location**: `/admin/analytics?tab=challenges`
 
 Monitor anti-bot challenge detection and solve rates across all sites.
 
@@ -74,9 +74,9 @@ Monitor anti-bot challenge detection and solve rates across all sites.
 - Sudden drop in solve rate: May indicate changes to the target site's anti-bot system
 - High challenge volume: Consider reducing request rate or improving stealth settings
 
-### 3. Scraping Metrics Dashboard
+### 4. Scraping Metrics Dashboard
 
-**Location**: `/admin/scraping-metrics`
+**Location**: `/admin/analytics?tab=metrics`
 
 Comprehensive view of scraping performance across all sites and tenants.
 
@@ -104,9 +104,9 @@ Comprehensive view of scraping performance across all sites and tenants.
 - 🟡 **Degraded**: Block rate 10-30%, success rate 70-90%
 - 🔴 **Critical**: Block rate > 30%, success rate < 70%
 
-### 4. Real-Time Scraping Monitor
+### 1. Real-Time Scraping Monitor
 
-**Location**: `/admin/monitor`
+**Location**: `/admin/monitoring?tab=live`
 
 Live view of active scraping sessions with real-time updates.
 

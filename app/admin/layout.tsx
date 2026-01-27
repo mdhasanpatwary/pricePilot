@@ -54,7 +54,7 @@ const adminMenuItems = [
     ],
   },
   {
-    icon: Database,
+    icon: BarChart3,
     label: "Analytics Hub",
     href: "/admin/analytics",
     children: [
@@ -68,35 +68,23 @@ const adminMenuItems = [
   {
     icon: Database,
     label: "Scraping Engine",
-    href: "/admin/scrapers",
+    href: "/admin/scraper-profiles",
     children: [
       { label: "Proxy Simulator", href: "/admin/simulator", icon: Microscope },
-      {
-        label: "Profiles & Proxy",
-        href: "/admin/scraper-profiles",
-        icon: Settings,
-      },
+      { label: "Scraper Profiles", href: "/admin/scraper-profiles", icon: Settings },
       { label: "Site Profiles", href: "/admin/site-profiles", icon: Settings },
       { label: "Human Simulation", href: "/admin/human-simulation", icon: Settings },
       { label: "Engine Playground", href: "/admin/playground", icon: Bug },
     ],
   },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
+  { icon: Settings2, label: "Business Setup", href: "/admin/business-setup" },
   {
-    icon: Settings2,
-    label: "Business Setup (Logic)",
-    href: "/admin/business-setup",
-  },
-  {
-    icon: Settings,
+    icon: Database,
     label: "Maintenance",
     href: "/admin/maintenance/backups",
     children: [
-      {
-        label: "Database Backups",
-        href: "/admin/maintenance/backups",
-        icon: Database,
-      },
+      { label: "Database Backups", href: "/admin/maintenance/backups", icon: Database },
     ],
   },
   { icon: CalendarClock, label: "Task Scheduler", href: "/admin/scheduler" },

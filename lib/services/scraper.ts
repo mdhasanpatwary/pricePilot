@@ -2110,6 +2110,21 @@ export class ScraperService {
           "#main-image",
           ".main-product-image img",
           ".product-main-image img",
+          "#image", // OpenCart
+          ".thumbnail img", // OpenCart thumbnails
+        ];
+
+        // Brand and Model extraction (OpenCart specific)
+        const brandSelectors = [
+          'a[href*="manufacturer"]', // OpenCart brand link
+          '.manufacturer a',
+          '[itemprop="brand"]',
+          '.product-brand',
+        ];
+
+        const modelSelectors = [
+          '.product-model',
+          '[itemprop="model"]',
         ];
 
         const getTextContent = (selectors: string[]) => {
@@ -2121,6 +2136,34 @@ export class ScraperService {
           }
           return "";
         };
+
+        // Extract brand and model from product info list (OpenCart)
+        const extractFromProductInfo = () => {
+          const listItems = document.querySelectorAll('.list-unstyled li, .product-info li, ul li');
+          let brand = "";
+          let model = "";
+          
+          listItems.forEach(li => {
+            const text = li.textContent || "";
+            // OpenCart typically shows "Brand: BrandName" or "Model: ModelName"
+            if (text.toLowerCase().includes('brand:')) {
+              const brandMatch = text.split(':');
+              if (brandMatch.length > 1) {
+                brand = brandMatch[1].trim();
+              }
+            }
+            if (text.toLowerCase().includes('model:')) {
+              const modelMatch = text.split(':');
+              if (modelMatch.length > 1) {
+                model = modelMatch[1].trim();
+              }
+            }
+          });
+          
+          return { brand, model };
+        };
+
+        const productInfo = extractFromProductInfo();
 
         const stockText = getTextContent(oosSelectors).toLowerCase();
         const oosKeywords = [
@@ -2193,6 +2236,8 @@ export class ScraperService {
         return {
           title: getTextContent(titleSelectors),
           priceText: getTextContent(priceSelectors),
+          brand: productInfo.brand || getTextContent(brandSelectors),
+          model: productInfo.model || getTextContent(modelSelectors),
           isOos: isActuallyOos,
           isComingSoon,
           isPreOrder,
@@ -2231,6 +2276,8 @@ export class ScraperService {
         title: data.title,
         price: price > 0 ? price : 0,
         currency: "USD", // Default assumption
+        brand: data.brand || undefined,
+        model: data.model || undefined,
         inStock: !data.isOos && price > 0,
         imageUrl: data.imageUrl,
       };

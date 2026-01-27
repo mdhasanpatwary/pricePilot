@@ -11,15 +11,13 @@ const API_CACHE = "pricepilot-api-v1";
 const STATIC_ASSETS = [
     "/",
     "/admin",
-    "/admin/monitor",
-    "/admin/metrics",
-    "/admin/health",
+    "/admin/monitoring",
+    "/admin/analytics",
 ];
 
 // API endpoints to cache (with short TTL)
 const API_ENDPOINTS = [
     "/api/v1/admin/sessions",
-    "/api/v1/admin/metrics/dashboard",
     "/api/v1/admin/health",
 ];
 

@@ -33,9 +33,9 @@ curl http://localhost:3000/api/v1/health
 ```
 
 ### Detailed Diagnostics
-Navigate to the Admin Panel → Diagnostics page:
+Navigate to the Admin Panel → Monitoring Hub → Diagnostics tab:
 ```
-https://your-domain.com/admin/diagnostics
+https://your-domain.com/admin/monitoring?tab=diagnostics
 ```
 
 This checks:

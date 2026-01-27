@@ -69,6 +69,19 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
     cacheTime: 3600, // 1 hour
     successRate: 0.90,
     retryCount: 1
+  },
+  'giftly.com.bd': {
+    strategy: 'light-js',
+    selectors: {
+      title: ['h1', '.product-title', '#content h1'],
+      price: ['#price-special', '.price-new', 'h2', '.product-price'],
+      image: ['.product-image img', '#image', '.thumbnail img', '.image img'],
+      stock: ['.stock-status', '#product .availability']
+    },
+    waitTime: 2000,
+    cacheTime: 1800, // 30 mins
+    successRate: 0.92,
+    retryCount: 2
   }
 };
 

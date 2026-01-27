@@ -721,86 +721,111 @@ export default function ConnectionsPage() {
             </div>
           ))}
 
-          {/* Global Terminal Feed */}
+          {/* Global Terminal Feed - Store Sync Monitor */}
           {connections.some((c) => c.isSyncing) && (
             <div className="col-span-full mt-6 animate-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-slate-950 rounded-xl border border-white/10 shadow-2xl overflow-hidden">
+              <div className="bg-slate-950 rounded-xl border border-primary/20 shadow-2xl overflow-hidden ring-1 ring-primary/10">
                 {/* Terminal Header */}
-                <div className="bg-white/5 px-4 py-2 border-b border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3 border-b border-primary/20 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
                     <div className="flex gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/40" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/40" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/40" />
+                      <div className="w-3 h-3 rounded-full bg-red-500/30 border border-red-500/50 shadow-sm" />
+                      <div className="w-3 h-3 rounded-full bg-amber-500/30 border border-amber-500/50 shadow-sm" />
+                      <div className="w-3 h-3 rounded-full bg-green-500 border border-green-500 shadow-sm shadow-green-500/50 animate-pulse" />
                     </div>
                     {(() => {
                       const activeSite = connections.find((c) => c.isSyncing);
                       return activeSite ? (
-                        <div className="text-[10px] font-mono uppercase tracking-widest ml-2 flex flex-col gap-0.5">
+                        <div className="text-[11px] font-mono uppercase tracking-widest ml-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-primary font-bold">[SYSTEM]</span>
-                            <span className="text-white/40">SYNCING STORE:</span>
+                            <Terminal className="w-4 h-4 text-primary animate-pulse" />
+                            <span className="text-primary font-black">[STORE SYNC]</span>
+                            <span className="text-white/50">→</span>
                             <span className="text-white font-bold">{activeSite.name.toUpperCase()}</span>
-                            <Terminal className="w-3 h-3 text-white/20 ml-1" />
                           </div>
                         </div>
                       ) : null;
                     })()}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
                     {(() => {
                       const activeSite = connections.find((c) => c.isSyncing);
                       return activeSite ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-1 h-1 rounded-full bg-primary animate-ping" />
-                          <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
-                            PROGRESS: <span className="text-primary">{activeSite.syncProcessed || 0}</span> / <span className="text-white/60">{activeSite.syncTotal || "?"}</span>
-                          </span>
-                        </div>
+                        <>
+                          <div className="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-md border border-white/10">
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                            <span className="text-[10px] font-mono text-white/60 uppercase font-bold">
+                              PROGRESS: <span className="text-primary font-black">{activeSite.syncProcessed || 0}</span> / <span className="text-white/80">{activeSite.syncTotal || "?"}</span>
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleStopSyncConnection(activeSite.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-md text-red-400 hover:text-red-300 transition-all text-[10px] font-bold uppercase"
+                          >
+                            <X className="w-3 h-3" />
+                            Stop
+                          </button>
+                        </>
                       ) : null;
                     })()}
                   </div>
                 </div>
 
                 {/* Terminal Body */}
-                <div className="p-0 font-mono text-[11px] h-62.5 flex flex-col bg-[#0a0a0a]">
+                <div className="p-0 font-mono text-[11px] h-80 flex flex-col bg-[#0a0a0a]">
                   <div className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-white/10">
                     {connections
                       .filter((c) => c.isSyncing)
                       .map((site) => (
                         <div key={site.id} className="space-y-0.5">
-                          {(site.logs || [])
-                            .slice()
-                            .reverse()
-                            .map((log: any) => (
-                              <div
-                                key={log.id}
-                                className="group flex gap-3 px-2 py-0.5 hover:bg-white/5 transition-colors border-l-2 border-transparent hover:border-primary/40"
-                              >
-                                <span className="text-white/20 shrink-0 select-none w-16">
-                                  {new Date(log.createdAt).toLocaleTimeString([], { hour12: false })}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "font-black shrink-0 w-12",
-                                    log.level === "SUCCESS"
-                                      ? "text-green-500"
-                                      : log.level === "ERROR"
-                                        ? "text-red-500"
-                                        : log.level === "WARN"
-                                          ? "text-amber-500"
-                                          : "text-blue-500"
-                                  )}
+                          {/* Show logs if available */}
+                          {(site.logs || []).length > 0 ? (
+                            (site.logs || [])
+                              .slice()
+                              .reverse()
+                              .map((log: any) => (
+                                <div
+                                  key={log.id}
+                                  className="group flex gap-3 px-2 py-1 hover:bg-white/5 transition-colors border-l-2 border-transparent hover:border-primary/40 rounded-r"
                                 >
-                                  {log.level}
-                                </span>
-                                <span className="text-white/80 break-all">{log.message}</span>
+                                  <span className="text-white/30 shrink-0 select-none w-20 text-[10px]">
+                                    {new Date(log.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "font-black shrink-0 w-16 text-[10px]",
+                                      log.level === "SUCCESS"
+                                        ? "text-green-400"
+                                        : log.level === "ERROR"
+                                          ? "text-red-400"
+                                          : log.level === "WARN"
+                                            ? "text-amber-400"
+                                            : "text-blue-400"
+                                    )}
+                                  >
+                                    [{log.level}]
+                                  </span>
+                                  <span className="text-white/90 break-all leading-relaxed">{log.message}</span>
+                                </div>
+                              ))
+                          ) : (
+                            <div className="space-y-2 p-4">
+                              <div className="flex gap-3 px-2 py-1 text-white/50 items-center">
+                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                <span className="animate-pulse">Initializing sync process for {site.name}...</span>
                               </div>
-                            ))}
-                          {(!site.logs || site.logs.length === 0) && (
-                            <div className="flex gap-3 px-2 py-0.5 text-white/40 italic">
-                              <span className="animate-pulse">_</span>
-                              <span>Initializing data stream to {site.name}...</span>
+                              <div className="flex gap-3 px-2 py-1 text-white/40 text-[10px]">
+                                <span className="animate-pulse">▸</span>
+                                <span>Connecting to store API...</span>
+                              </div>
+                              <div className="flex gap-3 px-2 py-1 text-white/40 text-[10px]">
+                                <span className="animate-pulse delay-100">▸</span>
+                                <span>Authenticating credentials...</span>
+                              </div>
+                              <div className="flex gap-3 px-2 py-1 text-white/40 text-[10px]">
+                                <span className="animate-pulse delay-200">▸</span>
+                                <span>Preparing product catalog scan...</span>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -809,13 +834,19 @@ export default function ConnectionsPage() {
                   </div>
 
                   {/* Traffic Footer Strip */}
-                  <div className="bg-white/2 border-t border-white/5 px-4 py-2 flex items-center justify-between">
-                    <div className="flex gap-4 font-mono text-[9px] text-white/40 uppercase font-bold">
-                      <span className="flex items-center gap-1">
-                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        Status: <span className="text-primary">Syncing</span>
+                  <div className="bg-gradient-to-r from-primary/5 to-transparent border-t border-primary/20 px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex gap-6 font-mono text-[10px] text-white/50 uppercase font-bold">
+                      <span className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-sm shadow-green-500/50" />
+                        Status: <span className="text-green-400">Active</span>
                       </span>
-                      <span>Action: {connections.find(c => c.isSyncing)?.syncLastAction || "Processing"}</span>
+                      <span className="flex items-center gap-2">
+                        <Activity className="w-3 h-3" />
+                        Action: <span className="text-primary">{connections.find(c => c.isSyncing)?.syncLastAction || "Processing Products"}</span>
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-white/30 font-mono">
+                      Live sync monitor • Auto-refresh enabled
                     </div>
                   </div>
                 </div>

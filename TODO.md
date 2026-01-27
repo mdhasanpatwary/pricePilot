@@ -18,6 +18,7 @@ The agent MUST acknowledge this file before acting.
 ---
 
 ## issues
+* don't need to run test on before commit. 
 
 
 ## request feature

@@ -137,7 +137,7 @@ async function handleGET(req: NextRequest) {
           siteName,
           url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
           price: parseFloat(m.competitorProduct.currentPrice.toString()),
-          image: (m.competitorProduct as any).imageUrl,
+          image: m.competitorProduct.imageUrl || null,
           inStock:
             m.competitorProduct.inStock &&
             parseFloat(m.competitorProduct.currentPrice.toString()) > 0,
@@ -180,7 +180,7 @@ async function handleGET(req: NextRequest) {
         id: product.id,
         sku: product.sku || "N/A",
         title: product.title,
-        image: (product as any).imageUrl,
+        image: product.imageUrl || null,
         yourPrice,
         compPrice,
         diff,
@@ -196,7 +196,8 @@ async function handleGET(req: NextRequest) {
           ? new URL(product.site.baseUrl).hostname.replace("www.", "")
           : "Unknown",
         allMatches,
-        specifications: (product as any).specifications || {},
+        specifications: product.specifications || {},
+        url: product.url || null,
       };
     });
 

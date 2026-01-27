@@ -1032,7 +1032,7 @@ export default function CompetitorsPage() {
                 <Input
                   id="pattern"
                   placeholder="/search?q={query}"
-                  value={searchPatternInput}
+                  value={searchPatternInput || ""}
                   onChange={(e) => setSearchPatternInput(e.target.value)}
                   className="font-mono text-xs"
                 />

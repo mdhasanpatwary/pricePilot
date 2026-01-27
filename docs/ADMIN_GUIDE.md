@@ -4,6 +4,8 @@
 
 This guide provides step-by-step instructions for using the PricePilot admin monitoring dashboards. These tools help platform administrators monitor system health, track performance, and configure scraping behavior.
 
+> **Note**: For the enhanced admin dashboard features (Real-Time Monitoring Hub, Proxy Simulator, Session Control, etc.), see the [Admin Dashboard Enhancement Guide](./ADMIN_DASHBOARD_ENHANCEMENT_GUIDE.md).
+
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
@@ -16,6 +18,13 @@ This guide provides step-by-step instructions for using the PricePilot admin mon
 8. [Alert Management](#alert-management)
 9. [Best Practices](#best-practices)
 10. [Troubleshooting](#troubleshooting)
+
+## Related Documentation
+
+- [Admin Dashboard Enhancement Guide](./ADMIN_DASHBOARD_ENHANCEMENT_GUIDE.md) - Enhanced features and capabilities
+- [Admin API Reference](./ADMIN_API_REFERENCE.md) - Complete API documentation
+- [Admin Troubleshooting Guide](./ADMIN_TROUBLESHOOTING_GUIDE.md) - Detailed troubleshooting procedures
+- [Admin Dashboard Deployment](./ADMIN_DASHBOARD_DEPLOYMENT.md) - Deployment instructions
 
 ---
 
@@ -30,13 +39,28 @@ This guide provides step-by-step instructions for using the PricePilot admin mon
 ### Dashboard Navigation
 
 All admin dashboards are located under `/admin/`:
-- Proxy Health: `/admin/proxy-health`
-- Challenge Stats: `/admin/challenge-stats`
-- Scraping Metrics: `/admin/scraping-metrics`
-- Real-Time Monitor: `/admin/monitor`
-- Human Simulation: `/admin/human-simulation`
-- Site Profiles: `/admin/site-profiles`
+
+**Main Hubs:**
+- Monitoring Hub: `/admin/monitoring` - Live monitoring, session control, health, debug, diagnostics
+- Analytics Hub: `/admin/analytics` - Dashboard, scraper status, metrics, proxy health, challenges
+
+**Management:**
+- Tenants: `/admin/tenants`
+- Users: `/admin/users`
 - Alerts: `/admin/alerts`
+
+**Scraping Engine:**
+- Proxy Simulator: `/admin/simulator`
+- Scraper Profiles: `/admin/scraper-profiles`
+- Site Profiles: `/admin/site-profiles`
+- Human Simulation: `/admin/human-simulation`
+- Engine Playground: `/admin/playground`
+
+**Other:**
+- Audit Search: `/admin/audit`
+- Business Setup: `/admin/business-setup`
+- Task Scheduler: `/admin/scheduler`
+- Maintenance: `/admin/maintenance/backups`
 
 ---
 

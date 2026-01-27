@@ -172,7 +172,7 @@ export function useLiveRegion(message: string | null, priority: 'polite' | 'asse
 export function useRovingTabIndex(itemCount: number) {
     const [activeIndex, setActiveIndex] = useState(0);
 
-    const handleKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+    const handleKeyDown = useCallback((e: React.KeyboardEvent, _index: number) => {
         switch (e.key) {
             case 'ArrowDown':
             case 'ArrowRight':

@@ -35,7 +35,7 @@ async function main() {
   });
 
   // 3. Create a User Site (Integration)
-  await prisma.site.create({
+  const userSiteData = await prisma.site.create({
     data: {
       tenantId: tenant.id,
       type: "USER",
@@ -45,23 +45,177 @@ async function main() {
     },
   });
 
-  // 4. Create an Initial Product for the User
-  // Note: Unused variable removed to satisfy strict TS
-  await prisma.product.create({
+  // 3b. Create Competitor Sites
+  const competitor1 = await prisma.site.create({
     data: {
       tenantId: tenant.id,
-      siteId: (
-        await prisma.site.findFirst({
-          where: { tenantId: tenant.id, type: "USER" },
-        })
-      ).id,
-      title: "E2E Test Product",
-      sku: "E2E-SKU-001",
-      currentPrice: 100.0,
+      type: "COMPETITOR",
+      platform: "GENERIC",
+      baseUrl: "https://competitor1.com",
     },
   });
 
-  // 5. Create a Pricing Rule
+  const competitor2 = await prisma.site.create({
+    data: {
+      tenantId: tenant.id,
+      type: "COMPETITOR",
+      platform: "GENERIC",
+      baseUrl: "https://competitor2.com",
+    },
+  });
+
+  // 4. Create Products for User Store
+  const userProduct1 = await prisma.product.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: userSiteData.id,
+      title: "Wireless Gaming Mouse",
+      sku: "WGM-001",
+      brand: "TechGear",
+      model: "Pro X",
+      category: "Electronics",
+      currentPrice: 79.99,
+      inStock: true,
+      stockLevel: 50,
+      imageUrl: "https://example.com/images/mouse.jpg",
+    },
+  });
+
+  const userProduct2 = await prisma.product.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: userSiteData.id,
+      title: "Mechanical Keyboard RGB",
+      sku: "MKB-002",
+      brand: "KeyMaster",
+      model: "Elite 87",
+      category: "Electronics",
+      currentPrice: 129.99,
+      inStock: true,
+      stockLevel: 30,
+      imageUrl: "https://example.com/images/keyboard.jpg",
+    },
+  });
+
+  const userProduct3 = await prisma.product.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: userSiteData.id,
+      title: "USB-C Hub 7-in-1",
+      sku: "HUB-003",
+      brand: "ConnectPro",
+      model: "Hub Max",
+      category: "Accessories",
+      currentPrice: 49.99,
+      inStock: true,
+      stockLevel: 100,
+      imageUrl: "https://example.com/images/hub.jpg",
+    },
+  });
+
+  // 5. Create Competitor Products
+  const compProduct1 = await prisma.product.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: competitor1.id,
+      title: "Wireless Gaming Mouse Pro X",
+      sku: "COMP-WGM-001",
+      brand: "TechGear",
+      model: "Pro X",
+      category: "Electronics",
+      currentPrice: 74.99,
+      inStock: true,
+      url: "https://competitor1.com/products/gaming-mouse",
+      imageUrl: "https://example.com/images/mouse-comp.jpg",
+    },
+  });
+
+  const compProduct2 = await prisma.product.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: competitor1.id,
+      title: "Mechanical Keyboard RGB Elite",
+      sku: "COMP-MKB-002",
+      brand: "KeyMaster",
+      model: "Elite 87",
+      category: "Electronics",
+      currentPrice: 119.99,
+      inStock: true,
+      url: "https://competitor1.com/products/keyboard",
+      imageUrl: "https://example.com/images/keyboard-comp.jpg",
+    },
+  });
+
+  const compProduct3 = await prisma.product.create({
+    data: {
+      tenantId: tenant.id,
+      siteId: competitor2.id,
+      title: "USB-C Hub 7-Port",
+      sku: "COMP-HUB-003",
+      brand: "ConnectPro",
+      model: "Hub Max",
+      category: "Accessories",
+      currentPrice: 44.99,
+      inStock: true,
+      url: "https://competitor2.com/products/usb-hub",
+      imageUrl: "https://example.com/images/hub-comp.jpg",
+    },
+  });
+
+  // 6. Create Product Matches
+  await prisma.productMatch.createMany({
+    data: [
+      {
+        userProductId: userProduct1.id,
+        competitorProductId: compProduct1.id,
+        matchType: "AUTO_MODEL",
+        confidenceScore: 95.5,
+        status: "APPROVED",
+      },
+      {
+        userProductId: userProduct2.id,
+        competitorProductId: compProduct2.id,
+        matchType: "AUTO_MODEL",
+        confidenceScore: 92.0,
+        status: "APPROVED",
+      },
+      {
+        userProductId: userProduct3.id,
+        competitorProductId: compProduct3.id,
+        matchType: "AUTO_MODEL",
+        confidenceScore: 88.5,
+        status: "PENDING",
+      },
+    ],
+  });
+
+  // 7. Create Price History
+  await prisma.priceHistory.createMany({
+    data: [
+      {
+        productId: userProduct1.id,
+        price: 79.99,
+        recordedAt: new Date(),
+      },
+      {
+        productId: userProduct1.id,
+        price: 84.99,
+        recordedAt: new Date(Date.now() - 86400000), // 1 day ago
+      },
+      {
+        productId: compProduct1.id,
+        price: 74.99,
+        recordedAt: new Date(),
+      },
+      {
+        productId: compProduct1.id,
+        price: 79.99,
+        recordedAt: new Date(Date.now() - 86400000),
+      },
+    ],
+  });
+
+  // 8. Create a Pricing Rule
   await prisma.pricingRule.create({
     data: {
       tenantId: tenant.id,
@@ -73,7 +227,7 @@ async function main() {
     },
   });
 
-  // 6. Seed test data for new tables
+  // 9. Seed test data for new tables
 
   // Seed CaptchaSolveAttempt test data
   await prisma.captchaSolveAttempt.createMany({
@@ -159,6 +313,7 @@ async function main() {
   }
 
   // Seed ConcurrencyState test data
+  await prisma.concurrencyState.deleteMany(); // Clear existing data first
   await prisma.concurrencyState.createMany({
     data: [
       {
