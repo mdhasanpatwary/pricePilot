@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     AlertTriangle,
     AlertCircle,
@@ -52,7 +52,7 @@ export default function AlertsPage() {
         new Set()
     );
 
-    const fetchAlerts = async (showRefreshing = false) => {
+    const fetchAlerts = useCallback(async (showRefreshing = false) => {
         if (showRefreshing) {
             setRefreshing(true);
         } else {
@@ -85,11 +85,11 @@ export default function AlertsPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [severityFilter, acknowledgedFilter]);
 
     useEffect(() => {
         fetchAlerts();
-    }, [severityFilter, acknowledgedFilter]);
+    }, [fetchAlerts]);
 
     const handleRefresh = () => {
         fetchAlerts(true);

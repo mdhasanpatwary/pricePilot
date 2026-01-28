@@ -18,7 +18,7 @@
  */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Activity,
     RefreshCw,
@@ -85,7 +85,7 @@ export default function TenantMetricsDashboard() {
     const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d">("24h");
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-    const fetchTenantMetrics = async (showRefreshing = false) => {
+    const fetchTenantMetrics = useCallback(async (showRefreshing = false) => {
         if (showRefreshing) {
             setRefreshing(true);
         } else {
@@ -109,11 +109,11 @@ export default function TenantMetricsDashboard() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [timeRange]);
 
     useEffect(() => {
         fetchTenantMetrics();
-    }, [timeRange]);
+    }, [fetchTenantMetrics]);
 
     const handleRefresh = () => {
         fetchTenantMetrics(true);

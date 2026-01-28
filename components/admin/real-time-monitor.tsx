@@ -13,6 +13,7 @@ import {
     RefreshCw,
     Eye,
     ChevronRight,
+    Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -199,6 +200,8 @@ export default function RealTimeMonitor({
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
     const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+    const [clearingLogs, setClearingLogs] = useState(false);
+    const [clearSuccess, setClearSuccess] = useState<string | null>(null);
 
     // Debounce filter changes to avoid excessive API calls
     const debouncedTenant = useDebounce(selectedTenant, 500);
@@ -254,6 +257,48 @@ export default function RealTimeMonitor({
         setIsDetailModalOpen(true);
     };
 
+    // Clear completed/failed sessions
+    const handleClearLogs = async () => {
+        if (!confirm('Are you sure you want to clear all completed and failed sessions? This action cannot be undone.')) {
+            return;
+        }
+
+        setClearingLogs(true);
+        setClearSuccess(null);
+        setError(null);
+
+        try {
+            const response = await fetch('/api/v1/admin/sessions/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tenantId: selectedTenant !== 'all' ? selectedTenant : undefined,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to clear sessions');
+            }
+
+            const data = await response.json();
+            if (data.success) {
+                setClearSuccess(data.data.message);
+                // Refresh sessions list
+                await fetchSessions();
+            } else {
+                throw new Error(data.error || 'Unknown error');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to clear sessions');
+        } finally {
+            setClearingLogs(false);
+            // Clear success message after 3 seconds
+            setTimeout(() => setClearSuccess(null), 3000);
+        }
+    };
+
     // Get unique tenants from sessions
     const uniqueTenants = Array.from(
         new Set(sessions.map((s) => s.tenantId))
@@ -284,6 +329,18 @@ export default function RealTimeMonitor({
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClearLogs}
+                        disabled={clearingLogs || loading}
+                        className="text-destructive hover:text-destructive"
+                    >
+                        <Trash2
+                            className={cn("w-4 h-4 mr-2", clearingLogs && "animate-spin")}
+                        />
+                        Clear Logs
+                    </Button>
                     <ExportButton
                         type="sessions"
                         filters={{
@@ -314,6 +371,16 @@ export default function RealTimeMonitor({
                     sessions={sessions}
                     onOperationComplete={fetchSessions}
                 />
+            )}
+
+            {/* Success Message */}
+            {clearSuccess && (
+                <Card className="p-4 bg-green-500/10 border-green-500/20">
+                    <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <p className="text-sm text-green-500">{clearSuccess}</p>
+                    </div>
+                </Card>
             )}
 
             {/* Filters */}

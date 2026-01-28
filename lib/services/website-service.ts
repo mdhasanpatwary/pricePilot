@@ -1,0 +1,353 @@
+/**
+ * Website Service for managing user website integrations with encrypted API tokens
+ */
+
+import { prisma } from '@/lib/prisma';
+import { Site, Prisma } from '@prisma/client';
+import { EncryptionService } from './encryption/encryption-service';
+import { KeyManager } from './encryption/key-manager';
+import { EncryptionError, DecryptionError } from './encryption/errors';
+
+// Initialize encryption service with key manager
+const keyManager = new KeyManager();
+const encryptionService = new EncryptionService(keyManager);
+
+/**
+ * Input type for creating a website
+ */
+export interface CreateWebsiteInput {
+    tenantId: string;
+    platform: string;
+    type: string;
+    baseUrl: string;
+    apiToken?: string | null;
+    searchQueryPattern?: string | null;
+}
+
+/**
+ * Input type for updating a website
+ */
+export interface UpdateWebsiteInput {
+    platform?: string;
+    baseUrl?: string;
+    apiToken?: string | null;
+    searchQueryPattern?: string | null;
+}
+
+/**
+ * Website with decrypted token for API usage
+ */
+export interface SiteWithDecryptedToken extends Site {
+    decryptedToken: string | null;
+}
+
+/**
+ * Website Service for managing user website integrations
+ */
+export class WebsiteService {
+    /**
+     * Creates a new user website with encrypted API token
+     * @param data - Website data including plaintext apiToken
+     * @param userId - User ID for audit logging
+     * @returns Created website record with encrypted token
+     * @throws EncryptionError if encryption fails
+     */
+    static async createWebsite(
+        data: CreateWebsiteInput,
+        _userId?: string
+    ): Promise<Site> {
+        return await prisma.$transaction(async (tx) => {
+            let encryptedToken: string | null = null;
+
+            // Encrypt token if provided
+            if (data.apiToken) {
+                try {
+                    encryptedToken = encryptionService.encrypt(data.apiToken);
+                } catch (error) {
+                    // Log encryption failure
+                    console.error('[WebsiteService] Token encryption failed:', error);
+
+                    // Re-throw encryption error to prevent saving plaintext token
+                    throw new EncryptionError(
+                        'Failed to encrypt API token. Please try again.',
+                        error instanceof Error ? error : undefined
+                    );
+                }
+            }
+
+            // Create website record with encrypted token
+            const site = await tx.site.create({
+                data: {
+                    tenantId: data.tenantId,
+                    platform: data.platform as any,
+                    type: data.type as any,
+                    baseUrl: data.baseUrl,
+                    apiToken: encryptedToken,
+                    searchQueryPattern: data.searchQueryPattern,
+                },
+            });
+
+            // Log successful encryption
+            if (encryptedToken) {
+                console.log(`[WebsiteService] Successfully encrypted token for site ${site.id}`);
+            }
+
+            return site;
+        });
+    }
+
+    /**
+     * Updates website data, re-encrypting token if changed
+     * @param id - Website ID
+     * @param data - Updated data
+     * @param tenantId - Tenant ID for authorization
+     * @param userId - User ID for audit logging
+     * @returns Updated website record
+     * @throws EncryptionError if encryption fails
+     */
+    static async updateWebsite(
+        id: string,
+        data: UpdateWebsiteInput,
+        tenantId: string,
+        userId?: string
+    ): Promise<Site> {
+        return await prisma.$transaction(async (tx) => {
+            // Fetch existing site to verify ownership
+            const existingSite = await tx.site.findFirst({
+                where: {
+                    id,
+                    tenantId,
+                },
+            });
+
+            if (!existingSite) {
+                throw new Error('Site not found');
+            }
+
+            let encryptedToken: string | null | undefined = undefined;
+
+            // Check if apiToken is being updated
+            if (data.apiToken !== undefined) {
+                if (data.apiToken === null) {
+                    // Explicitly setting token to null
+                    encryptedToken = null;
+                } else {
+                    // Encrypt new token value
+                    try {
+                        encryptedToken = encryptionService.encrypt(data.apiToken);
+                    } catch (error) {
+                        // Log encryption failure
+                        console.error('[WebsiteService] Token re-encryption failed:', error);
+
+                        // Re-throw encryption error
+                        throw new EncryptionError(
+                            'Failed to encrypt API token. Please try again.',
+                            error instanceof Error ? error : undefined
+                        );
+                    }
+                }
+            }
+
+            // Build update data
+            const updateData: Prisma.SiteUpdateInput = {
+                ...(data.platform && { platform: data.platform as any }),
+                ...(data.baseUrl && { baseUrl: data.baseUrl }),
+                ...(encryptedToken !== undefined && { apiToken: encryptedToken }),
+                ...(data.searchQueryPattern !== undefined && { searchQueryPattern: data.searchQueryPattern }),
+            };
+
+            // Update website record
+            const site = await tx.site.update({
+                where: { id },
+                data: updateData,
+            });
+
+            // Log successful re-encryption if token was updated
+            if (encryptedToken !== undefined && encryptedToken !== null) {
+                await tx.auditLog.create({
+                    data: {
+                        tenantId,
+                        userId: userId || null,
+                        userEmail: null,
+                        action: 'TOKEN_ENCRYPTED',
+                        entityType: 'SITE',
+                        entityId: site.id,
+                        ipAddress: null,
+                        details: {
+                            event: 'token_encrypted',
+                            success: true,
+                            timestamp: new Date(),
+                        },
+                    },
+                });
+
+                console.log(`[WebsiteService] Successfully re-encrypted token for site ${site.id}`);
+            }
+
+            return site;
+        });
+    }
+
+    /**
+     * Retrieves website with decrypted token for API calls
+     * Automatically migrates plaintext tokens to encrypted format
+     * @param id - Website ID
+     * @param tenantId - Tenant ID for authorization
+     * @param purpose - Purpose of decryption for audit logging
+     * @returns Website with plaintext token
+     * @throws DecryptionError if decryption fails
+     */
+    static async getWebsiteWithToken(
+        id: string,
+        tenantId: string,
+        purpose: string = 'api_call'
+    ): Promise<SiteWithDecryptedToken> {
+        // Fetch website record from database
+        const site = await prisma.site.findFirst({
+            where: {
+                id,
+                tenantId,
+            },
+        });
+
+        if (!site) {
+            throw new Error('Site not found');
+        }
+
+        // If no token, return as-is
+        if (!site.apiToken) {
+            return {
+                ...site,
+                decryptedToken: null,
+            };
+        }
+
+        // Check if token is encrypted
+        const isEncrypted = encryptionService.isEncrypted(site.apiToken);
+
+        if (!isEncrypted) {
+            // Plaintext token detected - migrate to encrypted format
+            console.log(`[WebsiteService] Plaintext token detected for site ${site.id}, migrating...`);
+
+            try {
+                const encryptedToken = encryptionService.encrypt(site.apiToken);
+
+                // Update database with encrypted token
+                await prisma.$transaction(async (tx) => {
+                    await tx.site.update({
+                        where: { id: site.id },
+                        data: { apiToken: encryptedToken },
+                    });
+
+                    // Log migration event
+                    await tx.auditLog.create({
+                        data: {
+                            tenantId,
+                            userId: null,
+                            userEmail: null,
+                            action: 'TOKEN_MIGRATED',
+                            entityType: 'SITE',
+                            entityId: site.id,
+                            ipAddress: null,
+                            details: {
+                                event: 'token_migrated',
+                                success: true,
+                                timestamp: new Date(),
+                            },
+                        },
+                    });
+                });
+
+                console.log(`[WebsiteService] Successfully migrated token for site ${site.id}`);
+
+                // Return with decrypted token (original plaintext)
+                return {
+                    ...site,
+                    apiToken: encryptedToken,
+                    decryptedToken: site.apiToken, // Original plaintext
+                };
+            } catch (error) {
+                // Log migration failure but continue with plaintext (backward compatibility)
+                console.error('[WebsiteService] Token migration failed:', error);
+
+                await prisma.auditLog.create({
+                    data: {
+                        tenantId,
+                        userId: null,
+                        userEmail: null,
+                        action: 'TOKEN_MIGRATION_FAILED',
+                        entityType: 'SITE',
+                        entityId: site.id,
+                        ipAddress: null,
+                        details: {
+                            event: 'token_migrated',
+                            success: false,
+                            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+                        },
+                    },
+                });
+
+                // Continue with plaintext token for backward compatibility
+                return {
+                    ...site,
+                    decryptedToken: site.apiToken,
+                };
+            }
+        }
+
+        // Token is encrypted - decrypt it
+        try {
+            const decryptedToken = encryptionService.decrypt(site.apiToken);
+
+            // Log decryption event
+            await prisma.auditLog.create({
+                data: {
+                    tenantId,
+                    userId: null,
+                    userEmail: null,
+                    action: 'TOKEN_DECRYPTED',
+                    entityType: 'SITE',
+                    entityId: site.id,
+                    ipAddress: null,
+                    details: {
+                        event: 'token_decrypted',
+                        purpose,
+                        success: true,
+                        timestamp: new Date(),
+                    },
+                },
+            });
+
+            return {
+                ...site,
+                decryptedToken,
+            };
+        } catch (error) {
+            // Log decryption failure
+            console.error('[WebsiteService] Token decryption failed:', error);
+
+            await prisma.auditLog.create({
+                data: {
+                    tenantId,
+                    userId: null,
+                    userEmail: null,
+                    action: 'DECRYPTION_FAILED',
+                    entityType: 'SITE',
+                    entityId: site.id,
+                    ipAddress: null,
+                    details: {
+                        event: 'decryption_failed',
+                        success: false,
+                        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+                    },
+                },
+            });
+
+            // Re-throw decryption error
+            throw new DecryptionError(
+                'Failed to decrypt API token. Please re-enter your token in settings.',
+                error instanceof Error ? error : undefined
+            );
+        }
+    }
+}

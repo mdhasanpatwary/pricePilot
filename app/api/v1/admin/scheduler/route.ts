@@ -25,7 +25,7 @@ let tasks = [
   {
     id: "health-check",
     name: "Automated Diagnostics",
-    schedule: "Every 15 minutes",
+    schedule: "Every 5 minutes",
     lastRun: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 mins ago
     status: "idle",
     enabled: true,

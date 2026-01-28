@@ -9,6 +9,8 @@ import {
   createIntegrationSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { WebsiteService } from "@/lib/services/website-service";
+import { EncryptionError } from "@/lib/services/encryption/errors";
 
 /**
  * GET /api/integrations
@@ -124,16 +126,29 @@ async function handlePOST(req: NextRequest) {
     }
 
     // Create the site
-    const site = await prisma.site.create({
-      data: {
-        tenantId,
-        platform,
-        type: type || "USER",
-        baseUrl,
-        apiToken,
-        searchQueryPattern,
-      },
-    });
+    let site;
+    try {
+      site = await WebsiteService.createWebsite(
+        {
+          tenantId,
+          platform,
+          type: type || "USER",
+          baseUrl,
+          apiToken,
+          searchQueryPattern,
+        },
+        session.user.id
+      );
+    } catch (error) {
+      if (error instanceof EncryptionError) {
+        console.error('[Integrations API] Token encryption failed:', error);
+        return NextResponse.json(
+          { error: 'Failed to encrypt API token. Please try again.' },
+          { status: 500 }
+        );
+      }
+      throw error;
+    }
 
     await recordAuditLog({
       tenantId,

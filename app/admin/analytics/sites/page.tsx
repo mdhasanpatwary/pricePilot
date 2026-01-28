@@ -19,7 +19,7 @@
  */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Activity,
     RefreshCw,
@@ -84,7 +84,7 @@ export default function SiteAnalyticsDashboard() {
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     // Fetch available sites
-    const fetchSites = async () => {
+    const fetchSites = useCallback(async () => {
         try {
             const res = await fetch("/api/v1/admin/scraping-metrics?timeRange=24h");
             if (res.ok) {
@@ -98,10 +98,10 @@ export default function SiteAnalyticsDashboard() {
         } catch (error) {
             console.error("Error fetching sites:", error);
         }
-    };
+    }, [selectedSite]);
 
     // Fetch site analytics
-    const fetchSiteAnalytics = async (showRefreshing = false) => {
+    const fetchSiteAnalytics = useCallback(async (showRefreshing = false) => {
         if (!selectedSite) return;
 
         if (showRefreshing) {
@@ -128,17 +128,17 @@ export default function SiteAnalyticsDashboard() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [selectedSite, timeRange]);
 
     useEffect(() => {
         fetchSites();
-    }, []);
+    }, [fetchSites]);
 
     useEffect(() => {
         if (selectedSite) {
             fetchSiteAnalytics();
         }
-    }, [selectedSite, timeRange]);
+    }, [selectedSite, timeRange, fetchSiteAnalytics]);
 
     const handleRefresh = () => {
         fetchSiteAnalytics(true);

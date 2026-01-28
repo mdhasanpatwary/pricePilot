@@ -463,6 +463,18 @@ export class ScraperService {
     // Get tenant name if not provided
     const displayTenantName = tenantName || tenantId;
 
+    // Auto-clear completed/failed sessions for this tenant before starting new scraping
+    // This ensures only fresh logs are shown for the new session
+    try {
+      const clearedCount = await sessionTracker.clearCompletedSessions(tenantId);
+      if (clearedCount > 0) {
+        logger.info(`[ScraperService] Auto-cleared ${clearedCount} completed/failed sessions for tenant ${tenantId}`);
+      }
+    } catch (error) {
+      // Don't fail the scraping operation if clearing fails
+      logger.warn(`[ScraperService] Failed to auto-clear sessions for tenant ${tenantId}`, { error });
+    }
+
     // Create session for tracking
     // Requirement 2.1: Session initialization with target URL, proxy, and tenant info
     const sessionId = await sessionTracker.createSession(
@@ -2142,7 +2154,7 @@ export class ScraperService {
           const listItems = document.querySelectorAll('.list-unstyled li, .product-info li, ul li');
           let brand = "";
           let model = "";
-          
+
           listItems.forEach(li => {
             const text = li.textContent || "";
             // OpenCart typically shows "Brand: BrandName" or "Model: ModelName"
@@ -2159,7 +2171,7 @@ export class ScraperService {
               }
             }
           });
-          
+
           return { brand, model };
         };
 

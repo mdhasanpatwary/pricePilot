@@ -222,21 +222,109 @@ export class RulesEngine {
 
   /**
    * Execute price changes for approved recommendations
+   * Now queues changes for manual approval instead of auto-applying
    */
   static async executePriceChanges(
     recommendations: PriceRecommendation[],
+  ): Promise<{ updated: number; failed: number; queued: number }> {
+    let queued = 0;
+    let failed = 0;
+
+    // Set expiration to 7 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    for (const rec of recommendations) {
+      try {
+        const product = await prisma.product.findUnique({
+          where: { id: rec.productId },
+          select: { id: true, tenantId: true, title: true, sku: true },
+        });
+
+        if (!product) {
+          failed++;
+          continue;
+        }
+
+        // Check if there's already a pending change for this product
+        const existingPending = await prisma.pendingPriceChange.findFirst({
+          where: {
+            productId: rec.productId,
+            status: "PENDING",
+          },
+        });
+
+        if (existingPending) {
+          // Update existing pending change
+          await prisma.pendingPriceChange.update({
+            where: { id: existingPending.id },
+            data: {
+              currentPrice: rec.currentPrice,
+              recommendedPrice: rec.recommendedPrice,
+              reason: rec.reason,
+              appliedRule: rec.appliedRule,
+              expiresAt,
+            },
+          });
+        } else {
+          // Create new pending change
+          await prisma.pendingPriceChange.create({
+            data: {
+              productId: rec.productId,
+              tenantId: product.tenantId,
+              currentPrice: rec.currentPrice,
+              recommendedPrice: rec.recommendedPrice,
+              reason: rec.reason,
+              appliedRule: rec.appliedRule,
+              expiresAt,
+            },
+          });
+        }
+
+        queued++;
+      } catch (error) {
+        if (process.env.NODE_ENV !== "test") {
+          console.error(
+            `[SAFE-RULES] Failed to queue price change for product ${rec.productId}:`,
+            error,
+          );
+        }
+        failed++;
+      }
+    }
+
+    return { updated: 0, failed, queued };
+  }
+
+  /**
+   * Apply approved price changes to products and push to stores
+   */
+  static async applyApprovedChanges(
+    changeIds: string[],
+    reviewedBy: string,
   ): Promise<{ updated: number; failed: number }> {
     let updated = 0;
     let failed = 0;
 
-    for (const rec of recommendations) {
+    for (const changeId of changeIds) {
       try {
+        const change = await prisma.pendingPriceChange.findUnique({
+          where: { id: changeId },
+          include: { product: true },
+        });
+
+        if (!change || change.status !== "PENDING") {
+          failed++;
+          continue;
+        }
+
         // Atomic Database Operations
-        const product = await prisma.$transaction(async (tx) => {
-          const p = await tx.product.update({
-            where: { id: rec.productId },
+        await prisma.$transaction(async (tx) => {
+          // Update product price
+          await tx.product.update({
+            where: { id: change.productId },
             data: {
-              currentPrice: rec.recommendedPrice,
+              currentPrice: change.recommendedPrice,
               lastCrawledAt: new Date(),
             },
           });
@@ -244,26 +332,33 @@ export class RulesEngine {
           // Record price history
           await tx.priceHistory.create({
             data: {
-              productId: rec.productId,
-              price: rec.recommendedPrice,
+              productId: change.productId,
+              price: change.recommendedPrice,
             },
           });
 
-          return p;
+          // Mark change as approved
+          await tx.pendingPriceChange.update({
+            where: { id: changeId },
+            data: {
+              status: "APPROVED",
+              reviewedAt: new Date(),
+              reviewedBy,
+            },
+          });
         });
 
         // External Side Effects (Post-Transaction)
-        // We keep these outside the DB transaction to avoid long-held locks
-        // and because we can't "rollback" an email or a webhook dispatch.
+        const product = change.product;
 
         // Dispatch webhook
         await WebhookService.dispatch(product.tenantId, "price.updated", {
           productId: product.id,
           sku: product.sku,
           title: product.title,
-          oldPrice: rec.currentPrice,
-          newPrice: rec.recommendedPrice,
-          reason: rec.reason,
+          oldPrice: change.currentPrice.toString(),
+          newPrice: change.recommendedPrice.toString(),
+          reason: change.reason,
           timestamp: new Date().toISOString(),
         });
 
@@ -271,15 +366,15 @@ export class RulesEngine {
         await NotificationService.sendPriceAlert(
           product.tenantId,
           product.title,
-          rec.currentPrice,
-          rec.recommendedPrice,
+          parseFloat(change.currentPrice.toString()),
+          parseFloat(change.recommendedPrice.toString()),
         );
 
         updated++;
       } catch (error) {
         if (process.env.NODE_ENV !== "test") {
           console.error(
-            `[SAFE-RULES] Failed to update product ${rec.productId}:`,
+            `[SAFE-RULES] Failed to apply approved change ${changeId}:`,
             error,
           );
         }
@@ -288,5 +383,51 @@ export class RulesEngine {
     }
 
     return { updated, failed };
+  }
+
+  /**
+   * Reject pending price changes
+   */
+  static async rejectPendingChanges(
+    changeIds: string[],
+    reviewedBy: string,
+  ): Promise<{ rejected: number; failed: number }> {
+    let rejected = 0;
+    let failed = 0;
+
+    for (const changeId of changeIds) {
+      try {
+        await prisma.pendingPriceChange.update({
+          where: { id: changeId, status: "PENDING" },
+          data: {
+            status: "REJECTED",
+            reviewedAt: new Date(),
+            reviewedBy,
+          },
+        });
+        rejected++;
+      } catch (error) {
+        failed++;
+      }
+    }
+
+    return { rejected, failed };
+  }
+
+  /**
+   * Clean up expired pending changes
+   */
+  static async cleanupExpiredChanges(): Promise<number> {
+    const result = await prisma.pendingPriceChange.updateMany({
+      where: {
+        status: "PENDING",
+        expiresAt: { lt: new Date() },
+      },
+      data: {
+        status: "EXPIRED",
+      },
+    });
+
+    return result.count;
   }
 }

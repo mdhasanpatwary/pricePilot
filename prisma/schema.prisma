@@ -31,6 +31,7 @@ model Tenant {
   scrapeRetries   ScrapeRetry[]
   categories      Category[]
   brands          Brand[]
+  pendingPriceChanges PendingPriceChange[]
 }
 
 model Category {
@@ -207,6 +208,7 @@ model Product {
   matchesAsCompetitor ProductMatch[]   @relation("CompetitorProduct")
   matchesAsUser       ProductMatch[]   @relation("UserProduct")
   scrapeRetries       ScrapeRetry[]
+  pendingPriceChanges PendingPriceChange[]
 
   @@index([sku])
   @@index([tenantId])
@@ -673,5 +675,34 @@ model SystemAlert {
   @@index([acknowledged])
   @@index([createdAt])
   @@index([severity])
+}
+
+model PendingPriceChange {
+  id                String         @id @default(uuid())
+  productId         String
+  tenantId          String
+  currentPrice      Decimal        @db.Decimal(10, 2)
+  recommendedPrice  Decimal        @db.Decimal(10, 2)
+  reason            String
+  appliedRule       String?
+  status            ApprovalStatus @default(PENDING)
+  createdAt         DateTime       @default(now())
+  reviewedAt        DateTime?
+  reviewedBy        String?
+  expiresAt         DateTime
+  
+  product           Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId, status])
+  @@index([productId])
+  @@index([expiresAt])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
 }
 

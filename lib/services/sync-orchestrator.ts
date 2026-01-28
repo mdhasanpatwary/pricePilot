@@ -1,6 +1,5 @@
 import { ScraperService, ScrapeBlockError } from "./scraper";
 import { RulesEngine } from "./rules-engine";
-import { SyncService } from "./sync";
 import { MatchingService } from "./matching";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
@@ -321,30 +320,19 @@ export class SyncOrchestrator {
         return { success: true, updated: 0, scrapped: scrappedCount };
       }
 
-      // 4. Execute Price Changes
+      // 4. Queue Price Changes for Approval (instead of auto-applying)
       const result = await RulesEngine.executePriceChanges(recommendations);
-
-      // 5. Trigger external sync
-      const userSites = await prisma.site.findMany({
-        where: { tenantId, type: "USER" },
-      });
-
-      for (const site of userSites) {
-        if (site.platform === "OPENCART" || site.platform === "LARAVEL") {
-          await SyncService.syncProductsToStore(site.id);
-        }
-      }
 
       const finalResult = {
         success: true,
         scrapped: scrappedCount,
-        updated: result.updated,
+        queued: result.queued,
         failed: result.failed,
       };
 
       await NotificationService.sendSyncSuccess(
         tenantId,
-        `Sync complete! Scrapped ${scrappedCount} products and updated ${result.updated} store prices.`,
+        `Sync complete! Scrapped ${scrappedCount} products and queued ${result.queued} price changes for your review.`,
       );
 
       return finalResult;
@@ -748,27 +736,15 @@ export class SyncOrchestrator {
       await prisma.syncLog.create({
         data: {
           siteId,
-          message: `✅ Rules evaluation complete. Pushing updates to connected stores...`,
+          message: `✅ Rules evaluation complete. Price changes queued for your approval.`,
           level: "SUCCESS",
         },
       });
 
-      const userSites = await prisma.site.findMany({
-        where: { tenantId: site.tenantId, type: "USER" },
-      });
-
-      for (const userSite of userSites) {
-        // Double check session is still valid before pushing to each store
-        const pushCheck = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true, syncStartedAt: true } });
-        if (!pushCheck?.isSyncing || pushCheck.syncStartedAt?.getTime() !== syncSessionStart.getTime()) break;
-
-        await SyncService.syncProductsToStore(userSite.id);
-      }
-
       await prisma.syncLog.create({
         data: {
           siteId,
-          message: `🚀 Sync operation completed. All systems nominal.`,
+          message: `🚀 Sync operation completed. Review pending price changes in your dashboard.`,
           level: "SUCCESS",
         },
       });

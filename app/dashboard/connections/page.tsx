@@ -31,34 +31,61 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 const platforms = [
-  { id: "SHOPIFY", name: "Shopify", icon: "/icons/platforms/shopify.svg" },
-  {
-    id: "WOOCOMMERCE",
-    name: "WooCommerce",
-    icon: "/icons/platforms/woocommerce.svg",
-  },
-  { id: "MAGENTO", name: "Magento", icon: "/icons/platforms/magento.png" },
-  {
-    id: "PRESTASHOP",
-    name: "PrestaShop",
-    icon: "/icons/platforms/prestashop.svg",
-  },
-  {
-    id: "BIGCOMMERCE",
-    name: "BigCommerce",
-    icon: "/icons/platforms/bigcommerce.svg",
-  },
   {
     id: "OPENCART",
     name: "OpenCart",
     icon: "/icons/platforms/opencart.svg",
     downloadUrl: "/dashboard/integrations/opencart",
+    status: "supported",
+    badge: "✅ Supported"
   },
   {
     id: "LARAVEL",
     name: "Laravel",
     icon: "/icons/platforms/laravel.png",
     downloadUrl: "/dashboard/integrations/laravel",
+    status: "supported",
+    badge: "✅ Supported"
+  },
+  {
+    id: "SHOPIFY",
+    name: "Shopify",
+    icon: "/icons/platforms/shopify.svg",
+    status: "in-development",
+    badge: "🚧 Coming Soon",
+    disabled: true
+  },
+  {
+    id: "WOOCOMMERCE",
+    name: "WooCommerce",
+    icon: "/icons/platforms/woocommerce.svg",
+    status: "in-development",
+    badge: "🚧 Coming Soon",
+    disabled: true
+  },
+  {
+    id: "MAGENTO",
+    name: "Magento",
+    icon: "/icons/platforms/magento.png",
+    status: "in-development",
+    badge: "🚧 Coming Soon",
+    disabled: true
+  },
+  {
+    id: "PRESTASHOP",
+    name: "PrestaShop",
+    icon: "/icons/platforms/prestashop.svg",
+    status: "planned",
+    badge: "⏳ Planned",
+    disabled: true
+  },
+  {
+    id: "BIGCOMMERCE",
+    name: "BigCommerce",
+    icon: "/icons/platforms/bigcommerce.svg",
+    status: "planned",
+    badge: "⏳ Planned",
+    disabled: true
   },
 ];
 
@@ -401,21 +428,34 @@ export default function ConnectionsPage() {
                       key={p.id}
                       type="button"
                       onClick={() =>
-                        form.setValue("platform", p.id, { shouldValidate: true })
+                        !p.disabled && form.setValue("platform", p.id, { shouldValidate: true })
                       }
+                      disabled={p.disabled}
                       className={cn(
                         "p-4 border rounded-md flex flex-col items-center gap-3 transition-all group relative",
+                        p.disabled && "opacity-50 cursor-not-allowed",
                         selectedPlatform === p.id
                           ? "border-primary bg-primary/5 ring-1 ring-primary"
                           : "border-border hover:border-primary/50 hover:bg-muted/50",
+                        p.disabled && "hover:border-border hover:bg-transparent"
                       )}
                     >
-                      {selectedPlatform === p.id && (
+                      {selectedPlatform === p.id && !p.disabled && (
                         <div className="absolute top-2 right-2">
                           <CheckCircle2 className="w-4 h-4 text-primary" />
                         </div>
                       )}
-                      <div className="w-12 h-12 flex items-center justify-center grayscale group-hover:grayscale-0 transition-all p-1 relative">
+                      {p.badge && (
+                        <div className="absolute top-2 left-2">
+                          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-muted border border-border">
+                            {p.badge}
+                          </span>
+                        </div>
+                      )}
+                      <div className={cn(
+                        "w-12 h-12 flex items-center justify-center transition-all p-1 relative",
+                        p.disabled ? "grayscale" : "grayscale group-hover:grayscale-0"
+                      )}>
                         <Image
                           src={p.icon}
                           alt={p.name}
@@ -435,6 +475,19 @@ export default function ConnectionsPage() {
                     {form.formState.errors.platform.message}
                   </p>
                 )}
+                {selectedPlatform && platforms.find((p) => p.id === selectedPlatform)?.disabled && (
+                  <div className="p-4 bg-amber-500/5 rounded-lg border border-amber-500/20 flex items-start gap-3">
+                    <div className="text-2xl">🚧</div>
+                    <div>
+                      <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                        Coming Soon!
+                      </p>
+                      <p className="text-xs text-amber-600/70 dark:text-amber-400/70 leading-relaxed mt-1">
+                        {platforms.find((p) => p.id === selectedPlatform)?.name} integration is currently {platforms.find((p) => p.id === selectedPlatform)?.status === 'in-development' ? 'in development' : 'planned for a future release'}. We&apos;re working hard to bring you this integration soon! In the meantime, you can use OpenCart or Laravel.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {platforms.find((p) => p.id === selectedPlatform)
                   ?.downloadUrl && (
                     <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col gap-3">
@@ -445,7 +498,7 @@ export default function ConnectionsPage() {
                             Integration Package Required
                           </p>
                           <p className="text-xs font-semibold text-primary/70 leading-relaxed uppercase tracking-tight">
-                            To connect Laravel, you first need to download and
+                            To connect {platforms.find((p) => p.id === selectedPlatform)?.name}, you first need to download and
                             install our integration package on your store.
                           </p>
                         </div>
@@ -560,7 +613,7 @@ export default function ConnectionsPage() {
                 <div className="flex items-center gap-3 pt-2">
                   <Button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || Boolean(selectedPlatform && platforms.find((p) => p.id === selectedPlatform)?.disabled)}
                     className="flex-1 font-bold py-2.5 rounded-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]"
                   >
                     {loading ? (

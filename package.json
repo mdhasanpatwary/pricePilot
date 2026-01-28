@@ -19,6 +19,8 @@
     "worker:dev": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/start-worker.ts",
     "backup": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/backup-db.ts",
     "retention": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/data-retention.ts",
+    "migrate-tokens": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/migrate-tokens.ts",
+    "rotate-keys": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/rotate-keys.ts",
     "prepare": "husky"
   },
   "dependencies": {

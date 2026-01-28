@@ -12,7 +12,7 @@ export default function FAQDocsPage() {
         },
         {
           q: "How often are prices synced?",
-          a: "The standard sync interval is every 15 minutes, though this can be configured to be as fast as 1 minute for enterprise plans.",
+          a: "The standard sync interval is every 24 hours. This ensures comprehensive competitor price monitoring while respecting rate limits and system resources.",
         },
       ],
     },
@@ -72,8 +72,8 @@ export default function FAQDocsPage() {
                     {faq.q}
                   </h3>
                   <div className="flex items-start gap-3 text-sm leading-relaxed text-muted-foreground italic">
-                     <span className="text-muted-foreground/30 pt-0.5 whitespace-nowrap">A:</span>
-                     {faq.a}
+                    <span className="text-muted-foreground/30 pt-0.5 whitespace-nowrap">A:</span>
+                    {faq.a}
                   </div>
                 </div>
               ))}

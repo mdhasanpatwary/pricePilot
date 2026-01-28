@@ -1,6 +1,23 @@
 // Removed unused NextRequest import
 import { GET, POST, DELETE } from "@/app/api/v1/integrations/route";
 
+// Mock encryption service before other imports
+jest.mock("@/lib/services/encryption/key-manager", () => ({
+  KeyManager: jest.fn().mockImplementation(() => ({
+    getMasterKey: jest.fn().mockReturnValue(Buffer.from('a'.repeat(32))),
+    validateKey: jest.fn(),
+    getKey: jest.fn(),
+  })),
+}));
+
+jest.mock("@/lib/services/encryption/encryption-service", () => ({
+  EncryptionService: jest.fn().mockImplementation(() => ({
+    encrypt: jest.fn().mockReturnValue('aes-256-gcm:mock:mock:mock'),
+    decrypt: jest.fn().mockReturnValue('mock-plaintext-token'),
+    isEncrypted: jest.fn().mockReturnValue(true),
+  })),
+}));
+
 // Mock NextAuth
 jest.mock("next-auth", () => ({
   getServerSession: jest.fn(),
@@ -55,6 +72,7 @@ jest.mock("@/lib/prisma", () => ({
     tenantAuditLog: {
       create: jest.fn().mockResolvedValue({ id: "log-1" }),
     },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -200,7 +218,7 @@ describe("/api/integrations", () => {
         platform: "OPENCART",
         type: "USER",
         baseUrl: "https://mystore.com",
-        apiToken: "test-token",
+        apiToken: "aes-256-gcm:mock:mock:mock", // Encrypted token
         tenantId: "test-tenant-123",
       };
 
@@ -209,7 +227,19 @@ describe("/api/integrations", () => {
         storeLimit: 5,
       });
       (prisma.site.count as jest.Mock).mockResolvedValue(1);
-      (prisma.site.create as jest.Mock).mockResolvedValue(mockSite);
+
+      // Mock transaction for WebsiteService
+      (prisma.$transaction as jest.Mock) = jest.fn().mockImplementation(async (callback) => {
+        const tx = {
+          site: {
+            create: jest.fn().mockResolvedValue(mockSite),
+          },
+          auditLog: {
+            create: jest.fn().mockResolvedValue({ id: 'log-1' }),
+          },
+        };
+        return callback(tx);
+      });
 
       const req = {
         url: "http://localhost:3000/api/v1/integrations",
@@ -236,15 +266,8 @@ describe("/api/integrations", () => {
         status: "CONNECTED",
       });
 
-      expect(prisma.site.create).toHaveBeenCalledWith({
-        data: {
-          tenantId: "test-tenant-123",
-          platform: "OPENCART",
-          type: "USER",
-          baseUrl: "https://mystore.com",
-          apiToken: "test-token",
-        },
-      });
+      // Verify transaction was called
+      expect(prisma.$transaction).toHaveBeenCalled();
     });
   });
 

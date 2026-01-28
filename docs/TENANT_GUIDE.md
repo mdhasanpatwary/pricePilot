@@ -377,7 +377,7 @@ Contact support if you experience:
 ### General Questions
 
 **Q: How often is data collected from competitor sites?**
-A: By default, every 15 minutes. This can be adjusted based on your plan.
+A: By default, every 24 hours. This ensures comprehensive monitoring while respecting rate limits.
 
 **Q: Can I configure different settings for each competitor?**
 A: Yes! Each site can have its own configuration.
@@ -386,7 +386,7 @@ A: Yes! Each site can have its own configuration.
 A: No, only future scraping sessions use the new settings.
 
 **Q: How long does it take for configuration changes to apply?**
-A: Changes apply to the next scraping session, typically within 15 minutes.
+A: Changes apply to the next scraping session, typically within 24 hours.
 
 ### Metrics Questions
 

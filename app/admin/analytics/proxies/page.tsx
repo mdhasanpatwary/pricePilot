@@ -19,7 +19,7 @@
  */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Server,
     RefreshCw,
@@ -84,7 +84,7 @@ export default function ProxyAnalyticsDashboard() {
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     // Fetch available proxies
-    const fetchProxies = async () => {
+    const fetchProxies = useCallback(async () => {
         try {
             const res = await fetch("/api/v1/admin/proxy-health?timeRange=24h");
             if (res.ok) {
@@ -98,10 +98,10 @@ export default function ProxyAnalyticsDashboard() {
         } catch (error) {
             console.error("Error fetching proxies:", error);
         }
-    };
+    }, [selectedProxy]);
 
     // Fetch proxy analytics
-    const fetchProxyAnalytics = async (showRefreshing = false) => {
+    const fetchProxyAnalytics = useCallback(async (showRefreshing = false) => {
         if (!selectedProxy) return;
 
         if (showRefreshing) {
@@ -128,17 +128,17 @@ export default function ProxyAnalyticsDashboard() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [selectedProxy, timeRange]);
 
     useEffect(() => {
         fetchProxies();
-    }, []);
+    }, [fetchProxies]);
 
     useEffect(() => {
         if (selectedProxy) {
             fetchProxyAnalytics();
         }
-    }, [selectedProxy, timeRange]);
+    }, [selectedProxy, timeRange, fetchProxyAnalytics]);
 
     const handleRefresh = () => {
         fetchProxyAnalytics(true);

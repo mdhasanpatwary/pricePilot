@@ -1,122 +1,146 @@
-# Scraping Log Clear on New Session - Implementation
+# Scraping Log Management - Implementation Summary
 
 ## Problem
-When a new scraping/sync session started, previous logs were not being deleted. This caused old logs from previous sessions to remain visible in both tenant and admin UI consoles, making it confusing to track the current session's progress.
+When scraping starts, previous logs remained visible, making it difficult to track the current session. Users needed to see only fresh logs for new scraping sessions.
 
 ## Solution
-Implemented automatic log clearing when a new sync session starts. Previous `SyncLog` entries are now deleted before creating new log entries for the current session.
+Implemented automatic and manual log clearing functionality to ensure clean log views for new scraping sessions.
 
 ## Changes Made
 
-### 1. Full Tenant Sync (`lib/services/sync-orchestrator.ts`)
-**Location:** `processFullSync` method (around line 175)
+### 1. Backend - Session Repository (`lib/services/session-repository.ts`)
+Added `clearCompletedSessions()` method to delete completed and failed sessions from the database:
+- Filters sessions by status: `completed` and `failed`
+- Supports optional tenant filtering
+- Returns count of cleared sessions
+- Includes error handling and logging
 
-**Change:** Added log deletion for all competitor sites before dispatching sync jobs:
+### 2. Backend - Session Tracker (`lib/services/session-tracker.ts`)
+Added `clearCompletedSessions()` method that:
+- Calls the repository method to clear from PostgreSQL
+- Also clears completed/failed sessions from Redis cache
+- Supports tenant-specific clearing
+- Provides comprehensive logging
+
+### 3. Backend - Scraper Service (`lib/services/scraper.ts`)
+Added automatic log clearing in `scrapeProductPageWithTracking()`:
+- Automatically clears completed/failed sessions for the tenant before creating a new session
+- Ensures only fresh logs are shown for new scraping operations
+- Non-blocking: scraping continues even if clearing fails
+- Logs the number of cleared sessions
+
+### 4. API Endpoint (`app/api/v1/admin/sessions/clear/route.ts`)
+Created new POST endpoint `/api/v1/admin/sessions/clear`:
+- Requires admin authentication
+- Accepts optional `tenantId` in request body
+- Returns count of cleared sessions
+- Provides success/error responses
+
+### 5. Frontend - Real-Time Monitor (`components/admin/real-time-monitor.tsx`)
+Added "Clear Logs" button with:
+- Confirmation dialog before clearing
+- Loading state during operation
+- Success message display (auto-dismisses after 3 seconds)
+- Error handling
+- Automatic refresh after clearing
+- Respects tenant filter (clears only selected tenant's logs)
+
+## Features
+
+### Automatic Clearing
+- **When**: Automatically triggered when a new scraping session starts
+- **Scope**: Clears only completed and failed sessions for the specific tenant
+- **Benefit**: Users always see fresh logs without manual intervention
+
+### Manual Clearing
+- **Where**: "Clear Logs" button in Real-Time Monitor
+- **Confirmation**: Requires user confirmation before clearing
+- **Feedback**: Shows success message with count of cleared sessions
+- **Filtering**: Respects current tenant filter
+
+### Safety Features
+1. **Confirmation Dialog**: Prevents accidental clearing
+2. **Non-Blocking**: Auto-clear failures don't stop scraping
+3. **Tenant Isolation**: Only clears sessions for the specified tenant
+4. **Status Filtering**: Only removes completed/failed sessions, preserves active ones
+5. **Comprehensive Logging**: All operations are logged for audit trail
+
+## User Experience
+
+### Before
+- Old logs mixed with new session logs
+- Difficult to track current scraping progress
+- Manual database cleanup required
+
+### After
+- Clean log view for each new scraping session
+- Easy to track current session progress
+- Optional manual clearing with one click
+- Clear feedback on clearing operations
+
+## Technical Details
+
+### Database Operations
 ```typescript
-// Clear previous logs for all competitor sites before starting new session
-for (const site of competitorSites) {
-  await prisma.syncLog.deleteMany({ where: { siteId: site.id } });
-}
+// Clear completed sessions
+DELETE FROM scraping_sessions 
+WHERE status IN ('completed', 'failed') 
+AND tenantId = ?
 ```
 
-**Impact:** When admin triggers a full tenant sync, all competitor site logs are cleared first.
+### Redis Operations
+- Removes completed/failed sessions from tenant session sets
+- Cleans up session data from Redis cache
 
-### 2. Single Site Sync (`lib/services/sync-orchestrator.ts`)
-**Location:** `processSiteSync` method (around line 449)
+### API Usage
+```bash
+# Clear all completed/failed sessions
+POST /api/v1/admin/sessions/clear
+Content-Type: application/json
+{}
 
-**Status:** ✅ Already implemented correctly
-```typescript
-await prisma.syncLog.deleteMany({ where: { siteId } });
-```
-
-**Impact:** When a single competitor site sync is triggered, its logs are cleared first.
-
-### 3. User Store Sync (`lib/services/sync.ts`)
-**Location:** `syncSite` method (around line 43)
-
-**Change:** Added log deletion before starting user store sync:
-```typescript
-// Clear previous logs before starting new sync session
-await prisma.syncLog.deleteMany({ where: { siteId } });
-```
-
-**Impact:** When a user store (OpenCart, Laravel, Shopify, etc.) sync is triggered, its logs are cleared first.
-
-## UI Impact
-
-### Tenant UI (`/dashboard/connections`)
-- The terminal-style console now shows only the current session's logs
-- When sync starts, previous logs are cleared
-- Users see a clean log stream for each new sync session
-
-### Admin UI (`/admin/monitor`)
-- The sync monitor shows only current session logs
-- Each site's log history is cleared when a new sync starts
-- Easier to track real-time progress without old log clutter
-
-## Log Display Locations
-
-1. **Tenant Dashboard - Connections Page**
-   - File: `app/dashboard/connections/page.tsx`
-   - Shows logs in a terminal-style console
-   - Displays logs for syncing stores with real-time updates
-
-2. **Admin Dashboard - Sync Monitor**
-   - File: `app/admin/monitor/page.tsx`
-   - API: `app/api/v1/admin/sync-monitor/route.ts`
-   - Shows logs for all active sync sessions across all tenants
-
-3. **Competitors Page**
-   - File: `app/dashboard/competitors/page.tsx`
-   - API: `app/api/v1/competitors/route.ts`
-   - Shows logs for competitor sites
-
-## Database Schema
-```prisma
-model SyncLog {
-  id        String   @id @default(uuid())
-  siteId    String
-  message   String
-  level     String   @default("INFO")
-  createdAt DateTime @default(now())
-  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+# Clear for specific tenant
+POST /api/v1/admin/sessions/clear
+Content-Type: application/json
+{
+  "tenantId": "tenant-123"
 }
 ```
 
 ## Testing Recommendations
 
-1. **Test Full Tenant Sync:**
-   - Start a full sync from admin panel
-   - Verify all competitor site logs are cleared
-   - Check that new logs appear cleanly
+1. **Automatic Clearing**
+   - Start a scraping session
+   - Verify old completed/failed sessions are cleared
+   - Verify active sessions are preserved
 
-2. **Test Single Site Sync:**
-   - Trigger sync for a single competitor site
-   - Verify previous logs for that site are cleared
-   - Confirm new logs display correctly
+2. **Manual Clearing**
+   - Click "Clear Logs" button
+   - Confirm the operation
+   - Verify success message appears
+   - Verify sessions are removed from UI
 
-3. **Test User Store Sync:**
-   - Sync a user store (e.g., Laravel, OpenCart)
-   - Verify previous logs are cleared
-   - Check terminal console shows only new logs
+3. **Tenant Filtering**
+   - Select a specific tenant
+   - Clear logs
+   - Verify only that tenant's sessions are cleared
 
-4. **Test Multiple Concurrent Syncs:**
-   - Start syncs for multiple sites
-   - Verify each site's logs are independent
-   - Confirm logs don't mix between sites
+4. **Error Handling**
+   - Test with network errors
+   - Verify error messages display correctly
+   - Verify scraping continues if auto-clear fails
 
-## Notes
+## Future Enhancements
 
-- Log deletion is scoped to individual sites (by `siteId`)
-- Logs are deleted atomically before new session starts
-- Old logs are permanently deleted (not archived)
-- Log retention policy still applies (configured via `RETENTION_SYNC_LOG_DAYS`)
-- The `onDelete: Cascade` in schema ensures logs are deleted when sites are deleted
+1. **Scheduled Cleanup**: Add cron job for automatic cleanup of old sessions
+2. **Retention Policy**: Configure retention period for completed sessions
+3. **Selective Clearing**: Allow clearing by date range or status
+4. **Bulk Operations**: Clear logs for multiple tenants at once
+5. **Archive Feature**: Archive old logs instead of deleting them
 
 ## Related Files
-
-- `lib/services/sync-orchestrator.ts` - Main sync orchestration logic
-- `lib/services/sync.ts` - User store sync logic
-- `app/dashboard/connections/page.tsx` - Tenant UI console
-- `app/admin/monitor/page.tsx` - Admin UI monitor
-- `prisma/schema.prisma` - Database schema
+- `lib/services/session-repository.ts` - Database operations
+- `lib/services/session-tracker.ts` - Session management
+- `lib/services/scraper.ts` - Scraping logic
+- `app/api/v1/admin/sessions/clear/route.ts` - API endpoint
+- `components/admin/real-time-monitor.tsx` - UI component

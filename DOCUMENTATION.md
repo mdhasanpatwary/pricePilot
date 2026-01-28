@@ -25,9 +25,9 @@ PricePilot is a professional-grade SaaS platform designed for e-commerce busines
 
 ### Key Benefits
 
-- **Real-Time Monitoring**: Track competitor prices automatically every 15 minutes
+- **Real-Time Monitoring**: Track competitor prices automatically every 24 hours
 - **Automated Price Updates**: Apply pricing rules and update your store prices instantly
-- **Multi-Platform Support**: Works with Shopify, WooCommerce, Laravel, Magento, and more
+- **Multi-Platform Support**: Currently supports OpenCart and Laravel, with more platforms coming soon
 - **Smart Matching**: Automatically match your products with competitor offerings
 - **Analytics Dashboard**: Visualize your market position and pricing trends
 
@@ -75,13 +75,18 @@ PricePilot is a professional-grade SaaS platform designed for e-commerce busines
 
 ### Supported Platforms
 
-- ✅ Shopify
-- ✅ WooCommerce
-- ✅ Laravel
-- ✅ Magento
-- ✅ PrestaShop
-- ✅ BigCommerce
-- ✅ OpenCart
+#### Currently Supported
+- ✅ **OpenCart** - Fully Supported
+- ✅ **Laravel** - Fully Supported
+
+#### In Development
+- 🚧 **Shopify** - Coming Soon
+- 🚧 **WooCommerce** - Coming Soon
+- 🚧 **Magento** - Coming Soon
+
+#### Planned
+- ⏳ **PrestaShop** - Planned for Future Release
+- ⏳ **BigCommerce** - Planned for Future Release
 
 ### Laravel Integration
 
@@ -225,11 +230,16 @@ For custom PHP platforms like OpenCart and Laravel, we provide dedicated integra
 
 > **Pro Tip**: Use the **Copy API Token** button in the OpenCart admin to ensure accuracy when connecting.
 
-### Shopify Integration
+### Shopify Integration (Coming Soon)
 
-1. Install PricePilot from Shopify App Store
-2. Authorize the app
-3. Connection is automatic - no manual token needed
+Shopify integration is currently in development. We're working hard to bring you seamless Shopify support soon!
+
+**Planned Features:**
+- One-click installation from Shopify App Store
+- Automatic authorization
+- No manual token configuration needed
+
+Stay tuned for updates!
 
 ---
 
@@ -247,7 +257,7 @@ View and manage all your products in one place:
 ### 2. Competitor Monitoring
 
 - Add unlimited competitor stores (based on your plan)
-- Automatic price crawling every 15 minutes
+- Automatic price crawling every 24 hours
 - Price history tracking
 - Alert notifications for price changes
 
@@ -479,13 +489,13 @@ A: Use any of these methods:
 A: No! You can download the package directly from the dashboard and install it manually. See the [Laravel Integration](#laravel-integration) section for manual installation steps.
 
 **Q: Which platforms does PricePilot support?**
-A: We support Shopify, WooCommerce, Laravel, Magento, PrestaShop, BigCommerce, and OpenCart. More platforms coming soon!
+A: We currently fully support OpenCart and Laravel. Shopify, WooCommerce, and Magento are in development. PrestaShop and BigCommerce are planned for future releases.
 
 **Q: Can I connect multiple stores?**
 A: Yes! The number of stores depends on your plan. Basic allows 1 store, Premium allows 3, and Pro allows unlimited stores.
 
 **Q: Do I need to install anything on my store?**
-A: For Laravel, yes - you need to install our package. For Shopify and WooCommerce, you install our app/plugin. For competitor stores, no installation is needed.
+A: For Laravel and OpenCart, yes - you need to install our integration package/module. For competitor stores, no installation is needed.
 
 ### Product Matching Questions
 
@@ -518,7 +528,7 @@ A: Use the "Margin Lock" strategy to ensure you never go below a certain profit 
 ### Technical Questions
 
 **Q: How often does PricePilot check competitor prices?**
-A: Every 15 minutes for all connected competitor stores.
+A: Every 24 hours for all connected competitor stores.
 
 **Q: Is my data secure?**
 A: Yes! All API tokens are encrypted with AES-256 encryption. We use industry-standard security practices and never store sensitive payment information.

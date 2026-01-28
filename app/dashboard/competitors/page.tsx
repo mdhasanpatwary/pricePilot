@@ -562,7 +562,7 @@ export default function CompetitorsPage() {
               {
                 icon: MousePointer2,
                 title: "Live Updates",
-                desc: "Checked every 15 minutes.",
+                desc: "Checked every 24 hours.",
               },
             ].map((step, i) => (
               <div key={i} className="flex gap-4 items-start">

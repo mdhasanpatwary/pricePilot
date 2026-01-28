@@ -231,6 +231,36 @@ export class SessionRepository {
     }
 
     /**
+     * Clear completed and failed sessions
+     * Used to clean up logs before starting new scraping sessions
+     */
+    async clearCompletedSessions(tenantId?: string): Promise<number> {
+        try {
+            const where: any = {
+                status: { in: ['completed', 'failed'] },
+            };
+
+            if (tenantId) {
+                where.tenantId = tenantId;
+            }
+
+            const result = await prisma.scrapingSession.deleteMany({
+                where,
+            });
+
+            logger.info('[SessionRepository] Cleared completed sessions', {
+                count: result.count,
+                tenantId,
+            });
+
+            return result.count;
+        } catch (error) {
+            logger.error('[SessionRepository] Error clearing completed sessions', { error, tenantId });
+            return 0;
+        }
+    }
+
+    /**
      * Map Prisma model to typed interface
      */
     private mapToSessionData(session: any): ScrapingSessionData {

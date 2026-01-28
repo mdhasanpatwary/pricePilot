@@ -8,6 +8,12 @@ jest.mock("@/lib/prisma", () => ({
     },
     product: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    pendingPriceChange: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
       update: jest.fn(),
     },
     priceHistory: {
@@ -277,7 +283,7 @@ describe("RulesEngine", () => {
   });
 
   describe("executePriceChanges", () => {
-    it("should update product prices and create price history", async () => {
+    it("should queue price changes for approval", async () => {
       const recommendations = [
         {
           productId: "product-1",
@@ -288,27 +294,30 @@ describe("RulesEngine", () => {
         },
       ];
 
-      (prisma.product.update as jest.Mock).mockResolvedValue({});
-      (prisma.priceHistory.create as jest.Mock).mockResolvedValue({});
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+        id: "product-1",
+        tenantId: "tenant-1",
+        title: "Test Product",
+        sku: "TEST-001",
+      });
+      (prisma.pendingPriceChange.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.pendingPriceChange.create as jest.Mock).mockResolvedValue({});
 
       const result = await RulesEngine.executePriceChanges(recommendations);
 
-      expect(result.updated).toBeGreaterThanOrEqual(0);
-      expect(result.updated).toBeLessThanOrEqual(1);
-      // expect(result.failed).toBe(0);
+      expect(result.queued).toBeGreaterThanOrEqual(0);
+      expect(result.queued).toBeLessThanOrEqual(1);
+      expect(result.failed).toBe(0);
 
-      expect(prisma.product.update).toHaveBeenCalledWith({
-        where: { id: "product-1" },
-        data: {
-          currentPrice: 144,
-          lastCrawledAt: expect.any(Date),
-        },
-      });
-
-      expect(prisma.priceHistory.create).toHaveBeenCalledWith({
+      expect(prisma.pendingPriceChange.create).toHaveBeenCalledWith({
         data: {
           productId: "product-1",
-          price: 144,
+          tenantId: "tenant-1",
+          currentPrice: 150,
+          recommendedPrice: 144,
+          reason: "Undercut competitor",
+          appliedRule: "UNDERCUT",
+          expiresAt: expect.any(Date),
         },
       });
     });
@@ -324,13 +333,13 @@ describe("RulesEngine", () => {
         },
       ];
 
-      (prisma.product.update as jest.Mock).mockRejectedValue(
+      (prisma.product.findUnique as jest.Mock).mockRejectedValue(
         new Error("Database error"),
       );
 
       const result = await RulesEngine.executePriceChanges(recommendations);
 
-      expect(result.updated).toBe(0);
+      expect(result.queued).toBe(0);
       expect(result.failed).toBe(1);
     });
   });

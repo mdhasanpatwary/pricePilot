@@ -292,8 +292,32 @@ class ControllerApiPricepilot extends Controller {
         $productId = $productIdValidation['value'];
         $price = $priceValidation['value'];
         
+        // Get optional SKU for verification
+        $expectedSku = isset($post_data['sku']) ? $post_data['sku'] : null;
+        
         // Get optional store_id
         $storeId = isset($post_data['store_id']) ? (int)$post_data['store_id'] : null;
+
+        // If SKU provided, verify it matches the product
+        if ($expectedSku !== null) {
+            $this->load->model('catalog/product');
+            $product = $this->model_catalog_product->getProduct($productId);
+            
+            if (!$product) {
+                $this->errorHandler->sendNotFoundError('Product not found');
+                return;
+            }
+            
+            // Verify SKU matches
+            if ($product['sku'] !== $expectedSku) {
+                $this->errorHandler->sendValidationError('SKU mismatch', array(
+                    'field' => 'sku',
+                    'expected' => $expectedSku,
+                    'actual' => $product['sku']
+                ));
+                return;
+            }
+        }
 
         // Update price using PriceService
         $updateResult = $this->priceService->updatePrice($productId, $price, $storeId);
@@ -308,13 +332,21 @@ class ControllerApiPricepilot extends Controller {
             return;
         }
 
-        // Build success response
+        // Get updated product details for verification
+        $this->load->model('catalog/product');
+        $updatedProduct = $this->model_catalog_product->getProduct($productId);
+
+        // Build success response with verification data
         $json = [
             'success' => true,
             'message' => 'Price updated successfully',
             'product_id' => $productId,
             'old_price' => $updateResult['old_price'],
-            'new_price' => $price
+            'new_price' => $price,
+            // Include verification data
+            'updated_price' => (float)$updatedProduct['price'], // Actual price from database
+            'sku' => $updatedProduct['sku'],
+            'timestamp' => date('Y-m-d H:i:s')
         ];
         
         // Calculate response time

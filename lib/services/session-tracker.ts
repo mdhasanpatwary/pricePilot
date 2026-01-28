@@ -416,6 +416,42 @@ export class SessionTracker {
     }
 
     /**
+     * Clear completed and failed sessions for a tenant
+     * This is useful when starting a new scraping session to show only fresh logs
+     *
+     * @param tenantId - Optional tenant filter (if not provided, clears all)
+     * @returns Number of sessions cleared
+     */
+    async clearCompletedSessions(tenantId?: string): Promise<number> {
+        try {
+            const count = await sessionRepository.clearCompletedSessions(tenantId);
+
+            // Also clear from Redis
+            if (tenantId) {
+                const tenantSessions = await redisSessionManager.getTenantSessions(tenantId);
+                for (const sessionId of tenantSessions) {
+                    const session = await this.getSession(sessionId);
+                    if (session && (session.status === 'completed' || session.status === 'failed')) {
+                        await redisSessionManager.deleteSession(sessionId, tenantId);
+                    }
+                }
+            }
+
+            logger.info('[SessionTracker] Completed sessions cleared', {
+                count,
+                tenantId,
+            });
+            return count;
+        } catch (error) {
+            logger.error('[SessionTracker] Error clearing completed sessions', {
+                error,
+                tenantId,
+            });
+            return 0;
+        }
+    }
+
+    /**
      * Pause a session
      * Requirements: 12.1, 12.4
      *

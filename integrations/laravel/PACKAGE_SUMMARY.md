@@ -165,7 +165,7 @@ public function handle(ProductPriceUpdated $event)
 
 ## 📈 What Happens When Connected
 
-1. **Product Sync** (Every 15 minutes)
+1. **Product Sync** (Every 24 hours)
    - PricePilot calls `GET /api/pricepilot/sync`
    - Fetches all products with pagination
    - Stores in PricePilot database

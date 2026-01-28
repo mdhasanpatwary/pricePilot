@@ -9,6 +9,9 @@ import {
   wooCommerceProductSchema,
   magentoProductSchema,
 } from "@/lib/validation/schemas";
+import { NotificationService } from "./notification";
+import { WebsiteService } from "./website-service";
+import { DecryptionError } from "./encryption/errors";
 
 interface ExternalProduct {
   external_id: string;
@@ -27,6 +30,13 @@ interface ExternalProduct {
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF = 1000;
 
+/**
+ * Check if mock mode is enabled (for development/testing only)
+ */
+function isUseMockDataEnabled(): boolean {
+  return process.env.USE_MOCK_DATA === "true";
+}
+
 export class SyncService {
   /**
    * Triggers a sync for a specific site
@@ -40,10 +50,10 @@ export class SyncService {
     if (!site) throw new Error("Site not found");
 
     const startTime = new Date();
-    
+
     // Clear previous logs before starting new sync session
     await prisma.syncLog.deleteMany({ where: { siteId } });
-    
+
     await prisma.site.update({
       where: { id: siteId },
       data: {
@@ -63,17 +73,47 @@ export class SyncService {
     });
 
     try {
+      // Get site with decrypted token for API calls
+      let siteWithToken;
+      try {
+        siteWithToken = await WebsiteService.getWebsiteWithToken(
+          siteId,
+          site.tenantId,
+          'product_sync'
+        );
+      } catch (error) {
+        if (error instanceof DecryptionError) {
+          // Log decryption error
+          await prisma.syncLog.create({
+            data: {
+              siteId,
+              level: "ERROR",
+              message: `❌ Failed to decrypt API token: ${error.message}`
+            }
+          });
+
+          // Send notification to tenant
+          await NotificationService.sendSyncError(
+            site.tenantId,
+            `Failed to decrypt API token for ${site.baseUrl}. Please re-enter your token in settings.`
+          );
+
+          throw error;
+        }
+        throw error;
+      }
+
       let externalProducts: ExternalProduct[] = [];
       if (site.platform === "OPENCART") {
-        externalProducts = await this.fetchFromOpenCart(site);
+        externalProducts = await this.fetchFromOpenCart(siteWithToken);
       } else if (site.platform === "LARAVEL") {
-        externalProducts = await this.fetchFromLaravel(site);
+        externalProducts = await this.fetchFromLaravel(siteWithToken);
       } else if (site.platform === "SHOPIFY") {
-        externalProducts = await this.fetchFromShopify(site);
+        externalProducts = await this.fetchFromShopify(siteWithToken);
       } else if (site.platform === "WOOCOMMERCE") {
-        externalProducts = await this.fetchFromWooCommerce(site);
+        externalProducts = await this.fetchFromWooCommerce(siteWithToken);
       } else if (site.platform === "MAGENTO") {
-        externalProducts = await this.fetchFromMagento(site);
+        externalProducts = await this.fetchFromMagento(siteWithToken);
       }
 
       await prisma.site.update({
@@ -223,6 +263,12 @@ export class SyncService {
         },
       });
 
+      // Send notification to tenant about sync failure
+      await NotificationService.sendSyncError(
+        site.tenantId,
+        `Failed to sync products from ${site.baseUrl}: ${err.message}`
+      );
+
       // Ensure we clear the sync lock on error
       await prisma.site.update({
         where: { id: siteId },
@@ -278,8 +324,15 @@ export class SyncService {
    * Fetch products from OpenCart API
    */
   private static async fetchFromOpenCart(
-    site: Site,
+    site: Site & { decryptedToken: string | null },
   ): Promise<ExternalProduct[]> {
+    // Development mock mode (only if explicitly enabled)
+    if (isUseMockDataEnabled()) {
+      console.warn(`[SyncService] Using mock data for OpenCart (USE_MOCK_DATA=true): ${site.baseUrl}`);
+      const { MOCK_OPENCART_PRODUCTS } = await import("@/__tests__/fixtures/mock-products");
+      return MOCK_OPENCART_PRODUCTS;
+    }
+
     interface OpenCartProduct {
       product_id?: string | number;
       id?: string | number;
@@ -297,9 +350,16 @@ export class SyncService {
     }
 
     try {
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new Error('API token not available');
+      }
+
       // Normalize URL (avoid double slashes)
       const cleanBaseUrl = site.baseUrl.replace(/\/$/, "");
-      const apiUrl = `${cleanBaseUrl}/index.php?route=api/pricepilot&api_token=${site.apiToken}`;
+      const apiUrl = `${cleanBaseUrl}/index.php?route=api/pricepilot&api_token=${apiToken}`;
 
       console.log(`[SyncService] Fetching from OpenCart: ${apiUrl}`);
 
@@ -407,32 +467,20 @@ export class SyncService {
         url: `${site.baseUrl.replace(/\/$/, "")}/index.php?route=product/product&product_id=${p.product_id || p.id}`,
       }));
     } catch (error) {
-      console.error(`OpenCart API error for ${site.baseUrl}:`, error);
+      const err = error as Error;
+      console.error(`OpenCart API error for ${site.baseUrl}:`, err);
 
-      // Fallback to mock data for development
-      console.log(`Using mock data for OpenCart: ${site.baseUrl}`);
-      return [
-        {
-          external_id: "oc_1",
-          sku: "NIKE-AM-270",
-          title: "Nike Air Max 270",
-          price: 150.0,
-          brand: "Nike",
-          model: "270",
-          in_stock: true,
-          url: "https://demo.opencart.com/index.php?route=product/product&product_id=1",
-        },
-        {
-          external_id: "oc_2",
-          sku: "ADIDAS-UB-22",
-          title: "Adidas Ultraboost 22",
-          price: 180.0,
-          brand: "Adidas",
-          model: "22",
-          in_stock: false,
-          url: "https://demo.opencart.com/index.php?route=product/product&product_id=2",
-        },
-      ];
+      // Log detailed error for debugging
+      await prisma.syncLog.create({
+        data: {
+          siteId: site.id,
+          level: "ERROR",
+          message: `❌ Failed to fetch products from OpenCart: ${err.message}`
+        }
+      });
+
+      // Throw error instead of returning mock data
+      throw new Error(`Failed to sync products from OpenCart (${site.baseUrl}): ${err.message}`);
     }
   }
 
@@ -440,8 +488,15 @@ export class SyncService {
    * Fetch products from Laravel API
    */
   private static async fetchFromLaravel(
-    site: Site,
+    site: Site & { decryptedToken: string | null },
   ): Promise<ExternalProduct[]> {
+    // Development mock mode (only if explicitly enabled)
+    if (isUseMockDataEnabled()) {
+      console.warn(`[SyncService] Using mock data for Laravel (USE_MOCK_DATA=true): ${site.baseUrl}`);
+      const { MOCK_LARAVEL_PRODUCTS } = await import("@/__tests__/fixtures/mock-products");
+      return MOCK_LARAVEL_PRODUCTS;
+    }
+
     interface LaravelProduct {
       id?: string | number;
       sku?: string;
@@ -457,13 +512,20 @@ export class SyncService {
     }
 
     try {
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new Error('API token not available');
+      }
+
       const response = await this.axiosRequestWithRetry<{
         data: LaravelProduct[];
       }>({
         method: "GET",
         url: `${site.baseUrl}/api/pricepilot/sync`,
         headers: {
-          "X-PricePilot-Token": site.apiToken,
+          "X-PricePilot-Token": apiToken,
           Accept: "application/json",
         },
         timeout: 30000,
@@ -511,22 +573,20 @@ export class SyncService {
         url: (p as any).url || null,
       }));
     } catch (error) {
-      console.error(`Laravel API error for ${site.baseUrl}:`, error);
+      const err = error as Error;
+      console.error(`Laravel API error for ${site.baseUrl}:`, err);
 
-      // Fallback to mock data for development
-      console.log(`Using mock data for Laravel: ${site.baseUrl}`);
-      return [
-        {
-          external_id: "lv_1",
-          sku: "PUMA-RS-X",
-          title: "Puma RS-X",
-          price: 110.0,
-          brand: "Puma",
-          model: "RS-X",
-          in_stock: true,
-          url: "https://demo.laravel.com/products/puma-rs-x",
-        },
-      ];
+      // Log detailed error for debugging
+      await prisma.syncLog.create({
+        data: {
+          siteId: site.id,
+          level: "ERROR",
+          message: `❌ Failed to fetch products from Laravel: ${err.message}`
+        }
+      });
+
+      // Throw error instead of returning mock data
+      throw new Error(`Failed to sync products from Laravel (${site.baseUrl}): ${err.message}`);
     }
   }
 
@@ -548,6 +608,22 @@ export class SyncService {
       return { success: true, updated: 0 };
     }
 
+    // Get site with decrypted token
+    let siteWithToken;
+    try {
+      siteWithToken = await WebsiteService.getWebsiteWithToken(
+        siteId,
+        site.tenantId,
+        'price_update'
+      );
+    } catch (error) {
+      if (error instanceof DecryptionError) {
+        console.error('[SyncService] Failed to decrypt token for price updates:', error);
+        throw new Error('Failed to decrypt API token. Please re-enter your token in settings.');
+      }
+      throw error;
+    }
+
     const productsToUpdate = site.products.filter((p) => p.externalId);
 
     console.log(
@@ -564,9 +640,9 @@ export class SyncService {
         batch.map(async (product) => {
           try {
             if (site.platform === "OPENCART") {
-              return await this.updateOpenCartPrice(site, product);
+              return await this.updateOpenCartPrice(siteWithToken, product);
             } else if (site.platform === "LARAVEL") {
-              return await this.updateLaravelPrice(site, product);
+              return await this.updateLaravelPrice(siteWithToken, product);
             }
             return null;
           } catch (error) {
@@ -594,25 +670,99 @@ export class SyncService {
   }
 
   /**
-   * Update price in OpenCart
+   * Update price in OpenCart with verification
    */
-  private static async updateOpenCartPrice(site: Site, product: Product) {
-    // This is a placeholder for actual API call
-    // In real OpenCart PicePilot extension, we would call a specific route
-    const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${site.apiToken}`;
+  private static async updateOpenCartPrice(site: Site & { decryptedToken: string | null }, product: Product): Promise<boolean> {
+    // Use decrypted token for API call
+    const apiToken = site.decryptedToken || site.apiToken;
+
+    if (!apiToken) {
+      throw new Error('API token not available');
+    }
+
+    const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${apiToken}`;
 
     try {
-      await this.axiosRequestWithRetry({
+      const response = await this.axiosRequestWithRetry<any>({
         method: "POST",
         url,
         data: {
           product_id: product.externalId,
           price: product.currentPrice.toString(),
+          // Include additional fields for validation
+          sku: product.sku,
+          verify: true // Request verification response
         },
         timeout: 10000,
       });
+
+      // Verify response structure
+      if (!response.data || typeof response.data !== 'object') {
+        throw new Error('Invalid response format from OpenCart');
+      }
+
+      // Check for success flag
+      if (response.data.success !== true) {
+        const errorMsg = response.data.error || response.data.message || 'Unknown error';
+        throw new Error(`OpenCart API error: ${errorMsg}`);
+      }
+
+      // Verify the price was actually updated
+      if (response.data.new_price !== undefined) {
+        const updatedPrice = parseFloat(response.data.new_price);
+        const expectedPrice = parseFloat(product.currentPrice.toString());
+
+        // Allow small floating point differences (0.01)
+        if (Math.abs(updatedPrice - expectedPrice) > 0.01) {
+          throw new Error(
+            `Price mismatch: expected ${expectedPrice}, got ${updatedPrice}`
+          );
+        }
+      }
+
+      // Verify SKU if provided in response
+      if (response.data.sku && product.sku && response.data.sku !== product.sku) {
+        console.warn(
+          `[SyncService] SKU mismatch for product ${product.id}: expected ${product.sku}, got ${response.data.sku}`
+        );
+      }
+
+      // Log successful update
+      await prisma.priceUpdateLog.create({
+        data: {
+          productId: product.id,
+          oldPrice: response.data.old_price
+            ? parseFloat(response.data.old_price.toString())
+            : product.currentPrice,
+          newPrice: product.currentPrice,
+          logicType: "FIXED",
+          status: "SUCCESS",
+          executedAt: new Date()
+        }
+      });
+
+      console.log(
+        `[SyncService] Successfully updated price for product ${product.id} (${product.externalId}): ${response.data.old_price} → ${response.data.new_price}`
+      );
+
       return true;
+
     } catch (error) {
+      // Log failed update
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await prisma.priceUpdateLog.create({
+        data: {
+          productId: product.id,
+          oldPrice: product.currentPrice,
+          newPrice: product.currentPrice,
+          logicType: "FIXED",
+          status: "FAILED",
+          errorDetails: errorMessage,
+          executedAt: new Date()
+        }
+      });
+
       if (
         axios.isAxiosError(error) &&
         (error.response?.status === 508 || error.response?.status === 429)
@@ -622,37 +772,118 @@ export class SyncService {
         );
       } else {
         console.error(
-          `OpenCart Update Error for ${product.id}:`,
-          error instanceof Error ? error.message : error,
+          `[SyncService] OpenCart Update Error for ${product.id}:`,
+          errorMessage
         );
       }
+
       return false;
     }
   }
 
   /**
-   * Update price in Laravel
+   * Update price in Laravel with verification
    */
-  private static async updateLaravelPrice(site: Site, product: Product) {
+  private static async updateLaravelPrice(site: Site & { decryptedToken: string | null }, product: Product): Promise<boolean> {
     const url = `${site.baseUrl}/api/pricepilot/update`;
 
+    // Use decrypted token for API call
+    const apiToken = site.decryptedToken || site.apiToken;
+
+    if (!apiToken) {
+      throw new Error('API token not available');
+    }
+
     try {
-      await this.axiosRequestWithRetry({
+      const response = await this.axiosRequestWithRetry<any>({
         method: "POST",
         url,
         data: {
           product_id: product.externalId,
           price: product.currentPrice.toString(),
+          // Include additional fields for validation
+          sku: product.sku,
+          verify: true // Request verification response
         },
         headers: {
-          "X-PricePilot-Token": site.apiToken,
+          "X-PricePilot-Token": apiToken,
           Accept: "application/json",
         },
         timeout: 10000,
       });
+
+      // Verify response structure
+      if (!response.data || typeof response.data !== 'object') {
+        throw new Error('Invalid response format from Laravel');
+      }
+
+      // Check for success flag
+      if (response.data.success !== true) {
+        const errorMsg = response.data.error || response.data.message || 'Unknown error';
+        throw new Error(`Laravel API error: ${errorMsg}`);
+      }
+
+      // Verify the price was actually updated
+      if (response.data.new_price !== undefined) {
+        const updatedPrice = parseFloat(response.data.new_price);
+        const expectedPrice = parseFloat(product.currentPrice.toString());
+
+        // Allow small floating point differences (0.01)
+        if (Math.abs(updatedPrice - expectedPrice) > 0.01) {
+          throw new Error(
+            `Price mismatch: expected ${expectedPrice}, got ${updatedPrice}`
+          );
+        }
+      }
+
+      // Verify SKU if provided in response
+      if (response.data.sku && product.sku && response.data.sku !== product.sku) {
+        console.warn(
+          `[SyncService] SKU mismatch for product ${product.id}: expected ${product.sku}, got ${response.data.sku}`
+        );
+      }
+
+      // Log successful update
+      await prisma.priceUpdateLog.create({
+        data: {
+          productId: product.id,
+          oldPrice: response.data.old_price
+            ? parseFloat(response.data.old_price.toString())
+            : product.currentPrice,
+          newPrice: product.currentPrice,
+          logicType: "FIXED",
+          status: "SUCCESS",
+          executedAt: new Date()
+        }
+      });
+
+      console.log(
+        `[SyncService] Successfully updated price for product ${product.id} (${product.externalId}): ${response.data.old_price} → ${response.data.new_price}`
+      );
+
       return true;
+
     } catch (error) {
-      console.error(`Laravel Update Error for ${product.id}:`, error);
+      // Log failed update
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await prisma.priceUpdateLog.create({
+        data: {
+          productId: product.id,
+          oldPrice: product.currentPrice,
+          newPrice: product.currentPrice,
+          logicType: "FIXED",
+          status: "FAILED",
+          errorDetails: errorMessage,
+          executedAt: new Date()
+        }
+      });
+
+      console.error(
+        `[SyncService] Laravel Update Error for ${product.id}:`,
+        errorMessage
+      );
+
       return false;
     }
   }
@@ -660,12 +891,19 @@ export class SyncService {
   /**
    * Shopify Implementation
    */
-  private static async fetchFromShopify(site: Site): Promise<ExternalProduct[]> {
+  private static async fetchFromShopify(site: Site & { decryptedToken: string | null }): Promise<ExternalProduct[]> {
     try {
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new Error('API token not available');
+      }
+
       const response = await this.axiosRequestWithRetry({
-         method: 'GET',
-         url: `${site.baseUrl}/admin/api/2023-01/products.json`,
-         headers: { "X-Shopify-Access-Token": site.apiToken || "" }
+        method: 'GET',
+        url: `${site.baseUrl}/admin/api/2023-01/products.json`,
+        headers: { "X-Shopify-Access-Token": apiToken }
       });
 
       const shops = z.array(shopifyProductSchema).parse(response.data.products);
@@ -693,10 +931,17 @@ export class SyncService {
   /**
    * WooCommerce Implementation
    */
-  private static async fetchFromWooCommerce(site: Site): Promise<ExternalProduct[]> {
+  private static async fetchFromWooCommerce(site: Site & { decryptedToken: string | null }): Promise<ExternalProduct[]> {
     try {
-      const consumerKey = site.apiToken?.split(':')[0];
-      const consumerSecret = site.apiToken?.split(':')[1];
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new Error('API token not available');
+      }
+
+      const consumerKey = apiToken.split(':')[0];
+      const consumerSecret = apiToken.split(':')[1];
 
       const response = await this.axiosRequestWithRetry({
         method: 'GET',
@@ -717,8 +962,8 @@ export class SyncService {
         image: p.images[0]?.src,
         url: `${site.baseUrl}/?p=${p.id}`,
         specifications: {
-            ram: p.attributes.find((a: any) => a.name.toLowerCase() === 'ram')?.options[0],
-            storage: p.attributes.find((a: any) => a.name.toLowerCase() === 'storage' || a.name.toLowerCase() === 'ssd')?.options[0]
+          ram: p.attributes.find((a: any) => a.name.toLowerCase() === 'ram')?.options[0],
+          storage: p.attributes.find((a: any) => a.name.toLowerCase() === 'storage' || a.name.toLowerCase() === 'ssd')?.options[0]
         }
       } as any));
     } catch (e) {
@@ -730,12 +975,19 @@ export class SyncService {
   /**
    * Magento Implementation
    */
-  private static async fetchFromMagento(site: Site): Promise<ExternalProduct[]> {
+  private static async fetchFromMagento(site: Site & { decryptedToken: string | null }): Promise<ExternalProduct[]> {
     try {
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new Error('API token not available');
+      }
+
       const response = await this.axiosRequestWithRetry({
         method: 'GET',
         url: `${site.baseUrl}/rest/V1/products?searchCriteria[pageSize]=100`,
-        headers: { "Authorization": `Bearer ${site.apiToken}` }
+        headers: { "Authorization": `Bearer ${apiToken}` }
       });
 
       const products = z.array(magentoProductSchema).parse(response.data.items);
@@ -753,8 +1005,8 @@ export class SyncService {
           image: null,
           url: null,
           specifications: {
-              ram: getAttr('ram'),
-              storage: getAttr('ssd_storage') || getAttr('hdd_storage')
+            ram: getAttr('ram'),
+            storage: getAttr('ssd_storage') || getAttr('hdd_storage')
           }
         } as any;
       });
@@ -768,18 +1020,18 @@ export class SyncService {
    * Tech Spec Extraction Helper
    */
   private static extractTechSpecs(tags: string, _body: string, variant: any): Record<string, string> {
-      const specs: Record<string, string> = {};
+    const specs: Record<string, string> = {};
 
-      // 1. Try from variant options
-      const optStr = `${variant.option1} ${variant.option2} ${variant.option3}`.toLowerCase();
-      const ramMatch = optStr.match(/(\d+gb|\d+g) ram/i) || optStr.match(/(\d+)gb/i);
-      if (ramMatch) specs.ram = ramMatch[0].toUpperCase();
+    // 1. Try from variant options
+    const optStr = `${variant.option1} ${variant.option2} ${variant.option3}`.toLowerCase();
+    const ramMatch = optStr.match(/(\d+gb|\d+g) ram/i) || optStr.match(/(\d+)gb/i);
+    if (ramMatch) specs.ram = ramMatch[0].toUpperCase();
 
-      // 2. Try from tags (e.g. "Spec:16GB RAM")
-      const tagList = tags.split(',').map(t => t.trim().toLowerCase());
-      const ramTag = tagList.find(t => t.includes('ram'));
-      if (ramTag) specs.ram = ramTag.toUpperCase();
+    // 2. Try from tags (e.g. "Spec:16GB RAM")
+    const tagList = tags.split(',').map(t => t.trim().toLowerCase());
+    const ramTag = tagList.find(t => t.includes('ram'));
+    if (ramTag) specs.ram = ramTag.toUpperCase();
 
-      return specs;
+    return specs;
   }
 }

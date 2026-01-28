@@ -107,15 +107,19 @@ class PricePilotController extends Controller
             $validated = $request->validate([
                 'product_id' => 'required',
                 'price' => 'required|numeric|min:0',
+                'sku' => 'nullable|string', // Optional SKU for verification
+                'verify' => 'nullable|boolean', // Optional verification flag
             ]);
 
             $productId = $validated['product_id'];
             $newPrice = $validated['price'];
+            $expectedSku = $validated['sku'] ?? null;
 
             // Get table and column names from config
             $table = config('pricepilot.products_table', 'products');
             $priceColumn = config('pricepilot.column_mapping.price', 'price');
             $idColumn = config('pricepilot.column_mapping.id', 'id');
+            $skuColumn = config('pricepilot.column_mapping.sku', 'sku');
 
             // Get current product
             $product = DB::table($table)
@@ -125,8 +129,28 @@ class PricePilotController extends Controller
             if (!$product) {
                 return response()->json([
                     'success' => false,
+                    'error' => 'Product not found',
                     'message' => 'Product not found'
                 ], 404);
+            }
+
+            // Verify SKU if provided
+            if ($expectedSku !== null && isset($product->{$skuColumn})) {
+                if ($product->{$skuColumn} !== $expectedSku) {
+                    Log::warning('PricePilot: SKU mismatch', [
+                        'product_id' => $productId,
+                        'expected_sku' => $expectedSku,
+                        'actual_sku' => $product->{$skuColumn}
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'SKU mismatch',
+                        'message' => 'SKU verification failed',
+                        'expected_sku' => $expectedSku,
+                        'actual_sku' => $product->{$skuColumn}
+                    ], 422);
+                }
             }
 
             $oldPrice = $product->{$priceColumn};
@@ -136,8 +160,12 @@ class PricePilotController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'Price unchanged',
-                    'old_price' => $oldPrice,
-                    'new_price' => $newPrice,
+                    'product_id' => $productId,
+                    'old_price' => (float) $oldPrice,
+                    'new_price' => (float) $newPrice,
+                    'updated_price' => (float) $oldPrice,
+                    'sku' => $product->{$skuColumn} ?? null,
+                    'timestamp' => now()->toIso8601String()
                 ]);
             }
 
@@ -150,10 +178,35 @@ class PricePilotController extends Controller
                 ]);
 
             if ($updated) {
+                // Get updated product to verify the change
+                $updatedProduct = DB::table($table)
+                    ->where($idColumn, $productId)
+                    ->first();
+
+                $actualNewPrice = (float) $updatedProduct->{$priceColumn};
+
+                // Verify the price was actually updated
+                if (abs($actualNewPrice - (float) $newPrice) > 0.01) {
+                    Log::error('PricePilot: Price verification failed', [
+                        'product_id' => $productId,
+                        'expected_price' => $newPrice,
+                        'actual_price' => $actualNewPrice
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Price verification failed',
+                        'message' => 'Price was not updated correctly',
+                        'expected_price' => (float) $newPrice,
+                        'actual_price' => $actualNewPrice
+                    ], 500);
+                }
+
                 Log::info('PricePilot: Price updated', [
                     'product_id' => $productId,
                     'old_price' => $oldPrice,
                     'new_price' => $newPrice,
+                    'sku' => $product->{$skuColumn} ?? null
                 ]);
 
                 // Fire event if configured
@@ -165,19 +218,33 @@ class PricePilotController extends Controller
                     'success' => true,
                     'message' => 'Price updated successfully',
                     'product_id' => $productId,
-                    'old_price' => $oldPrice,
-                    'new_price' => $newPrice,
+                    'old_price' => (float) $oldPrice,
+                    'new_price' => (float) $newPrice,
+                    'updated_price' => $actualNewPrice, // Verified price from database
+                    'sku' => $product->{$skuColumn} ?? null,
+                    'timestamp' => now()->toIso8601String()
                 ]);
             }
 
+            Log::error('PricePilot: Price update failed - no rows affected', [
+                'product_id' => $productId,
+                'new_price' => $newPrice
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update price'
+                'error' => 'Update failed',
+                'message' => 'Failed to update price - no rows affected'
             ], 500);
 
         } catch (ValidationException $e) {
+            Log::warning('PricePilot: Validation failed', [
+                'errors' => $e->errors()
+            ]);
+
             return response()->json([
                 'success' => false,
+                'error' => 'Validation failed',
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
@@ -190,8 +257,9 @@ class PricePilotController extends Controller
 
             return response()->json([
                 'success' => false,
+                'error' => 'Internal error',
                 'message' => 'Failed to update price',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'details' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
     }

@@ -19,7 +19,7 @@
  */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Shield,
     RefreshCw,
@@ -93,7 +93,7 @@ export default function ChallengeAnalyticsDashboard() {
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     // Fetch challenge analytics
-    const fetchChallengeAnalytics = async (showRefreshing = false) => {
+    const fetchChallengeAnalytics = useCallback(async (showRefreshing = false) => {
         if (showRefreshing) {
             setRefreshing(true);
         } else {
@@ -117,11 +117,11 @@ export default function ChallengeAnalyticsDashboard() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [timeRange]);
 
     useEffect(() => {
         fetchChallengeAnalytics();
-    }, [timeRange]);
+    }, [fetchChallengeAnalytics]);
 
     const handleRefresh = () => {
         fetchChallengeAnalytics(true);
