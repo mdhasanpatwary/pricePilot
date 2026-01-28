@@ -112,7 +112,7 @@ describe('RetryStrategy', () => {
             let attempts = 0;
 
             const result = await strategy.executeWithRetry(
-                async (context: RetryContext) => {
+                async (_context: RetryContext) => {
                     attempts++;
                     return 'success';
                 },
@@ -132,7 +132,7 @@ describe('RetryStrategy', () => {
             let attempts = 0;
 
             const result = await strategy.executeWithRetry(
-                async (context: RetryContext) => {
+                async (_context: RetryContext) => {
                     attempts++;
                     if (attempts < 3) {
                         throw new Error('Temporary failure');

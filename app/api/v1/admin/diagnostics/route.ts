@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SystemHealthService } from "@/lib/services/system-health";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRedisConnection } from "@/lib/queue/connection";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * POST /api/v1/admin/diagnostics
@@ -11,7 +12,7 @@ import { getRedisConnection } from "@/lib/queue/connection";
  * 
  * Requirements: 11.5
  */
-export async function POST() {
+async function handlePOST() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -42,6 +43,10 @@ export async function POST() {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, 'write', handlePOST);
 }
 
 async function runDiagnostics() {

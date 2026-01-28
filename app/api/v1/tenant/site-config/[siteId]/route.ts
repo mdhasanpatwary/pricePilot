@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 interface UpdateSiteConfigRequest {
     sessionWarmup: boolean;
@@ -17,7 +18,7 @@ interface UpdateSiteConfigRequest {
  * 
  * Requirements: 11.3, 11.4, 11.6
  */
-export async function PATCH(
+async function handlePATCH(
     request: NextRequest,
     { params }: { params: Promise<{ siteId: string }> }
 ) {
@@ -185,4 +186,11 @@ export async function PATCH(
             { status: 500 }
         );
     }
+}
+
+export async function PATCH(
+    req: NextRequest,
+    context: { params: Promise<{ siteId: string }> }
+) {
+    return withRateLimit(req, 'write', () => handlePATCH(req, context));
 }

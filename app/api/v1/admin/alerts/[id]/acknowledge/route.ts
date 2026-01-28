@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { alertRepository } from "@/lib/services/alert-repository";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * POST /api/v1/admin/alerts/[id]/acknowledge
@@ -9,7 +10,7 @@ import { alertRepository } from "@/lib/services/alert-repository";
  * 
  * Requirements: 11.2
  */
-export async function POST(
+async function handlePOST(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -49,4 +50,11 @@ export async function POST(
             { status: 500 }
         );
     }
+}
+
+export async function POST(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, 'write', (r) => handlePOST(r, context));
 }

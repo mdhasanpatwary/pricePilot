@@ -3,13 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import fs from "fs";
 import path from "path";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 const BACKUP_DIR = path.join(process.cwd(), "backups");
 
 /**
  * GET: Download a specific backup file
  */
-export async function GET(
+async function handleGET(
   _req: NextRequest,
   { params }: { params: Promise<{ filename: string }> },
 ) {
@@ -59,10 +60,17 @@ export async function GET(
   }
 }
 
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ filename: string }> },
+) {
+  return withRateLimit(req, 'read', () => handleGET(req, context));
+}
+
 /**
  * DELETE: Remove a specific backup file
  */
-export async function DELETE(
+async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ filename: string }> },
 ) {
@@ -107,4 +115,11 @@ export async function DELETE(
       { status: 500 },
     );
   }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ filename: string }> },
+) {
+  return withRateLimit(req, 'write', () => handleDELETE(req, context));
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { alertRepository } from "@/lib/services/alert-repository";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/admin/alerts
@@ -14,7 +15,7 @@ import { alertRepository } from "@/lib/services/alert-repository";
  * 
  * Requirements: 11.2
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user) {
@@ -62,4 +63,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

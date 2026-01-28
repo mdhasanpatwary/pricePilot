@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SystemHealthService } from "@/lib/services/system-health";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/admin/health
@@ -9,7 +10,7 @@ import { authOptions } from "@/lib/auth";
  * 
  * Requirements: 11.1, 11.2, 11.3, 11.4
  */
-export async function GET() {
+async function handleGET() {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user) {
@@ -41,4 +42,8 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

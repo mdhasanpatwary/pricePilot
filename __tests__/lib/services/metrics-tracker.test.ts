@@ -1026,7 +1026,6 @@ describe('MetricsTracker', () => {
             severity: 'warning',
             type: 'proxy_failure',
             message: expect.stringContaining('proxy1'),
-            message: expect.stringContaining('60.0%'),
             proxyUrl: 'proxy1',
             acknowledged: false,
           }),

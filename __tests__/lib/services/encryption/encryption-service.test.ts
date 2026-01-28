@@ -7,10 +7,10 @@ import crypto from 'crypto';
 import { EncryptionService } from '@/lib/services/encryption/encryption-service';
 import { KeyManager } from '@/lib/services/encryption/key-manager';
 import {
-    EncryptionError,
+    // EncryptionError,
     DecryptionError,
     InvalidFormatError,
-    AuthenticationError,
+    // AuthenticationError,
 } from '@/lib/services/encryption/errors';
 
 describe('EncryptionService', () => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { MetricsTracker } from "@/lib/services/metrics-tracker";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/analytics/challenges?timeRange=24h
@@ -12,7 +13,7 @@ import { MetricsTracker } from "@/lib/services/metrics-tracker";
  * 
  * Requirements: 5.6, 10.3
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -67,4 +68,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

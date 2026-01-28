@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/analytics/challenges
@@ -14,7 +15,7 @@ import { prisma } from '@/lib/prisma';
  *
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -210,4 +211,9 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

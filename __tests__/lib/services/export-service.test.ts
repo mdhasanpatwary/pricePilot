@@ -35,6 +35,8 @@ describe("ExportService", () => {
             },
             startTime: new Date("2024-01-01T10:00:00Z"),
             endTime: new Date("2024-01-01T10:00:01.5Z"),
+            createdAt: new Date("2024-01-01T10:00:00Z"),
+            updatedAt: new Date("2024-01-01T10:00:01.5Z"),
         },
     ];
 

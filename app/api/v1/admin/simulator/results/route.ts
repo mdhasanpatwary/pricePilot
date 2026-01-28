@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { proxySimulator } from '@/lib/services/proxy-simulator';
 import { logger } from '@/lib/logger';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/simulator/results
@@ -13,7 +14,7 @@ import { logger } from '@/lib/logger';
  *
  * Requirements: 8.3, 8.4, 8.5
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -81,4 +82,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', () => handleGET(req));
 }

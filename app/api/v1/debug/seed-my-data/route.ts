@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST() {
+async function handlePOST() {
   try {
     const session = await getServerSession(authOptions);
 
@@ -329,4 +330,8 @@ export async function POST() {
       details: error.stack 
     }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "auth", handlePOST);
 }

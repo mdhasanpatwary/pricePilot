@@ -5,8 +5,9 @@
 import { WebsiteService } from '@/lib/services/website-service';
 import { prisma } from '@/lib/prisma';
 import { EncryptionService } from '@/lib/services/encryption/encryption-service';
-import { KeyManager } from '@/lib/services/encryption/key-manager';
+// import { KeyManager } from '@/lib/services/encryption/key-manager';
 import { EncryptionError, DecryptionError } from '@/lib/services/encryption/errors';
+import { tokenCache } from '@/lib/services/encryption/token-cache';
 
 // Mock Prisma
 jest.mock('@/lib/prisma', () => ({
@@ -18,7 +19,7 @@ jest.mock('@/lib/prisma', () => ({
             create: jest.fn(),
             update: jest.fn(),
         },
-        auditLog: {
+        tenantAuditLog: {
             create: jest.fn(),
         },
     },
@@ -37,6 +38,7 @@ describe('WebsiteService', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        tokenCache.clear();
 
         // Setup encryption service mock
         (EncryptionService.prototype.encrypt as jest.Mock).mockReturnValue(mockEncryptedToken);
@@ -64,7 +66,7 @@ describe('WebsiteService', () => {
                     site: {
                         create: jest.fn().mockResolvedValue(mockSite),
                     },
-                    auditLog: {
+                    tenantAuditLog: {
                         create: jest.fn().mockResolvedValue({ id: 'log-1' }),
                     },
                 };
@@ -99,7 +101,7 @@ describe('WebsiteService', () => {
                     site: {
                         create: jest.fn(),
                     },
-                    auditLog: {
+                    tenantAuditLog: {
                         create: jest.fn().mockResolvedValue({ id: 'log-1' }),
                     },
                 };
@@ -138,7 +140,7 @@ describe('WebsiteService', () => {
                     site: {
                         create: jest.fn().mockResolvedValue(mockSite),
                     },
-                    auditLog: {
+                    tenantAuditLog: {
                         create: jest.fn(),
                     },
                 };
@@ -185,7 +187,7 @@ describe('WebsiteService', () => {
                         findFirst: jest.fn().mockResolvedValue(existingSite),
                         update: jest.fn().mockResolvedValue(updatedSite),
                     },
-                    auditLog: {
+                    tenantAuditLog: {
                         create: jest.fn().mockResolvedValue({ id: 'log-1' }),
                     },
                 };
@@ -225,7 +227,7 @@ describe('WebsiteService', () => {
                         findFirst: jest.fn().mockResolvedValue(existingSite),
                         update: jest.fn().mockResolvedValue(updatedSite),
                     },
-                    auditLog: {
+                    tenantAuditLog: {
                         create: jest.fn(),
                     },
                 };
@@ -255,7 +257,7 @@ describe('WebsiteService', () => {
             };
 
             (prisma.site.findFirst as jest.Mock).mockResolvedValue(mockSite);
-            (prisma.auditLog.create as jest.Mock).mockResolvedValue({ id: 'log-1' });
+            // (prisma.auditLog.create as jest.Mock).mockResolvedValue({ id: 'log-1' });
 
             const result = await WebsiteService.getWebsiteWithToken(
                 mockSiteId,
@@ -290,7 +292,7 @@ describe('WebsiteService', () => {
                             apiToken: mockEncryptedToken,
                         }),
                     },
-                    auditLog: {
+                    tenantAuditLog: {
                         create: jest.fn().mockResolvedValue({ id: 'log-1' }),
                     },
                 };
@@ -322,7 +324,7 @@ describe('WebsiteService', () => {
             (EncryptionService.prototype.encrypt as jest.Mock).mockImplementation(() => {
                 throw new EncryptionError('Encryption failed during migration');
             });
-            (prisma.auditLog.create as jest.Mock).mockResolvedValue({ id: 'log-1' });
+            // (prisma.tenantAuditLog.create as jest.Mock).mockResolvedValue({ id: 'log-1' });
 
             // Should not throw error, but continue with plaintext token
             const result = await WebsiteService.getWebsiteWithToken(
@@ -333,8 +335,7 @@ describe('WebsiteService', () => {
 
             expect(result.decryptedToken).toBe(mockPlaintextToken);
             expect(EncryptionService.prototype.encrypt).toHaveBeenCalledWith(mockPlaintextToken);
-            // Verify audit log was created for migration failure
-            expect(prisma.auditLog.create).toHaveBeenCalledWith(
+            expect(prisma.tenantAuditLog.create).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({
                         action: 'TOKEN_MIGRATION_FAILED',
@@ -357,7 +358,7 @@ describe('WebsiteService', () => {
             (EncryptionService.prototype.decrypt as jest.Mock).mockImplementation(() => {
                 throw new DecryptionError('Decryption failed');
             });
-            (prisma.auditLog.create as jest.Mock).mockResolvedValue({ id: 'log-1' });
+            // (prisma.tenantAuditLog.create as jest.Mock).mockResolvedValue({ id: 'log-1' });
 
             await expect(
                 WebsiteService.getWebsiteWithToken(mockSiteId, mockTenantId, 'test_purpose')

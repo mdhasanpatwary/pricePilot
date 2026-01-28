@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function handleGET() {
   try {
     // Fetch sites that are currently syncing or have synced recently (last 24 hours)
     // We prioritize syncing sites, then recently finished ones.
@@ -56,4 +57,8 @@ export async function GET() {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, 'read', handleGET);
 }

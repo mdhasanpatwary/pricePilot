@@ -13,6 +13,7 @@ import {
     InvalidFormatError,
 } from './errors';
 import { logKeyAccessed } from './audit-logger';
+import { encryptionPerformanceMonitor } from './performance-monitor';
 
 /**
  * Core cryptographic operations for encrypting and decrypting API tokens
@@ -31,6 +32,9 @@ export class EncryptionService implements IEncryptionService {
      * @throws EncryptionError if encryption fails
      */
     public encrypt(plaintext: string): string {
+        const startTime = performance.now();
+        let success = false;
+
         try {
             // Log key access for audit trail
             logKeyAccessed('encrypt');
@@ -59,6 +63,7 @@ export class EncryptionService implements IEncryptionService {
                 ciphertext,
             ].join(':');
 
+            success = true;
             return encrypted;
         } catch (error) {
             // Ensure we never expose sensitive data in error messages
@@ -71,6 +76,10 @@ export class EncryptionService implements IEncryptionService {
             throw new EncryptionError(
                 'Failed to encrypt data. Unknown error occurred.'
             );
+        } finally {
+            // Record performance metrics
+            const latency = performance.now() - startTime;
+            encryptionPerformanceMonitor.recordOperation('encrypt', latency, success);
         }
     }
 
@@ -83,6 +92,9 @@ export class EncryptionService implements IEncryptionService {
      * @throws AuthenticationError if auth tag verification fails (tampering detected)
      */
     public decrypt(encrypted: string): string {
+        const startTime = performance.now();
+        let success = false;
+
         try {
             // Log key access for audit trail
             logKeyAccessed('decrypt');
@@ -122,6 +134,7 @@ export class EncryptionService implements IEncryptionService {
             let plaintext = decipher.update(ciphertext, 'base64', 'utf8');
             plaintext += decipher.final('utf8');
 
+            success = true;
             return plaintext;
         } catch (error) {
             // Handle specific error types
@@ -150,6 +163,10 @@ export class EncryptionService implements IEncryptionService {
             throw new DecryptionError(
                 'Failed to decrypt data. Unknown error occurred.'
             );
+        } finally {
+            // Record performance metrics
+            const latency = performance.now() - startTime;
+            encryptionPerformanceMonitor.recordOperation('decrypt', latency, success);
         }
     }
 

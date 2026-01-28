@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { proxySimulator } from '@/lib/services/proxy-simulator';
 import { logger } from '@/lib/logger';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/simulator/results/[id]
@@ -10,7 +11,7 @@ import { logger } from '@/lib/logger';
  *
  * Requirements: 8.3, 8.4, 8.5
  */
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -82,4 +83,11 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, 'read', () => handleGET(req, context));
 }

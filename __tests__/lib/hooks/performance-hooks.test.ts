@@ -2,7 +2,7 @@
  * Tests for performance optimization hooks
  */
 
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { useDebounce, useDebouncedCallback } from "@/lib/hooks/useDebounce";
 import { usePagination } from "@/lib/hooks/usePagination";
 import { useVirtualScroll } from "@/lib/hooks/useVirtualScroll";

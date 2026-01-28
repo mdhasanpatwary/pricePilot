@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const query = searchParams.get("query");
 
@@ -95,4 +96,8 @@ export async function GET(req: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, 'read', handleGET);
 }

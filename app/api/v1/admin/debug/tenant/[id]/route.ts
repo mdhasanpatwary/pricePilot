@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { sessionTracker } from '@/lib/services/session-tracker';
 import { metricsAggregator } from '@/lib/services/metrics-aggregator';
 import { prisma } from '@/lib/prisma';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/debug/tenant/[id]
@@ -18,7 +19,7 @@ import { prisma } from '@/lib/prisma';
  *
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 9.1, 9.2, 9.3, 9.4, 9.5
  */
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -236,4 +237,11 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, "auth", (r) => handleGET(r, context));
 }

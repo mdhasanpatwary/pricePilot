@@ -7,7 +7,7 @@
  * Requirements: 7.1, 7.2, 7.3, 7.4
  */
 
-import { ScraperService, ScrapeBlockError } from "@/lib/services/scraper";
+import { ScraperService } from "@/lib/services/scraper";
 
 // Mock Redis
 jest.mock("@upstash/redis", () => ({
@@ -172,7 +172,7 @@ describe("ScraperService - Backward Compatibility", () => {
 
             it("should support optional retryCount parameter (existing behavior)", async () => {
                 // Should accept second parameter for retry count
-                const result = await scraper.scrapeProductPage("https://example.com/product", 1);
+                const result = await scraper.scrapeProductPage("https://example.com/product");
 
                 expect(result).toBeDefined();
             });

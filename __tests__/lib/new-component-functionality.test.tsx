@@ -350,7 +350,8 @@ describe('New Component Functionality Tests', () => {
     describe('DropdownMenu Component', () => {
         test('should render dropdown menu with items', async () => {
             const items = ['Item 1', 'Item 2', 'Item 3'];
-            let selectedItem = '';
+            // Track selected item
+            // let selectedItem = '';
 
             const { container } = render(
                 <DropdownMenu>

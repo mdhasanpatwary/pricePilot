@@ -32,6 +32,9 @@ model Tenant {
   categories      Category[]
   brands          Brand[]
   pendingPriceChanges PendingPriceChange[]
+  rateLimitMetrics RateLimitMetric[]
+  rateLimitBypasses RateLimitBypass[]
+  rateLimitCustomMultiplier RateLimitCustomMultiplier?
 }
 
 model Category {
@@ -706,3 +709,50 @@ enum ApprovalStatus {
   EXPIRED
 }
 
+
+// Rate Limiting Models
+
+model RateLimitMetric {
+  id             String   @id @default(uuid())
+  tenantId       String
+  limiterType    String   // 'auth', 'api', 'read', 'write', 'sync', 'importExport'
+  identifier     String   // 'user:xxx' or 'ip:xxx'
+  endpoint       String   // API route path
+  hitCount       Int      @default(0)
+  violationCount Int      @default(0)
+  timestamp      DateTime @default(now())
+  
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId, timestamp])
+  @@index([limiterType, timestamp])
+  @@index([tenantId, limiterType, timestamp])
+}
+
+model RateLimitBypass {
+  id         String   @id @default(uuid())
+  tenantId   String
+  setBy      String   // Admin user ID
+  reason     String
+  expiresAt  DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId, isActive, expiresAt])
+}
+
+model RateLimitCustomMultiplier {
+  id         String   @id @default(uuid())
+  tenantId   String   @unique
+  multiplier Float
+  setBy      String   // Admin user ID
+  reason     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId])
+}

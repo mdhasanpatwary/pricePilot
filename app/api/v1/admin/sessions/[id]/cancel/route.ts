@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { sessionTracker } from '@/lib/services/session-tracker';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * POST /api/v1/admin/sessions/[id]/cancel
@@ -9,7 +10,7 @@ import { sessionTracker } from '@/lib/services/session-tracker';
  *
  * Requirements: 12.1, 12.5
  */
-export async function POST(
+async function handlePOST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -73,4 +74,11 @@ export async function POST(
             { status: 500 }
         );
     }
+}
+
+export async function POST(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, 'write', () => handlePOST(req, context));
 }

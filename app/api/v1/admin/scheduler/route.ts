@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 // Mock storage for task status (In a real app, this would be in the DB)
 let tasks = [
@@ -33,11 +34,15 @@ let tasks = [
   },
 ];
 
-export async function GET() {
+async function handleGET() {
   return NextResponse.json(tasks);
 }
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, 'read', handleGET);
+}
+
+async function handlePOST(req: Request) {
   try {
     const body = await req.json();
     const { action, taskId } = body;
@@ -83,6 +88,10 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, 'write', () => handlePOST(req));
 }
 
 async function runTaskLogic(taskId: string) {

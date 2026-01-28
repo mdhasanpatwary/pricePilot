@@ -134,28 +134,163 @@ export function sanitizeErrorMessage(error: Error): string {
  */
 export function getUserFriendlyErrorMessage(error: Error): string {
     if (error instanceof AuthenticationError) {
-        return 'API token integrity check failed. Please re-enter your API token in settings.';
+        return 'API token integrity check failed. This may indicate the token was corrupted or tampered with. ' +
+            'For your security, please re-enter your API token in the website settings. ' +
+            'Navigate to Settings > Website Configuration to update your token.';
     }
 
     if (error instanceof DecryptionError) {
-        return 'Failed to decrypt API token. Please re-enter your API token in settings.';
+        return 'Failed to decrypt API token. This could be due to a configuration change or data corruption. ' +
+            'Please re-enter your API token in the website settings. ' +
+            'Navigate to Settings > Website Configuration to update your token.';
     }
 
     if (error instanceof EncryptionError) {
-        return 'Failed to encrypt API token. Please try again.';
+        return 'Failed to encrypt API token. This is usually a temporary issue. ' +
+            'Please try again in a few moments. If the problem persists, contact support.';
     }
 
     if (error instanceof KeyNotFoundError) {
-        return 'System configuration error. Please contact support.';
+        return 'System configuration error: Encryption key not found. ' +
+            'This is a server configuration issue. Please contact support for assistance.';
     }
 
     if (error instanceof KeyValidationError) {
-        return 'System configuration error. Please contact support.';
+        return 'System configuration error: Invalid encryption key. ' +
+            'This is a server configuration issue. Please contact support for assistance.';
     }
 
     if (error instanceof InvalidFormatError) {
-        return 'Invalid token format detected. Your token will be automatically migrated.';
+        return 'Invalid token format detected. Your token will be automatically migrated to the new secure format. ' +
+            'No action is required on your part.';
     }
 
-    return 'An unexpected error occurred. Please try again or contact support.';
+    return 'An unexpected error occurred while processing your API token. ' +
+        'Please try again. If the problem persists, contact support with error code: ' + error.name;
+}
+
+/**
+ * Error message templates for different error scenarios
+ * Provides consistent, helpful messages across the application
+ */
+export const ErrorMessages = {
+    // Encryption errors
+    ENCRYPTION_FAILED: {
+        title: 'Encryption Failed',
+        message: 'Failed to encrypt API token. Please try again.',
+        guidance: 'This is usually a temporary issue. If it persists, contact support.',
+        action: 'Try Again',
+    },
+    
+    // Decryption errors
+    DECRYPTION_FAILED: {
+        title: 'Token Decryption Failed',
+        message: 'Failed to decrypt your API token.',
+        guidance: 'Please re-enter your API token in the website settings.',
+        action: 'Update Token',
+        link: '/dashboard/site-config',
+    },
+    
+    // Authentication errors (tampering detected)
+    AUTHENTICATION_FAILED: {
+        title: 'Security Alert: Token Integrity Check Failed',
+        message: 'We detected a potential security issue with your API token.',
+        guidance: 'For your security, the token has been cleared. Please re-enter your API token.',
+        action: 'Update Token',
+        link: '/dashboard/site-config',
+        severity: 'critical',
+    },
+    
+    // Key management errors
+    KEY_NOT_FOUND: {
+        title: 'System Configuration Error',
+        message: 'Encryption key not configured.',
+        guidance: 'This is a server configuration issue. Please contact support.',
+        action: 'Contact Support',
+        severity: 'critical',
+    },
+    
+    KEY_VALIDATION_FAILED: {
+        title: 'System Configuration Error',
+        message: 'Invalid encryption key configuration.',
+        guidance: 'This is a server configuration issue. Please contact support.',
+        action: 'Contact Support',
+        severity: 'critical',
+    },
+    
+    // Format errors
+    INVALID_FORMAT: {
+        title: 'Token Format Issue',
+        message: 'Invalid token format detected.',
+        guidance: 'Your token will be automatically migrated to the secure format.',
+        action: 'No Action Required',
+        severity: 'info',
+    },
+    
+    // Migration errors
+    MIGRATION_FAILED: {
+        title: 'Token Migration Failed',
+        message: 'Failed to migrate your API token to the new secure format.',
+        guidance: 'Your token will continue to work. Migration will be retried automatically.',
+        action: 'No Action Required',
+        severity: 'warning',
+    },
+    
+    // Recovery errors
+    RECOVERY_FAILED: {
+        title: 'Token Recovery Failed',
+        message: 'Failed to complete token recovery process.',
+        guidance: 'Please manually clear and re-enter your API token in settings.',
+        action: 'Update Token',
+        link: '/dashboard/site-config',
+        severity: 'warning',
+    },
+} as const;
+
+/**
+ * Gets a structured error message for a given error type
+ * 
+ * @param error - The error to get message for
+ * @returns Structured error message with title, message, guidance, and action
+ */
+export function getStructuredErrorMessage(error: Error): {
+    title: string;
+    message: string;
+    guidance: string;
+    action: string;
+    link?: string;
+    severity?: 'info' | 'warning' | 'critical';
+} {
+    if (error instanceof AuthenticationError) {
+        return ErrorMessages.AUTHENTICATION_FAILED;
+    }
+
+    if (error instanceof DecryptionError) {
+        return ErrorMessages.DECRYPTION_FAILED;
+    }
+
+    if (error instanceof EncryptionError) {
+        return ErrorMessages.ENCRYPTION_FAILED;
+    }
+
+    if (error instanceof KeyNotFoundError) {
+        return ErrorMessages.KEY_NOT_FOUND;
+    }
+
+    if (error instanceof KeyValidationError) {
+        return ErrorMessages.KEY_VALIDATION_FAILED;
+    }
+
+    if (error instanceof InvalidFormatError) {
+        return ErrorMessages.INVALID_FORMAT;
+    }
+
+    // Default error message
+    return {
+        title: 'Unexpected Error',
+        message: 'An unexpected error occurred.',
+        guidance: 'Please try again. If the problem persists, contact support.',
+        action: 'Try Again',
+        severity: 'warning',
+    };
 }

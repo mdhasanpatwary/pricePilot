@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { metricsAggregator } from '@/lib/services/metrics-aggregator';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/metrics/tenant/[id]
@@ -9,7 +10,7 @@ import { metricsAggregator } from '@/lib/services/metrics-aggregator';
  *
  * Requirements: 3.5
  */
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -74,4 +75,11 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, 'read', () => handleGET(req, context));
 }

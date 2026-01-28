@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 interface ScrapingMetrics {
     site: string;
@@ -31,7 +32,7 @@ interface MetricsSummary {
  * 
  * Requirements: 8.3, 3.1, 3.2, 3.3, 3.5
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -210,4 +211,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', () => handleGET(req));
 }

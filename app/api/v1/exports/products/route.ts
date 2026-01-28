@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * Robust CSV Value Formatter
@@ -16,7 +17,7 @@ function formatCSVValue(val: any): string {
     return str;
 }
 
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -112,4 +113,8 @@ export async function GET(_req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "importExport", handleGET);
 }

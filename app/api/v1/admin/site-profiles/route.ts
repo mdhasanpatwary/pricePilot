@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { ANTI_BOT_PROFILES } from '@/lib/config/site-profiles';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/site-profiles
@@ -12,7 +13,7 @@ import { ANTI_BOT_PROFILES } from '@/lib/config/site-profiles';
  * 
  * Requirements: 8.7, 6.1, 6.6
  */
-export async function GET(_request: NextRequest) {
+async function handleGET(_request: NextRequest) {
     try {
         // Authenticate and verify admin role
         const session = await getServerSession(authOptions);
@@ -151,6 +152,10 @@ export async function GET(_request: NextRequest) {
     }
 }
 
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', () => handleGET(req));
+}
+
 /**
  * POST /api/v1/admin/site-profiles
  * 
@@ -159,7 +164,7 @@ export async function GET(_request: NextRequest) {
  * 
  * Requirements: 8.8, 6.5, 6.7
  */
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     try {
         // Authenticate and verify admin role
         const session = await getServerSession(authOptions);
@@ -395,4 +400,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRateLimit(req, 'write', () => handlePOST(req));
 }

@@ -314,7 +314,7 @@ describe('Encryption Audit Logger', () => {
 
             // Check all database calls
             const allDbCalls = prisma.tenantAuditLog.create.mock.calls;
-            allDbCalls.forEach((call) => {
+            allDbCalls.forEach((call: any) => {
                 const callString = JSON.stringify(call);
                 expect(callString).not.toMatch(/plaintext/i);
             });

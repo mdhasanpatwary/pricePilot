@@ -270,7 +270,8 @@ test.describe('Tenant Debugging Workflow', () => {
       page.locator('text=Usage')
     ).or(page.locator('text=Quota'));
     
-    const hasResources = await resourceSection.first().isVisible({ timeout: 5000 }).catch(() => false);
+    // Check if resources section is visible
+    // const hasResources = await resourceSection.first().isVisible({ timeout: 5000 }).catch(() => false);
     
     // Resource section might not always be visible, but the page should load
     expect(page.url()).toContain('/admin/debug/tenant/');

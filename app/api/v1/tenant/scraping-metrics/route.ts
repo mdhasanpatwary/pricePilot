@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 interface TenantSiteMetrics {
     domain: string;
@@ -32,7 +33,7 @@ interface TenantMetrics {
  * 
  * Requirements: 8.4, 4.1, 4.2, 4.3, 4.5, 4.7
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authenticate and get tenant ID
         const session = await getServerSession(authOptions);
@@ -277,4 +278,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', () => handleGET(req));
 }

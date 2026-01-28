@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { MetricsTracker } from "@/lib/services/metrics-tracker";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/analytics/sites/:site?timeRange=24h
@@ -12,7 +13,7 @@ import { MetricsTracker } from "@/lib/services/metrics-tracker";
  * 
  * Requirements: 5.2, 5.3, 5.4
  */
-export async function GET(
+async function handleGET(
     request: NextRequest,
     { params }: { params: Promise<{ site: string }> }
 ) {
@@ -75,4 +76,11 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(
+    req: NextRequest,
+    context: { params: Promise<{ site: string }> }
+) {
+    return withRateLimit(req, 'read', (r) => handleGET(r, context));
 }

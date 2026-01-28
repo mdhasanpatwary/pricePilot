@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function handleGET() {
   try {
     // Fetch all competitor sites
     const sites = await prisma.site.findMany({
@@ -152,4 +153,8 @@ export async function GET() {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, 'read', handleGET);
 }

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -96,4 +97,8 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, "importExport", handlePOST);
 }

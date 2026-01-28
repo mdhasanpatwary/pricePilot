@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SystemHealthService } from "@/lib/services/system-health";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/admin/system-health
  * Get comprehensive system health status
  */
-export async function GET() {
+async function handleGET(_req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user) {
@@ -39,4 +40,8 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

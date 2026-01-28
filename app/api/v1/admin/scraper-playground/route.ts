@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ScraperService } from "@/lib/services/scraper";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
     const body = await req.json();
     const { url } = body;
@@ -34,4 +35,8 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+  return withRateLimit(req, 'write', handlePOST);
 }

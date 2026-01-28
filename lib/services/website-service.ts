@@ -7,6 +7,9 @@ import { Site, Prisma } from '@prisma/client';
 import { EncryptionService } from './encryption/encryption-service';
 import { KeyManager } from './encryption/key-manager';
 import { EncryptionError, DecryptionError } from './encryption/errors';
+import { tokenCache } from './encryption/token-cache';
+import { encryptionPerformanceMonitor } from './encryption/performance-monitor';
+import { TokenRecoveryService } from './encryption/token-recovery';
 
 // Initialize encryption service with key manager
 const keyManager = new KeyManager();
@@ -164,20 +167,19 @@ export class WebsiteService {
 
             // Log successful re-encryption if token was updated
             if (encryptedToken !== undefined && encryptedToken !== null) {
-                await tx.auditLog.create({
+                await tx.tenantAuditLog.create({
                     data: {
                         tenantId,
-                        userId: userId || null,
-                        userEmail: null,
+                        userId: userId || '',
+                        userEmail: '',
                         action: 'TOKEN_ENCRYPTED',
-                        entityType: 'SITE',
                         entityId: site.id,
                         ipAddress: null,
-                        details: {
+                        details: JSON.stringify({
                             event: 'token_encrypted',
                             success: true,
                             timestamp: new Date(),
-                        },
+                        }),
                     },
                 });
 
@@ -191,6 +193,7 @@ export class WebsiteService {
     /**
      * Retrieves website with decrypted token for API calls
      * Automatically migrates plaintext tokens to encrypted format
+     * Uses request-scoped caching for performance
      * @param id - Website ID
      * @param tenantId - Tenant ID for authorization
      * @param purpose - Purpose of decryption for audit logging
@@ -202,6 +205,27 @@ export class WebsiteService {
         tenantId: string,
         purpose: string = 'api_call'
     ): Promise<SiteWithDecryptedToken> {
+        // Check cache first
+        const cachedToken = tokenCache.get(id);
+        if (cachedToken) {
+            // Fetch website record (without token decryption)
+            const site = await prisma.site.findFirst({
+                where: {
+                    id,
+                    tenantId,
+                },
+            });
+
+            if (!site) {
+                throw new Error('Site not found');
+            }
+
+            return {
+                ...site,
+                decryptedToken: cachedToken,
+            };
+        }
+
         // Fetch website record from database
         const site = await prisma.site.findFirst({
             where: {
@@ -229,6 +253,9 @@ export class WebsiteService {
             // Plaintext token detected - migrate to encrypted format
             console.log(`[WebsiteService] Plaintext token detected for site ${site.id}, migrating...`);
 
+            const migrationStartTime = performance.now();
+            let migrationSuccess = false;
+
             try {
                 const encryptedToken = encryptionService.encrypt(site.apiToken);
 
@@ -240,25 +267,28 @@ export class WebsiteService {
                     });
 
                     // Log migration event
-                    await tx.auditLog.create({
+                    await tx.tenantAuditLog.create({
                         data: {
                             tenantId,
-                            userId: null,
-                            userEmail: null,
+                            userId: '',
+                            userEmail: '',
                             action: 'TOKEN_MIGRATED',
-                            entityType: 'SITE',
                             entityId: site.id,
                             ipAddress: null,
-                            details: {
+                            details: JSON.stringify({
                                 event: 'token_migrated',
                                 success: true,
                                 timestamp: new Date(),
-                            },
+                            }),
                         },
                     });
                 });
 
+                migrationSuccess = true;
                 console.log(`[WebsiteService] Successfully migrated token for site ${site.id}`);
+
+                // Cache the decrypted token (original plaintext)
+                tokenCache.set(site.id, site.apiToken);
 
                 // Return with decrypted token (original plaintext)
                 return {
@@ -270,20 +300,19 @@ export class WebsiteService {
                 // Log migration failure but continue with plaintext (backward compatibility)
                 console.error('[WebsiteService] Token migration failed:', error);
 
-                await prisma.auditLog.create({
+                await prisma.tenantAuditLog.create({
                     data: {
                         tenantId,
-                        userId: null,
-                        userEmail: null,
+                        userId: '',
+                        userEmail: '',
                         action: 'TOKEN_MIGRATION_FAILED',
-                        entityType: 'SITE',
                         entityId: site.id,
                         ipAddress: null,
-                        details: {
+                        details: JSON.stringify({
                             event: 'token_migrated',
                             success: false,
                             errorMessage: error instanceof Error ? error.message : 'Unknown error',
-                        },
+                        }),
                     },
                 });
 
@@ -292,6 +321,11 @@ export class WebsiteService {
                     ...site,
                     decryptedToken: site.apiToken,
                 };
+            } finally {
+                // Record migration metrics
+                const migrationLatency = performance.now() - migrationStartTime;
+                encryptionPerformanceMonitor.recordOperation('migration', migrationLatency, migrationSuccess);
+                encryptionPerformanceMonitor.recordMigration(migrationSuccess, false);
             }
         }
 
@@ -300,23 +334,25 @@ export class WebsiteService {
             const decryptedToken = encryptionService.decrypt(site.apiToken);
 
             // Log decryption event
-            await prisma.auditLog.create({
+            await prisma.tenantAuditLog.create({
                 data: {
                     tenantId,
-                    userId: null,
-                    userEmail: null,
+                    userId: '',
+                    userEmail: '',
                     action: 'TOKEN_DECRYPTED',
-                    entityType: 'SITE',
                     entityId: site.id,
                     ipAddress: null,
-                    details: {
+                    details: JSON.stringify({
                         event: 'token_decrypted',
                         purpose,
                         success: true,
                         timestamp: new Date(),
-                    },
+                    }),
                 },
             });
+
+            // Cache the decrypted token
+            tokenCache.set(site.id, decryptedToken);
 
             return {
                 ...site,
@@ -326,26 +362,43 @@ export class WebsiteService {
             // Log decryption failure
             console.error('[WebsiteService] Token decryption failed:', error);
 
-            await prisma.auditLog.create({
+            await prisma.tenantAuditLog.create({
                 data: {
                     tenantId,
-                    userId: null,
-                    userEmail: null,
+                    userId: '',
+                    userEmail: '',
                     action: 'DECRYPTION_FAILED',
-                    entityType: 'SITE',
                     entityId: site.id,
                     ipAddress: null,
-                    details: {
+                    details: JSON.stringify({
                         event: 'decryption_failed',
                         success: false,
                         errorMessage: error instanceof Error ? error.message : 'Unknown error',
-                    },
+                    }),
                 },
             });
 
-            // Re-throw decryption error
+            // Check if this error should trigger token recovery
+            if (error instanceof Error && TokenRecoveryService.shouldTriggerRecovery(error)) {
+                console.log('[WebsiteService] Triggering token recovery flow...');
+
+                // Execute recovery flow
+                const recoveryResult = await TokenRecoveryService.handleCorruptedToken(
+                    site.id,
+                    tenantId,
+                    error
+                );
+
+                if (recoveryResult.success) {
+                    console.log('[WebsiteService] Token recovery completed successfully');
+                } else {
+                    console.error('[WebsiteService] Token recovery failed:', recoveryResult.error);
+                }
+            }
+
+            // Re-throw decryption error with user-friendly message
             throw new DecryptionError(
-                'Failed to decrypt API token. Please re-enter your token in settings.',
+                'Failed to decrypt API token. The token has been cleared for security. Please re-enter your token in settings.',
                 error instanceof Error ? error : undefined
             );
         }

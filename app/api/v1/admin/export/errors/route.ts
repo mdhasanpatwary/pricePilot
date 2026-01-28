@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { ExportService, ExportFormat } from "@/lib/services/export-service";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/admin/export/errors
@@ -17,7 +18,7 @@ import { Prisma } from "@prisma/client";
  * 
  * Requirements: 15.3, 15.5
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user) {
@@ -159,4 +160,8 @@ function categorizeError(message: string): string {
     }
 
     return "unknown";
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, "importExport", handleGET);
 }

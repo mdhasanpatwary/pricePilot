@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 interface HumanSimulationConfig {
     typing: {
@@ -48,7 +49,7 @@ const DEFAULT_CONFIG: HumanSimulationConfig = {
  * 
  * Requirements: 8.5, 5.1
  */
-export async function GET() {
+async function handleGET() {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -124,13 +125,17 @@ export async function GET() {
     }
 }
 
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
+}
+
 /**
  * POST /api/v1/admin/human-simulation-config
  * Update human simulation configuration
  * 
  * Requirements: 8.6, 5.5, 5.6
  */
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -318,4 +323,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRateLimit(req, 'write', () => handlePOST(req));
 }

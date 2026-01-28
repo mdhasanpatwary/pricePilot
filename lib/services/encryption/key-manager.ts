@@ -14,9 +14,7 @@ export class KeyManager implements IKeyManager {
     private keys: Map<string, Buffer> = new Map();
 
     constructor() {
-        // Initialize and validate master key on construction
-        this.loadMasterKey();
-        this.validateKey();
+        // Master key will be loaded and validated on first use
     }
 
     /**
@@ -90,6 +88,11 @@ export class KeyManager implements IKeyManager {
      * @throws KeyNotFoundError if key is not configured
      */
     public getMasterKey(): Buffer {
+        if (!this.masterKey) {
+            this.loadMasterKey();
+            this.validateKey();
+        }
+
         if (!this.masterKey) {
             throw new KeyNotFoundError('Master key not loaded');
         }

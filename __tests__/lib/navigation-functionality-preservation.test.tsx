@@ -9,7 +9,8 @@
 
 import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import * as fc from 'fast-check';
+// Property-based testing utilities
+// import * as fc from 'fast-check';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -254,7 +255,8 @@ describe('Navigation Functionality Preservation', () => {
 
     test('should preserve event handler functionality', () => {
         // Simple unit test instead of property-based test to avoid DOM conflicts
-        let eventFired = false;
+        // Track if event was fired
+        // let eventFired = false;
         const handleClick = () => {
             eventFired = true;
         };

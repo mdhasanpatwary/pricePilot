@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { metricsAggregator } from '@/lib/services/metrics-aggregator';
 import { prisma } from '@/lib/prisma';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/analytics/proxies
@@ -15,7 +16,7 @@ import { prisma } from '@/lib/prisma';
  *
  * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 13.3
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -179,4 +180,9 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

@@ -119,7 +119,8 @@ describe('Accessibility Features', () => {
                 document.body.appendChild(item);
             });
 
-            let selectedIndex = 0;
+            // Track selected index for keyboard navigation
+            // let selectedIndex = 0;
             const helper = new KeyboardNavigationHelper(items, (index) => {
                 selectedIndex = index;
             });

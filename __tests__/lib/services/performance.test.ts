@@ -58,8 +58,8 @@ jest.mock('@/lib/services/redis-session-manager', () => ({
 
 import { MetricsAggregator } from '@/lib/services/metrics-aggregator';
 import { SessionTracker } from '@/lib/services/session-tracker';
-import { sessionRepository } from '@/lib/services/session-repository';
-import { redisSessionManager } from '@/lib/services/redis-session-manager';
+// import { sessionRepository } from '@/lib/services/session-repository';
+// import { redisSessionManager } from '@/lib/services/redis-session-manager';
 import { prisma } from '@/lib/prisma';
 
 describe.skip('Performance Tests', () => {
@@ -162,7 +162,7 @@ describe.skip('Performance Tests', () => {
 
         it('should load tenant metrics in less than 1 second', async () => {
             const tenantId = 'test-tenant-' + Date.now();
-            const timestamp = Date.now();
+            // const timestamp = Date.now();
 
             // Create tenant first
             await prisma.tenant.create({
@@ -520,7 +520,6 @@ describe.skip('Performance Tests', () => {
                 data: {
                     id: tenantId,
                     companyName: 'Test Company',
-                    email: `test-${Date.now()}@example.com`,
                     planType: 'PRO',
                 },
             });
@@ -550,7 +549,6 @@ describe.skip('Performance Tests', () => {
                 data: {
                     id: tenantId,
                     companyName: 'Test Company',
-                    email: `test-${Date.now()}@example.com`,
                     planType: 'PRO',
                 },
             });
@@ -653,6 +651,7 @@ async function createTestProxies(count: number): Promise<void> {
             },
             create: {
                 proxyUrl: `http://proxy${i}.com:8080`,
+                proxyType: 'http',
                 isHealthy: Math.random() > 0.2,
                 lastChecked: new Date(),
             },
@@ -672,6 +671,7 @@ async function createTestChallenges(count: number): Promise<void> {
         const solved = Math.random() > 0.3;
         const promise = prisma.challengeAttempt.create({
             data: {
+                site: 'test-site.com',
                 timestamp,
                 challengeType: ['cloudflare', 'recaptcha', 'hcaptcha'][i % 3],
                 solved,

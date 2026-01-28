@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * DELETE /api/v1/admin/site-profiles/:id
@@ -11,7 +12,7 @@ import { logger } from '@/lib/logger';
  * 
  * Requirements: 8.8
  */
-export async function DELETE(
+async function handleDELETE(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -84,4 +85,11 @@ export async function DELETE(
             { status: 500 }
         );
     }
+}
+
+export async function DELETE(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, 'write', () => handleDELETE(req, context));
 }

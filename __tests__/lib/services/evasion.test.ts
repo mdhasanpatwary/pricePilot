@@ -1,5 +1,5 @@
-import { BrowserPool } from "../../../lib/services/browser-pool";
-import { ScraperService, ScrapeBlockError } from "../../../lib/services/scraper";
+// import { BrowserPool } from "../../../lib/services/browser-pool";
+import { ScraperService } from "../../../lib/services/scraper";
 
 // Mock Redis
 jest.mock("@upstash/redis", () => ({
@@ -124,6 +124,7 @@ const mockContext: any = {
   close: jest.fn().mockResolvedValue({}),
 };
 
+// Mock browser for testing
 const mockBrowser: any = {
   newContext: jest.fn().mockResolvedValue(mockContext),
   close: jest.fn().mockResolvedValue({}),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { sessionTracker } from '@/lib/services/session-tracker';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * GET /api/v1/admin/sessions/[id]
@@ -9,7 +10,7 @@ import { sessionTracker } from '@/lib/services/session-tracker';
  *
  * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
  */
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -64,4 +65,11 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(
+    req: NextRequest,
+    context: { params: Promise<{ id: string }> }
+) {
+    return withRateLimit(req, 'read', () => handleGET(req, context));
 }

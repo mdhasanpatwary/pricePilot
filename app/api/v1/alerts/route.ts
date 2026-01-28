@@ -14,8 +14,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authenticate user
         const session = await getServerSession(authOptions);
@@ -99,4 +100,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

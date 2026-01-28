@@ -49,3 +49,25 @@ if (typeof global.Request === 'undefined') {
   global.Response = fetch.Response;
   global.Headers = fetch.Headers;
 }
+
+// Mock bullmq to avoid ESM issues
+jest.mock('bullmq', () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn().mockResolvedValue({ id: 'job-id' }),
+    close: jest.fn().mockResolvedValue(undefined),
+    on: jest.fn(),
+  })),
+  Worker: jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    close: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+// Mock msgpackr as it is ESM and causes issues in Jest
+jest.mock('msgpackr', () => ({
+  Packr: jest.fn(),
+  Encoder: jest.fn(),
+  addExtension: jest.fn(),
+  pack: jest.fn(),
+  encode: jest.fn(),
+}));

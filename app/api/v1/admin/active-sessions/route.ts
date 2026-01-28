@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 interface ActiveSession {
     id: string;
@@ -28,7 +29,7 @@ interface MonitorStats {
  * 
  * Requirements: 8.9, 7.1, 7.2, 7.3, 7.4, 7.7
  */
-export async function GET() {
+async function handleGET() {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -213,4 +214,8 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }

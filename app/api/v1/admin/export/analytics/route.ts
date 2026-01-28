@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ExportService, ExportFormat } from "@/lib/services/export-service";
 import { MetricsAggregator } from "@/lib/services/metrics-aggregator";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/admin/export/analytics
@@ -17,7 +18,7 @@ import { MetricsAggregator } from "@/lib/services/metrics-aggregator";
  * 
  * Requirements: 15.4, 15.5
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user) {
@@ -140,4 +141,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, "importExport", handleGET);
 }

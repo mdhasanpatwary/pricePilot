@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
  * GET /api/v1/admin/debug
  * Centrally fetches system-wide diagnostics, logs, and inconsistencies.
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.isSuperAdmin) {
@@ -124,4 +125,8 @@ export async function GET(req: NextRequest) {
     console.error("[DEBUG_API] Error:", error);
     return NextResponse.json({ error: "Failed to collect debug data" }, { status: 500 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, "auth", handleGET);
 }

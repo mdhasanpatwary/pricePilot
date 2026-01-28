@@ -118,7 +118,7 @@ describe('Accessibility Testing', () => {
                             <Checkbox
                                 id="test-checkbox"
                                 checked={checked}
-                                onCheckedChange={setChecked}
+                                onCheckedChange={(checked) => setChecked(checked === true)}
                             />
                             <Label htmlFor="test-checkbox">Test Checkbox</Label>
                         </div>
@@ -201,7 +201,7 @@ describe('Accessibility Testing', () => {
     describe('Keyboard Navigation', () => {
         test('should support keyboard navigation for interactive elements', async () => {
             const TestKeyboardNavigation = () => {
-                const [buttonClicked, setButtonClicked] = useState(false);
+                const [, setButtonClicked] = useState(false);
                 const [checkboxChecked, setCheckboxChecked] = useState(false);
 
                 return (
@@ -215,7 +215,7 @@ describe('Accessibility Testing', () => {
 
                         <Checkbox
                             checked={checkboxChecked}
-                            onCheckedChange={setCheckboxChecked}
+                            onCheckedChange={(checked) => setCheckboxChecked(checked === true)}
                             data-testid="keyboard-checkbox"
                         />
 
@@ -318,7 +318,7 @@ describe('Accessibility Testing', () => {
 
     describe('Modal and Dialog Accessibility', () => {
         test('should have proper dialog accessibility attributes', () => {
-            const { container } = render(
+            render(
                 <Sheet open={true} onOpenChange={() => { }}>
                     <SheetContent>
                         <SheetHeader>

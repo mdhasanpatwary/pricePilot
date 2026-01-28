@@ -6,6 +6,7 @@ export { KeyManager } from './key-manager';
 export { EncryptionService } from './encryption-service';
 export { MigrationUtility } from './migration-utility';
 export { KeyRotationUtility } from './key-rotation-utility';
+export { TokenRecoveryService } from './token-recovery';
 export {
     EncryptionError,
     DecryptionError,
@@ -14,8 +15,17 @@ export {
     KeyNotFoundError,
     KeyValidationError,
     sanitizeErrorMessage,
-    getUserFriendlyErrorMessage
+    getUserFriendlyErrorMessage,
+    getStructuredErrorMessage,
+    ErrorMessages
 } from './errors';
+export {
+    handleEncryptionError,
+    withEncryptionErrorHandling,
+    formatErrorForUI,
+    isRecoverableError,
+    isSystemError
+} from './error-handler';
 export {
     logTokenEncrypted,
     logTokenDecrypted,
@@ -44,3 +54,9 @@ export type {
     KeyRotationResult,
     KeyRotationError
 } from './key-rotation-utility';
+export type {
+    TokenRecoveryResult
+} from './token-recovery';
+export type {
+    ErrorResponse
+} from './error-handler';

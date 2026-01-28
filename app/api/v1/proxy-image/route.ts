@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import axios from "axios";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return new NextResponse("Unauthorized", { status: 401 });
@@ -44,4 +45,8 @@ export async function GET(req: NextRequest) {
     console.error("Image proxy error:", error);
     return new NextResponse("Failed to fetch image", { status: 502 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, 'read', () => handleGET(req));
 }

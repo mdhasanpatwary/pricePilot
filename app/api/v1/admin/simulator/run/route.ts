@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { proxySimulator } from '@/lib/services/proxy-simulator';
 import { simulationConfigSchema } from '@/lib/validation/schemas';
 import { logger } from '@/lib/logger';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
 
 /**
  * POST /api/v1/admin/simulator/run
@@ -11,7 +12,7 @@ import { logger } from '@/lib/logger';
  *
  * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 8.1, 8.2
  */
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     try {
         // Authentication check
         const session = await getServerSession(authOptions);
@@ -87,4 +88,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRateLimit(req, 'write', () => handlePOST(req));
 }

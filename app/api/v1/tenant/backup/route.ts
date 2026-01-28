@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET: Export all data for the current tenant
  */
-export async function GET() {
+async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -72,10 +73,14 @@ export async function GET() {
   }
 }
 
+export async function GET(req: NextRequest) {
+  return withRateLimit(req, 'read', handleGET);
+}
+
 /**
  * PATCH: Update backup settings (e.g. Google Drive link)
  */
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -118,4 +123,8 @@ export async function PATCH(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function PATCH(req: NextRequest) {
+  return withRateLimit(req, 'write', handlePATCH);
 }

@@ -3,12 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/price-approvals
  * Get all pending price changes for the tenant
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user?.tenantId) {
@@ -73,6 +74,10 @@ export async function GET(req: NextRequest) {
     }
 }
 
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', () => handleGET(req));
+}
+
 /**
  * POST /api/v1/price-approvals
  * Approve or reject pending price changes
@@ -82,7 +87,7 @@ const actionSchema = z.object({
     changeIds: z.array(z.string()).min(1),
 });
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user?.tenantId || !session?.user?.email) {
@@ -155,4 +160,8 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRateLimit(req, 'write', () => handlePOST(req));
 }

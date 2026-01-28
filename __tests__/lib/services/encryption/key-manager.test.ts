@@ -3,7 +3,7 @@
  * Validates key loading, validation, and error handling
  */
 
-import { KeyManager } from '@/lib/services/encryption';
+import { KeyManager } from '@/lib/services/encryption/key-manager';
 import { KeyNotFoundError, KeyValidationError } from '@/lib/services/encryption/errors';
 
 describe('KeyManager', () => {

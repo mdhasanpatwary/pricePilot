@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
 
 /**
  * GET /api/v1/price-approvals/count
  * Get count of pending price changes for the tenant
  */
-export async function GET() {
+async function handleGET() {
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user?.tenantId) {
@@ -29,4 +30,8 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, 'read', handleGET);
 }
