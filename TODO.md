@@ -26,7 +26,11 @@ The agent MUST acknowledge this file before acting.
 * integration site data kibabe update hove?
 * add "If you’re unsure, say you’re unsure. Don’t guess" in agent rule.
 * scraping start korle previous log delete hoye jabe. and new session log show korbe.
-* Perform a deep analysis of the admin and tenant dashboards to provide 100% debug and control from the admin panel. Ensure all UI values are fully dynamic, identify missing features, and merge redundant pages where needed. Enable the admin to view, analyze, debug, simulate, and identify all issues faced by tenants. Visualize the complete scraping lifecycle in real time—including failures, detection, and resolution—and include a built-in proxy simulator to test proxy rotation, exclusion, failure handling, proxy prioritization, retry behavior, and all possible edge-case scenarios.
+** main flow -> get procut from store -> search & get competitor product(analysis, do what need) -> store product price update based on user logic.
+
+## Task
+* system er main kaj ki? kototuku done hoice? remaining ki ache? system er goal ki?
+* update main documentation at /docs
 
 
 

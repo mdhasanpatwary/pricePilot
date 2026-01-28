@@ -1,0 +1,296 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+        <button type="submit" form="form-webhook" data-toggle="tooltip" title="Save Webhook" class="btn btn-primary"><i class="fa fa-save"></i> Save</button>
+        <a href="{{ cancel }}" data-toggle="tooltip" title="Cancel" class="btn btn-default"><i class="fa fa-reply"></i> Cancel</a>
+      </div>
+      <h1><i class="fa fa-bell"></i> {{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        <li><a href="{{ cancel }}">Webhooks</a></li>
+        <li>{{ text_form }}</li>
+      </ul>
+    </div>
+  </div>
+  
+  <div class="container-fluid">
+    <!-- Error Messages -->
+    {% if error_warning %}
+    <div class="alert alert-danger alert-dismissible">
+      <button type="button" class="close" data-dismiss="alert">&times;</button>
+      <i class="fa fa-exclamation-circle"></i> {{ error_warning }}
+    </div>
+    {% endif %}
+    
+    <!-- Webhook Form -->
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-pencil"></i> Webhook Configuration</h3>
+      </div>
+      <div class="panel-body">
+        <form action="{{ action }}" method="post" enctype="multipart/form-data" id="form-webhook" class="form-horizontal">
+          
+          <!-- Webhook URL -->
+          <div class="form-group required {% if error_url %}has-error{% endif %}">
+            <label class="col-sm-2 control-label" for="input-url">
+              <span data-toggle="tooltip" title="The URL where webhook notifications will be sent">Webhook URL</span>
+            </label>
+            <div class="col-sm-10">
+              <input type="url" name="url" value="{{ webhook.url }}" placeholder="https://example.com/webhook/pricepilot" id="input-url" class="form-control" required />
+              {% if error_url %}
+              <div class="text-danger">{{ error_url }}</div>
+              {% else %}
+              <div class="help-block">Enter the full URL (including https://) where webhook notifications should be sent.</div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <!-- Event Selection -->
+          <div class="form-group required {% if error_events %}has-error{% endif %}">
+            <label class="col-sm-2 control-label">
+              <span data-toggle="tooltip" title="Select which events should trigger this webhook">Subscribed Events</span>
+            </label>
+            <div class="col-sm-10">
+              <div class="well well-sm" style="height: 200px; overflow: auto;">
+                {% for event_key, event_label in available_events %}
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" name="events[]" value="{{ event_key }}" {% if event_key in webhook.events %}checked{% endif %} />
+                    <strong>{{ event_label }}</strong>
+                    {% if event_key == 'product.created' %}
+                      <span class="text-muted">- Triggered when a new product is added</span>
+                    {% elseif event_key == 'product.updated' %}
+                      <span class="text-muted">- Triggered when product data is modified</span>
+                    {% elseif event_key == 'product.deleted' %}
+                      <span class="text-muted">- Triggered when a product is removed</span>
+                    {% elseif event_key == 'price.changed' %}
+                      <span class="text-muted">- Triggered when product price is updated via API</span>
+                    {% endif %}
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+              {% if error_events %}
+              <div class="text-danger">{{ error_events }}</div>
+              {% else %}
+              <div class="help-block">Select at least one event to subscribe to. The webhook will be triggered whenever any of the selected events occur.</div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <!-- Secret Key -->
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-secret">
+              <span data-toggle="tooltip" title="Secret key used to generate HMAC signature for webhook verification">Secret Key</span>
+            </label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <input type="text" name="secret" value="{{ webhook.secret }}" id="input-secret" class="form-control" readonly />
+                <span class="input-group-btn">
+                  <button type="button" class="btn btn-default" onclick="regenerateSecret()" data-toggle="tooltip" title="Generate New Secret">
+                    <i class="fa fa-refresh"></i> Regenerate
+                  </button>
+                  <button type="button" class="btn btn-default" onclick="copySecret()" data-toggle="tooltip" title="Copy to Clipboard">
+                    <i class="fa fa-copy"></i> Copy
+                  </button>
+                </span>
+              </div>
+              <div class="help-block">
+                This secret is used to generate an HMAC signature in the <code>X-PricePilot-Signature</code> header. 
+                Use it to verify that webhook requests are authentic and come from PricePilot.
+              </div>
+            </div>
+          </div>
+          
+          <!-- Status -->
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-status">
+              <span data-toggle="tooltip" title="Enable or disable this webhook">Status</span>
+            </label>
+            <div class="col-sm-10">
+              <select name="status" id="input-status" class="form-control">
+                <option value="1" {% if webhook.status == 1 %}selected{% endif %}>Active</option>
+                <option value="0" {% if webhook.status == 0 %}selected{% endif %}>Inactive</option>
+              </select>
+              <div class="help-block">Inactive webhooks will not receive notifications even if events occur.</div>
+            </div>
+          </div>
+          
+        </form>
+      </div>
+    </div>
+    
+    <!-- Webhook Testing Panel -->
+    <div class="panel panel-info">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-flask"></i> Test Webhook</h3>
+      </div>
+      <div class="panel-body">
+        <p>After saving your webhook, you can test it by triggering a test event:</p>
+        <button type="button" class="btn btn-info" onclick="testWebhook()" {% if not webhook.webhook_id %}disabled{% endif %}>
+          <i class="fa fa-paper-plane"></i> Send Test Event
+        </button>
+        <div id="test-result" class="alert" style="display: none; margin-top: 15px;"></div>
+        {% if not webhook.webhook_id %}
+        <div class="help-block">Save the webhook first to enable testing.</div>
+        {% endif %}
+      </div>
+    </div>
+    
+    <!-- Webhook Payload Example -->
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-code"></i> Example Webhook Payload</h3>
+      </div>
+      <div class="panel-body">
+        <p>When an event occurs, PricePilot will send a POST request to your webhook URL with a JSON payload like this:</p>
+        <pre style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; max-height: 400px; overflow: auto;"><code>{
+  "event": "price.changed",
+  "timestamp": "2024-01-15T10:30:00+00:00",
+  "store_id": 0,
+  "data": {
+    "product_id": 123,
+    "name": "Product Name",
+    "old_price": "89.99",
+    "new_price": "99.99",
+    "changes": ["price", "quantity"]
+  }
+}</code></pre>
+        <p><strong>Headers:</strong></p>
+        <ul>
+          <li><code>Content-Type: application/json</code></li>
+          <li><code>User-Agent: PricePilot-Webhook/1.0</code></li>
+          <li><code>X-PricePilot-Signature: [HMAC-SHA256 signature]</code></li>
+        </ul>
+        <p><strong>Signature Verification:</strong></p>
+        <p>Verify the webhook authenticity by computing the HMAC-SHA256 signature of the request body using your secret key:</p>
+        <pre style="background-color: #f5f5f5; padding: 15px; border-radius: 4px;"><code>// PHP Example
+$signature = hash_hmac('sha256', $requestBody, $secretKey);
+if ($signature === $_SERVER['HTTP_X_PRICEPILOT_SIGNATURE']) {
+    // Webhook is authentic
+}</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.form-horizontal .form-group {
+  margin-bottom: 20px;
+}
+.well {
+  background-color: #f9f9f9;
+}
+.checkbox {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+pre code {
+  font-size: 12px;
+  line-height: 1.5;
+}
+</style>
+
+<script type="text/javascript"><!--
+// Regenerate secret key
+function regenerateSecret() {
+    if (confirm('Are you sure you want to regenerate the secret key?\n\nThe old secret will no longer work for signature verification.')) {
+        // Generate random 64-character hex string
+        var array = new Uint8Array(32);
+        window.crypto.getRandomValues(array);
+        var hex = Array.from(array, function(byte) {
+            return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+        }).join('');
+        
+        $('#input-secret').val(hex);
+        
+        // Show success message
+        alert('New secret key generated!\n\nMake sure to save the webhook to apply the changes.');
+    }
+}
+
+// Copy secret to clipboard
+function copySecret() {
+    var secretInput = document.getElementById('input-secret');
+    secretInput.select();
+    secretInput.setSelectionRange(0, 99999); // For mobile devices
+    
+    try {
+        document.execCommand('copy');
+        alert('Secret key copied to clipboard!');
+    } catch (err) {
+        alert('Failed to copy secret key. Please copy it manually.');
+    }
+}
+
+// Test webhook (placeholder - would need backend implementation)
+function testWebhook() {
+    var webhookId = {{ webhook.webhook_id|default(0) }};
+    
+    if (!webhookId) {
+        alert('Please save the webhook first before testing.');
+        return;
+    }
+    
+    $('#test-result').hide();
+    
+    // Show loading state
+    var testButton = event.target;
+    var originalHtml = testButton.innerHTML;
+    testButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending...';
+    testButton.disabled = true;
+    
+    // Simulate test webhook (in production, this would call a backend endpoint)
+    setTimeout(function() {
+        testButton.innerHTML = originalHtml;
+        testButton.disabled = false;
+        
+        $('#test-result')
+            .removeClass('alert-success alert-danger')
+            .addClass('alert-info')
+            .html('<i class="fa fa-info-circle"></i> Test webhook functionality is not yet implemented. The webhook will be triggered automatically when real events occur.')
+            .fadeIn();
+    }, 1000);
+}
+
+// Enable tooltips
+$('[data-toggle="tooltip"]').tooltip();
+
+// Form validation
+$('#form-webhook').on('submit', function(e) {
+    var url = $('#input-url').val().trim();
+    var eventsChecked = $('input[name="events[]"]:checked').length;
+    
+    if (!url) {
+        alert('Please enter a webhook URL.');
+        e.preventDefault();
+        return false;
+    }
+    
+    if (eventsChecked === 0) {
+        alert('Please select at least one event to subscribe to.');
+        e.preventDefault();
+        return false;
+    }
+    
+    return true;
+});
+
+// URL validation feedback
+$('#input-url').on('blur', function() {
+    var url = $(this).val().trim();
+    var urlPattern = /^https?:\/\/.+/i;
+    
+    if (url && !urlPattern.test(url)) {
+        $(this).closest('.form-group').addClass('has-error');
+        if (!$(this).next('.text-danger').length) {
+            $(this).after('<div class="text-danger">Please enter a valid URL starting with http:// or https://</div>');
+        }
+    } else {
+        $(this).closest('.form-group').removeClass('has-error');
+        $(this).next('.text-danger').remove();
+    }
+});
+//--></script>
+{{ footer }}

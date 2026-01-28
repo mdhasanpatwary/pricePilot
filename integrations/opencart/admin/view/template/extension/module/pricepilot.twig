@@ -3,6 +3,7 @@
   <div class="page-header">
     <div class="container-fluid">
       <div class="pull-right">
+        <a href="{{ dashboard_link }}" data-toggle="tooltip" title="View Dashboard" class="btn btn-info"><i class="fa fa-dashboard"></i> Dashboard</a>
         <button type="submit" form="form-module" data-toggle="tooltip" title="Save" class="btn btn-primary"><i class="fa fa-save"></i></button>
         <a href="{{ cancel }}" data-toggle="tooltip" title="Cancel" class="btn btn-default"><i class="fa fa-reply"></i></a>
       </div>
@@ -32,9 +33,33 @@
                 <input type="text" name="module_pricepilot_token" value="{{ module_pricepilot_token }}" id="input-token" class="form-control" readonly />
                 <span class="input-group-btn">
                   <button type="button" id="button-copy" class="btn btn-info" data-toggle="tooltip" title="Copy Token"><i class="fa fa-copy"></i> Copy</button>
+                  <button type="button" id="button-regenerate" class="btn btn-warning" data-toggle="tooltip" title="Regenerate Token"><i class="fa fa-refresh"></i> Regenerate</button>
                 </span>
               </div>
-              <small class="text-muted">Copy this token and paste it into your PricePilot Dashboard.</small>
+              <small class="text-muted">
+                Copy this token and paste it into your PricePilot Dashboard.
+                {% if module_pricepilot_token_created %}
+                <br><strong>Token Created:</strong> {{ module_pricepilot_token_created }}
+                {% endif %}
+              </small>
+              <div class="alert alert-warning" style="margin-top: 10px;">
+                <i class="fa fa-exclamation-triangle"></i> <strong>Security Warning:</strong> Keep this token secure and never share it publicly. Anyone with this token can access your store's product data and update prices.
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label">API Connection</label>
+            <div class="col-sm-10">
+              <button type="button" id="button-test-connection" class="btn btn-default" data-toggle="tooltip" title="Test API Connection">
+                <i class="fa fa-plug"></i> Test API Connection
+              </button>
+              <div id="test-result" style="margin-top: 10px; display: none;">
+                <div class="alert" id="test-alert" role="alert">
+                  <strong id="test-status"></strong>
+                  <div id="test-details" style="margin-top: 5px;"></div>
+                  <div id="test-endpoint" style="margin-top: 5px; font-size: 12px; color: #666;"></div>
+                </div>
+              </div>
             </div>
           </div>
         </form>
@@ -59,6 +84,180 @@ $('#button-copy').on('click', function() {
         btn.html(originalText);
         btn.addClass('btn-info').removeClass('btn-success');
     }, 2000);
+});
+
+$('#button-regenerate').on('click', function() {
+    // Show confirmation dialog
+    if (!confirm('Are you sure you want to regenerate the API token?\n\nWARNING: The old token will be immediately invalidated and will no longer work. You will need to update the token in your PricePilot Dashboard.')) {
+        return;
+    }
+    
+    var btn = $(this);
+    var originalHtml = btn.html();
+    
+    // Show loading state
+    btn.prop('disabled', true);
+    btn.html('<i class="fa fa-spinner fa-spin"></i> Regenerating...');
+    
+    // Make AJAX request to regenerate token
+    $.ajax({
+        url: '{{ regenerate_token_link }}',
+        type: 'POST',
+        dataType: 'json',
+        success: function(response) {
+            // Reset button
+            btn.prop('disabled', false);
+            btn.html(originalHtml);
+            
+            if (response.success) {
+                // Update token in input field
+                $('#input-token').val(response.token);
+                
+                // Show success message
+                var successHtml = '<div class="alert alert-success alert-dismissible" style="margin-top: 15px;">';
+                successHtml += '<button type="button" class="close" data-dismiss="alert">&times;</button>';
+                successHtml += '<i class="fa fa-check-circle"></i> <strong>Success!</strong> ' + response.message;
+                successHtml += '<br><small>' + response.warning + '</small>';
+                if (response.token_created) {
+                    successHtml += '<br><small><strong>New Token Created:</strong> ' + response.token_created + '</small>';
+                }
+                successHtml += '</div>';
+                
+                // Remove any existing alerts
+                $('.alert-success, .alert-danger').not('.alert-warning').remove();
+                
+                // Add success message after the token input group
+                $('#input-token').closest('.form-group').find('.col-sm-10').append(successHtml);
+                
+                // Auto-dismiss after 10 seconds
+                setTimeout(function() {
+                    $('.alert-success').fadeOut(function() {
+                        $(this).remove();
+                    });
+                }, 10000);
+                
+                // Automatically copy new token to clipboard
+                var tokenInput = document.getElementById("input-token");
+                tokenInput.select();
+                tokenInput.setSelectionRange(0, 99999);
+                document.execCommand("copy");
+                
+            } else {
+                // Show error message
+                var errorHtml = '<div class="alert alert-danger alert-dismissible" style="margin-top: 15px;">';
+                errorHtml += '<button type="button" class="close" data-dismiss="alert">&times;</button>';
+                errorHtml += '<i class="fa fa-times-circle"></i> <strong>Error!</strong> ' + response.error;
+                if (response.details) {
+                    errorHtml += '<br><small>' + response.details + '</small>';
+                }
+                errorHtml += '</div>';
+                
+                // Remove any existing alerts
+                $('.alert-success, .alert-danger').not('.alert-warning').remove();
+                
+                // Add error message after the token input group
+                $('#input-token').closest('.form-group').find('.col-sm-10').append(errorHtml);
+            }
+        },
+        error: function(xhr, status, error) {
+            // Reset button
+            btn.prop('disabled', false);
+            btn.html(originalHtml);
+            
+            // Show error message
+            var errorHtml = '<div class="alert alert-danger alert-dismissible" style="margin-top: 15px;">';
+            errorHtml += '<button type="button" class="close" data-dismiss="alert">&times;</button>';
+            errorHtml += '<i class="fa fa-times-circle"></i> <strong>Error!</strong> Failed to regenerate token';
+            errorHtml += '<br><small>' + error + '</small>';
+            errorHtml += '</div>';
+            
+            // Remove any existing alerts
+            $('.alert-success, .alert-danger').not('.alert-warning').remove();
+            
+            // Add error message after the token input group
+            $('#input-token').closest('.form-group').find('.col-sm-10').append(errorHtml);
+        }
+    });
+});
+
+$('#button-test-connection').on('click', function() {
+    var btn = $(this);
+    var originalHtml = btn.html();
+    
+    // Show loading state
+    btn.prop('disabled', true);
+    btn.html('<i class="fa fa-spinner fa-spin"></i> Testing...');
+    
+    // Hide previous results
+    $('#test-result').hide();
+    
+    // Make AJAX request to test connection
+    $.ajax({
+        url: 'index.php?route=extension/module/pricepilot/testConnection&user_token={{ user_token }}',
+        type: 'GET',
+        dataType: 'json',
+        success: function(response) {
+            // Reset button
+            btn.prop('disabled', false);
+            btn.html(originalHtml);
+            
+            // Show result
+            $('#test-result').show();
+            
+            var alertDiv = $('#test-alert');
+            var statusDiv = $('#test-status');
+            var detailsDiv = $('#test-details');
+            var endpointDiv = $('#test-endpoint');
+            
+            if (response.success) {
+                // Success
+                alertDiv.removeClass('alert-danger').addClass('alert-success');
+                statusDiv.html('<i class="fa fa-check-circle"></i> ' + response.message);
+                
+                var details = response.details;
+                if (response.response_time) {
+                    details += '<br>Response Time: ' + response.response_time;
+                }
+                if (response.products_found !== undefined) {
+                    details += '<br>Products Found: ' + response.products_found;
+                }
+                detailsDiv.html(details);
+                
+                if (response.endpoint) {
+                    endpointDiv.html('Endpoint: ' + response.endpoint);
+                }
+            } else {
+                // Failure
+                alertDiv.removeClass('alert-success').addClass('alert-danger');
+                statusDiv.html('<i class="fa fa-times-circle"></i> ' + response.error);
+                
+                var details = response.details || 'No additional details available';
+                if (response.response_time) {
+                    details += '<br>Response Time: ' + response.response_time;
+                }
+                if (response.http_code) {
+                    details += '<br>HTTP Status Code: ' + response.http_code;
+                }
+                detailsDiv.html(details);
+                
+                if (response.endpoint) {
+                    endpointDiv.html('Endpoint: ' + response.endpoint);
+                }
+            }
+        },
+        error: function(xhr, status, error) {
+            // Reset button
+            btn.prop('disabled', false);
+            btn.html(originalHtml);
+            
+            // Show error
+            $('#test-result').show();
+            $('#test-alert').removeClass('alert-success').addClass('alert-danger');
+            $('#test-status').html('<i class="fa fa-times-circle"></i> Connection Test Failed');
+            $('#test-details').html('An error occurred while testing the connection: ' + error);
+            $('#test-endpoint').html('');
+        }
+    });
 });
 //--></script>
 {{ footer }}
