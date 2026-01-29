@@ -167,21 +167,26 @@ export function withValidation<T>(
 
 /**
  * Sanitize HTML to prevent XSS attacks
- * Removes all HTML tags and dangerous content
+ * Uses DOMPurify for comprehensive XSS prevention
  */
-export function sanitizeHtml(input: string): string {
-  return input
-    .replace(/<script[^>]*>.*?<\/script>/gi, "") // Remove script tags
-    .replace(/<iframe[^>]*>.*?<\/iframe>/gi, "") // Remove iframes
-    .replace(/<object[^>]*>.*?<\/object>/gi, "") // Remove objects
-    .replace(/<embed[^>]*>/gi, "") // Remove embeds
-    .replace(/<link[^>]*>/gi, "") // Remove link tags
-    .replace(/<style[^>]*>.*?<\/style>/gi, "") // Remove style tags
-    .replace(/<[^>]+>/g, "") // Remove all other HTML tags
-    .replace(/javascript:/gi, "") // Remove javascript: protocol
-    .replace(/on\w+\s*=/gi, "") // Remove event handlers
-    .replace(/data:text\/html/gi, "") // Remove data URLs
-    .trim();
+import DOMPurify from 'isomorphic-dompurify';
+
+export function sanitizeHtml(input: string, allowBasicFormatting: boolean = false): string {
+  if (allowBasicFormatting) {
+    // Allow basic formatting tags for rich text content
+    return DOMPurify.sanitize(input, {
+      ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }
+
+  // Strip all HTML tags for plain text fields
+  return DOMPurify.sanitize(input, {
+    ALLOWED_TAGS: [],
+    ALLOWED_ATTR: [],
+    KEEP_CONTENT: true,
+  }).trim();
 }
 
 /**

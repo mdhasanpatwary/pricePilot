@@ -1,0 +1,2123 @@
+
+> price-pilot@0.1.0 test
+> jest
+
+FAIL __tests__/lib/error-api.test.ts
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should handle AppError instances correctly
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:37:30)
+
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should preserve AppError status codes
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:58:34)
+
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should add request ID to AppError context if missing
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:74:13)
+
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should preserve existing request ID in AppError
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:87:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Non-AppError Handling › should wrap standard Error instances
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:101:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Non-AppError Handling › should wrap string errors
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:115:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Non-AppError Handling › should include request metadata in wrapped errors
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:128:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Development vs Production Mode › should include developer message in development mode
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:152:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Development vs Production Mode › should not include developer message in production mode
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:168:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Backward Compatibility › should maintain existing response format
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:182:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Backward Compatibility › should work with successful handlers
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:197:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Error Logging › should log all errors
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:215:13)
+
+  ● withErrorHandling - Enhanced Wrapper › Request ID Handling › should use x-request-id header if present
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:235:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Request ID Handling › should generate request ID if not present
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:247:30)
+
+FAIL __tests__/lib/services/rate-limiting-e2e-flow.test.ts
+  ● End-to-End Rate Limiting Flow › should enforce rate limits and record metrics for BASIC plan
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+  ● End-to-End Rate Limiting Flow › should apply higher limits immediately when plan is upgraded
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+  ● End-to-End Rate Limiting Flow › should record metrics for successful requests and violations
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+  ● End-to-End Rate Limiting Flow › should include correct headers in 429 responses
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+FAIL __tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts
+  ● Admin Bypass Flow › should allow requests when bypass is active
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should create audit log when bypass is set
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should deactivate expired bypasses
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should only allow super admins to set bypasses
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should validate bypass duration
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should validate bypass reason length
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should deactivate previous bypasses when setting new one
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+FAIL __tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts
+  ● Custom Multiplier Flow › should apply custom multiplier to rate limits
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should create audit log when custom multiplier is set
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should validate custom multiplier range
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should only allow super admins to set custom multipliers
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should validate reason length
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should update existing custom multiplier
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should remove custom multiplier and revert to plan multiplier
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should override plan multiplier with custom multiplier
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+PASS __tests__/lib/middleware/api-error-integration.test.ts
+PASS __tests__/app/api/integrations.test.ts
+PASS __tests__/lib/services/proxy-manager.test.ts
+PASS __tests__/lib/middleware/global-error-handler.test.ts
+PASS __tests__/lib/services/rules-engine.test.ts
+PASS __tests__/lib/services/retry-strategy.test.ts
+  ● Console
+
+    console.log
+      [2026-01-29T07:06:33.801Z] [INFO] [RetryStrategy] Initialized with options: {
+        maxRetries: 3,
+        initialDelay: 1000,
+        maxDelay: 30000,
+        backoffMultiplier: 2,
+        jitter: true
+      }
+
+      at Logger.log (lib/logger.ts:72:19)
+
+PASS __tests__/lib/services/user-agent-tracker.test.ts
+  ● Console
+
+    console.debug
+      [2026-01-29T07:06:33.940Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.946Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.947Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.947Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.950Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 3
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.950Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.75',
+        totalRequests: 4
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.951Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.952Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.952Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.953Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.50',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.953Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.953Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.954Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.954Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.955Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 3
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.955Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 4
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.955Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 5
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.955Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 6
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 7
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 8
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 9
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.90',
+        totalRequests: 10
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 3
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 4
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.956Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 5
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.957Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 6
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.957Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 7
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.957Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 8
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.957Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.89',
+        totalRequests: 9
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.957Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.80',
+        totalRequests: 10
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.957Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 3
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 4
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 5
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.50',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'macOS',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.958Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'macOS',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.959Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.959Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.959Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Firefox',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.959Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Firefox',
+        os: 'Windows',
+        successRate: '0.50',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.962Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.962Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.962Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 3
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.962Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 4
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 5
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 6
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 7
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 8
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 9
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 10
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 3
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.963Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 4
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.964Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 5
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.964Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.83',
+        totalRequests: 6
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.964Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.71',
+        totalRequests: 7
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.964Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.63',
+        totalRequests: 8
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.964Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.56',
+        totalRequests: 9
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.965Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '0.50',
+        totalRequests: 10
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:33.966Z] [DEBUG] [UserAgentTracker] Recorded success for user agent {
+        browser: 'Chrome',
+        os: 'Windows',
+        successRate: '1.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+PASS __tests__/lib/validation/input-validation.test.ts
+PASS __tests__/lib/utils/error-logger-audit.test.ts
+PASS __tests__/lib/services/matching.test.ts
+PASS __tests__/lib/services/website-service.test.ts
+PASS __tests__/lib/services/retry-queue.test.ts
+PASS __tests__/lib/services/concurrency-limiter.test.ts
+PASS __tests__/lib/utils/error-messages.test.ts
+PASS __tests__/lib/utils/error-adapters.test.ts
+PASS __tests__/lib/config/site-profiles.test.ts
+  ● Console
+
+    console.log
+      [2026-01-29T07:06:34.152Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:72:19)
+
+    console.log
+      [2026-01-29T07:06:34.158Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:72:19)
+
+    console.log
+      [2026-01-29T07:06:34.158Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:72:19)
+
+PASS __tests__/lib/services/captcha-solver.test.ts
+PASS __tests__/lib/utils/cache.test.ts
+PASS __tests__/lib/services/export-service.test.ts
+PASS __tests__/lib/utils/error-handler-messages.test.ts
+PASS __tests__/lib/utils/error-retry-metadata.test.ts
+PASS __tests__/lib/utils/error-handler-smoke.test.ts
+PASS __tests__/lib/services/challenge-handler.test.ts (8.157 s)
+PASS __tests__/lib/services/human-simulation.test.ts (42.623 s)
+PASS __tests__/lib/services/scraper.test.ts (57.333 s)
+  ● Console
+
+    console.log
+      [2026-01-29T07:06:33.129Z] [INFO] [ConfigurationManager] Loading initial configuration
+
+      at Logger.log (lib/logger.ts:72:19)
+
+    console.log
+      [2026-01-29T07:06:33.162Z] [INFO] [ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES
+
+      at Logger.log (lib/logger.ts:72:19)
+
+    console.log
+      [2026-01-29T07:06:33.163Z] [INFO] [ConfigurationManager] Configuration loaded successfully { proxyCount: 0, siteProfileCount: 0 }
+
+      at Logger.log (lib/logger.ts:72:19)
+
+    console.debug
+      [2026-01-29T07:06:45.338Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Linux',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:06:56.293Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Firefox',
+        os: 'Windows',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+          at async Promise.all (index 1)
+
+    console.debug
+      [2026-01-29T07:06:56.773Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Safari',
+        os: 'macOS',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+          at async Promise.all (index 2)
+
+    console.debug
+      [2026-01-29T07:06:58.874Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Firefox',
+        os: 'Windows',
+        successRate: '0.00',
+        totalRequests: 2
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+          at async Promise.all (index 0)
+
+    console.debug
+      [2026-01-29T07:07:03.732Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'Linux',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+          at async Promise.all (index 3)
+
+    console.debug
+      [2026-01-29T07:07:08.737Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Safari',
+        os: 'macOS',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+          at async Promise.all (index 4)
+
+    console.debug
+      [2026-01-29T07:07:20.931Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Firefox',
+        os: 'Linux',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+    console.debug
+      [2026-01-29T07:07:30.115Z] [DEBUG] [UserAgentTracker] Recorded failure for user agent {
+        browser: 'Chrome',
+        os: 'macOS',
+        successRate: '0.00',
+        totalRequests: 1
+      }
+
+      at Logger.debug [as log] (lib/logger.ts:69:19)
+
+
+Summary of all failing tests
+FAIL __tests__/lib/error-api.test.ts
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should handle AppError instances correctly
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:37:30)
+
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should preserve AppError status codes
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:58:34)
+
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should add request ID to AppError context if missing
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:74:13)
+
+  ● withErrorHandling - Enhanced Wrapper › AppError Handling › should preserve existing request ID in AppError
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:87:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Non-AppError Handling › should wrap standard Error instances
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:101:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Non-AppError Handling › should wrap string errors
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:115:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Non-AppError Handling › should include request metadata in wrapped errors
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:128:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Development vs Production Mode › should include developer message in development mode
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:152:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Development vs Production Mode › should not include developer message in production mode
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:168:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Backward Compatibility › should maintain existing response format
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:182:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Backward Compatibility › should work with successful handlers
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:197:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Error Logging › should log all errors
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:215:13)
+
+  ● withErrorHandling - Enhanced Wrapper › Request ID Handling › should use x-request-id header if present
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:235:30)
+
+  ● withErrorHandling - Enhanced Wrapper › Request ID Handling › should generate request ID if not present
+
+    TypeError: Response.json is not a function
+
+      83 |       }
+      84 |
+    > 85 |       return NextResponse.json(response, { status: appError.statusCode });
+         |                           ^
+      86 |     }
+      87 |   };
+      88 | }
+
+      at Function.json (node_modules/next/src/server/web/spec-extension/response.ts:113:41)
+      at json (lib/error-api.ts:85:27)
+      at Object.<anonymous> (__tests__/lib/error-api.test.ts:247:30)
+
+FAIL __tests__/lib/services/rate-limiting-e2e-flow.test.ts
+  ● End-to-End Rate Limiting Flow › should enforce rate limits and record metrics for BASIC plan
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+  ● End-to-End Rate Limiting Flow › should apply higher limits immediately when plan is upgraded
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+  ● End-to-End Rate Limiting Flow › should record metrics for successful requests and violations
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+  ● End-to-End Rate Limiting Flow › should include correct headers in 429 responses
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      31 |     beforeEach(async () => {
+      32 |         // Create test tenant with BASIC plan
+    > 33 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      34 |             data: {
+      35 |                 companyName: `Test Company ${Date.now()}`,
+      36 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-e2e-flow.test.ts:33:24)
+
+FAIL __tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts
+  ● Admin Bypass Flow › should allow requests when bypass is active
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should create audit log when bypass is set
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should deactivate expired bypasses
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should only allow super admins to set bypasses
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should validate bypass duration
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should validate bypass reason length
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+  ● Admin Bypass Flow › should deactivate previous bypasses when setting new one
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      32 |     beforeEach(async () => {
+      33 |         // Create test tenant
+    > 34 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      35 |             data: {
+      36 |                 companyName: `Test Company ${Date.now()}`,
+      37 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-admin-bypass-flow.test.ts:34:24)
+
+FAIL __tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts
+  ● Custom Multiplier Flow › should apply custom multiplier to rate limits
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should create audit log when custom multiplier is set
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should validate custom multiplier range
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should only allow super admins to set custom multipliers
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should validate reason length
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should update existing custom multiplier
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should remove custom multiplier and revert to plan multiplier
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+  ● Custom Multiplier Flow › should override plan multiplier with custom multiplier
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.tenant.create()` invocation:
+
+
+    User was denied access on the database `(not available)`
+
+      37 |     beforeEach(async () => {
+      38 |         // Create test tenant
+    > 39 |         const tenant = await prisma.tenant.create({
+         |                        ^
+      40 |             data: {
+      41 |                 companyName: `Test Company ${Date.now()}`,
+      42 |                 planType: 'BASIC',
+
+      at qr.handleRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at qr.handleAndLogRequestError (node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at qr.request (node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a (node_modules/@prisma/client/src/runtime/getPrismaClient.ts:805:24)
+      at Object.<anonymous> (__tests__/lib/services/rate-limiting-custom-multiplier-flow.test.ts:39:24)
+
+
+Test Suites: 4 failed, 1 skipped, 25 passed, 29 of 30 total
+Tests:       33 failed, 24 skipped, 462 passed, 519 total
+Snapshots:   0 total
+Time:        58.333 s
+Ran all test suites.

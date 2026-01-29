@@ -21,6 +21,9 @@
     "retention": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/data-retention.ts",
     "migrate-tokens": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/migrate-tokens.ts",
     "rotate-keys": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/rotate-keys.ts",
+    "warm-cache": "tsx scripts/warm-cache.ts",
+    "monitor-cache": "tsx scripts/monitor-cache.ts",
+    "archival": "tsx scripts/run-archival.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -54,6 +57,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "ioredis": "^5.9.2",
+    "isomorphic-dompurify": "^2.35.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.562.0",
     "next": "^16.1.1",

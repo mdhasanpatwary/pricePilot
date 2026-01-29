@@ -1,622 +1,805 @@
-# Error Handling and User Feedback Guide
+# Error Handling Guide
 
-This guide explains how to use the error handling, loading states, and user feedback utilities implemented in the admin dashboard.
+## Overview
 
-## Table of Contents
+PricePilot uses a comprehensive, standardized error handling system that provides:
+- **Security First**: Automatic sanitization of sensitive data
+- **User Experience**: Clear, actionable error messages
+- **Developer Experience**: Rich context and stack traces for debugging
+- **Consistency**: Standardized error format across all services and APIs
+- **Backward Compatibility**: Works with existing error handling code
 
-1. [Error Boundaries](#error-boundaries)
-2. [API Client with Retry Logic](#api-client-with-retry-logic)
-3. [Loading States](#loading-states)
-4. [Graceful Degradation](#graceful-degradation)
-5. [Custom Hooks](#custom-hooks)
-6. [Toast Notifications](#toast-notifications)
-7. [Best Practices](#best-practices)
-
-## Error Boundaries
-
-Error boundaries catch JavaScript errors anywhere in the component tree and display a fallback UI.
+## Quick Start
 
 ### Basic Usage
 
-```tsx
-import { ErrorBoundary } from "@/components/error-boundary";
+```typescript
+import { ValidationError, NotFoundError } from '@/lib/utils/error-handler';
 
-function MyPage() {
-  return (
-    <ErrorBoundary>
-      <MyComponent />
-    </ErrorBoundary>
-  );
-}
-```
-
-### With Custom Fallback
-
-```tsx
-<ErrorBoundary
-  fallback={
-    <div>
-      <h2>Something went wrong</h2>
-      <button onClick={() => window.location.reload()}>Reload</button>
-    </div>
+// Throw a validation error
+throw new ValidationError(
+  'Invalid product data',
+  { 
+    sku: ['SKU is required'],
+    price: ['Price must be greater than 0']
   }
->
-  <MyComponent />
-</ErrorBoundary>
-```
+);
 
-### With Error Handler
-
-```tsx
-<ErrorBoundary
-  onError={(error, errorInfo) => {
-    // Log to error tracking service
-    console.error("Error caught:", error, errorInfo);
-  }}
->
-  <MyComponent />
-</ErrorBoundary>
-```
-
-### With Reset Keys
-
-```tsx
-const [userId, setUserId] = useState("123");
-
-<ErrorBoundary resetKeys={[userId]}>
-  <UserProfile userId={userId} />
-</ErrorBoundary>
-```
-
-### HOC Pattern
-
-```tsx
-import { withErrorBoundary } from "@/components/error-boundary";
-
-const MyComponent = () => {
-  // Component code
-};
-
-export default withErrorBoundary(MyComponent, {
-  onError: (error) => console.error(error),
+// Throw a not found error
+throw new NotFoundError('Product', productId, {
+  context: { tenantId, operation: 'getProduct' }
 });
 ```
 
-## API Client with Retry Logic
+### In API Routes
 
-The API client provides automatic retry logic, timeout handling, and error management.
+```typescript
+import { GlobalErrorHandler } from '@/lib/middleware/global-error-handler';
 
-### Basic Usage
-
-```tsx
-import { apiClient } from "@/lib/utils/api-client";
-
-// GET request
-const response = await apiClient.get("/api/v1/admin/sessions");
-
-if (response.success) {
-  console.log(response.data);
-} else {
-  console.error(response.error);
+// Errors are automatically caught and formatted
+export async function GET(req: Request) {
+  // Your code - just throw AppError subclasses
+  const product = await getProduct(id);
+  if (!product) {
+    throw new NotFoundError('Product', id);
+  }
+  return Response.json({ success: true, data: product });
 }
 ```
 
-### POST Request
+## Error Class Hierarchy
 
-```tsx
-const response = await apiClient.post(
-  "/api/v1/admin/sessions",
-  { tenantId: "123", siteUrl: "example.com" },
+### Base Class: AppError
+
+All application errors extend `AppError`:
+
+```typescript
+class AppError extends Error {
+  statusCode: number;        // HTTP status code
+  errorCode: string;         // Machine-readable code
+  userMessage: string;       // User-friendly message
+  developerMessage?: string; // Technical details (dev only)
+  context: ErrorContext;     // Rich metadata
+  cause?: Error;             // Original error if wrapped
+  isRetryable: boolean;      // Can this be retried?
+  retryAfter?: number;       // Retry delay in seconds
+}
+```
+
+### Specialized Error Classes
+
+#### ValidationError (422)
+
+For input validation failures:
+
+```typescript
+throw new ValidationError(
+  'Invalid input data',
   {
-    showSuccessToast: true,
-    successMessage: "Session created successfully",
+    email: ['Invalid email format'],
+    price: ['Must be greater than 0', 'Must be a number']
+  },
+  {
+    context: { tenantId, operation: 'createProduct' }
   }
 );
 ```
 
-### With Custom Options
+#### NotFoundError (404)
 
-```tsx
-const response = await apiClient.get("/api/v1/admin/metrics", {
-  retries: 3,
-  retryDelay: 2000,
-  timeout: 60000,
-  showErrorToast: true,
-  showSuccessToast: false,
-});
+For missing resources:
+
+```typescript
+throw new NotFoundError(
+  'Product',           // Resource type
+  productId,           // Resource ID
+  {
+    context: { tenantId, operation: 'getProduct' }
+  }
+);
 ```
 
-### Available Methods
+#### UnauthorizedError (401)
 
-- `apiClient.get(url, options)`
-- `apiClient.post(url, body, options)`
-- `apiClient.put(url, body, options)`
-- `apiClient.patch(url, body, options)`
-- `apiClient.delete(url, options)`
+For authentication failures:
 
-## Loading States
-
-Various loading state components for different use cases.
-
-### Loading Spinner
-
-```tsx
-import { LoadingSpinner } from "@/components/ui/loading-state";
-
-<LoadingSpinner message="Loading data..." />
+```typescript
+throw new UnauthorizedError(
+  'Invalid API token',
+  {
+    context: { operation: 'authenticate' }
+  }
+);
 ```
 
-### Inline Loader
+#### ForbiddenError (403)
 
-```tsx
-import { InlineLoader } from "@/components/ui/loading-state";
+For authorization failures:
 
-<InlineLoader message="Fetching..." />
+```typescript
+throw new ForbiddenError(
+  'Insufficient permissions',
+  'admin',  // Required permission
+  {
+    context: { userId, tenantId, operation: 'deleteProduct' }
+  }
+);
 ```
 
-### Card Skeleton
+#### ConflictError (409)
 
-```tsx
-import { CardSkeleton } from "@/components/ui/loading-state";
+For resource conflicts:
 
-{loading ? <CardSkeleton /> : <MyCard data={data} />}
+```typescript
+throw new ConflictError(
+  'Product with this SKU already exists',
+  'Product:SKU-123',  // Conflicting resource
+  {
+    context: { tenantId, operation: 'createProduct' }
+  }
+);
 ```
 
-### Table Skeleton
+#### RateLimitError (429)
 
-```tsx
-import { TableSkeleton } from "@/components/ui/loading-state";
+For rate limiting violations:
 
-{loading ? <TableSkeleton rows={5} columns={4} /> : <MyTable data={data} />}
+```typescript
+throw new RateLimitError(
+  100,    // Limit
+  3600,   // Window in seconds
+  {
+    context: { userId, operation: 'scrapeCompetitor' },
+    retryAfter: 3600
+  }
+);
 ```
 
-### Loading Overlay
+#### ExternalServiceError (502)
 
-```tsx
-import { LoadingOverlay } from "@/components/ui/loading-state";
+For third-party API failures:
 
-<LoadingOverlay isLoading={isProcessing} message="Processing...">
-  <MyContent />
-</LoadingOverlay>
+```typescript
+throw new ExternalServiceError(
+  'OpenCart',  // Service name
+  'Failed to fetch products from website',
+  {
+    cause: originalError,
+    context: { tenantId, websiteId, operation: 'syncProducts' },
+    isRetryable: true,
+    serviceStatusCode: 503
+  }
+);
 ```
 
-### Button Loader
+## Error Context
 
-```tsx
-import { ButtonLoader } from "@/components/ui/loading-state";
-import { Button } from "@/components/ui/button";
+All errors capture rich context for debugging:
 
-<Button disabled={loading}>
-  {loading && <ButtonLoader className="mr-2" />}
-  Submit
-</Button>
-```
-
-## Graceful Degradation
-
-Utilities for handling missing or invalid data gracefully.
-
-### Safe Value Access
-
-```tsx
-import {
-  withFallback,
-  safeGet,
-  safeNumber,
-  safePercentage,
-  safeDate,
-  safeArray,
-  safeString,
-} from "@/lib/utils/graceful-degradation";
-
-// Provide fallback for null/undefined
-const value = withFallback(data?.value, 0);
-
-// Safely access nested properties
-const name = safeGet(user, "profile.name", "Unknown");
-
-// Format numbers safely
-const count = safeNumber(data?.count, 0);
-const percentage = safePercentage(data?.rate, 0, 2); // "0.00%"
-
-// Format dates safely
-const date = safeDate(data?.timestamp, "N/A");
-
-// Ensure array
-const items = safeArray(data?.items, []);
-
-// Ensure string
-const text = safeString(data?.text, "");
-```
-
-### Relative Time
-
-```tsx
-import { safeRelativeTime } from "@/lib/utils/graceful-degradation";
-
-const timeAgo = safeRelativeTime(session.startTime); // "5m ago"
-```
-
-### Duration Formatting
-
-```tsx
-import { safeDuration } from "@/lib/utils/graceful-degradation";
-
-const duration = safeDuration(1500); // "1.5s"
-```
-
-### File Size Formatting
-
-```tsx
-import { safeFileSize } from "@/lib/utils/graceful-degradation";
-
-const size = safeFileSize(1024 * 1024); // "1.00 MB"
-```
-
-### Empty State Messages
-
-```tsx
-import { getEmptyStateMessage } from "@/lib/utils/graceful-degradation";
-
-const message = getEmptyStateMessage("sessions"); // "No active sessions found"
-```
-
-## Custom Hooks
-
-### useFetch Hook
-
-Automatic data fetching with retry logic and caching.
-
-```tsx
-import { useFetch } from "@/lib/hooks/useFetch";
-
-function MyComponent() {
-  const { data, loading, error, refetch } = useFetch("/api/v1/admin/sessions", {
-    enabled: true,
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
-    cacheTime: 60000, // Cache for 1 minute
-    retries: 2,
-    onSuccess: (data) => console.log("Data loaded:", data),
-    onError: (error) => console.error("Error:", error),
-  });
-
-  if (loading) return <LoadingSpinner />;
-  if (error) return <div>Error: {error}</div>;
-
-  return <div>{/* Render data */}</div>;
+```typescript
+interface ErrorContext {
+  tenantId?: string;      // Multi-tenant isolation
+  userId?: string;        // User who triggered error
+  operation?: string;     // Function/operation name
+  requestId?: string;     // Request tracking ID
+  timestamp: string;      // ISO8601 timestamp
+  metadata?: Record<string, any>;  // Custom data
 }
 ```
 
-### useAsyncOperation Hook
+### Adding Context
 
-Manage async operations with loading and error states.
-
-```tsx
-import { useAsyncOperation } from "@/lib/hooks/useAsyncOperation";
-
-function MyComponent() {
-  const { data, loading, error, execute, reset } = useAsyncOperation({
-    showErrorToast: true,
-    showSuccessToast: true,
-    successMessage: "Operation completed",
-    onSuccess: (data) => console.log("Success:", data),
-    onError: (error) => console.error("Error:", error),
-  });
-
-  const handleSubmit = async () => {
-    const result = await execute(async () => {
-      const response = await fetch("/api/endpoint", {
-        method: "POST",
-        body: JSON.stringify(formData),
-      });
-      return response.json();
-    });
-
-    if (result.success) {
-      // Handle success
+```typescript
+throw new NotFoundError('Product', id, {
+  context: {
+    tenantId: 'tenant_123',
+    userId: 'user_456',
+    operation: 'getProduct',
+    requestId: req.id,
+    metadata: {
+      websiteId: 'website_789',
+      sku: 'PROD-001'
     }
-  };
+  }
+});
+```
 
-  return (
-    <Button onClick={handleSubmit} disabled={loading}>
-      {loading ? "Processing..." : "Submit"}
-    </Button>
-  );
+## Service Layer Integration
+
+### Pattern for Service Methods
+
+```typescript
+class ProductService {
+  async getProduct(id: string, tenantId: string): Promise<Product> {
+    try {
+      // Validate input
+      if (!id) {
+        throw new ValidationError(
+          'Invalid request',
+          { id: ['Product ID is required'] },
+          { context: { tenantId, operation: 'getProduct' } }
+        );
+      }
+      
+      // Fetch resource
+      const product = await prisma.product.findUnique({
+        where: { id, tenantId }
+      });
+      
+      if (!product) {
+        throw new NotFoundError('Product', id, {
+          context: { tenantId, operation: 'getProduct' }
+        });
+      }
+      
+      return product;
+    } catch (error) {
+      // Re-throw AppErrors
+      if (error instanceof AppError) {
+        throw error;
+      }
+      
+      // Wrap unexpected errors
+      throw new AppError(
+        'Unexpected error fetching product',
+        500,
+        'INTERNAL_ERROR',
+        {
+          cause: error,
+          context: { tenantId, operation: 'getProduct', productId: id }
+        }
+      );
+    }
+  }
 }
 ```
 
-## Toast Notifications
+### External API Calls
 
-Using Sonner for toast notifications.
-
-### Success Toast
-
-```tsx
-import { toast } from "sonner";
-
-toast.success("Operation completed successfully");
+```typescript
+async function fetchFromExternalAPI(url: string): Promise<Data> {
+  try {
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new ExternalServiceError(
+        'ExternalAPI',
+        `API returned ${response.status}`,
+        {
+          serviceStatusCode: response.status,
+          isRetryable: response.status >= 500,
+          context: { operation: 'fetchFromExternalAPI', url }
+        }
+      );
+    }
+    
+    return await response.json();
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    
+    // Network errors are retryable
+    throw new ExternalServiceError(
+      'ExternalAPI',
+      'Network request failed',
+      {
+        cause: error,
+        isRetryable: true,
+        context: { operation: 'fetchFromExternalAPI', url }
+      }
+    );
+  }
+}
 ```
 
-### Error Toast
+## API Error Responses
 
-```tsx
-toast.error("Failed to complete operation");
+### Response Format
+
+All API errors follow this format:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "User-friendly message",
+    "details": {
+      // Additional context (e.g., validation fields)
+    }
+  },
+  "meta": {
+    "requestId": "req_abc123",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
 ```
 
-### Info Toast
+### Validation Error Response
 
-```tsx
-toast.info("Processing your request...");
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The provided data is invalid",
+    "details": {
+      "fields": {
+        "email": ["Invalid email format"],
+        "price": ["Must be greater than 0"]
+      }
+    }
+  },
+  "meta": {
+    "requestId": "req_abc123",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
 ```
 
-### Warning Toast
+### HTTP Status Code Mapping
 
-```tsx
-toast.warning("This action cannot be undone");
+| Error Class | Error Code | HTTP Status |
+|-------------|------------|-------------|
+| ValidationError | VALIDATION_ERROR | 422 |
+| NotFoundError | NOT_FOUND | 404 |
+| UnauthorizedError | UNAUTHORIZED | 401 |
+| ForbiddenError | FORBIDDEN | 403 |
+| ConflictError | CONFLICT | 409 |
+| RateLimitError | RATE_LIMIT_EXCEEDED | 429 |
+| ExternalServiceError | EXTERNAL_SERVICE_ERROR | 502 |
+| AppError (generic) | INTERNAL_ERROR | 500 |
+
+## Security and Sanitization
+
+### Automatic Sanitization
+
+The error system automatically redacts sensitive data:
+
+```typescript
+// Before sanitization
+const error = new AppError('Failed to connect', 500, 'CONNECTION_ERROR', {
+  context: {
+    metadata: {
+      apiToken: 'sk_live_abc123',
+      password: 'secret123',
+      connectionString: 'postgresql://user:pass@host/db'
+    }
+  }
+});
+
+// After sanitization (in logs and responses)
+{
+  "metadata": {
+    "apiToken": "[REDACTED]",
+    "password": "[REDACTED]",
+    "connectionString": "[REDACTED]"
+  }
+}
 ```
 
-### Loading Toast
+### Sensitive Patterns
 
-```tsx
-const toastId = toast.loading("Processing...");
+Automatically redacted:
+- API tokens: `token`, `apiKey`, `apiToken`
+- Credentials: `password`, `secret`, `credential`
+- Encryption: `encrypted`, `cipher`, `privateKey`
+- Database: `connectionString`, `dbUrl`
+- Patterns: `Bearer ...`, `sk_...`, `pk_...`
 
-// Later, update the toast
-toast.success("Completed!", { id: toastId });
-```
+### Development vs Production
 
-### Promise Toast
+**Development Mode**:
+- Includes developer messages in responses
+- Shows full stack traces
+- Logs detailed error information
 
-```tsx
-toast.promise(
-  fetch("/api/endpoint").then((res) => res.json()),
+**Production Mode**:
+- Only user-friendly messages in responses
+- No stack traces exposed
+- Sanitized logs only
+
+## Error Logging
+
+### Automatic Logging
+
+All errors are automatically logged with:
+- Error type and message
+- Full stack trace (sanitized)
+- Error context (tenantId, userId, operation)
+- Request details (if available)
+- Original error (if wrapped)
+
+### Log Levels
+
+| Error Type | Log Level |
+|------------|-----------|
+| UnauthorizedError | ERROR |
+| ForbiddenError | ERROR |
+| ExternalServiceError | ERROR |
+| Unexpected errors | ERROR |
+| ValidationError | WARN |
+| NotFoundError | WARN |
+| ConflictError | WARN |
+| RateLimitError | WARN |
+
+### Security Audit Logging
+
+Security-related errors are automatically logged to the audit trail:
+- UnauthorizedError
+- ForbiddenError
+
+Audit logs include:
+- IP address
+- User agent
+- Timestamp
+- User ID (if available)
+
+## Retry Logic
+
+### Retryable Errors
+
+Some errors are marked as retryable:
+
+```typescript
+const error = new ExternalServiceError(
+  'OpenCart',
+  'Service temporarily unavailable',
   {
-    loading: "Loading...",
-    success: "Data loaded successfully",
-    error: "Failed to load data",
+    isRetryable: true,
+    retryAfter: 60  // Retry after 60 seconds
   }
 );
 ```
 
-## Empty States
+### Checking Retry Status
 
-Display friendly messages when no data is available.
-
-```tsx
-import { EmptyState } from "@/components/ui/empty-state";
-import { Activity } from "lucide-react";
-
-<EmptyState
-  icon={Activity}
-  title="No sessions found"
-  description="There are currently no active scraping sessions."
-  action={{
-    label: "Refresh",
-    onClick: () => refetch(),
-  }}
-/>
+```typescript
+if (error.isRetryable) {
+  const delay = error.retryAfter || 60;
+  await sleep(delay * 1000);
+  return retry();
+}
 ```
 
-### Inline Empty State
+### Retryable Error Types
 
-```tsx
-import { InlineEmptyState } from "@/components/ui/empty-state";
+- Network timeouts
+- 5xx errors from external services
+- Rate limit errors (with backoff)
+- Temporary service unavailability
 
-<InlineEmptyState
-  icon={Activity}
-  title="No data available"
-  description="Try adjusting your filters"
-/>
+## Backward Compatibility
+
+### Existing Error Classes
+
+The system maintains compatibility with existing errors:
+
+```typescript
+// Old error classes still work
+import { EncryptionError } from '@/lib/services/encryption/errors';
+
+try {
+  await encrypt(data);
+} catch (error) {
+  // Automatically wrapped and processed
+  if (error instanceof EncryptionError) {
+    // Handled by new system
+  }
+}
+```
+
+### withErrorHandling Wrapper
+
+Enhanced wrapper for gradual migration:
+
+```typescript
+import { withErrorHandling } from '@/lib/error-api';
+
+const safeFunction = withErrorHandling(
+  async (data) => {
+    // Your code
+  },
+  { operation: 'processData' }
+);
+```
+
+## Common Scenarios
+
+### Scenario 1: API Endpoint with Validation
+
+```typescript
+export async function POST(req: Request) {
+  const body = await req.json();
+  
+  // Validate input
+  const errors: Record<string, string[]> = {};
+  if (!body.name) errors.name = ['Name is required'];
+  if (!body.price || body.price <= 0) {
+    errors.price = ['Price must be greater than 0'];
+  }
+  
+  if (Object.keys(errors).length > 0) {
+    throw new ValidationError('Invalid product data', errors);
+  }
+  
+  // Process request
+  const product = await createProduct(body);
+  return Response.json({ success: true, data: product });
+}
+```
+
+### Scenario 2: Service with External API
+
+```typescript
+class SyncService {
+  async syncProducts(websiteId: string, tenantId: string) {
+    const website = await this.getWebsite(websiteId);
+    if (!website) {
+      throw new NotFoundError('UserWebsite', websiteId, {
+        context: { tenantId, operation: 'syncProducts' }
+      });
+    }
+    
+    try {
+      const products = await this.fetchFromWebsite(website);
+      return products;
+    } catch (error) {
+      throw new ExternalServiceError(
+        website.platform,
+        'Failed to fetch products',
+        {
+          cause: error,
+          isRetryable: true,
+          context: { tenantId, websiteId, operation: 'syncProducts' }
+        }
+      );
+    }
+  }
+}
+```
+
+### Scenario 3: Authorization Check
+
+```typescript
+async function deleteProduct(id: string, userId: string) {
+  const user = await getUser(userId);
+  
+  if (user.role !== 'admin') {
+    throw new ForbiddenError(
+      'Only administrators can delete products',
+      'admin',
+      { context: { userId, operation: 'deleteProduct' } }
+    );
+  }
+  
+  await prisma.product.delete({ where: { id } });
+}
+```
+
+### Scenario 4: Rate Limiting
+
+```typescript
+async function scrapeCompetitor(url: string, userId: string) {
+  const rateLimitKey = `scrape:${userId}`;
+  const count = await redis.incr(rateLimitKey);
+  
+  if (count > 10) {
+    throw new RateLimitError(10, 60, {
+      context: { userId, operation: 'scrapeCompetitor' },
+      retryAfter: 60
+    });
+  }
+  
+  await redis.expire(rateLimitKey, 60);
+  return await scrape(url);
+}
 ```
 
 ## Best Practices
 
-### 1. Always Wrap Components in Error Boundaries
+### 1. Always Include Context
 
-```tsx
-// ✅ Good
-<ErrorBoundary>
-  <AdminDashboard />
-</ErrorBoundary>
-
-// ❌ Bad
-<AdminDashboard />
-```
-
-### 2. Use Loading States for Async Operations
-
-```tsx
-// ✅ Good
-{loading ? <LoadingSpinner /> : <DataTable data={data} />}
-
-// ❌ Bad
-<DataTable data={data} /> // No loading state
-```
-
-### 3. Provide Fallback Values
-
-```tsx
-// ✅ Good
-const count = safeNumber(data?.count, 0);
-
-// ❌ Bad
-const count = data.count; // May crash if data is null
-```
-
-### 4. Handle Errors Gracefully
-
-```tsx
-// ✅ Good
-const response = await apiClient.get("/api/endpoint");
-if (response.success) {
-  // Handle success
-} else {
-  // Handle error
-  console.error(response.error);
-}
-
-// ❌ Bad
-const data = await fetch("/api/endpoint").then(r => r.json());
-// No error handling
-```
-
-### 5. Show User Feedback
-
-```tsx
-// ✅ Good
-const handleSave = async () => {
-  const result = await apiClient.post("/api/save", data, {
-    showSuccessToast: true,
-    successMessage: "Saved successfully",
-  });
-};
-
-// ❌ Bad
-const handleSave = async () => {
-  await apiClient.post("/api/save", data);
-  // No user feedback
-};
-```
-
-### 6. Use Empty States
-
-```tsx
-// ✅ Good
-{sessions.length === 0 ? (
-  <EmptyState
-    icon={Activity}
-    title="No sessions"
-    description="No active sessions found"
-  />
-) : (
-  <SessionList sessions={sessions} />
-)}
-
-// ❌ Bad
-{sessions.length === 0 ? null : <SessionList sessions={sessions} />}
-```
-
-### 7. Implement Retry Logic
-
-```tsx
-// ✅ Good
-const { data, error, refetch } = useFetch("/api/endpoint", {
-  retries: 2,
+```typescript
+// Good
+throw new NotFoundError('Product', id, {
+  context: { tenantId, userId, operation: 'getProduct' }
 });
 
-// ❌ Bad
-const [data, setData] = useState(null);
-useEffect(() => {
-  fetch("/api/endpoint").then(r => r.json()).then(setData);
-}, []); // No retry on failure
+// Bad
+throw new NotFoundError('Product', id);
 ```
 
-### 8. Cache Frequently Accessed Data
+### 2. Preserve Original Errors
 
-```tsx
-// ✅ Good
-const { data } = useFetch("/api/metrics", {
-  cacheTime: 60000, // Cache for 1 minute
-  refetchInterval: 30000, // Refresh every 30 seconds
+```typescript
+// Good
+try {
+  await externalAPI();
+} catch (error) {
+  throw new ExternalServiceError('API', 'Failed', {
+    cause: error  // Preserve original
+  });
+}
+
+// Bad
+try {
+  await externalAPI();
+} catch (error) {
+  throw new ExternalServiceError('API', 'Failed');
+}
+```
+
+### 3. Use Specific Error Classes
+
+```typescript
+// Good
+throw new ValidationError('Invalid input', { email: ['Invalid format'] });
+
+// Bad
+throw new AppError('Invalid input', 422, 'VALIDATION_ERROR');
+```
+
+### 4. Provide User-Friendly Messages
+
+```typescript
+// Good
+throw new ExternalServiceError(
+  'OpenCart',
+  'Unable to connect to your website. Please check your API token.',
+  { userMessage: 'Connection failed. Please verify your settings.' }
+);
+
+// Bad
+throw new ExternalServiceError(
+  'OpenCart',
+  'ECONNREFUSED 127.0.0.1:3000'
+);
+```
+
+### 5. Mark Transient Errors as Retryable
+
+```typescript
+// Good
+throw new ExternalServiceError('API', 'Timeout', {
+  isRetryable: true,
+  retryAfter: 30
 });
 
-// ❌ Bad
-useEffect(() => {
-  const interval = setInterval(() => {
-    fetch("/api/metrics"); // No caching, fetches every time
-  }, 1000);
-}, []);
+// Bad
+throw new ExternalServiceError('API', 'Timeout');
 ```
 
-## Complete Example
+## Testing
 
-Here's a complete example combining all best practices:
+### Unit Testing Errors
 
-```tsx
-import { ErrorBoundary } from "@/components/error-boundary";
-import { useFetch } from "@/lib/hooks/useFetch";
-import { LoadingSpinner } from "@/components/ui/loading-state";
-import { EmptyState } from "@/components/ui/empty-state";
-import { safeArray } from "@/lib/utils/graceful-degradation";
-import { Activity } from "lucide-react";
-import { toast } from "sonner";
+```typescript
+import { ValidationError } from '@/lib/utils/error-handler';
 
-function SessionMonitor() {
-  const { data, loading, error, refetch } = useFetch("/api/v1/admin/sessions", {
-    refetchInterval: 5000,
-    retries: 2,
-    cacheTime: 30000,
-    onError: (err) => console.error("Failed to fetch sessions:", err),
+test('throws validation error for invalid input', () => {
+  expect(() => {
+    validateProduct({ price: -10 });
+  }).toThrow(ValidationError);
+});
+
+test('validation error includes field details', () => {
+  try {
+    validateProduct({ price: -10 });
+  } catch (error) {
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error.fields).toHaveProperty('price');
+  }
+});
+```
+
+### Testing API Error Responses
+
+```typescript
+test('returns 422 for validation errors', async () => {
+  const response = await POST(
+    new Request('http://localhost/api/products', {
+      method: 'POST',
+      body: JSON.stringify({ price: -10 })
+    })
+  );
+  
+  expect(response.status).toBe(422);
+  const body = await response.json();
+  expect(body.success).toBe(false);
+  expect(body.error.code).toBe('VALIDATION_ERROR');
+});
+```
+
+## Troubleshooting
+
+### Error Not Being Caught
+
+Ensure you're throwing AppError subclasses:
+```typescript
+// This will be caught
+throw new NotFoundError('Product', id);
+
+// This won't be handled properly
+throw new Error('Not found');
+```
+
+### Sensitive Data Still Visible
+
+Check field names match sensitive patterns:
+```typescript
+// Will be redacted
+{ apiToken: 'secret' }
+{ password: 'secret' }
+
+// Won't be redacted (use correct field names)
+{ token: 'secret' }  // Use 'apiToken' instead
+```
+
+### Missing Context in Logs
+
+Always provide context when creating errors:
+```typescript
+throw new NotFoundError('Product', id, {
+  context: { tenantId, operation: 'getProduct' }
+});
+```
+
+## Migration Guide
+
+### Migrating from Old Error Handling
+
+1. **Replace generic throws**:
+```typescript
+// Before
+throw new Error('Product not found');
+
+// After
+throw new NotFoundError('Product', id);
+```
+
+2. **Add context to errors**:
+```typescript
+// Before
+throw new NotFoundError('Product', id);
+
+// After
+throw new NotFoundError('Product', id, {
+  context: { tenantId, operation: 'getProduct' }
+});
+```
+
+3. **Wrap external API calls**:
+```typescript
+// Before
+const data = await fetch(url);
+
+// After
+try {
+  const data = await fetch(url);
+} catch (error) {
+  throw new ExternalServiceError('API', 'Failed', {
+    cause: error,
+    isRetryable: true
   });
-
-  const sessions = safeArray(data?.sessions, []);
-
-  const handleRefresh = async () => {
-    try {
-      await refetch();
-      toast.success("Sessions refreshed");
-    } catch (err) {
-      toast.error("Failed to refresh");
-    }
-  };
-
-  if (loading && sessions.length === 0) {
-    return <LoadingSpinner message="Loading sessions..." />;
-  }
-
-  if (error) {
-    return (
-      <EmptyState
-        icon={Activity}
-        title="Failed to load sessions"
-        description={error}
-        action={{
-          label: "Retry",
-          onClick: handleRefresh,
-        }}
-      />
-    );
-  }
-
-  if (sessions.length === 0) {
-    return (
-      <EmptyState
-        icon={Activity}
-        title="No active sessions"
-        description="There are currently no scraping sessions running."
-        action={{
-          label: "Refresh",
-          onClick: handleRefresh,
-        }}
-      />
-    );
-  }
-
-  return (
-    <div>
-      {/* Render sessions */}
-    </div>
-  );
-}
-
-export default function SessionMonitorPage() {
-  return (
-    <ErrorBoundary>
-      <SessionMonitor />
-    </ErrorBoundary>
-  );
 }
 ```
 
-## Summary
+## Reference
 
-The error handling and user feedback system provides:
+### Error Class Reference
 
-- **Error Boundaries**: Catch and handle component errors gracefully
-- **API Client**: Automatic retry logic and timeout handling
-- **Loading States**: Various loading indicators for different contexts
-- **Graceful Degradation**: Safe data access with fallback values
-- **Custom Hooks**: Simplified async operations and data fetching
-- **Toast Notifications**: User feedback for actions and errors
-- **Empty States**: Friendly messages when no data is available
+See [lib/utils/error-handler.ts](../lib/utils/error-handler.ts) for complete implementation.
 
-By following these patterns, you ensure a robust and user-friendly admin dashboard that handles errors gracefully and provides clear feedback to users.
+### Middleware Reference
+
+See [lib/middleware/global-error-handler.ts](../lib/middleware/global-error-handler.ts) for API integration.
+
+### Sanitizer Reference
+
+See [lib/utils/error-sanitizer.ts](../lib/utils/error-sanitizer.ts) for sanitization rules.
+
+### Logger Reference
+
+See [lib/utils/error-logger.ts](../lib/utils/error-logger.ts) for logging implementation.

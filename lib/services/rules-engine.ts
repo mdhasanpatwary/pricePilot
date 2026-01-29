@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { PricingRule } from "@prisma/client";
 import { WebhookService } from "./webhook";
 import { NotificationService } from "./notification";
+import { ValidationError, NotFoundError, AppError } from "@/lib/utils/error-handler";
 
 interface PriceRecommendation {
   productId: string;
@@ -18,63 +19,90 @@ export class RulesEngine {
   static async evaluateAllRules(
     tenantId: string,
   ): Promise<PriceRecommendation[]> {
-    // Get all active pricing rules from database
-    const rules = await prisma.pricingRule.findMany({
-      where: {
-        tenantId,
-        isActive: true,
-      },
-      orderBy: {
-        priority: "asc", // Lower number = higher priority
-      },
-    });
-
-    // Batched processing to handle large datasets (Memory Optimization)
-    let processedCount = 0;
-    const BATCH_SIZE = 100;
-
-    const recommendations: PriceRecommendation[] = [];
-
-    while (true) {
-      // Get batch of user products with their matches
-      const products = await prisma.product.findMany({
-        where: {
-          tenantId,
-          site: { type: "USER" },
-        },
-        include: {
-          matchesAsUser: {
-            include: {
-              competitorProduct: true,
-            },
-          },
-        },
-        take: BATCH_SIZE,
-        skip: processedCount,
-      });
-
-      if (products.length === 0) {
-        break; // No more products to process
+    try {
+      // Validate input
+      if (!tenantId || typeof tenantId !== 'string') {
+        throw new ValidationError(
+          'Invalid tenant ID',
+          { tenantId: ['Tenant ID is required and must be a string'] },
+          { context: { tenantId, operation: 'evaluateAllRules' } }
+        );
       }
 
-      for (const product of products) {
-        const recommendation = await this.evaluateProduct(product, rules);
-        if (recommendation) {
-          recommendations.push(recommendation);
+      // Get all active pricing rules from database
+      const rules = await prisma.pricingRule.findMany({
+        where: {
+          tenantId,
+          isActive: true,
+        },
+        orderBy: {
+          priority: "asc", // Lower number = higher priority
+        },
+      });
+
+      // Batched processing to handle large datasets (Memory Optimization)
+      let processedCount = 0;
+      const BATCH_SIZE = 100;
+
+      const recommendations: PriceRecommendation[] = [];
+
+      while (true) {
+        // Get batch of user products with their matches
+        const products = await prisma.product.findMany({
+          where: {
+            tenantId,
+            site: { type: "USER" },
+          },
+          include: {
+            matchesAsUser: {
+              include: {
+                competitorProduct: true,
+              },
+            },
+          },
+          take: BATCH_SIZE,
+          skip: processedCount,
+        });
+
+        if (products.length === 0) {
+          break; // No more products to process
+        }
+
+        for (const product of products) {
+          const recommendation = await this.evaluateProduct(product, rules, tenantId);
+          if (recommendation) {
+            recommendations.push(recommendation);
+          }
+        }
+
+        processedCount += products.length;
+
+        // Safety break for extremely large datasets during dev/testing
+        // In production, this might be handled by a queue worker instead
+        if (processedCount > 50000) {
+          console.warn(`[RulesEngine] Processed 50k products, stopping safely.`);
+          break;
         }
       }
 
-      processedCount += products.length;
-
-      // Safety break for extremely large datasets during dev/testing
-      // In production, this might be handled by a queue worker instead
-      if (processedCount > 50000) {
-        console.warn(`[RulesEngine] Processed 50k products, stopping safely.`);
-        break;
+      return recommendations;
+    } catch (error) {
+      // If already an AppError, re-throw with additional context
+      if (error instanceof AppError) {
+        throw error;
       }
-    }
 
-    return recommendations;
+      // Wrap unexpected errors
+      throw new AppError(
+        'Failed to evaluate pricing rules',
+        500,
+        'RULES_EVALUATION_ERROR',
+        {
+          cause: error instanceof Error ? error : new Error(String(error)),
+          context: { tenantId, operation: 'evaluateAllRules' }
+        }
+      );
+    }
   }
 
   /**
@@ -89,41 +117,75 @@ export class RulesEngine {
       title: string;
     },
     rules: PricingRule[],
+    tenantId: string,
   ): Promise<PriceRecommendation | null> {
-    const currentPrice = parseFloat(product.currentPrice.toString());
-
-    // Get best competitor match
-    const bestMatch = product.matchesAsUser[0];
-    if (!bestMatch) {
-      return null; // No competitor data to compare
-    }
-
-    const competitorPrice = parseFloat(
-      bestMatch.competitorProduct.currentPrice.toString(),
-    );
-    const competitorIsOutOfStock = !bestMatch.competitorProduct.inStock;
-
-    // Apply rules in priority order
-    for (const rule of rules) {
-      const result = this.applyRule(
-        rule,
-        currentPrice,
-        competitorPrice,
-        competitorIsOutOfStock,
-      );
-
-      if (result) {
-        return {
-          productId: product.id,
-          currentPrice,
-          recommendedPrice: result.price,
-          reason: result.reason,
-          appliedRule: rule.strategy,
-        };
+    try {
+      // Validate product exists
+      if (!product || !product.id) {
+        throw new NotFoundError(
+          'Product',
+          'unknown',
+          { context: { tenantId, operation: 'evaluateProduct' } }
+        );
       }
-    }
 
-    return null;
+      const currentPrice = parseFloat(product.currentPrice.toString());
+
+      // Get best competitor match
+      const bestMatch = product.matchesAsUser[0];
+      if (!bestMatch) {
+        return null; // No competitor data to compare
+      }
+
+      const competitorPrice = parseFloat(
+        bestMatch.competitorProduct.currentPrice.toString(),
+      );
+      const competitorIsOutOfStock = !bestMatch.competitorProduct.inStock;
+
+      // Apply rules in priority order
+      for (const rule of rules) {
+        const result = this.applyRule(
+          rule,
+          currentPrice,
+          competitorPrice,
+          competitorIsOutOfStock,
+          tenantId,
+          product.id,
+        );
+
+        if (result) {
+          return {
+            productId: product.id,
+            currentPrice,
+            recommendedPrice: result.price,
+            reason: result.reason,
+            appliedRule: rule.strategy,
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      // If already an AppError, re-throw
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      // Wrap unexpected errors
+      throw new AppError(
+        'Failed to evaluate product against rules',
+        500,
+        'PRODUCT_EVALUATION_ERROR',
+        {
+          cause: error instanceof Error ? error : new Error(String(error)),
+          context: {
+            tenantId,
+            operation: 'evaluateProduct',
+            metadata: { productId: product.id }
+          }
+        }
+      );
+    }
   }
 
   /**
@@ -133,91 +195,145 @@ export class RulesEngine {
     rule: PricingRule,
     currentPrice: number,
     competitorPrice: number,
-    competitorIsOutOfStock: boolean = false,
+    competitorIsOutOfStock: boolean,
+    tenantId: string,
+    productId: string,
   ): { price: number; reason: string } | null {
-    switch (rule.strategy as any) {
-      case "UNDERCUT":
-        // Always be cheaper by a fixed amount
-        const undercutAmount = parseFloat(rule.parameter.toString());
-        const undercutPrice = competitorPrice - undercutAmount;
+    try {
+      // Validate rule configuration
+      if (!rule || !rule.strategy) {
+        throw new ValidationError(
+          'Invalid rule configuration',
+          { rule: ['Rule must have a strategy'] },
+          {
+            context: {
+              tenantId,
+              operation: 'applyRule',
+              metadata: { ruleId: rule?.id, productId }
+            }
+          }
+        );
+      }
 
-        if (currentPrice > undercutPrice) {
-          return {
-            price: Math.max(undercutPrice, 0),
-            reason: `Undercut competitor by $${undercutAmount}`,
-          };
+      // Validate rule parameter
+      if (rule.parameter === null || rule.parameter === undefined) {
+        throw new ValidationError(
+          'Invalid rule configuration',
+          { parameter: ['Rule parameter is required'] },
+          {
+            context: {
+              tenantId,
+              operation: 'applyRule',
+              metadata: { ruleId: rule.id, strategy: rule.strategy, productId }
+            }
+          }
+        );
+      }
+
+      switch (rule.strategy as any) {
+        case "UNDERCUT":
+          // Always be cheaper by a fixed amount
+          const undercutAmount = parseFloat(rule.parameter.toString());
+          const undercutPrice = competitorPrice - undercutAmount;
+
+          if (currentPrice > undercutPrice) {
+            return {
+              price: Math.max(undercutPrice, 0),
+              reason: `Undercut competitor by $${undercutAmount}`,
+            };
+          }
+          break;
+
+        case "MATCH":
+          // Match competitor price exactly
+          if (Math.abs(currentPrice - competitorPrice) > 0.01) {
+            return {
+              price: competitorPrice,
+              reason: "Match competitor price",
+            };
+          }
+          break;
+
+        case "MARGIN_LOCK":
+          // Maintain a minimum margin percentage
+          const minMargin = parseFloat(rule.parameter.toString());
+          const cost = currentPrice * (1 - minMargin / 100); // Reverse calculate cost
+          const minPrice = cost / (1 - minMargin / 100);
+
+          if (competitorPrice < minPrice) {
+            return {
+              price: minPrice,
+              reason: `Maintain ${minMargin}% margin`,
+            };
+          } else if (currentPrice > competitorPrice) {
+            return {
+              price: competitorPrice,
+              reason: "Match competitor while maintaining margin",
+            };
+          }
+          break;
+
+        case "THRESHOLD":
+          // Only adjust if difference exceeds threshold
+          const threshold = parseFloat(rule.parameter.toString());
+          const difference = Math.abs(currentPrice - competitorPrice);
+
+          if (difference > threshold && currentPrice > competitorPrice) {
+            return {
+              price: competitorPrice,
+              reason: `Price difference (${difference.toFixed(2)}) exceeds threshold`,
+            };
+          }
+          break;
+
+        case "PERCENTAGE":
+          // Be X% cheaper than competitor
+          const percentage = parseFloat(rule.parameter.toString());
+          const targetPrice = competitorPrice * (1 - percentage / 100);
+
+          if (currentPrice > targetPrice) {
+            return {
+              price: targetPrice,
+              reason: `Be ${percentage}% cheaper than competitor`,
+            };
+          }
+          break;
+
+        case "INVENTORY_HIKE":
+          // Increase price if competitor is out of stock
+          if (competitorIsOutOfStock) {
+            const hike = parseFloat(rule.parameter.toString());
+            const hikedPrice = currentPrice * (1 + hike / 100);
+            return {
+              price: hikedPrice,
+              reason: `Competitor is Out of Stock. Increasing price by ${hike}%`,
+            };
+          }
+          break;
+      }
+
+      return null;
+    } catch (error) {
+      // If already an AppError, re-throw
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      // Wrap unexpected errors
+      throw new AppError(
+        'Failed to apply pricing rule',
+        500,
+        'RULE_APPLICATION_ERROR',
+        {
+          cause: error instanceof Error ? error : new Error(String(error)),
+          context: {
+            tenantId,
+            operation: 'applyRule',
+            metadata: { ruleId: rule.id, strategy: rule.strategy, productId }
+          }
         }
-        break;
-
-      case "MATCH":
-        // Match competitor price exactly
-        if (Math.abs(currentPrice - competitorPrice) > 0.01) {
-          return {
-            price: competitorPrice,
-            reason: "Match competitor price",
-          };
-        }
-        break;
-
-      case "MARGIN_LOCK":
-        // Maintain a minimum margin percentage
-        const minMargin = parseFloat(rule.parameter.toString());
-        const cost = currentPrice * (1 - minMargin / 100); // Reverse calculate cost
-        const minPrice = cost / (1 - minMargin / 100);
-
-        if (competitorPrice < minPrice) {
-          return {
-            price: minPrice,
-            reason: `Maintain ${minMargin}% margin`,
-          };
-        } else if (currentPrice > competitorPrice) {
-          return {
-            price: competitorPrice,
-            reason: "Match competitor while maintaining margin",
-          };
-        }
-        break;
-
-      case "THRESHOLD":
-        // Only adjust if difference exceeds threshold
-        const threshold = parseFloat(rule.parameter.toString());
-        const difference = Math.abs(currentPrice - competitorPrice);
-
-        if (difference > threshold && currentPrice > competitorPrice) {
-          return {
-            price: competitorPrice,
-            reason: `Price difference ($${difference.toFixed(2)}) exceeds threshold`,
-          };
-        }
-        break;
-
-      case "PERCENTAGE":
-        // Be X% cheaper than competitor
-        const percentage = parseFloat(rule.parameter.toString());
-        const targetPrice = competitorPrice * (1 - percentage / 100);
-
-        if (currentPrice > targetPrice) {
-          return {
-            price: targetPrice,
-            reason: `Be ${percentage}% cheaper than competitor`,
-          };
-        }
-        break;
-
-      case "INVENTORY_HIKE":
-        // Increase price if competitor is out of stock
-        if (competitorIsOutOfStock) {
-          const hike = parseFloat(rule.parameter.toString());
-          const hikedPrice = currentPrice * (1 + hike / 100);
-          return {
-            price: hikedPrice,
-            reason: `Competitor is Out of Stock. Increasing price by ${hike}%`,
-          };
-        }
-        break;
+      );
     }
-
-    return null;
   }
 
   /**

@@ -1,10 +1,12 @@
 import { MatchingService } from '@/lib/services/matching';
+import { ValidationError, NotFoundError, AppError } from '@/lib/utils/error-handler';
 
 // Mock Prisma
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     product: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
     },
     productMatch: {
       create: jest.fn(),
@@ -53,6 +55,10 @@ describe('MatchingService', () => {
       (prisma.product.findMany as jest.Mock)
         .mockResolvedValueOnce(userProducts)
         .mockResolvedValueOnce(competitorProducts);
+
+      (prisma.product.findUnique as jest.Mock)
+        .mockResolvedValueOnce(userProducts[0])
+        .mockResolvedValueOnce(competitorProducts[0]);
 
       (prisma.productMatch.create as jest.Mock).mockResolvedValue({
         id: 'match-1',
@@ -104,6 +110,10 @@ describe('MatchingService', () => {
         .mockResolvedValueOnce(userProducts)
         .mockResolvedValueOnce(competitorProducts);
 
+      (prisma.product.findUnique as jest.Mock)
+        .mockResolvedValueOnce(userProducts[0])
+        .mockResolvedValueOnce(competitorProducts[0]);
+
       (prisma.productMatch.create as jest.Mock).mockResolvedValue({
         id: 'match-1',
         userProductId: 'user-1',
@@ -153,6 +163,10 @@ describe('MatchingService', () => {
       (prisma.product.findMany as jest.Mock)
         .mockResolvedValueOnce(userProducts)
         .mockResolvedValueOnce(competitorProducts);
+
+      (prisma.product.findUnique as jest.Mock)
+        .mockResolvedValueOnce(userProducts[0])
+        .mockResolvedValueOnce(competitorProducts[0]);
 
       (prisma.productMatch.create as jest.Mock).mockResolvedValue({
         id: 'match-1',
@@ -241,6 +255,9 @@ describe('MatchingService', () => {
       (prisma.productMatch.findMany as jest.Mock).mockResolvedValue(lowConfidenceMatches);
       (prisma.productMatch.delete as jest.Mock).mockResolvedValue({});
       (prisma.product.findMany as jest.Mock).mockResolvedValue(competitorProducts);
+      (prisma.product.findUnique as jest.Mock)
+        .mockResolvedValueOnce(lowConfidenceMatches[0].userProduct)
+        .mockResolvedValueOnce(competitorProducts[0]);
       (prisma.productMatch.create as jest.Mock).mockResolvedValue({});
 
       await MatchingService.refreshLowConfidenceMatches(tenantId);
@@ -249,6 +266,78 @@ describe('MatchingService', () => {
         where: { id: 'match-1' },
       });
       expect(prisma.productMatch.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('Error Handling', () => {
+    describe('runMatching', () => {
+      it('should throw ValidationError for missing tenantId', async () => {
+        await expect(MatchingService.runMatching('')).rejects.toThrow(ValidationError);
+        await expect(MatchingService.runMatching('')).rejects.toThrow('Invalid matching request');
+      });
+
+      it('should throw ValidationError for invalid tenantId type', async () => {
+        await expect(MatchingService.runMatching(null as any)).rejects.toThrow(ValidationError);
+      });
+
+      it('should wrap unexpected errors in AppError', async () => {
+        const tenantId = 'test-tenant-123';
+
+        (prisma.product.findMany as jest.Mock).mockRejectedValue(new Error('Database connection failed'));
+
+        await expect(MatchingService.runMatching(tenantId)).rejects.toThrow(AppError);
+        await expect(MatchingService.runMatching(tenantId)).rejects.toThrow('Unexpected error during product matching');
+      });
+
+      it('should include tenantId in error context', async () => {
+        const tenantId = 'test-tenant-123';
+
+        (prisma.product.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
+
+        try {
+          await MatchingService.runMatching(tenantId);
+          fail('Should have thrown an error');
+        } catch (error) {
+          expect(error).toBeInstanceOf(AppError);
+          expect((error as AppError).context.tenantId).toBe(tenantId);
+          expect((error as AppError).context.operation).toBe('runMatching');
+        }
+      });
+    });
+
+    describe('refreshLowConfidenceMatches', () => {
+      it('should throw ValidationError for missing tenantId', async () => {
+        await expect(MatchingService.refreshLowConfidenceMatches('')).rejects.toThrow(ValidationError);
+        await expect(MatchingService.refreshLowConfidenceMatches('')).rejects.toThrow('Invalid refresh request');
+      });
+
+      it('should throw ValidationError for invalid tenantId type', async () => {
+        await expect(MatchingService.refreshLowConfidenceMatches(null as any)).rejects.toThrow(ValidationError);
+      });
+
+      it('should wrap unexpected errors in AppError', async () => {
+        const tenantId = 'test-tenant-123';
+
+        (prisma.productMatch.findMany as jest.Mock).mockRejectedValue(new Error('Database connection failed'));
+
+        await expect(MatchingService.refreshLowConfidenceMatches(tenantId)).rejects.toThrow(AppError);
+        await expect(MatchingService.refreshLowConfidenceMatches(tenantId)).rejects.toThrow('Unexpected error refreshing low confidence matches');
+      });
+
+      it('should include tenantId in error context', async () => {
+        const tenantId = 'test-tenant-123';
+
+        (prisma.productMatch.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
+
+        try {
+          await MatchingService.refreshLowConfidenceMatches(tenantId);
+          fail('Should have thrown an error');
+        } catch (error) {
+          expect(error).toBeInstanceOf(AppError);
+          expect((error as AppError).context.tenantId).toBe(tenantId);
+          expect((error as AppError).context.operation).toBe('refreshLowConfidenceMatches');
+        }
+      });
     });
   });
 });

@@ -619,3 +619,154 @@ export const simulationConfigSchema = z.object({
 });
 
 export type SimulationConfigInput = z.infer<typeof simulationConfigSchema>;
+
+// ============================================================================
+// NOTIFICATION SCHEMAS
+// ============================================================================
+
+export const markNotificationReadSchema = z.object({
+  id: uuidSchema.optional(),
+  all: z.boolean().optional(),
+}).refine(data => data.id || data.all, {
+  message: "Either 'id' or 'all' must be provided"
+});
+
+export const deleteNotificationSchema = z.object({
+  id: uuidSchema.optional(),
+  all: z.boolean().optional(),
+}).refine(data => data.id || data.all, {
+  message: "Either 'id' or 'all' must be provided"
+});
+
+// ============================================================================
+// SYNC SCHEMAS
+// ============================================================================
+
+export const syncSiteSchema = z.object({
+  siteId: uuidSchema,
+});
+
+export const stopSyncSchema = z.object({
+  siteId: uuidSchema,
+});
+
+// ============================================================================
+// PRICING EVALUATION SCHEMAS
+// ============================================================================
+
+export const evaluatePricingSchema = z.object({
+  execute: z.boolean().optional().default(false),
+});
+
+// ============================================================================
+// ANALYTICS SCHEMAS
+// ============================================================================
+
+export const mergeDuplicatesSchema = z.object({
+  anchorId: uuidSchema,
+  duplicateIds: z.array(uuidSchema).min(1, "At least one duplicate ID is required"),
+});
+
+// ============================================================================
+// API KEY SCHEMAS
+// ============================================================================
+
+export const createApiKeySchema = z.object({
+  name: z.string().trim().min(1, "API key name is required").max(100),
+  expiresDays: z.number().int().min(1).max(365).optional(),
+});
+
+// ============================================================================
+// USER PREFERENCE SCHEMAS
+// ============================================================================
+
+export const updateNotificationPreferencesSchema = z.object({
+  emailNotifications: z.boolean(),
+});
+
+// ============================================================================
+// ADMIN SCHEMAS
+// ============================================================================
+
+export const scraperPlaygroundSchema = z.object({
+  url: urlSchema,
+});
+
+export const verifyAdminCodeSchema = z.object({
+  code: z.string().trim().min(1, "Code is required"),
+});
+
+export const schedulerActionSchema = z.object({
+  action: z.enum(["pause", "resume", "trigger"]),
+  taskId: z.string().trim().min(1, "Task ID is required"),
+});
+
+export const priceApprovalActionSchema = z.object({
+  action: z.enum(["APPROVE", "REJECT"]),
+  changeIds: z.array(uuidSchema).min(1, "At least one change ID is required"),
+});
+
+export const rateLimitMultiplierSchema = z.object({
+  multiplier: z.number().min(0.1).max(10),
+});
+
+export const rateLimitBypassSchema = z.object({
+  bypass: z.boolean(),
+});
+
+export const bulkRollbackSchema = z.object({
+  snapshotId: uuidSchema,
+});
+
+export const maintenanceActionSchema = z.object({
+  action: z.enum(["clear_cache", "clear_logs", "vacuum_db"]),
+});
+
+export const backupConfigSchema = z.object({
+  googleDriveLink: z.string().url().optional(),
+});
+
+export const alertRuleCreateSchema = z.object({
+  metric: z.string().trim().min(1).max(100),
+  condition: z.enum(["GREATER_THAN", "LESS_THAN", "EQUALS"]),
+  value: z.number().finite(),
+  isActive: z.boolean().optional().default(true),
+});
+
+export const alertRuleUpdateSchema = z.object({
+  id: uuidSchema,
+  metric: z.string().trim().min(1).max(100).optional(),
+  condition: z.enum(["GREATER_THAN", "LESS_THAN", "EQUALS"]).optional(),
+  value: z.number().finite().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const notificationSettingsSchema = z.object({
+  slackEnabled: z.boolean().optional(),
+  slackWebhookUrl: z.string().url().optional().nullable(),
+});
+
+// ============================================================================
+// EXPORT TYPES FOR NEW SCHEMAS
+// ============================================================================
+
+export type MarkNotificationReadInput = z.infer<typeof markNotificationReadSchema>;
+export type DeleteNotificationInput = z.infer<typeof deleteNotificationSchema>;
+export type SyncSiteInput = z.infer<typeof syncSiteSchema>;
+export type StopSyncInput = z.infer<typeof stopSyncSchema>;
+export type EvaluatePricingInput = z.infer<typeof evaluatePricingSchema>;
+export type MergeDuplicatesInput = z.infer<typeof mergeDuplicatesSchema>;
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>;
+export type ScraperPlaygroundInput = z.infer<typeof scraperPlaygroundSchema>;
+export type VerifyAdminCodeInput = z.infer<typeof verifyAdminCodeSchema>;
+export type SchedulerActionInput = z.infer<typeof schedulerActionSchema>;
+export type PriceApprovalActionInput = z.infer<typeof priceApprovalActionSchema>;
+export type RateLimitMultiplierInput = z.infer<typeof rateLimitMultiplierSchema>;
+export type RateLimitBypassInput = z.infer<typeof rateLimitBypassSchema>;
+export type BulkRollbackInput = z.infer<typeof bulkRollbackSchema>;
+export type MaintenanceActionInput = z.infer<typeof maintenanceActionSchema>;
+export type BackupConfigInput = z.infer<typeof backupConfigSchema>;
+export type AlertRuleCreateInput = z.infer<typeof alertRuleCreateSchema>;
+export type AlertRuleUpdateInput = z.infer<typeof alertRuleUpdateSchema>;
+export type NotificationSettingsInput = z.infer<typeof notificationSettingsSchema>;

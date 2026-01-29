@@ -181,7 +181,7 @@ export const ErrorMessages = {
         guidance: 'This is usually a temporary issue. If it persists, contact support.',
         action: 'Try Again',
     },
-    
+
     // Decryption errors
     DECRYPTION_FAILED: {
         title: 'Token Decryption Failed',
@@ -190,7 +190,7 @@ export const ErrorMessages = {
         action: 'Update Token',
         link: '/dashboard/site-config',
     },
-    
+
     // Authentication errors (tampering detected)
     AUTHENTICATION_FAILED: {
         title: 'Security Alert: Token Integrity Check Failed',
@@ -200,7 +200,7 @@ export const ErrorMessages = {
         link: '/dashboard/site-config',
         severity: 'critical',
     },
-    
+
     // Key management errors
     KEY_NOT_FOUND: {
         title: 'System Configuration Error',
@@ -209,7 +209,7 @@ export const ErrorMessages = {
         action: 'Contact Support',
         severity: 'critical',
     },
-    
+
     KEY_VALIDATION_FAILED: {
         title: 'System Configuration Error',
         message: 'Invalid encryption key configuration.',
@@ -217,7 +217,7 @@ export const ErrorMessages = {
         action: 'Contact Support',
         severity: 'critical',
     },
-    
+
     // Format errors
     INVALID_FORMAT: {
         title: 'Token Format Issue',
@@ -226,7 +226,7 @@ export const ErrorMessages = {
         action: 'No Action Required',
         severity: 'info',
     },
-    
+
     // Migration errors
     MIGRATION_FAILED: {
         title: 'Token Migration Failed',
@@ -235,7 +235,7 @@ export const ErrorMessages = {
         action: 'No Action Required',
         severity: 'warning',
     },
-    
+
     // Recovery errors
     RECOVERY_FAILED: {
         title: 'Token Recovery Failed',
@@ -293,4 +293,76 @@ export function getStructuredErrorMessage(error: Error): {
         action: 'Try Again',
         severity: 'warning',
     };
+}
+
+/**
+ * Adapter functions for backward compatibility with new error handling system
+ * These functions wrap existing encryption errors into the new AppError hierarchy
+ */
+
+// Import AppError for adapters (will be added at top of file)
+import type { AppError as AppErrorType, ErrorOptions as ErrorOptionsType } from '../../utils/error-handler';
+
+/**
+ * Wraps an EncryptionError into the new error handling system
+ * Maps to ExternalServiceError since encryption is an external concern
+ * 
+ * @param originalError - The original EncryptionError
+ * @param context - Additional context to include
+ * @returns AppError instance wrapping the original error
+ */
+export function wrapEncryptionError(
+    originalError: EncryptionError,
+    context?: Partial<ErrorOptionsType['context']>
+): AppErrorType {
+    // Dynamic import to avoid circular dependencies
+    const { AppError } = require('../../utils/error-handler');
+
+    return new AppError(
+        originalError.message,
+        500,
+        'ENCRYPTION_ERROR',
+        {
+            userMessage: getUserFriendlyErrorMessage(originalError),
+            developerMessage: sanitizeErrorMessage(originalError),
+            cause: originalError,
+            context: {
+                ...context,
+                operation: 'encryption',
+            },
+            isRetryable: false,
+        }
+    );
+}
+
+/**
+ * Wraps a DecryptionError into the new error handling system
+ * Maps to ExternalServiceError since decryption is an external concern
+ * 
+ * @param originalError - The original DecryptionError
+ * @param context - Additional context to include
+ * @returns AppError instance wrapping the original error
+ */
+export function wrapDecryptionError(
+    originalError: DecryptionError,
+    context?: Partial<ErrorOptionsType['context']>
+): AppErrorType {
+    // Dynamic import to avoid circular dependencies
+    const { AppError } = require('../../utils/error-handler');
+
+    return new AppError(
+        originalError.message,
+        500,
+        'DECRYPTION_ERROR',
+        {
+            userMessage: getUserFriendlyErrorMessage(originalError),
+            developerMessage: sanitizeErrorMessage(originalError),
+            cause: originalError,
+            context: {
+                ...context,
+                operation: 'decryption',
+            },
+            isRetryable: false,
+        }
+    );
 }

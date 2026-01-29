@@ -12,6 +12,11 @@ import {
 import { NotificationService } from "./notification";
 import { WebsiteService } from "./website-service";
 import { DecryptionError } from "./encryption/errors";
+import {
+  ValidationError,
+  NotFoundError,
+  ExternalServiceError,
+} from "@/lib/utils/error-handler";
 
 interface ExternalProduct {
   external_id: string;
@@ -42,85 +47,41 @@ export class SyncService {
    * Triggers a sync for a specific site
    */
   static async syncSite(siteId: string) {
-    const site = await prisma.site.findUnique({
-      where: { id: siteId },
-      include: { tenant: true },
-    });
-
-    if (!site) throw new Error("Site not found");
-
-    const startTime = new Date();
-
-    // Clear previous logs before starting new sync session
-    await prisma.syncLog.deleteMany({ where: { siteId } });
-
-    await prisma.site.update({
-      where: { id: siteId },
-      data: {
-        isSyncing: true,
-        syncStartedAt: startTime,
-        syncProcessed: 0,
-        syncLastAction: "Initializing sync..."
-      },
-    });
-
-    await prisma.syncLog.create({
-      data: {
-        siteId,
-        level: "INFO",
-        message: `🔄 Starting product synchronization for ${site.platform}...`
-      }
-    });
-
     try {
-      // Get site with decrypted token for API calls
-      let siteWithToken;
-      try {
-        siteWithToken = await WebsiteService.getWebsiteWithToken(
-          siteId,
-          site.tenantId,
-          'product_sync'
+      // Validate input
+      if (!siteId || typeof siteId !== 'string' || siteId.trim() === '') {
+        throw new ValidationError(
+          'Invalid sync request',
+          { siteId: ['Site ID is required and must be a valid string'] },
+          { context: { operation: 'syncSite' } }
         );
-      } catch (error) {
-        if (error instanceof DecryptionError) {
-          // Log decryption error
-          await prisma.syncLog.create({
-            data: {
-              siteId,
-              level: "ERROR",
-              message: `❌ Failed to decrypt API token: ${error.message}`
-            }
-          });
-
-          // Send notification to tenant
-          await NotificationService.sendSyncError(
-            site.tenantId,
-            `Failed to decrypt API token for ${site.baseUrl}. Please re-enter your token in settings.`
-          );
-
-          throw error;
-        }
-        throw error;
       }
 
-      let externalProducts: ExternalProduct[] = [];
-      if (site.platform === "OPENCART") {
-        externalProducts = await this.fetchFromOpenCart(siteWithToken);
-      } else if (site.platform === "LARAVEL") {
-        externalProducts = await this.fetchFromLaravel(siteWithToken);
-      } else if (site.platform === "SHOPIFY") {
-        externalProducts = await this.fetchFromShopify(siteWithToken);
-      } else if (site.platform === "WOOCOMMERCE") {
-        externalProducts = await this.fetchFromWooCommerce(siteWithToken);
-      } else if (site.platform === "MAGENTO") {
-        externalProducts = await this.fetchFromMagento(siteWithToken);
+      const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        include: { tenant: true },
+      });
+
+      if (!site) {
+        throw new NotFoundError(
+          'Site',
+          siteId,
+          { context: { operation: 'syncSite' } }
+        );
       }
+
+      const startTime = new Date();
+
+      // Clear previous logs before starting new sync session
+      await prisma.syncLog.deleteMany({ where: { siteId } });
 
       await prisma.site.update({
         where: { id: siteId },
         data: {
-          syncTotal: externalProducts.length,
-          syncLastAction: `Fetched ${externalProducts.length} products`
+          isSyncing: true,
+          syncStartedAt: startTime,
+          syncProcessed: 0,
+          syncLastAction: "Initializing sync..."
         },
       });
 
@@ -128,153 +89,280 @@ export class SyncService {
         data: {
           siteId,
           level: "INFO",
-          message: `📡 API responded: Found ${externalProducts.length} products to process.`
+          message: `🔄 Starting product synchronization for ${site.platform}...`
         }
       });
 
-      // 2. Process and Upsert products in transactions
-      const results = [];
-      let processed = 0;
-
-      for (const extProd of externalProducts) {
+      try {
+        // Get site with decrypted token for API calls
+        let siteWithToken;
         try {
-          // Check if sync was manually stopped
-          const currentSite = await prisma.site.findUnique({
-            where: { id: siteId },
-            select: { isSyncing: true },
-          });
-
-          if (!currentSite?.isSyncing) {
-            console.log(`[SyncService] Sync terminated manually for site ${siteId}`);
+          siteWithToken = await WebsiteService.getWebsiteWithToken(
+            siteId,
+            site.tenantId,
+            'product_sync'
+          );
+        } catch (error) {
+          if (error instanceof DecryptionError) {
+            // Log decryption error
             await prisma.syncLog.create({
               data: {
                 siteId,
-                level: "WARN",
-                message: "🛑 Synchronization terminated manually by user.",
-              },
+                level: "ERROR",
+                message: `❌ Failed to decrypt API token: ${error.message}`
+              }
             });
-            return { count: results.length, siteName: site.baseUrl };
+
+            // Send notification to tenant
+            await NotificationService.sendSyncError(
+              site.tenantId,
+              `Failed to decrypt API token for ${site.baseUrl}. Please re-enter your token in settings.`
+            );
+
+            throw new ExternalServiceError(
+              site.platform,
+              'Failed to decrypt API token',
+              {
+                cause: error,
+                context: {
+                  tenantId: site.tenantId,
+                  operation: 'syncSite',
+                  metadata: { siteId, baseUrl: site.baseUrl }
+                },
+                userMessage: 'Failed to decrypt API token. Please re-enter your token in settings.'
+              }
+            );
+          }
+          throw error;
+        }
+
+        let externalProducts: ExternalProduct[] = [];
+        try {
+          if (site.platform === "OPENCART") {
+            externalProducts = await this.fetchFromOpenCart(siteWithToken);
+          } else if (site.platform === "LARAVEL") {
+            externalProducts = await this.fetchFromLaravel(siteWithToken);
+          } else if (site.platform === "SHOPIFY") {
+            externalProducts = await this.fetchFromShopify(siteWithToken);
+          } else if (site.platform === "WOOCOMMERCE") {
+            externalProducts = await this.fetchFromWooCommerce(siteWithToken);
+          } else if (site.platform === "MAGENTO") {
+            externalProducts = await this.fetchFromMagento(siteWithToken);
+          } else {
+            throw new ValidationError(
+              'Unsupported platform',
+              { platform: [`Platform ${site.platform} is not supported`] },
+              {
+                context: {
+                  tenantId: site.tenantId,
+                  operation: 'syncSite',
+                  metadata: { siteId, platform: site.platform }
+                }
+              }
+            );
+          }
+        } catch (error) {
+          // If it's already an AppError, re-throw
+          if (error instanceof ValidationError || error instanceof ExternalServiceError) {
+            throw error;
           }
 
-          const product = await prisma.$transaction(async (tx) => {
-            // Find existing product by externalId within this site
-            const existingProduct = await tx.product.findFirst({
-              where: {
-                siteId: site.id,
-                externalId: extProd.external_id,
+          // Wrap unexpected errors
+          throw new ExternalServiceError(
+            site.platform,
+            `Failed to fetch products from ${site.platform}`,
+            {
+              cause: error as Error,
+              context: {
+                tenantId: site.tenantId,
+                operation: 'syncSite',
+                metadata: { siteId, platform: site.platform, baseUrl: site.baseUrl }
               },
+              isRetryable: this.isRetryableError(error),
+              userMessage: `Unable to fetch products from your ${site.platform} store. Please check your API token and try again.`
+            }
+          );
+        }
+
+        await prisma.site.update({
+          where: { id: siteId },
+          data: {
+            syncTotal: externalProducts.length,
+            syncLastAction: `Fetched ${externalProducts.length} products`
+          },
+        });
+
+        await prisma.syncLog.create({
+          data: {
+            siteId,
+            level: "INFO",
+            message: `📡 API responded: Found ${externalProducts.length} products to process.`
+          }
+        });
+
+        // 2. Process and Upsert products in transactions
+        const results = [];
+        let processed = 0;
+
+        for (const extProd of externalProducts) {
+          try {
+            // Check if sync was manually stopped
+            const currentSite = await prisma.site.findUnique({
+              where: { id: siteId },
+              select: { isSyncing: true },
             });
 
-            let p;
-            const productData = {
-              title: extProd.title,
-              category: extProd.category,
-              currentPrice: extProd.price,
-              sku: extProd.sku,
-              model: extProd.model,
-              brand: extProd.brand,
-              imageUrl: extProd.image,
-              url: extProd.url,
-              lastCrawledAt: new Date(),
-            };
-
-            if (existingProduct) {
-              p = await tx.product.update({
-                where: { id: existingProduct.id },
-                data: productData,
-              });
-            } else {
-              p = await tx.product.create({
+            if (!currentSite?.isSyncing) {
+              console.log(`[SyncService] Sync terminated manually for site ${siteId}`);
+              await prisma.syncLog.create({
                 data: {
-                  ...productData,
+                  siteId,
+                  level: "WARN",
+                  message: "🛑 Synchronization terminated manually by user.",
+                },
+              });
+              return { count: results.length, siteName: site.baseUrl };
+            }
+
+            const product = await prisma.$transaction(async (tx) => {
+              // Find existing product by externalId within this site
+              const existingProduct = await tx.product.findFirst({
+                where: {
                   siteId: site.id,
-                  tenantId: site.tenantId,
                   externalId: extProd.external_id,
-                  currency: "USD",
+                },
+              });
+
+              let p;
+              const productData = {
+                title: extProd.title,
+                category: extProd.category,
+                currentPrice: extProd.price,
+                sku: extProd.sku,
+                model: extProd.model,
+                brand: extProd.brand,
+                imageUrl: extProd.image,
+                url: extProd.url,
+                lastCrawledAt: new Date(),
+              };
+
+              if (existingProduct) {
+                p = await tx.product.update({
+                  where: { id: existingProduct.id },
+                  data: productData,
+                });
+              } else {
+                p = await tx.product.create({
+                  data: {
+                    ...productData,
+                    siteId: site.id,
+                    tenantId: site.tenantId,
+                    externalId: extProd.external_id,
+                    currency: "USD",
+                  },
+                });
+              }
+
+              // 3. Record price history (Atomic with the update)
+              await tx.priceHistory.create({
+                data: {
+                  productId: p.id,
+                  price: extProd.price,
+                },
+              });
+
+              return p;
+            });
+
+            results.push(product);
+            processed++;
+
+            // Update progress every 10 products
+            if (processed % 10 === 0) {
+              await prisma.site.update({
+                where: { id: siteId },
+                data: {
+                  syncProcessed: processed,
+                  syncLastAction: `Processing products (${processed}/${externalProducts.length})`
                 },
               });
             }
-
-            // 3. Record price history (Atomic with the update)
-            await tx.priceHistory.create({
-              data: {
-                productId: p.id,
-                price: extProd.price,
-              },
-            });
-
-            return p;
-          });
-
-          results.push(product);
-          processed++;
-
-          // Update progress every 10 products
-          if (processed % 10 === 0) {
-            await prisma.site.update({
-              where: { id: siteId },
-              data: {
-                syncProcessed: processed,
-                syncLastAction: `Processing products (${processed}/${externalProducts.length})`
-              },
-            });
+          } catch (error) {
+            console.error(
+              `[SAFE-SYNC] Error processing external product ${extProd.external_id}:`,
+              error,
+            );
           }
-        } catch (error) {
-          console.error(
-            `[SAFE-SYNC] Error processing external product ${extProd.external_id}:`,
-            error,
-          );
         }
+
+        // 4. Update last sync time and finish
+        await prisma.site.update({
+          where: { id: siteId },
+          data: {
+            lastSyncAt: new Date(),
+            isSyncing: false,
+            syncProcessed: processed,
+            syncTotal: externalProducts.length,
+            syncLastAction: "Completed"
+          },
+        });
+
+        // Log success in SyncLogs if we have a way to record them for Source too
+        await prisma.syncLog.create({
+          data: {
+            siteId,
+            level: "INFO",
+            message: `✅ Integration sync completed: ${results.length} products imported.`,
+          },
+        });
+
+        return {
+          count: results.length,
+          siteName: site.baseUrl,
+        };
+      } catch (error) {
+        const err = error as Error;
+        // Record error in logs
+        await prisma.syncLog.create({
+          data: {
+            siteId,
+            level: "ERROR",
+            message: `❌ Sync failed: ${err.message}`,
+          },
+        });
+
+        // Send notification to tenant about sync failure
+        await NotificationService.sendSyncError(
+          site.tenantId,
+          `Failed to sync products from ${site.baseUrl}: ${err.message}`
+        );
+
+        // Ensure we clear the sync lock on error
+        await prisma.site.update({
+          where: { id: siteId },
+          data: { isSyncing: false },
+        });
+        throw error;
+      }
+    } catch (error) {
+      // If already an AppError, re-throw with context
+      if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof ExternalServiceError) {
+        throw error;
       }
 
-      // 4. Update last sync time and finish
-      await prisma.site.update({
-        where: { id: siteId },
-        data: {
-          lastSyncAt: new Date(),
-          isSyncing: false,
-          syncProcessed: processed,
-          syncTotal: externalProducts.length,
-          syncLastAction: "Completed"
-        },
-      });
-
-      // Log success in SyncLogs if we have a way to record them for Source too
-      await prisma.syncLog.create({
-        data: {
-          siteId,
-          level: "INFO",
-          message: `✅ Integration sync completed: ${results.length} products imported.`,
-        },
-      });
-
-      return {
-        count: results.length,
-        siteName: site.baseUrl,
-      };
-    } catch (error) {
-      const err = error as Error;
-      // Record error in logs
-      await prisma.syncLog.create({
-        data: {
-          siteId,
-          level: "ERROR",
-          message: `❌ Sync failed: ${err.message}`,
-        },
-      });
-
-      // Send notification to tenant about sync failure
-      await NotificationService.sendSyncError(
-        site.tenantId,
-        `Failed to sync products from ${site.baseUrl}: ${err.message}`
+      // Wrap unexpected errors
+      throw new ExternalServiceError(
+        'SyncService',
+        'An unexpected error occurred during product synchronization',
+        {
+          cause: error as Error,
+          context: {
+            operation: 'syncSite',
+            metadata: { siteId }
+          },
+          userMessage: 'An unexpected error occurred while syncing products. Please try again.'
+        }
       );
-
-      // Ensure we clear the sync lock on error
-      await prisma.site.update({
-        where: { id: siteId },
-        data: { isSyncing: false },
-      });
-      throw error;
     }
   }
 
@@ -321,6 +409,24 @@ export class SyncService {
   }
 
   /**
+   * Helper to determine if an error is retryable
+   */
+  private static isRetryableError(error: any): boolean {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      // Retry on network errors, timeouts, and server errors
+      if (!status || status >= 500 || status === 429 || status === 408) {
+        return true;
+      }
+    }
+    // Retry on network errors (ECONNREFUSED, ETIMEDOUT, etc.)
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Fetch products from OpenCart API
    */
   private static async fetchFromOpenCart(
@@ -354,7 +460,17 @@ export class SyncService {
       const apiToken = site.decryptedToken || site.apiToken;
 
       if (!apiToken) {
-        throw new Error('API token not available');
+        throw new ValidationError(
+          'API token is required',
+          { apiToken: ['API token is missing or invalid'] },
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'fetchFromOpenCart',
+              metadata: { siteId: site.id, baseUrl: site.baseUrl }
+            }
+          }
+        );
       }
 
       // Normalize URL (avoid double slashes)
@@ -363,16 +479,54 @@ export class SyncService {
 
       console.log(`[SyncService] Fetching from OpenCart: ${apiUrl}`);
 
-      const response = await this.axiosRequestWithRetry<any>({
-        method: "GET",
-        url: apiUrl,
-        timeout: 30000,
-      });
+      let response;
+      try {
+        response = await this.axiosRequestWithRetry<any>({
+          method: "GET",
+          url: apiUrl,
+          timeout: 30000,
+        });
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const statusCode = error.response?.status;
+          const isRetryable = !statusCode || statusCode >= 500 || statusCode === 429 || statusCode === 408;
+
+          throw new ExternalServiceError(
+            'OpenCart',
+            `Failed to connect to OpenCart API: ${error.message}`,
+            {
+              cause: error,
+              serviceStatusCode: statusCode,
+              isRetryable,
+              context: {
+                tenantId: site.tenantId,
+                operation: 'fetchFromOpenCart',
+                metadata: { siteId: site.id, baseUrl: site.baseUrl, statusCode }
+              },
+              userMessage: statusCode === 401 || statusCode === 403
+                ? 'Invalid API token. Please check your OpenCart API token in settings.'
+                : 'Unable to connect to your OpenCart store. Please check your store URL and API token.'
+            }
+          );
+        }
+        throw error;
+      }
 
       // Check for HTML response (happens on 404/500 if server returns error page)
       if (typeof response.data === "string" && response.data.includes("<html")) {
         console.error(`[SyncService] Received HTML instead of JSON from ${site.baseUrl}. Check if the PricePilot extension is correctly installed and accessible.`);
-        throw new Error("Invalid API response: Received HTML instead of JSON");
+        throw new ExternalServiceError(
+          'OpenCart',
+          'Invalid API response: Received HTML instead of JSON',
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'fetchFromOpenCart',
+              metadata: { siteId: site.id, baseUrl: site.baseUrl }
+            },
+            userMessage: 'The OpenCart PricePilot extension may not be installed correctly. Please verify the installation.'
+          }
+        );
       }
 
       let responseData = response.data;
@@ -396,6 +550,19 @@ export class SyncService {
             }
           } catch (parseError) {
             console.error(`[SyncService] Failed to parse extracted JSON string:`, parseError);
+            throw new ExternalServiceError(
+              'OpenCart',
+              'Failed to parse API response',
+              {
+                cause: parseError as Error,
+                context: {
+                  tenantId: site.tenantId,
+                  operation: 'fetchFromOpenCart',
+                  metadata: { siteId: site.id, baseUrl: site.baseUrl }
+                },
+                userMessage: 'Received invalid data from OpenCart. Please check your store configuration.'
+              }
+            );
           }
         }
       }
@@ -467,6 +634,11 @@ export class SyncService {
         url: `${site.baseUrl.replace(/\/$/, "")}/index.php?route=product/product&product_id=${p.product_id || p.id}`,
       }));
     } catch (error) {
+      // If already an AppError, re-throw
+      if (error instanceof ValidationError || error instanceof ExternalServiceError) {
+        throw error;
+      }
+
       const err = error as Error;
       console.error(`OpenCart API error for ${site.baseUrl}:`, err);
 
@@ -479,8 +651,21 @@ export class SyncService {
         }
       });
 
-      // Throw error instead of returning mock data
-      throw new Error(`Failed to sync products from OpenCart (${site.baseUrl}): ${err.message}`);
+      // Wrap unexpected errors
+      throw new ExternalServiceError(
+        'OpenCart',
+        `Failed to sync products from OpenCart: ${err.message}`,
+        {
+          cause: err,
+          context: {
+            tenantId: site.tenantId,
+            operation: 'fetchFromOpenCart',
+            metadata: { siteId: site.id, baseUrl: site.baseUrl }
+          },
+          isRetryable: true,
+          userMessage: 'An unexpected error occurred while fetching products from OpenCart. Please try again.'
+        }
+      );
     }
   }
 
@@ -516,20 +701,57 @@ export class SyncService {
       const apiToken = site.decryptedToken || site.apiToken;
 
       if (!apiToken) {
-        throw new Error('API token not available');
+        throw new ValidationError(
+          'API token is required',
+          { apiToken: ['API token is missing or invalid'] },
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'fetchFromLaravel',
+              metadata: { siteId: site.id, baseUrl: site.baseUrl }
+            }
+          }
+        );
       }
 
-      const response = await this.axiosRequestWithRetry<{
-        data: LaravelProduct[];
-      }>({
-        method: "GET",
-        url: `${site.baseUrl}/api/pricepilot/sync`,
-        headers: {
-          "X-PricePilot-Token": apiToken,
-          Accept: "application/json",
-        },
-        timeout: 30000,
-      });
+      let response;
+      try {
+        response = await this.axiosRequestWithRetry<{
+          data: LaravelProduct[];
+        }>({
+          method: "GET",
+          url: `${site.baseUrl}/api/pricepilot/sync`,
+          headers: {
+            "X-PricePilot-Token": apiToken,
+            Accept: "application/json",
+          },
+          timeout: 30000,
+        });
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const statusCode = error.response?.status;
+          const isRetryable = !statusCode || statusCode >= 500 || statusCode === 429 || statusCode === 408;
+
+          throw new ExternalServiceError(
+            'Laravel',
+            `Failed to connect to Laravel API: ${error.message}`,
+            {
+              cause: error,
+              serviceStatusCode: statusCode,
+              isRetryable,
+              context: {
+                tenantId: site.tenantId,
+                operation: 'fetchFromLaravel',
+                metadata: { siteId: site.id, baseUrl: site.baseUrl, statusCode }
+              },
+              userMessage: statusCode === 401 || statusCode === 403
+                ? 'Invalid API token. Please check your Laravel API token in settings.'
+                : 'Unable to connect to your Laravel store. Please check your store URL and API token.'
+            }
+          );
+        }
+        throw error;
+      }
 
       // Expected Laravel response format:
       // { data: [{ id, sku, name, price, brand, model }] }
@@ -573,6 +795,11 @@ export class SyncService {
         url: (p as any).url || null,
       }));
     } catch (error) {
+      // If already an AppError, re-throw
+      if (error instanceof ValidationError || error instanceof ExternalServiceError) {
+        throw error;
+      }
+
       const err = error as Error;
       console.error(`Laravel API error for ${site.baseUrl}:`, err);
 
@@ -585,8 +812,21 @@ export class SyncService {
         }
       });
 
-      // Throw error instead of returning mock data
-      throw new Error(`Failed to sync products from Laravel (${site.baseUrl}): ${err.message}`);
+      // Wrap unexpected errors
+      throw new ExternalServiceError(
+        'Laravel',
+        `Failed to sync products from Laravel: ${err.message}`,
+        {
+          cause: err,
+          context: {
+            tenantId: site.tenantId,
+            operation: 'fetchFromLaravel',
+            metadata: { siteId: site.id, baseUrl: site.baseUrl }
+          },
+          isRetryable: true,
+          userMessage: 'An unexpected error occurred while fetching products from Laravel. Please try again.'
+        }
+      );
     }
   }
 
@@ -594,117 +834,228 @@ export class SyncService {
    * Pushes latest price updates for all products of a site back to the external platform
    */
   static async syncProductsToStore(siteId: string) {
-    const site = await prisma.site.findUnique({
-      where: { id: siteId },
-      include: { products: true },
-    });
-
-    if (!site) throw new Error("Site not found");
-
-    if (!site.apiToken) {
-      console.log(
-        `[SyncService] No API token for ${site.baseUrl}, skipping push.`,
-      );
-      return { success: true, updated: 0 };
-    }
-
-    // Get site with decrypted token
-    let siteWithToken;
     try {
-      siteWithToken = await WebsiteService.getWebsiteWithToken(
-        siteId,
-        site.tenantId,
-        'price_update'
-      );
-    } catch (error) {
-      if (error instanceof DecryptionError) {
-        console.error('[SyncService] Failed to decrypt token for price updates:', error);
-        throw new Error('Failed to decrypt API token. Please re-enter your token in settings.');
+      // Validate input
+      if (!siteId || typeof siteId !== 'string' || siteId.trim() === '') {
+        throw new ValidationError(
+          'Invalid sync request',
+          { siteId: ['Site ID is required and must be a valid string'] },
+          { context: { operation: 'syncProductsToStore' } }
+        );
       }
-      throw error;
-    }
 
-    const productsToUpdate = site.products.filter((p) => p.externalId);
+      const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        include: { products: true },
+      });
 
-    console.log(
-      `[SyncService] Pushing ${productsToUpdate.length} price updates to ${site.platform}`,
-    );
+      if (!site) {
+        throw new NotFoundError(
+          'Site',
+          siteId,
+          { context: { operation: 'syncProductsToStore' } }
+        );
+      }
 
-    const results: (boolean | null)[] = [];
-    const BATCH_SIZE = 5;
+      if (!site.apiToken) {
+        console.log(
+          `[SyncService] No API token for ${site.baseUrl}, skipping push.`,
+        );
+        return { success: true, updated: 0 };
+      }
 
-    for (let i = 0; i < productsToUpdate.length; i += BATCH_SIZE) {
-      const batch = productsToUpdate.slice(i, i + BATCH_SIZE);
-
-      const batchResults = await Promise.all(
-        batch.map(async (product) => {
-          try {
-            if (site.platform === "OPENCART") {
-              return await this.updateOpenCartPrice(siteWithToken, product);
-            } else if (site.platform === "LARAVEL") {
-              return await this.updateLaravelPrice(siteWithToken, product);
+      // Get site with decrypted token
+      let siteWithToken;
+      try {
+        siteWithToken = await WebsiteService.getWebsiteWithToken(
+          siteId,
+          site.tenantId,
+          'price_update'
+        );
+      } catch (error) {
+        if (error instanceof DecryptionError) {
+          console.error('[SyncService] Failed to decrypt token for price updates:', error);
+          throw new ExternalServiceError(
+            site.platform,
+            'Failed to decrypt API token',
+            {
+              cause: error,
+              context: {
+                tenantId: site.tenantId,
+                operation: 'syncProductsToStore',
+                metadata: { siteId, baseUrl: site.baseUrl }
+              },
+              userMessage: 'Failed to decrypt API token. Please re-enter your token in settings.'
             }
-            return null;
-          } catch (error) {
-            console.error(
-              `Failed to update price for product ${product.id}:`,
-              error,
-            );
-            return null;
-          }
-        }),
+          );
+        }
+        throw error;
+      }
+
+      const productsToUpdate = site.products.filter((p) => p.externalId);
+
+      console.log(
+        `[SyncService] Pushing ${productsToUpdate.length} price updates to ${site.platform}`,
       );
 
-      results.push(...batchResults);
+      const results: (boolean | null)[] = [];
+      const BATCH_SIZE = 5;
 
-      // Add a small delay between batches to respect server limits
-      if (i + BATCH_SIZE < productsToUpdate.length) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      for (let i = 0; i < productsToUpdate.length; i += BATCH_SIZE) {
+        const batch = productsToUpdate.slice(i, i + BATCH_SIZE);
+
+        const batchResults = await Promise.all(
+          batch.map(async (product) => {
+            try {
+              if (site.platform === "OPENCART") {
+                return await this.updateOpenCartPrice(siteWithToken, product);
+              } else if (site.platform === "LARAVEL") {
+                return await this.updateLaravelPrice(siteWithToken, product);
+              }
+              return null;
+            } catch (error) {
+              console.error(
+                `Failed to update price for product ${product.id}:`,
+                error,
+              );
+              return null;
+            }
+          }),
+        );
+
+        results.push(...batchResults);
+
+        // Add a small delay between batches to respect server limits
+        if (i + BATCH_SIZE < productsToUpdate.length) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
       }
-    }
 
-    return {
-      success: true,
-      updated: results.filter((r) => r !== null).length,
-    };
+      return {
+        success: true,
+        updated: results.filter((r) => r !== null).length,
+      };
+    } catch (error) {
+      // If already an AppError, re-throw
+      if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof ExternalServiceError) {
+        throw error;
+      }
+
+      // Wrap unexpected errors
+      throw new ExternalServiceError(
+        'SyncService',
+        'An unexpected error occurred during price synchronization',
+        {
+          cause: error as Error,
+          context: {
+            operation: 'syncProductsToStore',
+            metadata: { siteId }
+          },
+          userMessage: 'An unexpected error occurred while updating prices. Please try again.'
+        }
+      );
+    }
   }
 
   /**
    * Update price in OpenCart with verification
    */
   private static async updateOpenCartPrice(site: Site & { decryptedToken: string | null }, product: Product): Promise<boolean> {
-    // Use decrypted token for API call
-    const apiToken = site.decryptedToken || site.apiToken;
-
-    if (!apiToken) {
-      throw new Error('API token not available');
-    }
-
-    const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${apiToken}`;
-
     try {
-      const response = await this.axiosRequestWithRetry<any>({
-        method: "POST",
-        url,
-        data: {
-          product_id: product.externalId,
-          price: product.currentPrice.toString(),
-          // Include additional fields for validation
-          sku: product.sku,
-          verify: true // Request verification response
-        },
-        timeout: 10000,
-      });
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new ValidationError(
+          'API token is required',
+          { apiToken: ['API token is missing or invalid'] },
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'updateOpenCartPrice',
+              metadata: { siteId: site.id, productId: product.id }
+            }
+          }
+        );
+      }
+
+      const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${apiToken}`;
+
+      let response;
+      try {
+        response = await this.axiosRequestWithRetry<any>({
+          method: "POST",
+          url,
+          data: {
+            product_id: product.externalId,
+            price: product.currentPrice.toString(),
+            // Include additional fields for validation
+            sku: product.sku,
+            verify: true // Request verification response
+          },
+          timeout: 10000,
+        });
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const statusCode = error.response?.status;
+
+          if (statusCode === 508 || statusCode === 429) {
+            console.warn(
+              `[SyncService] OpenCart Rate Limit/Loop Warning (Status ${statusCode}). Retrying skipped for ${product.id}`,
+            );
+            return false;
+          }
+
+          throw new ExternalServiceError(
+            'OpenCart',
+            `Failed to update price in OpenCart: ${error.message}`,
+            {
+              cause: error,
+              serviceStatusCode: statusCode,
+              isRetryable: this.isRetryableError(error),
+              context: {
+                tenantId: site.tenantId,
+                operation: 'updateOpenCartPrice',
+                metadata: { siteId: site.id, productId: product.id, externalId: product.externalId }
+              },
+              userMessage: 'Failed to update price in OpenCart. Please try again.'
+            }
+          );
+        }
+        throw error;
+      }
 
       // Verify response structure
       if (!response.data || typeof response.data !== 'object') {
-        throw new Error('Invalid response format from OpenCart');
+        throw new ExternalServiceError(
+          'OpenCart',
+          'Invalid response format from OpenCart',
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'updateOpenCartPrice',
+              metadata: { siteId: site.id, productId: product.id }
+            },
+            userMessage: 'Received invalid response from OpenCart.'
+          }
+        );
       }
 
       // Check for success flag
       if (response.data.success !== true) {
         const errorMsg = response.data.error || response.data.message || 'Unknown error';
-        throw new Error(`OpenCart API error: ${errorMsg}`);
+        throw new ExternalServiceError(
+          'OpenCart',
+          `OpenCart API error: ${errorMsg}`,
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'updateOpenCartPrice',
+              metadata: { siteId: site.id, productId: product.id, errorMsg }
+            },
+            userMessage: `Failed to update price: ${errorMsg}`
+          }
+        );
       }
 
       // Verify the price was actually updated
@@ -714,8 +1065,17 @@ export class SyncService {
 
         // Allow small floating point differences (0.01)
         if (Math.abs(updatedPrice - expectedPrice) > 0.01) {
-          throw new Error(
-            `Price mismatch: expected ${expectedPrice}, got ${updatedPrice}`
+          throw new ExternalServiceError(
+            'OpenCart',
+            `Price mismatch: expected ${expectedPrice}, got ${updatedPrice}`,
+            {
+              context: {
+                tenantId: site.tenantId,
+                operation: 'updateOpenCartPrice',
+                metadata: { siteId: site.id, productId: product.id, expectedPrice, updatedPrice }
+              },
+              userMessage: 'Price update verification failed. The price may not have been updated correctly.'
+            }
           );
         }
       }
@@ -748,9 +1108,26 @@ export class SyncService {
       return true;
 
     } catch (error) {
-      // Log failed update
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // If already an AppError, log and re-throw
+      if (error instanceof ValidationError || error instanceof ExternalServiceError) {
+        // Log failed update
+        await prisma.priceUpdateLog.create({
+          data: {
+            productId: product.id,
+            oldPrice: product.currentPrice,
+            newPrice: product.currentPrice,
+            logicType: "FIXED",
+            status: "FAILED",
+            errorDetails: error.message,
+            executedAt: new Date()
+          }
+        });
+        console.error(`[SyncService] OpenCart Update Error for ${product.id}:`, error.message);
+        return false;
+      }
 
+      // Wrap unexpected errors
+      const errorMessage = error instanceof Error ? error.message : String(error);
       await prisma.priceUpdateLog.create({
         data: {
           productId: product.id,
@@ -763,19 +1140,10 @@ export class SyncService {
         }
       });
 
-      if (
-        axios.isAxiosError(error) &&
-        (error.response?.status === 508 || error.response?.status === 429)
-      ) {
-        console.warn(
-          `[SyncService] OpenCart Rate Limit/Loop Warning (Status ${error.response.status}). Retrying skipped for ${product.id}`,
-        );
-      } else {
-        console.error(
-          `[SyncService] OpenCart Update Error for ${product.id}:`,
-          errorMessage
-        );
-      }
+      console.error(
+        `[SyncService] OpenCart Update Error for ${product.id}:`,
+        errorMessage
+      );
 
       return false;
     }
@@ -785,42 +1153,98 @@ export class SyncService {
    * Update price in Laravel with verification
    */
   private static async updateLaravelPrice(site: Site & { decryptedToken: string | null }, product: Product): Promise<boolean> {
-    const url = `${site.baseUrl}/api/pricepilot/update`;
-
-    // Use decrypted token for API call
-    const apiToken = site.decryptedToken || site.apiToken;
-
-    if (!apiToken) {
-      throw new Error('API token not available');
-    }
-
     try {
-      const response = await this.axiosRequestWithRetry<any>({
-        method: "POST",
-        url,
-        data: {
-          product_id: product.externalId,
-          price: product.currentPrice.toString(),
-          // Include additional fields for validation
-          sku: product.sku,
-          verify: true // Request verification response
-        },
-        headers: {
-          "X-PricePilot-Token": apiToken,
-          Accept: "application/json",
-        },
-        timeout: 10000,
-      });
+      const url = `${site.baseUrl}/api/pricepilot/update`;
+
+      // Use decrypted token for API call
+      const apiToken = site.decryptedToken || site.apiToken;
+
+      if (!apiToken) {
+        throw new ValidationError(
+          'API token is required',
+          { apiToken: ['API token is missing or invalid'] },
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'updateLaravelPrice',
+              metadata: { siteId: site.id, productId: product.id }
+            }
+          }
+        );
+      }
+
+      let response;
+      try {
+        response = await this.axiosRequestWithRetry<any>({
+          method: "POST",
+          url,
+          data: {
+            product_id: product.externalId,
+            price: product.currentPrice.toString(),
+            // Include additional fields for validation
+            sku: product.sku,
+            verify: true // Request verification response
+          },
+          headers: {
+            "X-PricePilot-Token": apiToken,
+            Accept: "application/json",
+          },
+          timeout: 10000,
+        });
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const statusCode = error.response?.status;
+
+          throw new ExternalServiceError(
+            'Laravel',
+            `Failed to update price in Laravel: ${error.message}`,
+            {
+              cause: error,
+              serviceStatusCode: statusCode,
+              isRetryable: this.isRetryableError(error),
+              context: {
+                tenantId: site.tenantId,
+                operation: 'updateLaravelPrice',
+                metadata: { siteId: site.id, productId: product.id, externalId: product.externalId }
+              },
+              userMessage: 'Failed to update price in Laravel. Please try again.'
+            }
+          );
+        }
+        throw error;
+      }
 
       // Verify response structure
       if (!response.data || typeof response.data !== 'object') {
-        throw new Error('Invalid response format from Laravel');
+        throw new ExternalServiceError(
+          'Laravel',
+          'Invalid response format from Laravel',
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'updateLaravelPrice',
+              metadata: { siteId: site.id, productId: product.id }
+            },
+            userMessage: 'Received invalid response from Laravel.'
+          }
+        );
       }
 
       // Check for success flag
       if (response.data.success !== true) {
         const errorMsg = response.data.error || response.data.message || 'Unknown error';
-        throw new Error(`Laravel API error: ${errorMsg}`);
+        throw new ExternalServiceError(
+          'Laravel',
+          `Laravel API error: ${errorMsg}`,
+          {
+            context: {
+              tenantId: site.tenantId,
+              operation: 'updateLaravelPrice',
+              metadata: { siteId: site.id, productId: product.id, errorMsg }
+            },
+            userMessage: `Failed to update price: ${errorMsg}`
+          }
+        );
       }
 
       // Verify the price was actually updated
@@ -830,8 +1254,17 @@ export class SyncService {
 
         // Allow small floating point differences (0.01)
         if (Math.abs(updatedPrice - expectedPrice) > 0.01) {
-          throw new Error(
-            `Price mismatch: expected ${expectedPrice}, got ${updatedPrice}`
+          throw new ExternalServiceError(
+            'Laravel',
+            `Price mismatch: expected ${expectedPrice}, got ${updatedPrice}`,
+            {
+              context: {
+                tenantId: site.tenantId,
+                operation: 'updateLaravelPrice',
+                metadata: { siteId: site.id, productId: product.id, expectedPrice, updatedPrice }
+              },
+              userMessage: 'Price update verification failed. The price may not have been updated correctly.'
+            }
           );
         }
       }
@@ -864,9 +1297,26 @@ export class SyncService {
       return true;
 
     } catch (error) {
-      // Log failed update
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // If already an AppError, log and re-throw
+      if (error instanceof ValidationError || error instanceof ExternalServiceError) {
+        // Log failed update
+        await prisma.priceUpdateLog.create({
+          data: {
+            productId: product.id,
+            oldPrice: product.currentPrice,
+            newPrice: product.currentPrice,
+            logicType: "FIXED",
+            status: "FAILED",
+            errorDetails: error.message,
+            executedAt: new Date()
+          }
+        });
+        console.error(`[SyncService] Laravel Update Error for ${product.id}:`, error.message);
+        return false;
+      }
 
+      // Wrap unexpected errors
+      const errorMessage = error instanceof Error ? error.message : String(error);
       await prisma.priceUpdateLog.create({
         data: {
           productId: product.id,

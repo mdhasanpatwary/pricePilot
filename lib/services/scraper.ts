@@ -18,6 +18,7 @@ import { CaptchaSolver } from "./captcha-solver";
 import { getAllUserAgents, getRandomUserAgentExcluding } from "../config/user-agents";
 import { getUserAgentTracker } from "./user-agent-tracker";
 import { sessionTracker } from "./session-tracker";
+import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
 
 interface ScrapedProduct {
   title: string;
@@ -37,6 +38,51 @@ export class ScrapeBlockError extends Error {
     super(`BLOCKED: ${provider} at ${url}`);
     this.name = "ScrapeBlockError";
   }
+}
+
+/**
+ * Adapter function for backward compatibility with new error handling system
+ * Wraps ScrapeBlockError into the new AppError hierarchy
+ */
+import type { AppError as AppErrorType, ErrorOptions as ErrorOptionsType } from '../utils/error-handler';
+
+/**
+ * Wraps a ScrapeBlockError into the new error handling system
+ * Maps to ExternalServiceError since scraping is an external service concern
+ * 
+ * @param originalError - The original ScrapeBlockError
+ * @param context - Additional context to include
+ * @returns AppError instance wrapping the original error
+ */
+export function wrapScrapeBlockError(
+  originalError: ScrapeBlockError,
+  context?: Partial<ErrorOptionsType['context']>
+): AppErrorType {
+  // Dynamic import to avoid circular dependencies
+  const { ExternalServiceError } = require('../utils/error-handler');
+
+  return new ExternalServiceError(
+    originalError.provider,
+    `Scraping blocked by ${originalError.provider}`,
+    {
+      userMessage: originalError.isAdvanced
+        ? `Unable to access ${originalError.provider}. The website has advanced protection. Please check your configuration or contact support.`
+        : `Unable to access ${originalError.provider}. The website may be blocking automated requests. Please try again later.`,
+      developerMessage: originalError.message,
+      cause: originalError,
+      context: {
+        ...context,
+        operation: 'scraping',
+        metadata: {
+          provider: originalError.provider,
+          url: originalError.url,
+          isAdvanced: originalError.isAdvanced,
+        },
+      },
+      isRetryable: !originalError.isAdvanced, // Only retry if not advanced blocking
+      retryAfter: originalError.isAdvanced ? undefined : 300, // 5 minutes for simple blocks
+    }
+  );
 }
 
 // Domain-specific search URL builders
@@ -162,6 +208,29 @@ export class ScraperService {
       this.proxies = [];
       logger.info('[ScraperService] Proxies removed, operating in direct mode');
     }
+  }
+
+  /**
+   * Check if an error is a network-related error that should be retried
+   * Requirement 9.1: Identify transient network failures
+   */
+  private isNetworkError(error: any): boolean {
+    if (!error) return false;
+
+    const errorMessage = error.message?.toLowerCase() || '';
+    const networkErrorPatterns = [
+      'econnrefused',
+      'econnreset',
+      'etimedout',
+      'enetunreach',
+      'ehostunreach',
+      'network',
+      'timeout',
+      'socket hang up',
+      'fetch failed',
+    ];
+
+    return networkErrorPatterns.some(pattern => errorMessage.includes(pattern));
   }
 
   /**
@@ -353,26 +422,100 @@ export class ScraperService {
 
   /**
    * Scrape a competitor product page with retry logic and human simulation
+   * Requirements: 6.2, 6.5, 6.8, 6.9, 8.3, 9.1, 9.2
    */
   async scrapeProductPage(url: string): Promise<ScrapedProduct | null> {
-    await this.init();
+    // Extract hostname for context (used in error metadata)
+    let hostname = 'unknown';
 
-    // Use RetryStrategy to handle retries with exponential backoff
-    return this.retryStrategy.executeWithRetry(
-      async (context: RetryContext) => {
-        return this._scrapeProductPageInternal(url, context);
-      },
-      (error: Error) => {
-        // Use the RetryStrategy's error classification
-        return this.retryStrategy.shouldRetryError(error);
+    try {
+      await this.init();
+
+      try {
+        hostname = new URL(url).hostname;
+      } catch (error) {
+        // Requirement 6.5: Throw ExternalServiceError for invalid URLs
+        throw new ExternalServiceError(
+          'Unknown',
+          'Invalid product URL provided',
+          {
+            cause: error as Error,
+            context: {
+              operation: 'scrapeProductPage',
+              metadata: { url },
+            },
+            isRetryable: false,
+          }
+        );
       }
-    );
+
+      // Use RetryStrategy to handle retries with exponential backoff
+      return await this.retryStrategy.executeWithRetry(
+        async (context: RetryContext) => {
+          return this._scrapeProductPageInternal(url, context);
+        },
+        (error: Error) => {
+          // Maintain compatibility with existing ScrapeBlockError (Requirement 8.3)
+          if (error instanceof ScrapeBlockError) {
+            // Wrap ScrapeBlockError in ExternalServiceError for consistency
+            // but preserve the original error as cause
+            const wrappedError = new ExternalServiceError(
+              error.provider,
+              `Scraping blocked by ${error.provider}`,
+              {
+                cause: error,
+                context: {
+                  operation: 'scrapeProductPage',
+                  metadata: { url, provider: error.provider, isAdvanced: error.isAdvanced },
+                },
+                isRetryable: true, // Requirement 9.1: Mark transient errors as retryable
+                retryAfter: 60, // Retry after 60 seconds
+              }
+            );
+            throw wrappedError;
+          }
+
+          // Use the RetryStrategy's error classification
+          return this.retryStrategy.shouldRetryError(error);
+        }
+      );
+    } catch (error) {
+      // Requirement 6.8: Include operation name in context
+      // Requirement 6.9: Preserve original error as cause
+
+      // If already an AppError, re-throw with additional context
+      if (error instanceof AppError) {
+        // Add operation context if not already present
+        if (!error.context.operation) {
+          error.context.operation = 'scrapeProductPage';
+        }
+        if (!error.context.metadata?.url) {
+          error.context.metadata = { ...error.context.metadata, url, hostname };
+        }
+        throw error;
+      }
+
+      // Wrap unexpected errors in ExternalServiceError
+      // Requirement 6.2: Wrap scraper errors in appropriate AppError subclass
+      throw new ExternalServiceError(
+        'Scraper',
+        'Failed to scrape product page',
+        {
+          cause: error as Error,
+          context: {
+            operation: 'scrapeProductPage',
+            metadata: { url, hostname },
+          },
+          isRetryable: this.isNetworkError(error), // Requirement 9.1: Mark network errors as retryable
+        }
+      );
+    }
   }
 
   /**
    * Scrape a product page with retry queue integration
    * If immediate retries fail, adds the request to the retry queue for later processing
-   * Implements Requirements 8.1, 8.5
+   * Implements Requirements 8.1, 8.5, 6.2, 6.8, 6.9
    * 
    * @param url Product URL to scrape
    * @param tenantId Tenant ID
@@ -400,11 +543,12 @@ export class ScraperService {
       return result;
     } catch (error) {
       // All immediate retries exhausted, add to retry queue
+      // Requirement 6.8: Include operation name in context
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       logger.warn(
         `[ScraperService] All immediate retries exhausted for ${url}, adding to retry queue`,
-        { error: errorMessage, productId }
+        { error: errorMessage, productId, tenantId }
       );
 
       try {
@@ -422,9 +566,25 @@ export class ScraperService {
           `[ScraperService] Failed to add product ${productId} to retry queue`,
           { error: queueError }
         );
+
+        // Wrap queue error in ExternalServiceError
+        // Requirement 6.2: Wrap errors in appropriate AppError subclass
+        throw new ExternalServiceError(
+          'RetryQueue',
+          'Failed to add product to retry queue',
+          {
+            cause: queueError as Error,
+            context: {
+              operation: 'scrapeProductPageWithRetryQueue',
+              tenantId,
+              metadata: { url, productId, siteId },
+            },
+            isRetryable: false,
+          }
+        );
       }
 
-      // Return null to indicate failure
+      // Return null to indicate failure (original behavior preserved)
       return null;
     }
   }
@@ -432,7 +592,7 @@ export class ScraperService {
   /**
    * Scrape a product page with session tracking
    * Creates a session, tracks all lifecycle stages, and completes the session
-   * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
+   * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 6.2, 6.8, 6.9
    * 
    * @param url Product URL to scrape
    * @param tenantId Tenant ID
@@ -448,71 +608,162 @@ export class ScraperService {
     _productId: string,
     tenantName?: string
   ): Promise<ScrapedProduct | null> {
-    await this.init();
-
-    // Extract hostname for session tracking
-    let siteUrl: string;
     try {
-      const urlObj = new URL(url);
-      siteUrl = `${urlObj.protocol}//${urlObj.hostname}`;
-    } catch (error) {
-      logger.error(`[ScraperService] Invalid URL: ${url}`, { error });
-      return null;
-    }
+      await this.init();
 
-    // Get tenant name if not provided
-    const displayTenantName = tenantName || tenantId;
+      // Extract hostname for session tracking
+      let siteUrl: string;
+      let hostname: string;
+      try {
+        const urlObj = new URL(url);
+        siteUrl = `${urlObj.protocol}//${urlObj.hostname}`;
+        hostname = urlObj.hostname;
+      } catch (error) {
+        logger.error(`[ScraperService] Invalid URL: ${url}`, { error });
 
-    // Auto-clear completed/failed sessions for this tenant before starting new scraping
-    // This ensures only fresh logs are shown for the new session
-    try {
-      const clearedCount = await sessionTracker.clearCompletedSessions(tenantId);
-      if (clearedCount > 0) {
-        logger.info(`[ScraperService] Auto-cleared ${clearedCount} completed/failed sessions for tenant ${tenantId}`);
+        // Requirement 6.5: Throw ExternalServiceError for invalid URLs
+        throw new ExternalServiceError(
+          'Unknown',
+          'Invalid product URL provided',
+          {
+            cause: error as Error,
+            context: {
+              operation: 'scrapeProductPageWithTracking',
+              tenantId,
+              metadata: { url },
+            },
+            isRetryable: false,
+          }
+        );
       }
-    } catch (error) {
-      // Don't fail the scraping operation if clearing fails
-      logger.warn(`[ScraperService] Failed to auto-clear sessions for tenant ${tenantId}`, { error });
-    }
 
-    // Create session for tracking
-    // Requirement 2.1: Session initialization with target URL, proxy, and tenant info
-    const sessionId = await sessionTracker.createSession(
-      tenantId,
-      displayTenantName,
-      siteUrl,
-      url
-    );
+      // Get tenant name if not provided
+      const displayTenantName = tenantName || tenantId;
 
-    try {
-      // Use RetryStrategy to handle retries with exponential backoff
-      const result = await this.retryStrategy.executeWithRetry(
-        async (context: RetryContext) => {
-          return this._scrapeProductPageInternalWithTracking(url, context, sessionId);
-        },
-        (error: Error) => {
-          // Record error in session
-          sessionTracker.recordError(sessionId, error);
-          // Use the RetryStrategy's error classification
-          return this.retryStrategy.shouldRetryError(error);
+      // Auto-clear completed/failed sessions for this tenant before starting new scraping
+      // This ensures only fresh logs are shown for the new session
+      try {
+        const clearedCount = await sessionTracker.clearCompletedSessions(tenantId);
+        if (clearedCount > 0) {
+          logger.info(`[ScraperService] Auto-cleared ${clearedCount} completed/failed sessions for tenant ${tenantId}`);
         }
+      } catch (error) {
+        // Don't fail the scraping operation if clearing fails
+        logger.warn(`[ScraperService] Failed to auto-clear sessions for tenant ${tenantId}`, { error });
+      }
+
+      // Create session for tracking
+      // Requirement 2.1: Session initialization with target URL, proxy, and tenant info
+      const sessionId = await sessionTracker.createSession(
+        tenantId,
+        displayTenantName,
+        siteUrl,
+        url
       );
 
-      // Complete session successfully
-      // Requirement 2.5: Session completion with final status and data quality metrics
-      await sessionTracker.completeSession(sessionId, true, {
-        extractedData: result,
-      });
+      try {
+        // Use RetryStrategy to handle retries with exponential backoff
+        const result = await this.retryStrategy.executeWithRetry(
+          async (context: RetryContext) => {
+            return this._scrapeProductPageInternalWithTracking(url, context, sessionId);
+          },
+          (error: Error) => {
+            // Record error in session
+            sessionTracker.recordError(sessionId, error);
 
-      return result;
+            // Maintain compatibility with existing ScrapeBlockError (Requirement 8.3)
+            if (error instanceof ScrapeBlockError) {
+              // Wrap ScrapeBlockError in ExternalServiceError for consistency
+              const wrappedError = new ExternalServiceError(
+                error.provider,
+                `Scraping blocked by ${error.provider}`,
+                {
+                  cause: error,
+                  context: {
+                    operation: 'scrapeProductPageWithTracking',
+                    tenantId,
+                    metadata: { url, hostname, provider: error.provider, isAdvanced: error.isAdvanced },
+                  },
+                  isRetryable: true, // Requirement 9.1: Mark transient errors as retryable
+                  retryAfter: 60,
+                }
+              );
+              throw wrappedError;
+            }
+
+            // Use the RetryStrategy's error classification
+            return this.retryStrategy.shouldRetryError(error);
+          }
+        );
+
+        // Complete session successfully
+        // Requirement 2.5: Session completion with final status and data quality metrics
+        await sessionTracker.completeSession(sessionId, true, {
+          extractedData: result,
+        });
+
+        return result;
+      } catch (error) {
+        // Record final error
+        await sessionTracker.recordError(sessionId, error as Error);
+
+        // Complete session with failure
+        await sessionTracker.completeSession(sessionId, false);
+
+        // Requirement 6.8: Include operation name in context
+        // Requirement 6.9: Preserve original error as cause
+
+        // If already an AppError, re-throw with additional context
+        if (error instanceof AppError) {
+          // Add tenant context if not already present
+          if (!error.context.tenantId) {
+            error.context.tenantId = tenantId;
+          }
+          if (!error.context.operation) {
+            error.context.operation = 'scrapeProductPageWithTracking';
+          }
+          if (!error.context.metadata?.url) {
+            error.context.metadata = { ...error.context.metadata, url, hostname };
+          }
+          throw error;
+        }
+
+        // Wrap unexpected errors in ExternalServiceError
+        // Requirement 6.2: Wrap scraper errors in appropriate AppError subclass
+        throw new ExternalServiceError(
+          'Scraper',
+          'Failed to scrape product page with tracking',
+          {
+            cause: error as Error,
+            context: {
+              operation: 'scrapeProductPageWithTracking',
+              tenantId,
+              metadata: { url, hostname },
+            },
+            isRetryable: this.isNetworkError(error), // Requirement 9.1: Mark network errors as retryable
+          }
+        );
+      }
     } catch (error) {
-      // Record final error
-      await sessionTracker.recordError(sessionId, error as Error);
+      // Outer catch for initialization errors
+      // Requirement 6.2: Wrap errors in appropriate AppError subclass
+      if (error instanceof AppError) {
+        throw error;
+      }
 
-      // Complete session with failure
-      await sessionTracker.completeSession(sessionId, false);
-
-      throw error;
+      throw new ExternalServiceError(
+        'Scraper',
+        'Failed to initialize scraping with tracking',
+        {
+          cause: error as Error,
+          context: {
+            operation: 'scrapeProductPageWithTracking',
+            tenantId,
+            metadata: { url },
+          },
+          isRetryable: false,
+        }
+      );
     }
   }
 
@@ -631,6 +882,25 @@ export class ScraperService {
       }
 
       statusCode = response?.status() || 0;
+
+      // Requirement 9.2: Throw RateLimitError for HTTP 429
+      if (statusCode === 429) {
+        // Extract retry-after header if available
+        const retryAfterHeader = response?.headers()['retry-after'];
+        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 60;
+
+        throw new RateLimitError(
+          profile.rateLimit?.requestsPerMinute || 10,
+          60,
+          {
+            context: {
+              operation: 'scrapeProductPage',
+              metadata: { url, hostname, statusCode },
+            },
+            retryAfter,
+          }
+        );
+      }
 
       // 2. Challenge Detection and Handling
       const challengeResult = await this.challengeHandler.detectChallenge(page);
@@ -1198,6 +1468,25 @@ export class ScraperService {
       }
 
       statusCode = response?.status() || 0;
+
+      // Requirement 9.2: Throw RateLimitError for HTTP 429
+      if (statusCode === 429) {
+        // Extract retry-after header if available
+        const retryAfterHeader = response?.headers()['retry-after'];
+        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 60;
+
+        throw new RateLimitError(
+          profile.rateLimit?.requestsPerMinute || 10,
+          60,
+          {
+            context: {
+              operation: 'scrapeProductPageWithTracking',
+              metadata: { url, hostname, statusCode },
+            },
+            retryAfter,
+          }
+        );
+      }
 
       // Update session with navigation complete
       await sessionTracker.updateStage(sessionId, 'navigation', {

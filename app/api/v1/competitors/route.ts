@@ -4,228 +4,204 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import {
   validateBody,
   validationErrorResponse,
   createCompetitorSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { UnauthorizedError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/utils/error-handler";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    throw new UnauthorizedError('Authentication required to access competitors');
   }
 
   const tenantId = session.user.tenantId;
 
-  try {
-    // Get total number of products the user is tracking (from USER site)
-    const totalUserProducts = await prisma.product.count({
-      where: {
-        tenantId,
-        site: { type: "USER" }
-      }
-    });
-
-    const competitors = await prisma.site.findMany({
-      where: {
-        tenantId,
-        type: "COMPETITOR",
-      },
-      select: {
-        id: true,
-        tenantId: true,
-        type: true,
-        platform: true,
-        baseUrl: true,
-        apiToken: true,
-        lastSyncAt: true,
-        isSyncing: true,
-        syncTotal: true,
-        syncProcessed: true,
-        syncLastAction: true,
-        syncStartedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        lastSecurityBlockAt: true,
-        isAdvancedProtected: true, // Explicitly select this field
-        currency: true,
-        searchQueryPattern: true,
-        _count: {
-          select: { products: true },
-        },
-        syncLogs: {
-          orderBy: { createdAt: "desc" },
-          take: 50,
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    const formattedCompetitors = competitors
-      .map((site) => {
-        try {
-          let name = "Unknown";
-          try {
-            const urlObj = new URL(
-              site.baseUrl.startsWith("http")
-                ? site.baseUrl
-                : `https://${site.baseUrl}`,
-            );
-            const hostname = urlObj.hostname;
-            const cleanHostname = hostname.replace(/^www\./, "");
-            const parts = cleanHostname.split(".");
-            const rawName = parts.length > 1 ? parts[0] : cleanHostname;
-            name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-          } catch (e) {
-            console.error(
-              `Invalid baseUrl for site ${site.id}: ${site.baseUrl}`,
-            );
-          }
-
-          return {
-            id: site.id,
-            name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
-            url: site.baseUrl,
-            products: site._count.products,
-            status: site.isSyncing
-              ? "SYNCING"
-              : site._count.products > 0
-                ? "ACTIVE"
-                : site.lastSyncAt
-                  ? "NO MATCHES"
-                  : "PENDING",
-            health: site._count.products > 0 ? 100 : 0,
-            isSyncing: site.isSyncing,
-            syncTotal: site.syncTotal,
-            syncProcessed: site.syncProcessed,
-            syncLastAction: site.syncLastAction,
-            syncStartedAt: site.syncStartedAt,
-            totalUserProducts: totalUserProducts || 0,
-            isAdvancedProtected: site.isAdvancedProtected || false, // Use the real DB value
-            searchQueryPattern: site.searchQueryPattern,
-            logs: site.syncLogs || [],
-          };
-        } catch (e) {
-          console.error(`Error formatting site ${site.id}:`, e);
-          return null;
-        }
-      })
-      .filter(Boolean);
-
-    return NextResponse.json(formattedCompetitors);
-  } catch (error) {
-    console.error("Error fetching competitors:", error);
-    if (error instanceof Error) {
-      console.error("Message:", error.message);
-      console.error("Stack:", error.stack);
+  // Get total number of products the user is tracking (from USER site)
+  const totalUserProducts = await prisma.product.count({
+    where: {
+      tenantId,
+      site: { type: "USER" }
     }
-    return NextResponse.json(
-      {
-        error: "Failed to fetch competitors",
-        details: error instanceof Error ? error.message : String(error),
+  });
+
+  const competitors = await prisma.site.findMany({
+    where: {
+      tenantId,
+      type: "COMPETITOR",
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      type: true,
+      platform: true,
+      baseUrl: true,
+      apiToken: true,
+      lastSyncAt: true,
+      isSyncing: true,
+      syncTotal: true,
+      syncProcessed: true,
+      syncLastAction: true,
+      syncStartedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      lastSecurityBlockAt: true,
+      isAdvancedProtected: true, // Explicitly select this field
+      currency: true,
+      searchQueryPattern: true,
+      _count: {
+        select: { products: true },
       },
-      { status: 500 },
-    );
-  }
+      syncLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  const formattedCompetitors = competitors
+    .map((site) => {
+      try {
+        let name = "Unknown";
+        try {
+          const urlObj = new URL(
+            site.baseUrl.startsWith("http")
+              ? site.baseUrl
+              : `https://${site.baseUrl}`,
+          );
+          const hostname = urlObj.hostname;
+          const cleanHostname = hostname.replace(/^www\./, "");
+          const parts = cleanHostname.split(".");
+          const rawName = parts.length > 1 ? parts[0] : cleanHostname;
+          name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+        } catch (e) {
+          console.error(
+            `Invalid baseUrl for site ${site.id}: ${site.baseUrl}`,
+          );
+        }
+
+        return {
+          id: site.id,
+          name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
+          url: site.baseUrl,
+          products: site._count.products,
+          status: site.isSyncing
+            ? "SYNCING"
+            : site._count.products > 0
+              ? "ACTIVE"
+              : site.lastSyncAt
+                ? "NO MATCHES"
+                : "PENDING",
+          health: site._count.products > 0 ? 100 : 0,
+          isSyncing: site.isSyncing,
+          syncTotal: site.syncTotal,
+          syncProcessed: site.syncProcessed,
+          syncLastAction: site.syncLastAction,
+          syncStartedAt: site.syncStartedAt,
+          totalUserProducts: totalUserProducts || 0,
+          isAdvancedProtected: site.isAdvancedProtected || false, // Use the real DB value
+          searchQueryPattern: site.searchQueryPattern,
+          logs: site.syncLogs || [],
+        };
+      } catch (e) {
+        console.error(`Error formatting site ${site.id}:`, e);
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  return NextResponse.json(formattedCompetitors);
 }
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    throw new UnauthorizedError('Authentication required to create competitors');
   }
 
   const tenantId = session.user.tenantId;
 
-  try {
-    // Validate and sanitize input
-    const validation = await validateBody(req, createCompetitorSchema);
+  // Validate and sanitize input
+  const validation = await validateBody(req, createCompetitorSchema);
 
-    if (!validation.success) {
-      return validationErrorResponse(validation);
-    }
+  if (!validation.success) {
+    return validationErrorResponse(validation);
+  }
 
-    const { url, searchQueryPattern } = validation.data!;
+  const { url, searchQueryPattern } = validation.data!;
 
-    // Fetch tenant limits
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
+  // Fetch tenant limits
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+  });
 
-    if (!tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
-    }
+  if (!tenant) {
+    throw new NotFoundError('Tenant', tenantId);
+  }
 
-    // Check for existing integration (Dynamic Limit)
-    const existingCount = await prisma.site.count({
-      where: {
-        tenantId,
-        type: "COMPETITOR",
-      },
-    });
-
-    if (existingCount >= tenant.competitorLimit) {
-      return NextResponse.json(
-        {
-          error: `Competitor tracking limit reached (${tenant.competitorLimit}). Please upgrade your plan to track more sites.`,
-        },
-        { status: 403 },
-      );
-    }
-
-    const site = await prisma.site.create({
-      data: {
-        baseUrl: url,
-        type: "COMPETITOR",
-        tenantId,
-        isSyncing: true, // Start as syncing immediately so UI picks it up
-        syncLastAction: "Initializing crawler...",
-        searchQueryPattern,
-      },
-    });
-
-    await recordAuditLog({
+  // Check for existing integration (Dynamic Limit)
+  const existingCount = await prisma.site.count({
+    where: {
       tenantId,
-      userId: session.user.id,
-      userEmail: session.user.email!,
-      action: "CREATE_COMPETITOR",
-      entityId: site.id,
-      ipAddress: getIpAddress(req),
-      details: { url },
-    });
+      type: "COMPETITOR",
+    },
+  });
 
-    // Trigger auto-fetch immediately in background (with slight delay for DB propagation)
-    setTimeout(() => {
-      // Pass true to force sync even though isSyncing is already true
-      SyncOrchestrator.processSiteSync(site.id, true).catch((error) => {
-        console.error(
-          `[API] Auto-fetch failed for new site ${site.id}:`,
-          error,
-        );
-      });
-    }, 500);
-
-    return NextResponse.json(site);
-  } catch (error) {
-    console.error("Error creating competitor:", error);
-    return NextResponse.json(
-      { error: "Failed to create competitor" },
-      { status: 500 },
+  if (existingCount >= tenant.competitorLimit) {
+    throw new ForbiddenError(
+      `Competitor tracking limit reached (${tenant.competitorLimit}). Please upgrade your plan to track more sites.`
     );
   }
+
+  const site = await prisma.site.create({
+    data: {
+      baseUrl: url,
+      type: "COMPETITOR",
+      tenantId,
+      isSyncing: true, // Start as syncing immediately so UI picks it up
+      syncLastAction: "Initializing crawler...",
+      searchQueryPattern,
+    },
+  });
+
+  await recordAuditLog({
+    tenantId,
+    userId: session.user.id,
+    userEmail: session.user.email!,
+    action: "CREATE_COMPETITOR",
+    entityId: site.id,
+    ipAddress: getIpAddress(req),
+    details: { url },
+  });
+
+  // Trigger auto-fetch immediately in background (with slight delay for DB propagation)
+  setTimeout(() => {
+    // Pass true to force sync even though isSyncing is already true
+    SyncOrchestrator.processSiteSync(site.id, true).catch((error) => {
+      console.error(
+        `[API] Auto-fetch failed for new site ${site.id}:`,
+        error,
+      );
+    });
+  }, 500);
+
+  return NextResponse.json(site);
 }
 
 async function handleDELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    throw new UnauthorizedError('Authentication required to delete competitors');
   }
 
   const tenantId = session.user.tenantId;
@@ -233,44 +209,36 @@ async function handleDELETE(req: NextRequest) {
   const id = searchParams.get("id");
 
   if (!id) {
-    return NextResponse.json({ error: "ID is required" }, { status: 400 });
+    throw new ValidationError('Invalid request', { id: ['ID is required'] });
   }
 
-  try {
-    await prisma.site.delete({
-      where: {
-        id,
-        tenantId,
-      },
-    });
-
-    await recordAuditLog({
+  await prisma.site.delete({
+    where: {
+      id,
       tenantId,
-      userId: session.user.id,
-      userEmail: session.user.email!,
-      action: "DELETE_COMPETITOR",
-      entityId: id,
-      ipAddress: getIpAddress(req),
-    });
+    },
+  });
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting competitor:", error);
-    return NextResponse.json(
-      { error: "Failed to delete competitor" },
-      { status: 500 },
-    );
-  }
+  await recordAuditLog({
+    tenantId,
+    userId: session.user.id,
+    userEmail: session.user.email!,
+    action: "DELETE_COMPETITOR",
+    entityId: id,
+    ipAddress: getIpAddress(req),
+  });
+
+  return NextResponse.json({ success: true });
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRateLimit(req, "read", withErrorHandling(handleGET));
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRateLimit(req, "write", withErrorHandling(handlePOST));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", handleDELETE);
+  return withRateLimit(req, "write", withErrorHandling(handleDELETE));
 }

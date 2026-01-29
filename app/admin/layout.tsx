@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Server,
   BarChart3,
+  Gauge,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -78,6 +79,7 @@ const adminMenuItems = [
     ],
   },
   { icon: Microscope, label: "Audit Search", href: "/admin/audit" },
+  { icon: Gauge, label: "Rate Limits", href: "/admin/rate-limits" },
   { icon: Settings2, label: "Business Setup", href: "/admin/business-setup" },
   {
     icon: Database,

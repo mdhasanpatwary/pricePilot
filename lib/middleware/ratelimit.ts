@@ -4,9 +4,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PlanType } from "@prisma/client";
-import { 
-  getPlanMultiplier, 
-  getEffectiveLimit, 
+import {
+  getPlanMultiplier,
+  getEffectiveLimit,
   RateLimiterType
 } from "@/lib/services/rate-limit-config";
 import { checkBypass, getCustomMultiplier } from "@/lib/services/rate-limit-admin";
@@ -80,15 +80,15 @@ export async function withRateLimit(
 
     // Get identifier for rate limiting (include plan info for better tracking)
     const baseIdentifier = getRateLimitIdentifier(req, userId);
-    const identifier = tenantId 
-      ? `${baseIdentifier}:tenant:${tenantId}:plan:${planType}` 
+    const identifier = tenantId
+      ? `${baseIdentifier}:tenant:${tenantId}:plan:${planType}`
       : baseIdentifier;
 
     // Get the appropriate rate limiter
     const limiter = rateLimiters[limiterType];
 
     // Calculate effective limit based on plan multiplier
-    const effectiveLimit = tenantId 
+    const effectiveLimit = tenantId
       ? getEffectiveLimit(limiterType as RateLimiterType, planType, effectiveMultiplier !== getPlanMultiplier(planType) ? effectiveMultiplier : null)
       : undefined;
 
@@ -97,8 +97,8 @@ export async function withRateLimit(
 
     // Adjust limit and remaining based on effective multiplier if tenant exists
     const adjustedLimit = effectiveLimit ?? limit;
-    const adjustedRemaining = effectiveLimit 
-      ? Math.floor(remaining * effectiveMultiplier) 
+    const adjustedRemaining = effectiveLimit
+      ? Math.floor(remaining * effectiveMultiplier)
       : remaining;
 
     if (!success) {
@@ -142,7 +142,7 @@ export async function withRateLimit(
     response.headers.set("X-RateLimit-Limit", adjustedLimit.toString());
     response.headers.set("X-RateLimit-Remaining", adjustedRemaining.toString());
     response.headers.set("X-RateLimit-Reset", reset.toString());
-    
+
     // Add plan information for debugging
     if (tenantId) {
       response.headers.set("X-RateLimit-Plan", planType);
@@ -158,9 +158,59 @@ export async function withRateLimit(
 }
 
 /**
- * Create enhanced rate limit response with limiter type information
+ * Create enhanced rate limit error response with limiter type information
+ * 
+ * This function generates a standardized HTTP 429 error response with:
+ * - JSON error body with limiter type for debugging
+ * - All required rate limit headers
+ * - Retry-After header for client retry logic
+ * - Request ID and timestamp for tracking
+ * 
+ * @param limit - Total requests allowed in the time window
+ * @param remaining - Remaining requests in current window (should be 0)
+ * @param reset - Unix timestamp (ms) when the limit resets
+ * @param limiterType - Type of limiter that was exceeded (for debugging)
+ * @returns NextResponse with 429 status, headers, and JSON error body
  * 
  * Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7
+ * 
+ * @example
+ * ```typescript
+ * if (!success) {
+ *   return createEnhancedRateLimitResponse(
+ *     adjustedLimit,
+ *     adjustedRemaining,
+ *     reset,
+ *     'write'
+ *   );
+ * }
+ * ```
+ * 
+ * Response format:
+ * ```json
+ * {
+ *   "success": false,
+ *   "error": {
+ *     "code": "RATE_LIMIT_EXCEEDED",
+ *     "message": "Rate limit exceeded. Please try again later.",
+ *     "details": {
+ *       "limiterType": "write",
+ *       "retryAfter": 45
+ *     }
+ *   },
+ *   "meta": {
+ *     "requestId": "uuid",
+ *     "timestamp": "ISO8601"
+ *   }
+ * }
+ * ```
+ * 
+ * Headers:
+ * - X-RateLimit-Limit: Total allowed requests
+ * - X-RateLimit-Remaining: Remaining requests (0)
+ * - X-RateLimit-Reset: Reset timestamp
+ * - Retry-After: Seconds to wait before retry
+ * - X-RateLimit-Type: Limiter type for debugging
  */
 function createEnhancedRateLimitResponse(
   limit: number,
@@ -201,7 +251,38 @@ function createEnhancedRateLimitResponse(
 }
 
 /**
- * Determine rate limiter type based on HTTP method and path
+ * Determine the appropriate rate limiter type based on HTTP method and path
+ * 
+ * This function automatically selects the correct rate limiter based on the
+ * endpoint's characteristics. It's useful for applying rate limiting without
+ * manually specifying the limiter type.
+ * 
+ * @param method - HTTP method (GET, POST, PUT, DELETE, PATCH)
+ * @param pathname - Request URL pathname
+ * @returns The appropriate rate limiter type key
+ * 
+ * Selection logic:
+ * - Auth endpoints (/auth/, /register) → 'auth' (5 req/15min)
+ * - Sync operations (/sync) → 'sync' (5 req/5min)
+ * - Import/Export (/import, /export) → 'importExport' (10 req/min)
+ * - Write methods (POST, PUT, DELETE, PATCH) → 'write' (30 req/min)
+ * - Read methods (GET) → 'read' (200 req/min)
+ * - Default → 'api' (100 req/min)
+ * 
+ * @example
+ * ```typescript
+ * // Auto-detect limiter type
+ * export async function POST(req: NextRequest) {
+ *   const limiterType = getRateLimiterType('POST', req.nextUrl.pathname);
+ *   return withRateLimit(req, limiterType, handler);
+ * }
+ * 
+ * // Examples:
+ * getRateLimiterType('POST', '/api/auth/login')      // Returns: 'auth'
+ * getRateLimiterType('POST', '/api/competitors/sync') // Returns: 'sync'
+ * getRateLimiterType('GET', '/api/products')          // Returns: 'read'
+ * getRateLimiterType('POST', '/api/products')         // Returns: 'write'
+ * ```
  */
 export function getRateLimiterType(method: string, pathname: string): keyof typeof rateLimiters {
   // Auth endpoints - strict rate limiting

@@ -26,7 +26,9 @@ export type AuditAction =
   | "USER_REGISTRATION"
   | "CHANGE_PASSWORD"
   | "PASSWORD_RESET_REQUESTED"
-  | "EMAIL_VERIFIED";
+  | "EMAIL_VERIFIED"
+  | "SECURITY_UNAUTHORIZED_ACCESS"
+  | "SECURITY_FORBIDDEN_ACCESS";
 
 interface AuditLogOptions {
   tenantId: string;

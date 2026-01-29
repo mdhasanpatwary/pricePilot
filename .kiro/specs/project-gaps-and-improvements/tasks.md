@@ -48,58 +48,58 @@
 - [ ] 4.5 Test price updates with real Laravel instance (Test price updates with real Laravel instance)
 
 ### 5. Security - API Token Encryption
-- [ ] 5.1 Create lib/security.ts with encryption functions
-- [ ] 5.2 Add ENCRYPTION_KEY to environment variables
-- [ ] 5.3 Create encryption middleware
-- [ ] 5.4 Update Site model to use encrypted tokens
-- [ ] 5.5 Migrate existing tokens to encrypted format
-- [ ] 5.6 Test encryption/decryption
+- [x] 5.1 Create lib/security.ts with encryption functions
+- [x] 5.2 Add ENCRYPTION_KEY to environment variables
+- [x] 5.3 Create encryption middleware
+- [x] 5.4 Update Site model to use encrypted tokens
+- [x] 5.5 Migrate existing tokens to encrypted format
+- [x] 5.6 Test encryption/decryption
 
 ### 6. Security - Rate Limiting
-- [ ] 6.1 Set up Upstash Redis for rate limiting
-- [ ] 6.2 Create lib/middleware/ratelimit.ts
-- [ ] 6.3 Implement rate limiters for different user types
-- [ ] 6.4 Add rate limiting to all API routes
-- [ ] 6.5 Add rate limit headers to responses
-- [ ] 6.6 Test rate limiting enforcement
+- [x] 6.1 Set up Upstash Redis for rate limiting
+- [x] 6.2 Create lib/middleware/ratelimit.ts
+- [x] 6.3 Implement rate limiters for different user types
+- [x] 6.4 Add rate limiting to all API routes
+- [x] 6.5 Add rate limit headers to responses
+- [x] 6.6 Test rate limiting enforcement
 
 ### 7. Security - Input Validation
-- [ ] 7.1 Create lib/validation/middleware.ts
-- [ ] 7.2 Add validation schemas for all API endpoints
-- [ ] 7.3 Implement validateRequest middleware
-- [ ] 7.4 Add validation to all POST/PUT/PATCH endpoints
-- [ ] 7.5 Add XSS prevention with DOMPurify
-- [ ] 7.6 Test validation with malicious inputs
+- [x] 7.1 Create lib/validation/middleware.ts
+- [x] 7.2 Add validation schemas for all API endpoints
+- [x] 7.3 Implement validateRequest middleware
+- [x] 7.4 Add validation to all POST/PUT/PATCH endpoints
+- [x] 7.5 Add XSS prevention with DOMPurify
+- [x] 7.6 Test validation with malicious inputs
 
 ---
 
 ## Phase 2: Core Functionality (Week 2)
 
 ### 8. Error Handling Enhancement
-- [ ] 8.1 Create lib/utils/error-handler.ts with custom error classes
-- [ ] 8.2 Create AppError, ValidationError, NotFoundError classes
-- [ ] 8.3 Create global error handler middleware
-- [ ] 8.4 Add error handling to SyncService
-- [ ] 8.5 Add error handling to ScraperService
-- [ ] 8.6 Add error handling to RulesEngine
-- [ ] 8.7 Add error handling to MatchingService
-- [ ] 8.8 Add user-friendly error messages
-- [ ] 8.9 Add error logging with context
-- [ ] 8.10 Test error handling
+- [x] 8.1 Create lib/utils/error-handler.ts with custom error classes
+- [x] 8.2 Create AppError, ValidationError, NotFoundError classes
+- [x] 8.3 Create global error handler middleware
+- [x] 8.4 Add error handling to SyncService
+- [x] 8.5 Add error handling to ScraperService
+- [x] 8.6 Add error handling to RulesEngine
+- [x] 8.7 Add error handling to MatchingService
+- [x] 8.8 Add user-friendly error messages
+- [x] 8.9 Add error logging with context
+- [x] 8.10 Test error handling
 
 ### 9. Performance - Database Optimization
-- [ ] 9.1 Audit all database queries for N+1 problems
-- [ ] 9.2 Create migration for missing indexes
-  - [ ] 9.2.1 Add idx_product_tenant_site
-  - [ ] 9.2.2 Add idx_product_external_id
-  - [ ] 9.2.3 Add idx_product_updated_at
-  - [ ] 9.2.4 Add idx_match_user_product
-  - [ ] 9.2.5 Add idx_match_competitor_product
-  - [ ] 9.2.6 Add idx_price_history_product_date
-  - [ ] 9.2.7 Add idx_site_tenant_type
-  - [ ] 9.2.8 Add idx_notification_tenant_read
-- [ ] 9.3 Optimize Prisma queries with proper includes
-- [ ] 9.4 Test query performance improvements
+- [x] 9.1 Audit all database queries for N+1 problems
+- [x] 9.2 Create migration for missing indexes
+  - [x] 9.2.1 Add idx_product_tenant_site
+  - [x] 9.2.2 Add idx_product_external_id
+  - [x] 9.2.3 Add idx_product_updated_at
+  - [x] 9.2.4 Add idx_match_user_product
+  - [x] 9.2.5 Add idx_match_competitor_product
+  - [x] 9.2.6 Add idx_price_history_product_date
+  - [x] 9.2.7 Add idx_site_tenant_type
+  - [x] 9.2.8 Add idx_notification_tenant_read
+- [x] 9.3 Optimize Prisma queries with proper includes
+- [x] 9.4 Test query performance improvements
 
 ### 10. Performance - Caching
 - [ ] 10.1 Set up Upstash Redis for caching
@@ -160,30 +160,64 @@
 - [ ] 15.6 Add delegation notification emails
 - [ ] 15.7 Test delegation workflow
 
-### 16. Test Coverage - Essential Tests Only
-- [ ] 16.1 Create __tests__/lib/services/core-business-logic.test.ts
-- [ ] 16.2 Write Test #1: Product Matching - SKU Match
-- [ ] 16.3 Write Test #2: Product Matching - Brand/Model Match
-- [ ] 16.4 Write Test #3: Pricing Rules - Undercut Strategy
-- [ ] 16.5 Write Test #4: Pricing Rules - Margin Lock
-- [ ] 16.6 Write Test #5: Price Updates - OpenCart
-- [ ] 16.7 Write Test #6: Price Updates - Laravel
-- [ ] 16.8 Write Test #7: Product Sync - OpenCart
-- [ ] 16.9 Write Test #8: Product Sync - Laravel
-- [ ] 16.10 Write Test #9: Scraper - Product Extraction
-- [ ] 16.11 Write Test #10: Scraper - Challenge Detection
-- [ ] 16.12 Write Test #11: Price Approval - Create Pending Change
-- [ ] 16.13 Write Test #12: Price Approval - Approve Change
-- [ ] 16.14 Write Test #13: Rollback - Single Price Change
-- [ ] 16.15 Write Test #14: Rollback - Bulk Operation
-- [ ] 16.16 Write Test #15: Authentication - Login
-- [ ] 16.17 Write Test #16: Authorization - Tenant Isolation
-- [ ] 16.18 Write Test #17: Rate Limiting
-- [ ] 16.19 Write Test #18: Input Validation
-- [ ] 16.20 Write Test #19: Error Handling
-- [ ] 16.21 Write Test #20: Caching
-- [ ] 16.22 Remove all non-essential test files
-- [ ] 16.23 Verify 100% coverage of critical paths
+### 16. Test Suite Cleanup - Reduce to Core Business Logic Only
+- [x] 16.1 Analyze and categorize all existing tests
+  - [x] 16.1.1 Identify core business logic tests (keep)
+  - [x] 16.1.2 Identify duplicate tests (remove)
+  - [x] 16.1.3 Identify site-specific/selector tests (remove)
+  - [x] 16.1.4 Identify low-value/happy-path-only tests (remove)
+  - [x] 16.1.5 Identify third-party library validation tests (remove)
+  - [x] 16.1.6 Identify UI/snapshot tests (remove)
+  - [x] 16.1.7 Identify tests with real HTTP/DB dependencies (evaluate)
+- [x] 16.2 Core Scraping Engine Tests (KEEP)
+  - [x] 16.2.1 Scraper - Product extraction with mocked HTML
+  - [x] 16.2.2 Scraper - Challenge detection logic
+  - [x] 16.2.3 Scraper - HTML parsing edge cases
+  - [x] 16.2.4 Scraper - Data normalization (price, currency, stock)
+  - [x] 16.2.5 Scraper - Deduplication logic
+- [x] 16.3 Retry & Rate Limiting Tests (KEEP)
+  - [x] 16.3.1 Retry strategy - exponential backoff
+  - [x] 16.3.2 Retry queue - failure classification
+  - [x] 16.3.3 Rate limiter - enforcement logic
+  - [x] 16.3.4 Timeout handling - critical edge cases
+- [x] 16.4 Proxy & Rotation Tests (KEEP)
+  - [x] 16.4.1 Proxy manager - rotation logic
+  - [x] 16.4.2 Proxy manager - failure detection
+  - [x] 16.4.3 Proxy manager - health tracking
+- [x] 16.5 Product Matching Tests (KEEP)
+  - [x] 16.5.1 Matching - SKU exact match
+  - [x] 16.5.2 Matching - Brand + model match
+  - [x] 16.5.3 Matching - Fuzzy title match edge cases
+  - [x] 16.5.4 Matching - Confidence scoring
+- [x] 16.6 Pricing Rules Tests (KEEP)
+  - [x] 16.6.1 Rules engine - undercut strategy
+  - [x] 16.6.2 Rules engine - margin lock
+  - [x] 16.6.3 Rules engine - min/max constraints
+  - [x] 16.6.4 Rules engine - edge cases (zero, negative, null)
+- [x] 16.7 Price Update Tests (KEEP)
+  - [x] 16.7.1 Price updates - OpenCart API integration
+  - [x] 16.7.2 Price updates - Laravel API integration
+  - [x] 16.7.3 Price updates - validation logic
+  - [x] 16.7.4 Price updates - error handling
+- [x] 16.8 Authentication & Authorization Tests (KEEP)
+  - [x] 16.8.1 Auth - tenant isolation enforcement
+  - [x] 16.8.2 Auth - API token validation
+  - [x] 16.8.3 Auth - role-based access control
+- [x] 16.9 Delete Non-Core Tests
+  - [x] 16.9.1 Remove website-specific selector tests
+  - [x] 16.9.2 Remove duplicate happy-path tests
+  - [x] 16.9.3 Remove UI component snapshot tests
+  - [x] 16.9.4 Remove third-party library validation tests
+  - [x] 16.9.5 Remove tests with unstable external dependencies
+  - [x] 16.9.6 Remove low-value integration tests
+- [x] 16.10 Verify Final Test Suite
+  - [x] 16.10.1 Ensure test count is 30-50 (hard limit)
+  - [x] 16.10.2 Ensure test runtime is under 1 minute
+  - [x] 16.10.3 Ensure all core business logic is covered
+  - [x] 16.10.4 Document kept tests with reasons
+  - [x] 16.10.5 Document removed tests grouped by reason
+  - [x] 16.10.6 Fix any real issues in remaining tests
+  - [x] 16.10.7 Update test documentation
 
 ### 17. API Documentation
 - [ ] 17.1 Update public/openapi.json with all endpoints

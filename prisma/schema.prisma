@@ -7,94 +7,94 @@ datasource db {
 }
 
 model Tenant {
-  id              String        @id @default(uuid())
-  companyName     String
-  planType        PlanType      @default(BASIC)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  competitorLimit Int           @default(3)
-  storeLimit      Int           @default(1)
-  currency        String        @default("USD")
-  slackEnabled    Boolean       @default(false)
-  slackWebhookUrl String?
-  pricingRules    PricingRule[]
-  products        Product[]
-  sites           Site[]
-  users           User[]
-  webhooks        Webhook[]
-  auditLogs       TenantAuditLog[]
-  notifications   Notification[]
-  alertRules      AlertRule[]
-  apiKeys         ApiKey[]
-  bulkSnapshots   BulkOperationSnapshot[]
-  backupConfig    Json?         // Stores Google Drive links, etc.
-  scrapeRetries   ScrapeRetry[]
-  categories      Category[]
-  brands          Brand[]
-  pendingPriceChanges PendingPriceChange[]
-  rateLimitMetrics RateLimitMetric[]
-  rateLimitBypasses RateLimitBypass[]
+  id                        String                     @id @default(uuid())
+  companyName               String
+  planType                  PlanType                   @default(BASIC)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  competitorLimit           Int                        @default(3)
+  storeLimit                Int                        @default(1)
+  currency                  String                     @default("USD")
+  slackEnabled              Boolean                    @default(false)
+  slackWebhookUrl           String?
+  pricingRules              PricingRule[]
+  products                  Product[]
+  sites                     Site[]
+  users                     User[]
+  webhooks                  Webhook[]
+  auditLogs                 TenantAuditLog[]
+  notifications             Notification[]
+  alertRules                AlertRule[]
+  apiKeys                   ApiKey[]
+  bulkSnapshots             BulkOperationSnapshot[]
+  backupConfig              Json? // Stores Google Drive links, etc.
+  scrapeRetries             ScrapeRetry[]
+  categories                Category[]
+  brands                    Brand[]
+  pendingPriceChanges       PendingPriceChange[]
+  rateLimitMetrics          RateLimitMetric[]
+  rateLimitBypasses         RateLimitBypass[]
   rateLimitCustomMultiplier RateLimitCustomMultiplier?
 }
 
 model Category {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   tenantId    String
   name        String
   slug        String
   description String?
   parentId    String?
-  level       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children    Category[] @relation("CategoryHierarchy")
-  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  products    Product[]
+  level       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, parentId])
 }
 
 model Brand {
-  id          String    @id @default(uuid())
-  tenantId    String
-  name        String
-  slug        String
-  aliases     String[]  // Alternate names e.g., ["HP", "Hewlett Packard"]
-  logoUrl     String?
-  website     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  slug      String
+  aliases   String[] // Alternate names e.g., ["HP", "Hewlett Packard"]
+  logoUrl   String?
+  website   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  products    Product[]
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
 
   @@unique([tenantId, slug])
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  name         String?
-  passwordHash String
-  role         Role     @default(ADMIN)
-  tenantId     String
-  emailNotifications Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt         DateTime          @updatedAt
-  passwordUpdatedAt DateTime          @default(now())
-  emailVerified     DateTime?
-  verificationToken String?
-  resetToken        String?
-  resetTokenExpires DateTime?
-  isSuperAdmin      Boolean           @default(false)
-  tenant            Tenant            @relation(fields: [tenantId], references: [id])
-  passwordHistory   PasswordHistory[]
-  accounts          Account[]
-  sessions          Session[]
-  apiKeys           ApiKey[]
+  id                 String            @id @default(uuid())
+  email              String            @unique
+  name               String?
+  passwordHash       String
+  role               Role              @default(ADMIN)
+  tenantId           String
+  emailNotifications Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  passwordUpdatedAt  DateTime          @default(now())
+  emailVerified      DateTime?
+  verificationToken  String?
+  resetToken         String?
+  resetTokenExpires  DateTime?
+  isSuperAdmin       Boolean           @default(false)
+  tenant             Tenant            @relation(fields: [tenantId], references: [id])
+  passwordHistory    PasswordHistory[]
+  accounts           Account[]
+  sessions           Session[]
+  apiKeys            ApiKey[]
 }
 
 model Account {
@@ -138,28 +138,28 @@ model PasswordHistory {
 }
 
 model Site {
-  id             String       @id @default(uuid())
-  tenantId       String
-  type           SiteType
-  platform       PlatformType @default(GENERIC)
-  baseUrl        String
-  apiToken       String?
-  lastSyncAt     DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  isSyncing      Boolean      @default(false)
-  syncProcessed  Int          @default(0)
-  syncStartedAt  DateTime?
-  syncTotal      Int          @default(0)
-  syncLastAction        String?
-  isAdvancedProtected   Boolean      @default(false)
-  lastSecurityBlockAt   DateTime?
-  currency              String       @default("USD")
-  searchQueryPattern    String?     
-  products       Product[]
-  tenant         Tenant       @relation(fields: [tenantId], references: [id])
-  syncLogs       SyncLog[]
-  scrapeRetries  ScrapeRetry[]
+  id                  String        @id @default(uuid())
+  tenantId            String
+  type                SiteType
+  platform            PlatformType  @default(GENERIC)
+  baseUrl             String
+  apiToken            String?
+  lastSyncAt          DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  isSyncing           Boolean       @default(false)
+  syncProcessed       Int           @default(0)
+  syncStartedAt       DateTime?
+  syncTotal           Int           @default(0)
+  syncLastAction      String?
+  isAdvancedProtected Boolean       @default(false)
+  lastSecurityBlockAt DateTime?
+  currency            String        @default("USD")
+  searchQueryPattern  String?
+  products            Product[]
+  tenant              Tenant        @relation(fields: [tenantId], references: [id])
+  syncLogs            SyncLog[]
+  scrapeRetries       ScrapeRetry[]
 }
 
 model SyncLog {
@@ -171,45 +171,44 @@ model SyncLog {
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
-
 model Product {
-  id                  String           @id @default(uuid())
-  siteId              String
-  tenantId            String
-  externalId          String?
-  sku                 String?
-  url                 String?
-  title               String
-  
+  id         String  @id @default(uuid())
+  siteId     String
+  tenantId   String
+  externalId String?
+  sku        String?
+  url        String?
+  title      String
+
   // Normalized relations
-  brandId             String?
-  categoryId          String?
-  
+  brandId    String?
+  categoryId String?
+
   // Legacy string fields (kept for backward compat or raw data)
-  brand               String?
-  model               String?
-  category            String?
-  
-  currentPrice        Decimal          @db.Decimal(10, 2)
-  currency            String           @default("USD")
-  lastCrawledAt       DateTime?
-  inStock             Boolean          @default(true)
-  stockLevel          Int?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  imageUrl            String?
-  specifications      Json?
-  
-  priceHistory        PriceHistory[]
-  updateLogs          PriceUpdateLog[]
-  site                Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  tenant              Tenant           @relation(fields: [tenantId], references: [id])
-  
-  normBrand           Brand?           @relation(fields: [brandId], references: [id])
-  normCategory        Category?        @relation(fields: [categoryId], references: [id])
-  
-  matchesAsCompetitor ProductMatch[]   @relation("CompetitorProduct")
-  matchesAsUser       ProductMatch[]   @relation("UserProduct")
+  brand    String?
+  model    String?
+  category String?
+
+  currentPrice   Decimal   @db.Decimal(10, 2)
+  currency       String    @default("USD")
+  lastCrawledAt  DateTime?
+  inStock        Boolean   @default(true)
+  stockLevel     Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  imageUrl       String?
+  specifications Json?
+
+  priceHistory PriceHistory[]
+  updateLogs   PriceUpdateLog[]
+  site         Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+
+  normBrand    Brand?    @relation(fields: [brandId], references: [id])
+  normCategory Category? @relation(fields: [categoryId], references: [id])
+
+  matchesAsCompetitor ProductMatch[]       @relation("CompetitorProduct")
+  matchesAsUser       ProductMatch[]       @relation("UserProduct")
   scrapeRetries       ScrapeRetry[]
   pendingPriceChanges PendingPriceChange[]
 
@@ -223,15 +222,15 @@ model Product {
 }
 
 model ProductMatch {
-  id                  String    @id @default(uuid())
+  id                  String      @id @default(uuid())
   userProductId       String
   competitorProductId String
   matchType           MatchType   @default(AUTO_SKU)
   confidenceScore     Decimal     @db.Decimal(5, 2)
   status              MatchStatus @default(PENDING)
   createdAt           DateTime    @default(now())
-  competitorProduct   Product   @relation("CompetitorProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
-  userProduct         Product   @relation("UserProduct", fields: [userProductId], references: [id], onDelete: Cascade)
+  competitorProduct   Product     @relation("CompetitorProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
+  userProduct         Product     @relation("UserProduct", fields: [userProductId], references: [id], onDelete: Cascade)
 }
 
 model PriceHistory {
@@ -296,10 +295,10 @@ model SystemConfig {
 model Notification {
   id        String   @id @default(uuid())
   tenantId  String
-  type      String   // e.g., "SYNC_SUCCESS", "SYNC_ERROR", "PRICE_ALERT", "SYSTEM"
+  type      String // e.g., "SYNC_SUCCESS", "SYNC_ERROR", "PRICE_ALERT", "SYSTEM"
   title     String
   message   String
-  link      String?  // Optional link to relevant dashboard page
+  link      String? // Optional link to relevant dashboard page
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
@@ -313,9 +312,9 @@ model TenantAuditLog {
   tenantId  String
   userId    String
   userEmail String
-  action    String   // e.g., "APPROVE_MATCH", "REJECT_MATCH"
-  entityId  String   // e.g., the match ID
-  details   String?  // JSON string for extra info
+  action    String // e.g., "APPROVE_MATCH", "REJECT_MATCH"
+  entityId  String // e.g., the match ID
+  details   String? // JSON string for extra info
   ipAddress String?
   createdAt DateTime @default(now())
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
@@ -384,16 +383,16 @@ enum MatchStatus {
 }
 
 model BulkOperationSnapshot {
-  id           String   @id @default(uuid())
-  tenantId     String
-  operation    String   // BULK_UPDATE, BULK_DELETE, etc.
-  productCount Int
-  snapshot     String   @db.Text // JSON snapshot of original data
-  changes      String   @db.Text // JSON of what changed
-  rolledBack   Boolean  @default(false)
+  id             String   @id @default(uuid())
+  tenantId       String
+  operation      String // BULK_UPDATE, BULK_DELETE, etc.
+  productCount   Int
+  snapshot       String   @db.Text // JSON snapshot of original data
+  changes        String   @db.Text // JSON of what changed
+  rolledBack     Boolean  @default(false)
   idempotencyKey String?
-  createdAt    DateTime @default(now())
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([createdAt])
@@ -407,7 +406,7 @@ model AlertRule {
   description String?
   type        AlertRuleType  @default(PRICE_CHANGE)
   target      AlertTarget    @default(ALL_PRODUCTS)
-  targetId    String?        // ID of product or category
+  targetId    String? // ID of product or category
   condition   AlertCondition @default(LESS_THAN)
   value       Decimal        @db.Decimal(10, 2)
   isActive    Boolean        @default(true)
@@ -439,39 +438,39 @@ enum AlertCondition {
 }
 
 model ApiKey {
-  id        String   @id @default(uuid())
-  name      String
-  key       String   @unique
-  prefix    String
-  userId    String
-  tenantId  String
+  id         String    @id @default(uuid())
+  name       String
+  key        String    @unique
+  prefix     String
+  userId     String
+  tenantId   String
   lastUsedAt DateTime?
   expiresAt  DateTime?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tenantId])
 }
 
 model ScrapeRetry {
-  id              String   @id @default(uuid())
-  tenantId        String
-  siteId          String
-  userProductId   String
-  retryCount      Int      @default(0)
-  nextAttemptAt   DateTime
-  lastAttemptAt   DateTime?
-  status          String   @default("PENDING") // PENDING, SUCCESS, FAILED
-  reason          String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String    @id @default(uuid())
+  tenantId      String
+  siteId        String
+  userProductId String
+  retryCount    Int       @default(0)
+  nextAttemptAt DateTime
+  lastAttemptAt DateTime?
+  status        String    @default("PENDING") // PENDING, SUCCESS, FAILED
+  reason        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  userProduct   Product  @relation(fields: [userProductId], references: [id], onDelete: Cascade)
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site        Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  userProduct Product @relation(fields: [userProductId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([siteId])
@@ -479,30 +478,30 @@ model ScrapeRetry {
 }
 
 model ScrapingMetrics {
-  id                  String   @id @default(uuid())
-  site                String
-  timestamp           DateTime @default(now())
-  totalRequests       Int
-  successfulRequests  Int
-  blockedRequests     Int
-  challengedRequests  Int
-  successRate         Float
-  blockRate           Float
-  avgResponseTime     Float
-  
+  id                 String   @id @default(uuid())
+  site               String
+  timestamp          DateTime @default(now())
+  totalRequests      Int
+  successfulRequests Int
+  blockedRequests    Int
+  challengedRequests Int
+  successRate        Float
+  blockRate          Float
+  avgResponseTime    Float
+
   @@index([site, timestamp])
 }
 
 model ProxyMetrics {
-  id                  String   @id @default(uuid())
-  proxy               String
-  timestamp           DateTime @default(now())
-  totalRequests       Int
-  successfulRequests  Int
-  failedRequests      Int
-  avgResponseTime     Float
-  successRate         Float
-  
+  id                 String   @id @default(uuid())
+  proxy              String
+  timestamp          DateTime @default(now())
+  totalRequests      Int
+  successfulRequests Int
+  failedRequests     Int
+  avgResponseTime    Float
+  successRate        Float
+
   @@index([proxy, timestamp])
 }
 
@@ -516,133 +515,133 @@ model ProxyHealth {
   avgResponseTime Float    @default(0)
   lastChecked     DateTime @default(now())
   lastSuccess     DateTime @default(now())
-  
+
   @@index([isHealthy])
 }
 
 model ChallengeAttempt {
-  id              String   @id @default(uuid())
-  site            String
-  challengeType   String   // e.g., "Cloudflare", "reCAPTCHA", "Turnstile", "PerimeterX", "DataDome"
-  solved          Boolean
-  duration        Int      // Duration in milliseconds
-  timestamp       DateTime @default(now())
-  
+  id            String   @id @default(uuid())
+  site          String
+  challengeType String // e.g., "Cloudflare", "reCAPTCHA", "Turnstile", "PerimeterX", "DataDome"
+  solved        Boolean
+  duration      Int // Duration in milliseconds
+  timestamp     DateTime @default(now())
+
   @@index([site, timestamp])
   @@index([challengeType, timestamp])
 }
 
 model SiteProfile {
-  id                    String   @id @default(uuid())
-  domain                String   @unique
-  requestsPerMinute     Int      @default(10)
-  concurrentRequests    Int      @default(2)
-  minDelay              Int      @default(1000)
-  maxDelay              Int      @default(3000)
-  delayMultiplier       Float    @default(1.0)
-  sessionWarmupEnabled  Boolean  @default(false)
-  sessionWarmupPaths    String[] @default([])
-  referrerChainEnabled  Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
+  id                   String   @id @default(uuid())
+  domain               String   @unique
+  requestsPerMinute    Int      @default(10)
+  concurrentRequests   Int      @default(2)
+  minDelay             Int      @default(1000)
+  maxDelay             Int      @default(3000)
+  delayMultiplier      Float    @default(1.0)
+  sessionWarmupEnabled Boolean  @default(false)
+  sessionWarmupPaths   String[] @default([])
+  referrerChainEnabled Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
   @@index([domain])
 }
 
 model Alert {
-  id              String    @id @default(uuid())
-  severity        String    // 'critical', 'warning', 'info'
-  type            String    // 'high_block_rate', 'proxy_failure', 'low_solve_rate'
-  message         String
-  site            String?
-  proxyUrl        String?
-  acknowledged    Boolean   @default(false)
-  acknowledgedAt  DateTime?
-  createdAt       DateTime  @default(now())
-  
+  id             String    @id @default(uuid())
+  severity       String // 'critical', 'warning', 'info'
+  type           String // 'high_block_rate', 'proxy_failure', 'low_solve_rate'
+  message        String
+  site           String?
+  proxyUrl       String?
+  acknowledged   Boolean   @default(false)
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+
   @@index([acknowledged, createdAt])
   @@index([severity])
 }
 
 model HumanSimulationConfig {
-  id                      String   @id @default(uuid())
-  typingMinDelay          Int      @default(50)
-  typingMaxDelay          Int      @default(150)
-  actionPauseMin          Int      @default(100)
-  actionPauseMax          Int      @default(2000)
-  mouseMovementEnabled    Boolean  @default(true)
-  naturalCurvesEnabled    Boolean  @default(true)
-  pauseBetweenFields      Int      @default(500)
-  simulateCorrections     Boolean  @default(true)
-  updatedAt               DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  typingMinDelay       Int      @default(50)
+  typingMaxDelay       Int      @default(150)
+  actionPauseMin       Int      @default(100)
+  actionPauseMax       Int      @default(2000)
+  mouseMovementEnabled Boolean  @default(true)
+  naturalCurvesEnabled Boolean  @default(true)
+  pauseBetweenFields   Int      @default(500)
+  simulateCorrections  Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
 }
 
 model CaptchaSolveAttempt {
-  id              String   @id @default(uuid())
-  site            String
-  captchaType     String   // 'recaptcha_v2', 'recaptcha_v3', 'hcaptcha', 'turnstile'
-  success         Boolean
-  solveTime       Int      // milliseconds
-  cost            Float    // credits used
-  errorMessage    String?
-  timestamp       DateTime @default(now())
-  
+  id           String   @id @default(uuid())
+  site         String
+  captchaType  String // 'recaptcha_v2', 'recaptcha_v3', 'hcaptcha', 'turnstile'
+  success      Boolean
+  solveTime    Int // milliseconds
+  cost         Float // credits used
+  errorMessage String?
+  timestamp    DateTime @default(now())
+
   @@index([site, timestamp])
   @@index([captchaType, timestamp])
 }
 
 model RetryQueue {
-  id              String   @id @default(uuid())
-  tenantId        String
-  siteId          String
-  productId       String
-  url             String
-  retryCount      Int      @default(0)
-  maxRetries      Int      @default(4)
-  nextRetryAt     DateTime
-  lastAttemptAt   DateTime?
-  lastError       String?
-  status          String   @default("PENDING") // PENDING, IN_PROGRESS, SUCCESS, FAILED
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  id            String    @id @default(uuid())
+  tenantId      String
+  siteId        String
+  productId     String
+  url           String
+  retryCount    Int       @default(0)
+  maxRetries    Int       @default(4)
+  nextRetryAt   DateTime
+  lastAttemptAt DateTime?
+  lastError     String?
+  status        String    @default("PENDING") // PENDING, IN_PROGRESS, SUCCESS, FAILED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
   @@index([status, nextRetryAt])
   @@index([tenantId, siteId])
 }
 
 model ConcurrencyState {
-  id                  String   @id @default(uuid())
-  site                String   @unique
-  currentConcurrency  Int      @default(3)
-  activeRequests      Int      @default(0)
-  lastAdjustedAt      DateTime @default(now())
-  adjustmentReason    String?
-  
+  id                 String   @id @default(uuid())
+  site               String   @unique
+  currentConcurrency Int      @default(3)
+  activeRequests     Int      @default(0)
+  lastAdjustedAt     DateTime @default(now())
+  adjustmentReason   String?
+
   @@index([site])
 }
 
 model ScrapingSession {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  tenantName          String
-  siteUrl             String
-  targetUrl           String
-  status              String   // 'initializing', 'running', 'waiting_challenge', 'completed', 'failed'
-  currentStage        String   // 'proxy_selection', 'navigation', 'challenge_detection', 'challenge_solving', 'data_extraction', 'validation'
-  proxyUsed           String?
-  userAgent           String?
-  requestsCompleted   Int      @default(0)
-  requestsTotal       Int      @default(0)
-  challengeType       String?
-  challengeStatus     String?  // 'waiting', 'solving', 'solved', 'failed'
-  extractedData       Json?
-  errors              Json?    // Array of error objects
-  metrics             Json?    // Session metrics object
-  startTime           DateTime @default(now())
-  endTime             DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  
+  id                String    @id @default(uuid())
+  tenantId          String
+  tenantName        String
+  siteUrl           String
+  targetUrl         String
+  status            String // 'initializing', 'running', 'waiting_challenge', 'completed', 'failed'
+  currentStage      String // 'proxy_selection', 'navigation', 'challenge_detection', 'challenge_solving', 'data_extraction', 'validation'
+  proxyUsed         String?
+  userAgent         String?
+  requestsCompleted Int       @default(0)
+  requestsTotal     Int       @default(0)
+  challengeType     String?
+  challengeStatus   String? // 'waiting', 'solving', 'solved', 'failed'
+  extractedData     Json?
+  errors            Json? // Array of error objects
+  metrics           Json? // Session metrics object
+  startTime         DateTime  @default(now())
+  endTime           DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
   @@index([tenantId])
   @@index([status])
   @@index([startTime])
@@ -650,53 +649,53 @@ model ScrapingSession {
 
 model SimulationResult {
   id              String   @id @default(uuid())
-  scenario        String   // 'rotation', 'failure', 'exclusion', 'prioritization', 'recovery', 'cascading_failure', 'all_fail', 'single_success', 'intermittent'
-  config          Json     // Simulation configuration
-  requests        Json     // Array of request results
-  summary         Json     // Summary statistics
-  recommendations Json?    // Array of recommendation strings
+  scenario        String // 'rotation', 'failure', 'exclusion', 'prioritization', 'recovery', 'cascading_failure', 'all_fail', 'single_success', 'intermittent'
+  config          Json // Simulation configuration
+  requests        Json // Array of request results
+  summary         Json // Summary statistics
+  recommendations Json? // Array of recommendation strings
   startTime       DateTime
   endTime         DateTime
   createdAt       DateTime @default(now())
-  
+
   @@index([scenario])
   @@index([createdAt])
 }
 
 model SystemAlert {
-  id              String    @id @default(uuid())
-  alertType       String    // Type of alert
-  severity        String    // 'critical', 'warning', 'info'
-  title           String
-  message         String    @db.Text
-  context         Json?     // Additional context data
-  acknowledged    Boolean   @default(false)
-  acknowledgedAt  DateTime?
-  acknowledgedBy  String?
-  createdAt       DateTime  @default(now())
-  
+  id             String    @id @default(uuid())
+  alertType      String // Type of alert
+  severity       String // 'critical', 'warning', 'info'
+  title          String
+  message        String    @db.Text
+  context        Json? // Additional context data
+  acknowledged   Boolean   @default(false)
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  createdAt      DateTime  @default(now())
+
   @@index([acknowledged])
   @@index([createdAt])
   @@index([severity])
 }
 
 model PendingPriceChange {
-  id                String         @id @default(uuid())
-  productId         String
-  tenantId          String
-  currentPrice      Decimal        @db.Decimal(10, 2)
-  recommendedPrice  Decimal        @db.Decimal(10, 2)
-  reason            String
-  appliedRule       String?
-  status            ApprovalStatus @default(PENDING)
-  createdAt         DateTime       @default(now())
-  reviewedAt        DateTime?
-  reviewedBy        String?
-  expiresAt         DateTime
-  
-  product           Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  
+  id               String         @id @default(uuid())
+  productId        String
+  tenantId         String
+  currentPrice     Decimal        @db.Decimal(10, 2)
+  recommendedPrice Decimal        @db.Decimal(10, 2)
+  reason           String
+  appliedRule      String?
+  status           ApprovalStatus @default(PENDING)
+  createdAt        DateTime       @default(now())
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  expiresAt        DateTime
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId, status])
   @@index([productId])
   @@index([expiresAt])
@@ -709,37 +708,36 @@ enum ApprovalStatus {
   EXPIRED
 }
 
-
 // Rate Limiting Models
 
 model RateLimitMetric {
   id             String   @id @default(uuid())
   tenantId       String
-  limiterType    String   // 'auth', 'api', 'read', 'write', 'sync', 'importExport'
-  identifier     String   // 'user:xxx' or 'ip:xxx'
-  endpoint       String   // API route path
+  limiterType    String // 'auth', 'api', 'read', 'write', 'sync', 'importExport'
+  identifier     String // 'user:xxx' or 'ip:xxx'
+  endpoint       String // API route path
   hitCount       Int      @default(0)
   violationCount Int      @default(0)
   timestamp      DateTime @default(now())
-  
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId, timestamp])
   @@index([limiterType, timestamp])
   @@index([tenantId, limiterType, timestamp])
 }
 
 model RateLimitBypass {
-  id         String   @id @default(uuid())
-  tenantId   String
-  setBy      String   // Admin user ID
-  reason     String
-  expiresAt  DateTime
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(uuid())
+  tenantId  String
+  setBy     String // Admin user ID
+  reason    String
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId, isActive, expiresAt])
 }
 
@@ -747,12 +745,61 @@ model RateLimitCustomMultiplier {
   id         String   @id @default(uuid())
   tenantId   String   @unique
   multiplier Float
-  setBy      String   // Admin user ID
+  setBy      String // Admin user ID
   reason     String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId])
+}
+
+// Database Optimization Models
+
+model SlowQuery {
+  id               String   @id @default(uuid())
+  queryFingerprint String
+  queryText        String   @db.Text
+  executionTimeMs  Int
+  affectedRows     Int?
+  tenantId         String?
+  executionPlan    String?  @db.Text
+  params           Json?
+  createdAt        DateTime @default(now())
+
+  @@index([queryFingerprint])
+  @@index([executionTimeMs])
+  @@index([createdAt])
+}
+
+model QueryPerformanceMetric {
+  id                 String   @id @default(uuid())
+  queryFingerprint   String
+  date               DateTime @db.Date
+  executionCount     Int
+  avgExecutionTimeMs Decimal  @db.Decimal(10, 2)
+  maxExecutionTimeMs Int
+  minExecutionTimeMs Int
+  p95ExecutionTimeMs Int
+  totalRowsAffected  BigInt?
+  createdAt          DateTime @default(now())
+
+  @@unique([queryFingerprint, date])
+  @@index([queryFingerprint, date])
+}
+
+model IndexRecommendation {
+  id              String    @id @default(uuid())
+  tableName       String
+  columns         String[]
+  reason          String    @db.Text
+  estimatedImpact String // 'high', 'medium', 'low'
+  createStatement String    @db.Text
+  status          String    @default("pending") // 'pending', 'applied', 'rejected'
+  createdAt       DateTime  @default(now())
+  appliedAt       DateTime?
+
+  @@index([status])
+  @@index([tableName])
 }
