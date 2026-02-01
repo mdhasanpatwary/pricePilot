@@ -9,6 +9,7 @@ import {
   matchApprovalSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { CacheInvalidationService } from "@/lib/services/cache-invalidation";
 
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,14 +33,14 @@ async function handleGET(req: NextRequest) {
         },
         OR: q
           ? [
-              // Use insensitive search for various fields
-              { userProduct: { title: { contains: q, mode: "insensitive" } } },
-              { userProduct: { sku: { contains: q, mode: "insensitive" } } },
-              { competitorProduct: { title: { contains: q, mode: "insensitive" } } },
-              { competitorProduct: { sku: { contains: q, mode: "insensitive" } } },
-              // Search by competitor site name (through relation)
-              { competitorProduct: { site: { baseUrl: { contains: q, mode: "insensitive" } } } },
-            ]
+            // Use insensitive search for various fields
+            { userProduct: { title: { contains: q, mode: "insensitive" } } },
+            { userProduct: { sku: { contains: q, mode: "insensitive" } } },
+            { competitorProduct: { title: { contains: q, mode: "insensitive" } } },
+            { competitorProduct: { sku: { contains: q, mode: "insensitive" } } },
+            // Search by competitor site name (through relation)
+            { competitorProduct: { site: { baseUrl: { contains: q, mode: "insensitive" } } } },
+          ]
           : undefined,
       },
       include: {
@@ -61,11 +62,11 @@ async function handleGET(req: NextRequest) {
       try {
         siteName = m.competitorProduct.site.baseUrl
           ? new URL(m.competitorProduct.site.baseUrl).hostname.replace(
-              "www.",
-              "",
-            )
+            "www.",
+            "",
+          )
           : "Unknown";
-      } catch (e) {}
+      } catch (e) { }
 
       return {
         id: m.id,
@@ -125,7 +126,7 @@ async function handlePOST(req: NextRequest) {
     const matchInfo = await prisma.productMatch.findUnique({
       where: { id: matchId },
       include: {
-        userProduct: { select: { title: true } },
+        userProduct: { select: { id: true, title: true } },
         competitorProduct: { select: { title: true } },
       },
     });
@@ -140,6 +141,21 @@ async function handlePOST(req: NextRequest) {
         where: { id: matchId },
         data: { status: "REJECTED" },
       });
+    }
+
+    // Invalidate cache after match approval/rejection
+    // Requirement 2.3: Match update invalidation
+    if (matchInfo) {
+      try {
+        const cacheInvalidation = new CacheInvalidationService();
+        await cacheInvalidation.onMatchUpdate(
+          session.user.tenantId,
+          matchInfo.userProduct.id
+        );
+      } catch (cacheError) {
+        // Log cache invalidation error but don't fail the operation
+        console.error('[MatchingRoute] Cache invalidation failed:', cacheError);
+      }
     }
 
     // Create Audit Log

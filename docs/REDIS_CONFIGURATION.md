@@ -12,10 +12,10 @@ PricePilot uses Upstash Redis for distributed caching to improve performance and
 
 ## Performance Targets
 
-- **Cache hit rate**: 70%+
+- **Cache hit rate**: 60%+ (free tier) or 70%+ (paid plans)
 - **Response time**: <50ms for cached queries
-- **Database load reduction**: 60%+
-- **Memory usage**: <500MB
+- **Database load reduction**: 50%+ (free tier) or 60%+ (paid plans)
+- **Memory usage**: <250MB (free tier) or <500MB (paid plans)
 
 ## Setup Instructions
 
@@ -54,30 +54,59 @@ In the Upstash dashboard:
 1. Go to your database settings
 2. Navigate to "Configuration" section
 3. Set the following:
-   - **Max Memory**: 500 MB
+   - **Max Memory**: 250 MB (free tier) or 500 MB+ (paid plans)
    - **Eviction Policy**: `allkeys-lru` (Least Recently Used)
 
 **Why these settings?**
-- **500MB limit**: Prevents unbounded memory growth while providing ample cache space
+- **250MB (free tier)**: Maximum available on free tier, suitable for development
+- **500MB+ (paid)**: Prevents unbounded memory growth in production
 - **allkeys-lru**: Automatically evicts least recently used keys when memory limit is reached
+
+**For detailed memory configuration instructions, see:**
+- [Redis Memory Configuration Guide](./REDIS_MEMORY_CONFIGURATION.md)
+- [Upstash Dashboard Setup](./UPSTASH_DASHBOARD_SETUP.md)
+
+### 5. Configure Environment Variables
+
+Add memory monitoring configuration to your `.env` file:
+
+```bash
+# Redis Memory Monitoring Configuration
+# IMPORTANT: Set this to match your Upstash plan
+# - Free tier: 250 (maximum for free tier)
+# - Paid plans: 500 or higher
+REDIS_MEMORY_LIMIT_MB=250              # Memory limit in MB (must match Upstash config)
+REDIS_MEMORY_ALERT_THRESHOLD=0.8      # Alert when usage exceeds 80%
+```
+
+These values allow the monitoring service to track memory usage and generate alerts.
 
 ### 5. Verify Configuration
 
-Run the verification script to ensure everything is working:
+Run the verification scripts to ensure everything is working:
 
 ```bash
+# Verify memory configuration
+npx tsx scripts/verify-redis-memory-config.ts
+
+# Verify basic connectivity
 npx tsx scripts/verify-redis-simple.ts
 ```
 
-Expected output:
+Expected output from memory verification:
 ```
-✅ ALL CHECKS PASSED
+✅ Redis Memory Configuration Verified
 
-Redis Configuration Summary:
-  • Connection: Working
-  • Basic Operations: Working
-  • Write Performance: ~150ms avg
-  • Read Performance: ~150ms avg
+Configuration:
+  • Memory Limit: 250 MB (Free Tier)
+  • Eviction Policy: allkeys-lru
+  • Current Usage: 45 MB (18%)
+  • Status: Healthy
+
+Recommendations:
+  ✓ Memory limit is properly configured
+  ✓ Eviction policy is set correctly
+  ✓ Current usage is within safe limits
 ```
 
 ## Cache Architecture
@@ -340,6 +369,8 @@ As your application grows:
 - [Upstash REST API Reference](https://docs.upstash.com/redis/features/restapi)
 - [Redis Best Practices](https://redis.io/docs/manual/patterns/)
 - [Cache Invalidation Patterns](https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/BestPractices.html)
+- [Redis Memory Configuration Guide](./REDIS_MEMORY_CONFIGURATION.md) - Detailed memory and eviction configuration
+- [Upstash Dashboard Setup](./UPSTASH_DASHBOARD_SETUP.md) - Step-by-step dashboard configuration
 
 ## Support
 

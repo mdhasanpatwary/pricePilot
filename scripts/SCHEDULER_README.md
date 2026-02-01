@@ -87,6 +87,8 @@ sudo systemctl status db-scheduler
 | Query Metrics | 3:30 AM UTC | 2-5 min | Aggregate slow query data |
 | Cache Warming | 2:00 AM UTC | 5-10 min | Pre-load frequently accessed data |
 | Statistics Collection | 4:00 AM UTC | 2-5 min | Track database growth |
+| Cache Statistics Logging | Every 5 min | <1 min | Log cache performance metrics |
+| Cache Health Alerting | Every 5 min | <1 min | Check cache health and send alerts |
 
 ## Manual Job Execution
 
@@ -110,6 +112,9 @@ npx tsx scripts/aggregate-query-metrics.ts
 
 # Warm cache
 npx tsx scripts/warm-cache.ts
+
+# Monitor cache
+npx tsx scripts/monitor-cache.ts
 
 # Collect statistics
 npx tsx scripts/collect-statistics.ts

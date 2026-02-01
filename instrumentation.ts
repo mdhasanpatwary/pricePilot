@@ -4,6 +4,7 @@
  */
 
 import { KeyManager } from './lib/services/encryption';
+import { initializeDistributedCache } from './lib/services/cache-initialization';
 
 /**
  * Validates critical environment variables on application startup
@@ -48,12 +49,31 @@ function validateEnvironment(): void {
 }
 
 /**
+ * Initialize distributed caching infrastructure
+ * Non-blocking - application continues if cache initialization fails
+ */
+async function initializeCache(): Promise<void> {
+    try {
+        await initializeDistributedCache();
+        console.log('✓ Distributed cache initialized successfully');
+    } catch (error) {
+        console.warn('⚠️  Distributed cache initialization failed, continuing without it');
+        if (error instanceof Error) {
+            console.warn(`  Reason: ${error.message}`);
+        }
+    }
+}
+
+/**
  * Register function called when the server starts
  * Only runs in Node.js runtime (not in Edge runtime)
  */
-export function register() {
+export async function register() {
     // Only run validation in Node.js runtime
     if (process.env.NEXT_RUNTIME === 'nodejs') {
         validateEnvironment();
+
+        // Initialize distributed cache (non-blocking)
+        await initializeCache();
     }
 }

@@ -17,6 +17,7 @@ import {
   NotFoundError,
   ExternalServiceError,
 } from "@/lib/utils/error-handler";
+import { CacheInvalidationService } from "./cache-invalidation";
 
 interface ExternalProduct {
   external_id: string;
@@ -315,6 +316,16 @@ export class SyncService {
             message: `✅ Integration sync completed: ${results.length} products imported.`,
           },
         });
+
+        // Invalidate cache after successful product sync
+        // Requirement 2.2: Product sync invalidation
+        try {
+          const cacheInvalidation = new CacheInvalidationService();
+          await cacheInvalidation.onProductSync(site.tenantId);
+        } catch (cacheError) {
+          // Log cache invalidation error but don't fail the operation
+          console.error('[SyncService] Cache invalidation failed:', cacheError);
+        }
 
         return {
           count: results.length,

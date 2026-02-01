@@ -23,6 +23,7 @@
     "rotate-keys": "ts-node --project tsconfig.worker.json -r tsconfig-paths/register scripts/rotate-keys.ts",
     "warm-cache": "tsx scripts/warm-cache.ts",
     "monitor-cache": "tsx scripts/monitor-cache.ts",
+    "test-cache-alerting": "tsx scripts/test-cache-alerting.ts",
     "archival": "tsx scripts/run-archival.ts",
     "prepare": "husky"
   },

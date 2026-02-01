@@ -10,8 +10,9 @@ import { logger } from "@/lib/logger";
  * - Individual product comparisons
  * - Graceful degradation on cache failures
  * - 5-minute TTL for comparison data
+ * - Cache warming for related competitor products
  * 
- * Requirements: 1.2, 1.6
+ * Requirements: 1.2, 1.6, 3.2
  */
 
 export interface ComparisonReport {
@@ -83,6 +84,7 @@ export class ComparisonService {
      * Get comparison report with caching
      * Requirement 1.2: Cache infrastructure integration
      * Requirement 1.6: Graceful degradation on cache failure
+     * Requirement 3.2: Warm related competitor products when generating report
      */
     async getComparisonReport(
         tenantId: string,
@@ -105,6 +107,14 @@ export class ComparisonService {
             this.cacheService.cacheComparison(tenantId, filters, report, this.COMPARISON_TTL)
                 .catch(error => {
                     logger.error('[ComparisonService] Failed to cache comparison report', { tenantId, filters, error });
+                });
+
+            // Warm related competitor products (fire and forget)
+            // Requirement 3.2: Warm cache with related competitor products
+            this.warmRelatedCompetitorProducts(tenantId, report.products)
+                .catch(error => {
+                    logger.error('[ComparisonService] Failed to warm competitor products', { tenantId, error });
+                    // Don't block response on warming failure
                 });
 
             return report;
@@ -455,6 +465,93 @@ export class ComparisonService {
             competitors,
             priceHistory,
         };
+    }
+
+    /**
+     * Warm cache with related competitor products from comparison report
+     * Requirement 3.2: Warm related competitor products when generating report
+     * Private method - called after generating comparison report
+     */
+    private async warmRelatedCompetitorProducts(
+        tenantId: string,
+        products: ComparisonProduct[]
+    ): Promise<void> {
+        try {
+            logger.debug('[ComparisonService] Warming related competitor products', {
+                tenantId,
+                productsCount: products.length
+            });
+
+            // Extract unique competitor site IDs from all matches
+            const competitorSiteIds = new Set<string>();
+            for (const product of products) {
+                for (const match of product.allMatches || []) {
+                    if (match.id) {
+                        // Extract site ID from match ID (format: matchId contains competitor product info)
+                        // We'll query the database to get the actual site IDs
+                        competitorSiteIds.add(match.id);
+                    }
+                }
+            }
+
+            logger.debug('[ComparisonService] Found competitor matches', {
+                tenantId,
+                count: competitorSiteIds.size
+            });
+
+            // For each unique competitor site, cache their products
+            const competitorSites = await prisma.site.findMany({
+                where: {
+                    tenantId,
+                    type: 'COMPETITOR'
+                },
+                select: { id: true }
+            });
+
+            for (const site of competitorSites) {
+                try {
+                    // Get competitor products for this site
+                    const competitorProducts = await prisma.product.findMany({
+                        where: {
+                            tenantId,
+                            siteId: site.id,
+                            site: { type: 'COMPETITOR' }
+                        },
+                        take: 50, // Limit to top 50 products per site
+                        orderBy: { updatedAt: 'desc' }
+                    });
+
+                    // Cache competitor products
+                    await this.cacheService.cacheCompetitorProducts(
+                        tenantId,
+                        site.id,
+                        competitorProducts,
+                        1800 // 30 minutes TTL
+                    );
+
+                    logger.debug('[ComparisonService] Cached competitor products', {
+                        tenantId,
+                        siteId: site.id,
+                        count: competitorProducts.length
+                    });
+                } catch (error) {
+                    logger.warn('[ComparisonService] Failed to cache competitor products for site', {
+                        tenantId,
+                        siteId: site.id,
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                    // Continue with next site
+                }
+            }
+
+            logger.debug('[ComparisonService] Completed warming competitor products', { tenantId });
+        } catch (error) {
+            logger.error('[ComparisonService] Failed to warm related competitor products', {
+                tenantId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            // Don't throw - warming failures should not block operations
+        }
     }
 }
 

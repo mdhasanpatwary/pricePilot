@@ -11,6 +11,7 @@ import {
   manualMatchSchema,
   uuidSchema,
 } from "@/lib/validation";
+import { CacheInvalidationService } from "@/lib/services/cache-invalidation";
 
 async function handlePOST(
   req: NextRequest,
@@ -104,6 +105,16 @@ async function handlePOST(
           confidenceScore: 1.0,
         },
       });
+    }
+
+    // Invalidate cache after match update
+    // Requirement 2.3: Match update invalidation
+    try {
+      const cacheInvalidation = new CacheInvalidationService();
+      await cacheInvalidation.onMatchUpdate(session.user.tenantId, productId);
+    } catch (cacheError) {
+      // Log cache invalidation error but don't fail the operation
+      console.error('[MatchRoute] Cache invalidation failed:', cacheError);
     }
 
     // 4. Trigger immediate sync to get price/details

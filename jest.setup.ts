@@ -32,11 +32,27 @@ beforeAll(() => {
   console.info = jest.fn();
 });
 
-afterAll(() => {
+afterAll(async () => {
   console.log = originalConsoleLog;
   console.error = originalConsoleError;
   console.warn = originalConsoleWarn;
   console.info = originalConsoleInfo;
+
+  // Cleanup Redis connections to prevent Jest from hanging
+  try {
+    const { disconnectRedis } = await import('./lib/queue/connection');
+    await disconnectRedis();
+  } catch (error) {
+    // Ignore if module doesn't exist or fails to import
+  }
+
+  // Cleanup CacheLayer singleton
+  try {
+    const { CacheLayer } = await import('./lib/services/cache-layer');
+    CacheLayer.resetInstance();
+  } catch (error) {
+    // Ignore if module doesn't exist or fails to import
+  }
 });
 
 // Next.js 13+ APIs like NextRequest/NextResponse require a Fetch API polyfill

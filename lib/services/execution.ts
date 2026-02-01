@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { LogicType } from "@prisma/client";
 import { withRetry } from "@/lib/utils/timeout";
+import { CacheInvalidationService } from "./cache-invalidation";
 
 export class UpdateExecutionService {
   /**
@@ -13,6 +14,7 @@ export class UpdateExecutionService {
     minPrice?: number,
   ) {
     const results = [];
+    const successfulProductIds: string[] = [];
 
     for (const pid of productIds) {
       const product = await prisma.product.findUnique({
@@ -89,6 +91,7 @@ export class UpdateExecutionService {
         );
 
         results.push({ id: pid, success: true });
+        successfulProductIds.push(pid);
       } catch (error) {
         const err = error as Error;
         // Non-transactional logging of failure
@@ -103,6 +106,29 @@ export class UpdateExecutionService {
           },
         });
         results.push({ id: pid, success: false, error: err.message });
+      }
+    }
+
+    // Invalidate cache for successfully updated products
+    // Requirement 2.1: Price update invalidation
+    if (successfulProductIds.length > 0) {
+      try {
+        // Get tenantId from the first product
+        const firstProduct = await prisma.product.findUnique({
+          where: { id: successfulProductIds[0] },
+          select: { tenantId: true },
+        });
+
+        if (firstProduct) {
+          const cacheInvalidation = new CacheInvalidationService();
+          await cacheInvalidation.onPriceUpdate(
+            firstProduct.tenantId,
+            successfulProductIds
+          );
+        }
+      } catch (cacheError) {
+        // Log cache invalidation error but don't fail the operation
+        console.error('[UpdateExecutionService] Cache invalidation failed:', cacheError);
       }
     }
 

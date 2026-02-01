@@ -89,7 +89,7 @@ export function withCache(
                 // Return cached response
                 return NextResponse.json(cached, {
                     headers: {
-                        'X-Cache': 'HIT',
+                        'X-Cache-Status': 'HIT',
                         'X-Cache-Key': cacheKey,
                     },
                 });
@@ -108,7 +108,7 @@ export function withCache(
                 // Return response with cache miss header
                 return NextResponse.json(data, {
                     headers: {
-                        'X-Cache': 'MISS',
+                        'X-Cache-Status': 'MISS',
                         'X-Cache-Key': cacheKey,
                     },
                 });

@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
-import { CacheLayer } from "@/lib/services/cache-layer";
+import { withCache, CacheConfigs } from "@/lib/middleware/api-cache";
 
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -15,9 +15,8 @@ async function handleGET(req: NextRequest) {
   }
 
   const tenantId = session.user.tenantId;
-  const cache = CacheLayer.getInstance();
 
-  // Generate cache key based on query parameters
+  // Parse query parameters
   const searchParams = req.nextUrl.searchParams;
   const q = searchParams.get("q") || "";
   const brand = searchParams.get("brand");
@@ -26,28 +25,6 @@ async function handleGET(req: NextRequest) {
   const ram = searchParams.get("ram");
   const storage = searchParams.get("storage");
   const processor = searchParams.get("processor");
-
-  // Build cache key
-  const cacheKeyParts = [
-    'products',
-    tenantId,
-    q,
-    brand || 'all',
-    category || 'all',
-    stock || 'all',
-    ram || 'all',
-    storage || 'all',
-    processor || 'all'
-  ];
-  const cacheKey = cacheKeyParts.join(':');
-
-  // Try to get from cache (5-minute TTL)
-  const cached = await cache.get<any>(cacheKey);
-  if (cached) {
-    return NextResponse.json(cached, {
-      headers: { 'X-Cache': 'HIT' }
-    });
-  }
 
   // Determine currency
   let currency = "USD";
@@ -77,8 +54,6 @@ async function handleGET(req: NextRequest) {
     // keep default USD
   }
 
-  // Query params already parsed above for cache key
-
   const where: any = {
     tenantId,
     site: { type: "USER" },
@@ -102,16 +77,6 @@ async function handleGET(req: NextRequest) {
 
   // 3. Tech Spec Filters (JSONB)
   if (ram || storage || processor) {
-    // Prisma JSON filtering requires specific syntax
-    // We check if the specifications JSON contains the key-value pair
-    const specsFilter: any = {};
-    if (ram) specsFilter.ram = ram;
-    if (storage) specsFilter.storage = storage;
-    if (processor) specsFilter.processor = processor;
-
-    // Use 'equals' for exact JSON match on a subset of properties if possible,
-    // but Prisma's 'path' support is better for individual fields.
-    // Since we want ANY of these to match if provided:
     const andConditions = [];
     if (ram) andConditions.push({ specifications: { path: ["ram"], equals: ram } });
     if (storage) andConditions.push({ specifications: { path: ["storage"], equals: storage } });
@@ -236,36 +201,16 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const response = await withRateLimit(req, "read", withErrorHandling(handleGET));
-
-  // Cache the response if successful
-  if (response.ok) {
-    const session = await getServerSession(authOptions);
-    if (session?.user) {
-      const cache = CacheLayer.getInstance();
-      const searchParams = req.nextUrl.searchParams;
-      const cacheKeyParts = [
-        'products',
-        session.user.tenantId,
-        searchParams.get("q") || "",
-        searchParams.get("brand") || 'all',
-        searchParams.get("category") || 'all',
-        searchParams.get("stock") || 'all',
-        searchParams.get("ram") || 'all',
-        searchParams.get("storage") || 'all',
-        searchParams.get("processor") || 'all'
-      ];
-      const cacheKey = cacheKeyParts.join(':');
-      const data = await response.json();
-
-      // Store in cache with 5-minute TTL
-      await cache.set(cacheKey, data, 300);
-
-      return NextResponse.json(data, {
-        headers: { 'X-Cache': 'MISS' }
-      });
+  // Apply caching with 2-minute TTL (120 seconds)
+  const cachedHandler = withCache(
+    (req) => withRateLimit(req, "read", withErrorHandling(handleGET)),
+    {
+      ttl: 120, // 2 minutes
+      keyPrefix: 'api:products',
+      varyBy: ['q', 'brand', 'category', 'stock', 'ram', 'storage', 'processor'],
+      tenantIsolated: true,
     }
-  }
+  );
 
-  return response;
+  return cachedHandler(req);
 }

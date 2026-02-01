@@ -44,6 +44,7 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 ---
 
 ## 🐛 Issues
+* what's wrong things exist in this project?
 
 ## 💡 Feature Requests
 * should care lint error warnings, test errors & build errors in code writing time

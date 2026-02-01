@@ -1,6 +1,7 @@
 import { Redis } from "ioredis";
 import { getRedisConnection } from "@/lib/queue/connection";
 import { logger } from "@/lib/logger";
+import { cacheInvalidationPubSub, InvalidationEvent } from "./cache-invalidation-pubsub";
 
 /**
  * Cache Layer Component for Database Optimization
@@ -15,7 +16,7 @@ import { logger } from "@/lib/logger";
  * - Hit rate monitoring and alerting
  * - Redis pub/sub for distributed invalidation
  * 
- * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
+ * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 7.2
  */
 
 export interface CacheStats {
@@ -45,10 +46,121 @@ export class CacheLayer {
     private readonly HIT_RATE_THRESHOLD = 0.6; // 60%
     private readonly CACHE_PREFIX = "cache:";
     private readonly STATS_KEY = "cache:stats";
+    private isRedisAvailable: boolean = false;
+    private connectionCheckTimeout: NodeJS.Timeout | null = null;
+    private connectionPromise: Promise<void> | null = null;
 
     private constructor() {
         this.redis = getRedisConnection();
-        this.initializeStats();
+
+        // In test mode, don't auto-connect - only connect when actually needed
+        if (process.env.NODE_ENV !== "test") {
+            this.checkRedisConnection();
+            this.initializePubSub();
+        }
+    }
+
+    /**
+     * Initialize pub/sub for distributed cache invalidation
+     * Requirement 7.2: Distributed cache invalidation propagation
+     */
+    private async initializePubSub(): Promise<void> {
+        try {
+            // Initialize pub/sub service
+            await cacheInvalidationPubSub.initialize();
+
+            // Register callback to handle invalidation events from other instances
+            cacheInvalidationPubSub.onInvalidation(async (event: InvalidationEvent) => {
+                await this.handleRemoteInvalidation(event);
+            });
+
+            logger.info("[CacheLayer] Pub/sub initialized for distributed invalidation");
+        } catch (error) {
+            logger.error("[CacheLayer] Failed to initialize pub/sub", { error });
+            // Don't throw - application should continue without distributed invalidation
+        }
+    }
+
+    /**
+     * Handle invalidation event from another instance
+     * Requirement 7.2: Distributed cache invalidation propagation
+     */
+    private async handleRemoteInvalidation(event: InvalidationEvent): Promise<void> {
+        try {
+            const fullPattern = this.buildKey(event.pattern);
+            const keys = await this.redis.keys(fullPattern);
+
+            if (keys.length > 0) {
+                await this.redis.del(...keys);
+                logger.info("[CacheLayer] Handled remote invalidation", {
+                    pattern: event.pattern,
+                    keysInvalidated: keys.length,
+                    fromInstance: event.instanceId
+                });
+            }
+        } catch (error) {
+            logger.error("[CacheLayer] Error handling remote invalidation", {
+                pattern: event.pattern,
+                error
+            });
+        }
+    }
+
+    /**
+     * Check if Redis is available with timeout
+     */
+    private async checkRedisConnection(): Promise<void> {
+        // Return existing connection promise if already connecting
+        if (this.connectionPromise) {
+            return this.connectionPromise;
+        }
+
+        this.connectionPromise = (async () => {
+            try {
+                // Set a timeout for connection check
+                const timeoutPromise = new Promise<void>((_, reject) => {
+                    this.connectionCheckTimeout = setTimeout(() => {
+                        reject(new Error('Redis connection check timeout'));
+                    }, 3000); // 3 second timeout
+                });
+
+                const connectPromise = this.redis.connect().then(() => {
+                    this.isRedisAvailable = true;
+                    logger.info("[CacheLayer] Redis connection established");
+                    this.initializeStats();
+                });
+
+                await Promise.race([connectPromise, timeoutPromise]);
+
+                if (this.connectionCheckTimeout) {
+                    clearTimeout(this.connectionCheckTimeout);
+                    this.connectionCheckTimeout = null;
+                }
+            } catch (error) {
+                this.isRedisAvailable = false;
+                logger.warn("[CacheLayer] Redis unavailable, cache disabled", { error });
+
+                if (process.env.NODE_ENV !== "test") {
+                    console.warn("⚠️  Cache disabled: Redis connection failed. Application will continue without caching.");
+                }
+
+                if (this.connectionCheckTimeout) {
+                    clearTimeout(this.connectionCheckTimeout);
+                    this.connectionCheckTimeout = null;
+                }
+            } finally {
+                this.connectionPromise = null;
+            }
+        })();
+
+        return this.connectionPromise;
+    }
+
+    /**
+     * Check if cache is available
+     */
+    private isCacheAvailable(): boolean {
+        return this.isRedisAvailable && this.redis.status === 'ready';
     }
 
     static getInstance(): CacheLayer {
@@ -59,9 +171,49 @@ export class CacheLayer {
     }
 
     /**
+     * Cleanup resources - for test teardown
+     */
+    async cleanup(): Promise<void> {
+        if (this.connectionCheckTimeout) {
+            clearTimeout(this.connectionCheckTimeout);
+            this.connectionCheckTimeout = null;
+        }
+
+        // Cleanup pub/sub
+        if (process.env.NODE_ENV !== "test") {
+            await cacheInvalidationPubSub.cleanup();
+        }
+
+        if (this.redis && this.redis.status !== 'end') {
+            try {
+                await this.redis.quit();
+            } catch (error) {
+                // Ignore errors during cleanup
+            }
+        }
+
+        this.isRedisAvailable = false;
+        this.connectionPromise = null;
+    }
+
+    /**
+     * Reset singleton instance - for testing only
+     */
+    static resetInstance(): void {
+        if (CacheLayer.instance) {
+            CacheLayer.instance.cleanup();
+            CacheLayer.instance = null as any;
+        }
+    }
+
+    /**
      * Initialize cache statistics tracking
      */
     private async initializeStats(): Promise<void> {
+        if (!this.isCacheAvailable()) {
+            return;
+        }
+
         try {
             const exists = await this.redis.exists(this.STATS_KEY);
             if (!exists) {
@@ -81,6 +233,11 @@ export class CacheLayer {
      * Requirement 4.1: Tenant-specific cache keys
      */
     async get<T>(key: string): Promise<T | null> {
+        if (!this.isCacheAvailable()) {
+            this.missCount++;
+            return null;
+        }
+
         try {
             const fullKey = this.buildKey(key);
             const data = await this.redis.get(fullKey);
@@ -108,6 +265,10 @@ export class CacheLayer {
      * Requirement 4.6: Redis for distributed caching
      */
     async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+        if (!this.isCacheAvailable()) {
+            return;
+        }
+
         try {
             const fullKey = this.buildKey(key);
             const serialized = JSON.stringify(value);
@@ -128,8 +289,13 @@ export class CacheLayer {
      * Invalidate cache entries by pattern
      * Requirement 4.2: Cache invalidation on updates
      * Requirement 4.3: Distributed invalidation
+     * Requirement 7.2: Distributed cache invalidation propagation
      */
     async invalidate(pattern: string): Promise<number> {
+        if (!this.isCacheAvailable()) {
+            return 0;
+        }
+
         try {
             const fullPattern = this.buildKey(pattern);
             const keys = await this.redis.keys(fullPattern);
@@ -138,21 +304,43 @@ export class CacheLayer {
                 return 0;
             }
 
-            // Delete all matching keys
+            // Delete all matching keys locally
             await this.redis.del(...keys);
 
-            // Publish invalidation event for distributed systems
-            await this.publishInvalidation(pattern);
+            // Publish invalidation event to other instances
+            // Extract tenantId from pattern if present
+            const tenantIdMatch = pattern.match(/^([^:]+):/);
+            const tenantId = tenantIdMatch ? tenantIdMatch[1] : undefined;
+
+            await cacheInvalidationPubSub.publishInvalidation(pattern, tenantId);
 
             logger.info("[CacheLayer] Invalidated cache entries", {
                 pattern,
-                count: keys.length
+                count: keys.length,
+                distributed: true
             });
 
             return keys.length;
         } catch (error) {
             logger.error("[CacheLayer] Invalidate error", { pattern, error });
             return 0;
+        }
+    }
+
+    /**
+     * Delete a specific cache key
+     */
+    async del(key: string): Promise<void> {
+        if (!this.isCacheAvailable()) {
+            return;
+        }
+
+        try {
+            const fullKey = this.buildKey(key);
+            await this.redis.del(fullKey);
+            logger.debug("[CacheLayer] Deleted cache key", { key });
+        } catch (error) {
+            logger.error("[CacheLayer] Delete error", { key, error });
         }
     }
 
@@ -311,48 +499,6 @@ export class CacheLayer {
             await this.redis.hincrby(this.STATS_KEY, stat, 1);
         } catch (error) {
             // Silently fail to avoid impacting cache operations
-        }
-    }
-
-    /**
-     * Publish cache invalidation event for distributed systems
-     * Requirement 4.3: Distributed invalidation via pub/sub
-     */
-    private async publishInvalidation(pattern: string): Promise<void> {
-        try {
-            await this.redis.publish("cache:invalidate", pattern);
-        } catch (error) {
-            logger.error("[CacheLayer] Publish invalidation error", { pattern, error });
-        }
-    }
-
-    /**
-     * Subscribe to cache invalidation events
-     * Requirement 4.3: Distributed invalidation via pub/sub
-     */
-    async subscribeToInvalidations(
-        callback: (pattern: string) => void
-    ): Promise<void> {
-        try {
-            // Create a separate Redis connection for subscriptions
-            const subscriber = getRedisConnection().duplicate();
-
-            subscriber.subscribe("cache:invalidate", (err) => {
-                if (err) {
-                    logger.error("[CacheLayer] Subscribe error", { error: err });
-                } else {
-                    logger.info("[CacheLayer] Subscribed to cache invalidations");
-                }
-            });
-
-            subscriber.on("message", (channel, message) => {
-                if (channel === "cache:invalidate") {
-                    logger.debug("[CacheLayer] Received invalidation", { pattern: message });
-                    callback(message);
-                }
-            });
-        } catch (error) {
-            logger.error("[CacheLayer] Subscribe setup error", { error });
         }
     }
 

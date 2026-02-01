@@ -23,6 +23,9 @@ import { ArchiveManager } from '@/lib/services/archive-manager';
 import { MaterializedViewManager } from '@/lib/services/materialized-view-manager';
 import { MaintenanceScheduler } from '@/lib/services/maintenance-scheduler';
 import { CacheLayer } from '@/lib/services/cache-layer';
+import { cacheWarmingService } from '@/lib/services/cache-warming';
+import { cacheMonitoringService } from '@/lib/services/cache-monitoring';
+import { cacheAlertingService } from '@/lib/services/cache-alerting';
 
 const execAsync = promisify(exec);
 const prisma = new PrismaClient();
@@ -157,22 +160,13 @@ cron.schedule('30 3 * * *', async () => {
 
 /**
  * Cache warming - Pre-loads frequently accessed data
- * Runs daily at 2 AM UTC
+ * Runs daily at 2 AM UTC (off-peak hours)
+ * Requirement 3.3: Daily warming of top 100 products per tenant
  */
 cron.schedule('0 2 * * *', async () => {
     await executeJob('warm-cache', async () => {
-        const cache = CacheLayer.getInstance();
-
-        // Get all active tenants
-        const tenants = await prisma.tenant.findMany({
-            where: { status: 'ACTIVE' },
-            select: { id: true },
-        });
-
-        // Warm cache for each tenant
-        for (const tenant of tenants) {
-            await cache.warmCache(tenant.id);
-        }
+        // Use CacheWarmingService for comprehensive cache warming
+        await cacheWarmingService.scheduledWarming();
     });
 }, {
     timezone: 'UTC'
@@ -186,6 +180,32 @@ cron.schedule('0 4 * * *', async () => {
     await executeJob('collect-statistics', async () => {
         const maintenance = new MaintenanceScheduler(prisma);
         await maintenance.collectStatistics();
+    });
+}, {
+    timezone: 'UTC'
+});
+
+/**
+ * Cache statistics logging - Logs cache performance metrics
+ * Runs every 5 minutes
+ * Requirement 4.6: Periodic cache statistics logging
+ */
+cron.schedule('*/5 * * * *', async () => {
+    await executeJob('log-cache-stats', async () => {
+        await cacheMonitoringService.logStats();
+    });
+}, {
+    timezone: 'UTC'
+});
+
+/**
+ * Cache health alerting - Checks cache health and sends alerts
+ * Runs every 5 minutes
+ * Requirements: 4.5, 10.4, 10.6
+ */
+cron.schedule('*/5 * * * *', async () => {
+    await executeJob('check-cache-alerts', async () => {
+        await cacheAlertingService.checkAndAlert();
     });
 }, {
     timezone: 'UTC'
@@ -233,6 +253,8 @@ console.log('  - Materialized Views: Every 15 minutes');
 console.log('  - Query Metrics: 3:30 AM UTC');
 console.log('  - Cache Warming: 2:00 AM UTC');
 console.log('  - Statistics Collection: 4:00 AM UTC');
+console.log('  - Cache Statistics Logging: Every 5 minutes');
+console.log('  - Cache Health Alerting: Every 5 minutes');
 console.log();
 console.log('Scheduler is running. Press Ctrl+C to stop.');
 console.log('='.repeat(80));

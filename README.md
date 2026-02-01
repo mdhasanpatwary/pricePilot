@@ -102,6 +102,17 @@ npm run dev
 - **[Deployment Guide](docs/DEPLOYMENT.md)**: Production deployment instructions
 - **[Runbook](docs/RUNBOOK.md)**: Operational procedures and troubleshooting
 
+### Performance & Caching Documentation
+- **[Cache Configuration Guide](docs/CACHE_CONFIGURATION.md)**: Complete cache setup and configuration
+- **[Cache Quick Reference](docs/CACHE_QUICK_REFERENCE.md)**: Quick reference for cache operations
+- **[Cache Invalidation Patterns](docs/CACHE_INVALIDATION_PATTERNS.md)**: Cache invalidation strategies
+- **[Cache Warming Strategies](docs/CACHE_WARMING_STRATEGIES.md)**: Proactive cache loading techniques
+- **[Cache Monitoring Guide](docs/CACHE_MONITORING.md)**: Performance monitoring and metrics
+- **[Cache Troubleshooting Guide](docs/CACHE_TROUBLESHOOTING.md)**: Common issues and solutions
+- **[Redis Configuration](docs/REDIS_CONFIGURATION.md)**: Redis setup and connectivity
+- **[Redis Memory Configuration](docs/REDIS_MEMORY_CONFIGURATION.md)**: Memory limits and eviction
+- **[Distributed Cache Invalidation](docs/DISTRIBUTED_CACHE_INVALIDATION.md)**: Multi-instance caching
+
 ---
 
 ## 🗺 Product Roadmap

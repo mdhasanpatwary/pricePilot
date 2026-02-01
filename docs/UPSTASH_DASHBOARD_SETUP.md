@@ -23,14 +23,18 @@ Follow these steps in the Upstash dashboard to configure Redis for optimal perfo
 
 ### Memory Limit
 ```
-Max Memory: 500 MB
+Free Tier: 250 MB (maximum for free tier)
+Paid Plans: 500 MB or higher
 ```
 
-**Why 500MB?**
-- Sufficient for caching product data, comparisons, and analytics
-- Prevents unbounded memory growth
-- Fits within most Upstash plans
-- Can be increased later if needed
+**Memory Limit by Plan**:
+- **Free Tier**: 250MB maximum - suitable for development and testing
+- **Paid Plans**: 500MB+ - recommended for production deployments
+
+**Why these limits?**
+- 250MB (free tier) is sufficient for development and small-scale testing
+- 500MB+ (paid) prevents unbounded memory growth in production
+- Can be increased based on monitoring and actual usage patterns
 
 ### Eviction Policy
 ```
@@ -124,9 +128,10 @@ Database Configuration:
   Name: pricepilot-cache
   Region: [Your chosen region]
   Type: Redis
+  Plan: Free Tier or Paid
   
 Memory Settings:
-  Max Memory: 500 MB
+  Max Memory: 250 MB (Free) or 500 MB+ (Paid)
   Eviction Policy: allkeys-lru
   Persistence: Enabled
   
@@ -140,12 +145,38 @@ Alerts:
   Error Rate: >5%
 ```
 
-## Verification
+## Step 5: Verify Configuration
 
 After configuration, verify everything is working:
 
 ```bash
-# Run verification script
+# Run memory configuration verification
+npx tsx scripts/verify-redis-memory-config.ts
+```
+
+Expected output:
+```
+✅ Redis Memory Configuration Verified
+
+Configuration:
+  • Memory Limit: 500 MB
+  • Eviction Policy: allkeys-lru
+  • Current Usage: 45 MB (9%)
+
+Checks:
+  ✅ Redis Connection: Redis is connected and responsive
+  ✅ Memory Limit: Memory limit is properly configured: 500MB
+  ✅ Eviction Policy: Eviction policy is correctly set to "allkeys-lru"
+  ✅ Memory Usage: Memory usage is healthy: 45MB (9%)
+  ✅ Evictions: No evictions detected yet
+
+✅ ALL CHECKS PASSED
+```
+
+You can also run the basic connectivity test:
+
+```bash
+# Run basic verification script
 npx tsx scripts/verify-redis-simple.ts
 ```
 

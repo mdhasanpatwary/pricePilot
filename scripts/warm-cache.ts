@@ -1,197 +1,197 @@
 #!/usr/bin/env ts-node
 /**
- * Cache Warming Script
+ * Manual Cache Warming Script
  * 
- * Warms the cache with frequently accessed data during off-peak hours.
- * Should be run via cron job between 2-4 AM UTC.
+ * Warms cache for all active tenants or a specific tenant.
+ * Can be run manually or scheduled via cron.
  * 
- * Requirements: 4.4
+ * Requirements: 3.3
  * 
  * Usage:
- *   ts-node scripts/warm-cache.ts [tenantId]
+ *   # Warm cache for all tenants
+ *   ts-node scripts/warm-cache.ts
  * 
- * If no tenant ID is provided, warms cache for all active tenants.
+ *   # Warm cache for specific tenant
+ *   ts-node scripts/warm-cache.ts --tenant-id=<tenant-id>
+ * 
+ *   # Dry run (show what would be warmed)
+ *   ts-node scripts/warm-cache.ts --dry-run
  */
 
-import { PrismaClient } from '@prisma/client';
-import { CacheLayer } from '@/lib/services/cache-layer';
+import { cacheWarmingService } from '@/lib/services/cache-warming';
+import { prisma } from '@/lib/prisma';
 
-async function warmTenantCache(prisma: PrismaClient, cache: CacheLayer, tenantId: string) {
-    console.log(`Warming cache for tenant: ${tenantId}`);
-
-    try {
-        // 1. Warm product comparison cache (most frequently accessed)
-        const products = await prisma.product.findMany({
-            where: {
-                tenantId,
-                site: { type: 'USER' },
-            },
-            include: {
-                site: true,
-                matchesAsUser: {
-                    include: {
-                        competitorProduct: {
-                            include: {
-                                site: true,
-                            },
-                        },
-                    },
-                },
-            },
-            take: 100, // Warm top 100 products
-            orderBy: {
-                updatedAt: 'desc',
-            },
-        });
-
-        // Cache the full product list
-        const cacheKey = `products:${tenantId}:all:all:all:all:all:all:all`;
-        await cache.set(cacheKey, { products, stats: {}, currency: 'USD' }, 300);
-
-        console.log(`  ✓ Cached ${products.length} products`);
-
-        // 2. Warm competitor products cache
-        const competitorSites = await prisma.site.findMany({
-            where: {
-                tenantId,
-                type: 'COMPETITOR',
-            },
-            take: 10, // Top 10 competitor sites
-        });
-
-        for (const site of competitorSites) {
-            const competitorProducts = await prisma.product.findMany({
-                where: {
-                    siteId: site.id,
-                },
-                take: 50,
-                orderBy: {
-                    updatedAt: 'desc',
-                },
-            });
-
-            const compCacheKey = `competitors:${tenantId}:${site.id}`;
-            await cache.set(compCacheKey, competitorProducts, 900);
-        }
-
-        console.log(`  ✓ Cached ${competitorSites.length} competitor sites`);
-
-        // 3. Warm analytics summary cache
-        const matches = await prisma.productMatch.findMany({
-            where: {
-                userProduct: {
-                    tenantId,
-                },
-            },
-            include: {
-                userProduct: true,
-                competitorProduct: true,
-            },
-            take: 100,
-        });
-
-        const analyticsCacheKey = `analytics:summary:${tenantId}`;
-        await cache.set(analyticsCacheKey, { matches }, 300);
-
-        console.log(`  ✓ Cached ${matches.length} product matches`);
-
-        // 4. Warm frequently accessed categories
-        const categories = await prisma.product.groupBy({
-            by: ['category'],
-            where: {
-                tenantId,
-                site: { type: 'USER' },
-                category: { not: null },
-            },
-            _count: true,
-            orderBy: {
-                _count: {
-                    category: 'desc',
-                },
-            },
-            take: 10,
-        });
-
-        for (const cat of categories) {
-            if (cat.category) {
-                const categoryProducts = await prisma.product.findMany({
-                    where: {
-                        tenantId,
-                        category: cat.category,
-                        site: { type: 'USER' },
-                    },
-                    include: {
-                        matchesAsUser: {
-                            include: {
-                                competitorProduct: true,
-                            },
-                        },
-                    },
-                    take: 50,
-                });
-
-                const catCacheKey = `products:${tenantId}::all:${cat.category}:all:all:all:all`;
-                await cache.set(catCacheKey, { products: categoryProducts }, 300);
-            }
-        }
-
-        console.log(`  ✓ Cached ${categories.length} categories`);
-
-    } catch (error) {
-        console.error(`  ✗ Error warming cache for tenant ${tenantId}:`, error);
-    }
+interface Options {
+    tenantId?: string;
+    dryRun: boolean;
 }
 
+/**
+ * Parse command line arguments
+ */
+function parseArgs(): Options {
+    const args = process.argv.slice(2);
+    const options: Options = {
+        dryRun: false
+    };
+
+    for (const arg of args) {
+        if (arg.startsWith('--tenant-id=')) {
+            options.tenantId = arg.split('=')[1];
+        } else if (arg === '--dry-run') {
+            options.dryRun = true;
+        } else if (arg === '--help' || arg === '-h') {
+            console.log(`
+Manual Cache Warming Script
+
+Usage:
+  ts-node scripts/warm-cache.ts [options]
+
+Options:
+  --tenant-id=<id>    Warm cache for specific tenant only
+  --dry-run           Show what would be warmed without actually warming
+  --help, -h          Show this help message
+
+Examples:
+  # Warm cache for all tenants
+  ts-node scripts/warm-cache.ts
+
+  # Warm cache for specific tenant
+  ts-node scripts/warm-cache.ts --tenant-id=tenant_123
+
+  # Dry run
+  ts-node scripts/warm-cache.ts --dry-run
+            `);
+            process.exit(0);
+        }
+    }
+
+    return options;
+}
+
+/**
+ * Get active tenants for warming
+ */
+async function getActiveTenants(tenantId?: string): Promise<Array<{ id: string; name: string }>> {
+    if (tenantId) {
+        const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { id: true, companyName: true }
+        });
+
+        if (!tenant) {
+            throw new Error(`Tenant not found: ${tenantId}`);
+        }
+
+        return [{ id: tenant.id, name: tenant.companyName }];
+    }
+
+    // Get tenants with recent activity (products updated in last 7 days)
+    const tenants = await prisma.tenant.findMany({
+        where: {
+            products: {
+                some: {
+                    updatedAt: {
+                        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                    }
+                }
+            }
+        },
+        select: {
+            id: true,
+            companyName: true
+        }
+    });
+
+    return tenants.map(t => ({ id: t.id, name: t.companyName }));
+}
+
+/**
+ * Main execution
+ */
 async function main() {
-    const prisma = new PrismaClient();
-    const cache = CacheLayer.getInstance();
+    const options = parseArgs();
+
+    console.log('='.repeat(80));
+    console.log('Cache Warming Script');
+    console.log('='.repeat(80));
+    console.log();
+
+    if (options.dryRun) {
+        console.log('🔍 DRY RUN MODE - No actual warming will occur');
+        console.log();
+    }
 
     try {
-        console.log('Starting cache warming...');
-        const startTime = Date.now();
+        // Get tenants to warm
+        const tenants = await getActiveTenants(options.tenantId);
 
-        // Get target tenant(s)
-        let tenantIds: string[];
-
-        if (process.argv[2]) {
-            // Specific tenant provided
-            tenantIds = [process.argv[2]];
-        } else {
-            // Get all active tenants
-            const tenants = await prisma.tenant.findMany({
-                where: {
-                    status: 'ACTIVE',
-                },
-                select: {
-                    id: true,
-                },
-            });
-            tenantIds = tenants.map(t => t.id);
+        if (tenants.length === 0) {
+            console.log('⚠️  No active tenants found');
+            return;
         }
 
-        console.log(`Warming cache for ${tenantIds.length} tenant(s)...`);
+        console.log(`📊 Found ${tenants.length} tenant(s) to warm:`);
+        for (const tenant of tenants) {
+            console.log(`   - ${tenant.name} (${tenant.id})`);
+        }
+        console.log();
+
+        if (options.dryRun) {
+            console.log('✅ Dry run complete - no changes made');
+            return;
+        }
 
         // Warm cache for each tenant
-        for (const tenantId of tenantIds) {
-            await warmTenantCache(prisma, cache, tenantId);
+        console.log('🔥 Starting cache warming...');
+        console.log();
+
+        let successCount = 0;
+        let failureCount = 0;
+
+        for (const tenant of tenants) {
+            const startTime = Date.now();
+            console.log(`[${new Date().toISOString()}] Warming cache for ${tenant.name}...`);
+
+            try {
+                await cacheWarmingService.warmTenantCache(tenant.id);
+                const duration = Date.now() - startTime;
+                console.log(`   ✓ Completed in ${duration}ms`);
+                successCount++;
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                console.error(`   ✗ Failed after ${duration}ms:`, error instanceof Error ? error.message : String(error));
+                failureCount++;
+            }
+
+            console.log();
         }
 
-        const duration = Date.now() - startTime;
-        console.log(`\n✓ Cache warming completed in ${duration}ms`);
+        // Summary
+        console.log('='.repeat(80));
+        console.log('Cache Warming Summary');
+        console.log('='.repeat(80));
+        console.log(`Total tenants: ${tenants.length}`);
+        console.log(`Successful: ${successCount}`);
+        console.log(`Failed: ${failureCount}`);
+        console.log();
 
-        // Get cache stats
-        const stats = await cache.getCacheStats();
-        console.log('\nCache Statistics:');
-        console.log(`  Total Keys: ${stats.totalKeys}`);
-        console.log(`  Memory Used: ${(stats.memoryUsedBytes / 1024 / 1024).toFixed(2)} MB`);
-        console.log(`  Hit Rate: ${(stats.hitRate * 100).toFixed(2)}%`);
-
+        if (failureCount > 0) {
+            console.log('⚠️  Some cache warming operations failed. Check logs for details.');
+            process.exit(1);
+        } else {
+            console.log('✅ All cache warming operations completed successfully');
+        }
     } catch (error) {
-        console.error('Error warming cache:', error);
+        console.error('❌ Cache warming failed:', error);
         process.exit(1);
     } finally {
         await prisma.$disconnect();
     }
 }
 
-main();
+// Run the script
+main().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+});

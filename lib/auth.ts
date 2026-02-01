@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { cacheWarmingService } from "@/lib/services/cache-warming";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
@@ -90,6 +91,15 @@ export const authOptions: NextAuthOptions = {
             expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
           },
         });
+
+        // Warm cache on login (fire-and-forget pattern)
+        // Requirement 3.1: Warm cache with essential data on tenant login
+        if (user.tenantId) {
+          cacheWarmingService.warmOnLogin(user.tenantId).catch((error) => {
+            console.error('[Auth] Cache warming failed on login:', error);
+            // Don't block login on cache warming failure
+          });
+        }
       }
 
       // ON EVERY REQUEST: Verify session still exists in DB (revocation check)

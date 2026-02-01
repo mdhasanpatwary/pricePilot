@@ -27,6 +27,9 @@ describe("CacheLayer", () => {
             duplicate: jest.fn(),
             info: jest.fn(),
             dbsize: jest.fn(),
+            connect: jest.fn().mockResolvedValue(undefined),
+            quit: jest.fn().mockResolvedValue(undefined),
+            status: 'ready', // Mock Redis as ready
         };
 
         // Mock duplicate to return another mock Redis instance
@@ -38,8 +41,11 @@ describe("CacheLayer", () => {
         (getRedisConnection as jest.Mock).mockReturnValue(mockRedis);
 
         // Reset singleton instance
-        (CacheLayer as any).instance = undefined;
+        CacheLayer.resetInstance();
         cacheLayer = CacheLayer.getInstance();
+
+        // Manually set Redis as available for tests
+        (cacheLayer as any).isRedisAvailable = true;
     });
 
     afterEach(() => {

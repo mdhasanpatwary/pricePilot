@@ -10,6 +10,7 @@ import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
 import { circuitBreakerRegistry } from "@/lib/utils/circuit-breaker";
+import { CacheInvalidationService } from "./cache-invalidation";
 
 export class SyncOrchestrator {
   /**
@@ -722,6 +723,16 @@ export class SyncOrchestrator {
           level: "SUCCESS",
         },
       });
+
+      // Invalidate cache after competitor scrape completes
+      // Requirement 2.4: Competitor scrape invalidation
+      try {
+        const cacheInvalidation = new CacheInvalidationService();
+        await cacheInvalidation.onCompetitorScrape(site.tenantId, siteId);
+      } catch (cacheError) {
+        // Log cache invalidation error but don't fail the operation
+        logger.error('[SyncOrchestrator] Cache invalidation failed', { error: cacheError });
+      }
 
       await prisma.syncLog.create({
         data: {

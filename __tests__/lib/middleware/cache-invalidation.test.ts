@@ -284,8 +284,8 @@ describe("CacheInvalidationMiddleware", () => {
             await CacheInvalidationMiddleware.invalidateBatch(contexts);
 
             // Should call invalidate for each context
-            // 2 user products * 2 calls each (product + comparison) + 1 competitor * 1 call = 5 calls
-            expect(cacheLayer.invalidate).toHaveBeenCalledTimes(5);
+            // 2 user products * 3 calls each (product + comparison + products list) + 1 competitor * 1 call = 7 calls
+            expect(cacheLayer.invalidate).toHaveBeenCalledTimes(7);
         });
 
         it("should handle errors in batch gracefully", async () => {
