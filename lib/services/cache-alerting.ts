@@ -9,7 +9,6 @@
 
 import { logger } from "@/lib/logger";
 import { cacheMonitoringService, Alert, CacheHealth } from "./cache-monitoring";
-import { NotificationService } from "./notification";
 
 export interface AlertConfig {
     enabled: boolean;
@@ -385,7 +384,7 @@ export class CacheAlertingService {
             health.alerts?.map(a => a.metric || 'general') || []
         );
 
-        for (const [alertKey, alert] of this.alertHistory.entries()) {
+        for (const [, alert] of this.alertHistory.entries()) {
             if (!alert.resolved && !activeMetrics.has(alert.metric)) {
                 alert.resolved = true;
                 alert.resolvedAt = new Date();

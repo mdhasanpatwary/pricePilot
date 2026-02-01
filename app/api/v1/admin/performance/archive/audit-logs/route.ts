@@ -1,6 +1,6 @@
 /**
  * Archive Audit Logs API
- * 
+ *
  * Provides read-only access to archived audit log records.
  * Supports filtering by tenant and date range.
  */
@@ -8,18 +8,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { optimizedPrisma } from '@/lib/database/optimized-prisma';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
-const archiveManager = new ArchiveManager(prisma);
+const archiveManager = new ArchiveManager(optimizedPrisma);
 
 /**
  * GET /api/v1/admin/performance/archive/audit-logs
- * 
+ *
  * Query archived audit log records
- * 
+ *
  * Query Parameters:
  * - tenantId: Filter by tenant ID
  * - startDate: Filter by start date (ISO 8601)

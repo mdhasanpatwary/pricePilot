@@ -2,18 +2,18 @@
 
 /**
  * Establish Performance Baselines
- * 
+ *
  * Establishes performance baselines for critical queries.
  * Run this script after optimizations or during low-traffic periods.
- * 
+ *
  * Usage:
  *   npm run baseline:establish
  *   npm run baseline:establish -- --query=user_products_active
  */
 
-import { getOptimizedPrisma } from '@/lib/database/optimized-prisma';
+import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 import { PerformanceBaselineManager } from '@/lib/services/performance-baseline-manager';
-import { logger } from '@/lib/logger';
+
 
 interface BaselineOptions {
     query?: string;
@@ -33,7 +33,7 @@ async function parseArgs(): Promise<BaselineOptions> {
 }
 
 async function establishAllBaselines(): Promise<void> {
-    const { pool } = getOptimizedPrisma();
+    const pool = getConnectionPoolManager().getPool();
     const manager = new PerformanceBaselineManager(pool);
 
     console.log('🎯 Establishing baselines for all critical queries...');
@@ -60,7 +60,7 @@ async function establishAllBaselines(): Promise<void> {
 }
 
 async function establishSingleBaseline(queryFingerprint: string): Promise<void> {
-    const { pool } = getOptimizedPrisma();
+    const pool = getConnectionPoolManager().getPool();
     const manager = new PerformanceBaselineManager(pool);
 
     console.log(`🎯 Establishing baseline for: ${queryFingerprint}...`);
@@ -100,7 +100,7 @@ async function establishSingleBaseline(queryFingerprint: string): Promise<void> 
 }
 
 async function listBaselines(): Promise<void> {
-    const { pool } = getOptimizedPrisma();
+    const pool = getConnectionPoolManager().getPool();
     const manager = new PerformanceBaselineManager(pool);
 
     console.log('📊 Current Performance Baselines:\n');
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
         await establishSingleBaseline(options.query);
     } else {
         // Check if baselines exist
-        const { pool } = getOptimizedPrisma();
+        const pool = getConnectionPoolManager().getPool();
         const manager = new PerformanceBaselineManager(pool);
         const existing = await manager.getAllBaselines();
 

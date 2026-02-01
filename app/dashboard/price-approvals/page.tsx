@@ -27,6 +27,8 @@ interface PendingChange {
     appliedRule: string | null;
     createdAt: string;
     expiresAt: string;
+    autoApprovedBy: string | null;
+    autoApprovedAt: string | null;
     product: {
         id: string;
         title: string;
@@ -44,6 +46,7 @@ export default function PriceApprovalsPage() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [autoApprovalRules, setAutoApprovalRules] = useState<Record<string, string>>({});
     const { toast } = useToast();
 
     const fetchChanges = useCallback(async () => {
@@ -53,6 +56,23 @@ export default function PriceApprovalsPage() {
             if (!res.ok) throw new Error("Failed to fetch");
             const data = await res.json();
             setChanges(data.changes);
+
+            // Fetch auto-approval rule names for changes that were auto-approved
+            const autoApprovedRuleIds = data.changes
+                .filter((c: PendingChange) => c.autoApprovedBy)
+                .map((c: PendingChange) => c.autoApprovedBy);
+
+            if (autoApprovedRuleIds.length > 0) {
+                const rulesRes = await fetch("/api/v1/auto-approval-rules");
+                if (rulesRes.ok) {
+                    const rulesData = await rulesRes.json();
+                    const rulesMap: Record<string, string> = {};
+                    rulesData.data.forEach((rule: any) => {
+                        rulesMap[rule.id] = rule.name;
+                    });
+                    setAutoApprovalRules(rulesMap);
+                }
+            }
         } catch (error) {
             toast({
                 title: "Error",
@@ -269,6 +289,18 @@ export default function PriceApprovalsPage() {
                                             <p className="text-sm text-muted-foreground">
                                                 Rule: {change.appliedRule}
                                             </p>
+                                        )}
+                                        {change.autoApprovedBy && (
+                                            <div className="mt-2">
+                                                <Badge variant="default" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                    Auto-approved by: {autoApprovalRules[change.autoApprovedBy] || change.autoApprovedBy}
+                                                </Badge>
+                                                {change.autoApprovedAt && (
+                                                    <span className="ml-2 text-xs text-muted-foreground">
+                                                        on {new Date(change.autoApprovedAt).toLocaleString()}
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
 

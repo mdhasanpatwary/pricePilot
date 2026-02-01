@@ -3,7 +3,7 @@
  * Uses AES-256-GCM for authenticated encryption
  */
 
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import { IEncryptionService } from './types';
 import { IKeyManager } from './types';
 import {

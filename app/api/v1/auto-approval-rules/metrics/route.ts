@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { AutoApprovalService } from "@/lib/services/auto-approval";
+import { AppError } from "@/lib/utils/error-handler";
+
+/**
+ * GET /api/v1/auto-approval-rules/metrics
+ * 
+ * Get auto-approval metrics for the authenticated tenant
+ * 
+ * Query Parameters:
+ * - startDate: ISO date string (optional, defaults to 30 days ago)
+ * - endDate: ISO date string (optional, defaults to today)
+ * 
+ * Returns:
+ * - totalAutoApproved: Total number of auto-approved changes
+ * - totalNonMatching: Total number of changes that didn't match any rule
+ * - totalEvaluated: Total number of changes evaluated
+ * - autoApprovalPercentage: Percentage of changes auto-approved
+ * - perRuleMetrics: Array of per-rule trigger counts
+ * 
+ * Requirements: 8.1, 8.2, 8.5
+ */
+export async function GET(req: NextRequest): Promise<NextResponse> {
+    try {
+        // Authenticate user
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "UNAUTHORIZED",
+                        message: "Authentication required",
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        const tenantId = session.user.tenantId;
+
+        if (!tenantId) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "FORBIDDEN",
+                        message: "Tenant context required",
+                    },
+                },
+                { status: 403 }
+            );
+        }
+
+        // Parse query parameters
+        const { searchParams } = new URL(req.url);
+        const startDateParam = searchParams.get("startDate");
+        const endDateParam = searchParams.get("endDate");
+
+        let startDate: Date | undefined;
+        let endDate: Date | undefined;
+
+        if (startDateParam) {
+            startDate = new Date(startDateParam);
+            if (isNaN(startDate.getTime())) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: "VALIDATION_ERROR",
+                            message: "Invalid startDate format",
+                            details: {
+                                fields: {
+                                    startDate: ["Must be a valid ISO date string"],
+                                },
+                            },
+                        },
+                    },
+                    { status: 422 }
+                );
+            }
+        }
+
+        if (endDateParam) {
+            endDate = new Date(endDateParam);
+            if (isNaN(endDate.getTime())) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: "VALIDATION_ERROR",
+                            message: "Invalid endDate format",
+                            details: {
+                                fields: {
+                                    endDate: ["Must be a valid ISO date string"],
+                                },
+                            },
+                        },
+                    },
+                    { status: 422 }
+                );
+            }
+        }
+
+        // Get metrics from service
+        const metrics = await AutoApprovalService.getMetrics(
+            tenantId,
+            startDate,
+            endDate
+        );
+
+        // Return success response
+        return NextResponse.json(
+            {
+                success: true,
+                data: metrics,
+                meta: {
+                    requestId: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 200 }
+        );
+    } catch (error) {
+        // Handle known errors
+        if (error instanceof AppError) {
+            const errorResponse = error.toJSON();
+            return NextResponse.json(errorResponse, { status: error.statusCode });
+        }
+
+        // Handle unexpected errors
+        console.error("[API] Auto-approval metrics error:", error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "INTERNAL_SERVER_ERROR",
+                    message: "An unexpected error occurred",
+                },
+                meta: {
+                    requestId: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 500 }
+        );
+    }
+}

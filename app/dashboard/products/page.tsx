@@ -104,6 +104,10 @@ export default function PriceReportPage() {
       if (filterRam !== "ALL") params.append("ram", filterRam);
       if (filterStorage !== "ALL") params.append("storage", filterStorage);
 
+      // Add pagination parameters
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
+
       const res = await fetch(`/api/v1/products?${params.toString()}`);
       const result = await res.json();
       if (res.ok) {
@@ -117,7 +121,7 @@ export default function PriceReportPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, filterBrand, filterCategory, filterStock, filterRam, filterStorage]);
+  }, [debouncedSearch, filterBrand, filterCategory, filterStock, filterRam, filterStorage, currentPage, itemsPerPage]);
 
   useEffect(() => {
     fetchProducts();
@@ -262,10 +266,6 @@ export default function PriceReportPage() {
     setCurrentPage((prev) => Math.max(1, prev - 1));
   };
 
-  const handleNextPage: ButtonClickHandler = () => {
-    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
-  };
-
   const filteredData = useMemo(() => {
     let result = data;
 
@@ -323,12 +323,18 @@ export default function PriceReportPage() {
     filterStorage,
   ]);
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  // Pagination logic (using client-side pagination for filtered data)
   const paginatedData = filteredData.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
+
+  // Update total pages based on filtered data
+  const computedTotalPages = Math.ceil(filteredData.length / itemsPerPage);
+
+  const handleNextPage: ButtonClickHandler = () => {
+    setCurrentPage((prev) => Math.min(computedTotalPages, prev + 1));
+  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1182,14 +1188,14 @@ export default function PriceReportPage() {
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              {Array.from({ length: Math.min(5, computedTotalPages) }, (_, i) => {
                 let pageNum = currentPage;
                 if (currentPage <= 3) pageNum = i + 1;
-                else if (currentPage >= totalPages - 2)
-                  pageNum = totalPages - 4 + i;
+                else if (currentPage >= computedTotalPages - 2)
+                  pageNum = computedTotalPages - 4 + i;
                 else pageNum = currentPage - 2 + i;
 
-                if (pageNum <= 0 || pageNum > totalPages) return null;
+                if (pageNum <= 0 || pageNum > computedTotalPages) return null;
 
                 return (
                   <Button
@@ -1211,7 +1217,7 @@ export default function PriceReportPage() {
               variant={BUTTON_VARIANTS.OUTLINE}
               size="icon"
               onClick={handleNextPage}
-              disabled={currentPage === totalPages || totalPages === 0}
+              disabled={currentPage === computedTotalPages || computedTotalPages === 0}
               className="h-8 w-8"
             >
               <ChevronRight className="w-4 h-4" />

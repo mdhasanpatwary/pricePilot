@@ -12,10 +12,11 @@ Welcome to PricePilot - Your intelligent e-commerce pricing automation platform.
 2. [Getting Started](#getting-started)
 3. [Platform Integrations](#platform-integrations)
 4. [Features Overview](#features-overview)
-5. [Monitoring & Analytics](#monitoring--analytics)
-6. [API Reference](#api-reference)
-7. [FAQ](#faq)
-8. [Support](#support)
+5. [Auto-Approval Rules Guide](#auto-approval-rules-guide)
+6. [Monitoring & Analytics](#monitoring--analytics)
+7. [API Reference](#api-reference)
+8. [FAQ](#faq)
+9. [Support](#support)
 
 ---
 
@@ -281,19 +282,657 @@ Create sophisticated pricing strategies:
 | **Threshold** | Set min/max price boundaries | "Between $50-$200" |
 | **Percentage** | Adjust by percentage | "+10% of competitor price" |
 
-### 5. Execution Engine
+### 5. Auto-Approval Rules
+
+Automate your price approval workflow with intelligent rules:
+
+- **Condition-Based Automation**: Set multiple conditions for automatic approvals
+- **Priority System**: Control which rules apply first
+- **Safety Constraints**: Prevent unintended price changes
+- **Complete Audit Trail**: Track every auto-approval decision
+- **Email Notifications**: Stay informed about automated changes
+
+See the [Auto-Approval Rules Guide](#auto-approval-rules-guide) for detailed information.
+
+### 6. Execution Engine
 
 - Automatic price updates to your store
 - Manual approval mode available
 - Update logs and history
 - Rollback capability
 
-### 6. Analytics & Reports
+### 7. Analytics & Reports
 
 - Position Summary (Cheapest/Neutral/Expensive)
 - Price trend charts
 - Competitor comparison
 - Market share insights
+
+---
+
+## 🤖 Auto-Approval Rules Guide
+
+### Overview
+
+Auto-approval rules allow you to automate the price approval workflow by defining conditions under which price changes are automatically approved without manual review. This feature reduces manual workload while maintaining full control over your pricing decisions.
+
+**Key Benefits:**
+- **Save Time**: Automatically approve routine price changes
+- **Stay Competitive**: Respond to competitor price changes faster
+- **Maintain Control**: Set precise conditions for automation
+- **Full Transparency**: Complete audit trail of all auto-approvals
+- **Flexible Configuration**: Multiple rules with priority-based evaluation
+
+### Getting Started with Auto-Approval Rules
+
+#### Step 1: Navigate to Auto-Approval Rules
+
+1. Log in to your PricePilot dashboard
+2. Go to **Dashboard → Auto-Approval Rules**
+3. Click **Create New Rule**
+
+#### Step 2: Configure Your First Rule
+
+**Basic Information:**
+- **Name**: Give your rule a descriptive name (e.g., "Small Price Decreases")
+- **Description**: Optional explanation of the rule's purpose
+- **Enabled**: Toggle to activate/deactivate the rule
+- **Priority**: Lower numbers = higher priority (evaluated first)
+
+**Example Rule:**
+```
+Name: Auto-approve small decreases
+Description: Automatically approve price decreases under $10
+Priority: 1
+Enabled: Yes
+```
+
+#### Step 3: Set Conditions
+
+Rules support multiple condition types. **All conditions must be satisfied** for auto-approval (AND logic).
+
+### Condition Types
+
+#### 1. Maximum Price Change (Currency)
+
+Approve changes only if the absolute price difference is within a limit.
+
+**Example:**
+- **Condition**: Max Price Change = $50
+- **Behavior**: Auto-approve if |new price - old price| ≤ $50
+- **Use Case**: "Only auto-approve changes under $50"
+
+```
+Old Price: $100
+New Price: $120
+Change: $20 ✅ Approved (under $50)
+
+Old Price: $100
+New Price: $160
+Change: $60 ❌ Not approved (over $50)
+```
+
+#### 2. Maximum Percentage Change
+
+Approve changes only if the percentage change is within a limit.
+
+**Example:**
+- **Condition**: Max Percentage Change = 10%
+- **Behavior**: Auto-approve if |(new - old) / old × 100| ≤ 10%
+- **Use Case**: "Only auto-approve changes under 10%"
+
+```
+Old Price: $100
+New Price: $108
+Change: 8% ✅ Approved (under 10%)
+
+Old Price: $100
+New Price: $115
+Change: 15% ❌ Not approved (over 10%)
+```
+
+#### 3. Minimum Confidence Score
+
+Approve changes only if the product match confidence is high enough.
+
+**Example:**
+- **Condition**: Min Confidence Score = 80
+- **Behavior**: Auto-approve if match confidence ≥ 80
+- **Use Case**: "Only auto-approve high-confidence matches"
+
+```
+Match Confidence: 95 ✅ Approved (≥ 80)
+Match Confidence: 70 ❌ Not approved (< 80)
+```
+
+#### 4. Allowed Pricing Strategies
+
+Approve changes only if they use specific pricing strategies.
+
+**Example:**
+- **Condition**: Allowed Strategies = ["UNDERCUT", "MATCH"]
+- **Behavior**: Auto-approve only UNDERCUT or MATCH strategies
+- **Use Case**: "Only auto-approve competitive pricing"
+
+**Available Strategies:**
+- `UNDERCUT`: Price below competitor
+- `MATCH`: Match competitor price
+- `MARGIN_LOCK`: Maintain profit margin
+- `THRESHOLD`: Within price boundaries
+- `PERCENTAGE`: Percentage-based adjustment
+
+```
+Strategy: UNDERCUT ✅ Approved (in allowed list)
+Strategy: MARGIN_LOCK ❌ Not approved (not in list)
+```
+
+#### 5. Product Categories
+
+Approve changes only for specific product categories.
+
+**Example:**
+- **Condition**: Categories = ["Electronics", "Computers"]
+- **Behavior**: Auto-approve only for Electronics or Computers
+- **Use Case**: "Only auto-approve tech products"
+
+```
+Product Category: Electronics ✅ Approved
+Product Category: Clothing ❌ Not approved
+```
+
+#### 6. Price Range
+
+Approve changes only if the new price falls within a range.
+
+**Example:**
+- **Condition**: Price Range = $50 - $500
+- **Behavior**: Auto-approve if $50 ≤ new price ≤ $500
+- **Use Case**: "Only auto-approve mid-range products"
+
+```
+New Price: $200 ✅ Approved (within range)
+New Price: $600 ❌ Not approved (above range)
+New Price: $30 ❌ Not approved (below range)
+```
+
+### Combining Conditions (AND Logic)
+
+When you specify multiple conditions, **ALL must be satisfied** for auto-approval.
+
+**Example Rule:**
+```
+Name: Safe small changes
+Conditions:
+  - Max Price Change: $20
+  - Max Percentage Change: 5%
+  - Min Confidence Score: 85
+  - Allowed Strategies: ["UNDERCUT"]
+```
+
+**Evaluation:**
+```
+Scenario 1:
+  Price Change: $15 ✅
+  Percentage: 3% ✅
+  Confidence: 90 ✅
+  Strategy: UNDERCUT ✅
+  Result: ✅ AUTO-APPROVED (all conditions met)
+
+Scenario 2:
+  Price Change: $15 ✅
+  Percentage: 3% ✅
+  Confidence: 90 ✅
+  Strategy: MATCH ❌
+  Result: ❌ NOT APPROVED (strategy not allowed)
+```
+
+### Priority System
+
+When multiple rules are enabled, they are evaluated in **priority order** (lowest number first).
+
+**How It Works:**
+1. Rules are sorted by priority (ascending)
+2. Each rule is evaluated in order
+3. **First matching rule wins** (short-circuit evaluation)
+4. If no rules match, the change stays PENDING
+
+**Example:**
+```
+Rule 1 (Priority: 1):
+  - Max Price Change: $10
+  - Strategy: UNDERCUT
+
+Rule 2 (Priority: 2):
+  - Max Price Change: $50
+  - Min Confidence: 90
+
+Rule 3 (Priority: 3):
+  - Max Percentage Change: 20%
+```
+
+**Evaluation for a $15 price change with UNDERCUT strategy:**
+1. Check Rule 1: ❌ Fails ($15 > $10)
+2. Check Rule 2: ✅ Matches (if confidence ≥ 90)
+3. **Result**: Auto-approved by Rule 2 (Rule 3 never evaluated)
+
+**Best Practice:** Order rules from most restrictive to least restrictive.
+
+### Managing Rules
+
+#### Enable/Disable Rules
+
+Toggle rules on/off without deleting them:
+
+1. Go to **Dashboard → Auto-Approval Rules**
+2. Use the toggle switch next to each rule
+3. Disabled rules are skipped during evaluation
+
+**Use Cases:**
+- Temporarily pause automation during sales events
+- Test new rules before enabling
+- Seasonal rule activation
+
+#### Edit Rules
+
+Modify existing rules:
+
+1. Click the **Edit** button next to the rule
+2. Update conditions, priority, or settings
+3. Click **Save Changes**
+4. Changes apply immediately to new pending changes
+
+#### Delete Rules
+
+Remove rules permanently:
+
+1. Click the **Delete** button next to the rule
+2. Confirm deletion
+3. Rule is removed (cannot be undone)
+
+**Note:** Deleting a rule does not affect previously auto-approved changes.
+
+### Auto-Approval Workflow
+
+#### How Auto-Approval Works
+
+1. **Cron Job Runs**: Every hour, the system processes pending changes
+2. **Load Rules**: Enabled rules are loaded for each tenant
+3. **Evaluate Changes**: Each PENDING change is evaluated against rules
+4. **Priority Order**: Rules are checked in priority order
+5. **First Match**: First matching rule triggers auto-approval
+6. **Execute Update**: Price is updated in your store
+7. **Create Records**: Price history and audit log entries are created
+8. **Send Notification**: Email notification sent (if enabled)
+
+#### What Gets Auto-Approved
+
+Only changes with **PENDING** status are evaluated. Changes that are:
+- Already APPROVED (manually)
+- Already REJECTED (manually)
+- EXPIRED
+
+...are **never** evaluated by auto-approval rules.
+
+#### Manual Approval Takes Precedence
+
+If you manually approve or reject a change before auto-approval runs, your decision is **final**. Auto-approval will skip that change.
+
+**Example Timeline:**
+```
+10:00 AM - Price change detected (status: PENDING)
+10:30 AM - You manually approve the change
+11:00 AM - Auto-approval cron runs
+Result: Change is skipped (already approved manually)
+```
+
+### Audit Trail & Transparency
+
+Every auto-approval is fully logged for transparency and compliance.
+
+#### Viewing Auto-Approved Changes
+
+1. Go to **Dashboard → Price Approvals**
+2. Look for the **"Auto-approved by: [Rule Name]"** badge
+3. Click to view full details
+
+**Information Displayed:**
+- Which rule triggered the approval
+- When the approval occurred
+- Old price and new price
+- Product details
+- Match confidence score
+
+#### Audit Logs
+
+Complete audit trail available:
+
+1. Go to **Dashboard → Audit Logs**
+2. Filter by action: "AUTO_APPROVE_PRICE"
+3. View detailed information:
+   - Rule ID and name
+   - Product ID
+   - Old and new prices
+   - Timestamp
+   - Reason for approval
+
+### Email Notifications
+
+Stay informed about auto-approved changes.
+
+#### Enabling Notifications
+
+1. Go to **Dashboard → Settings → Notifications**
+2. Enable **"Auto-Approval Notifications"**
+3. Choose notification frequency:
+   - **Immediate**: Email after each auto-approval run
+   - **Daily Digest**: Once per day summary
+   - **Weekly Digest**: Once per week summary
+
+#### Notification Content
+
+Emails include:
+- Number of changes auto-approved
+- Which rules triggered approvals
+- Link to view details in dashboard
+- Summary of affected products
+
+**Example Email:**
+```
+Subject: PricePilot Auto-Approval Summary
+
+Hello,
+
+5 price changes were automatically approved in the last hour:
+
+- "Small Price Decreases" rule: 3 changes
+- "High Confidence Matches" rule: 2 changes
+
+View details: [Dashboard Link]
+```
+
+### Metrics & Analytics
+
+Track auto-approval effectiveness.
+
+#### Auto-Approval Dashboard
+
+View key metrics:
+
+1. Go to **Dashboard → Auto-Approval Rules**
+2. Click **View Metrics**
+
+**Metrics Displayed:**
+- **Total Auto-Approvals**: Count of all auto-approved changes
+- **Auto-Approval Rate**: Percentage of changes auto-approved
+- **Top Rules**: Most frequently triggered rules
+- **Non-Matching Changes**: Changes that didn't match any rule
+
+#### Per-Rule Statistics
+
+See how each rule performs:
+
+1. Go to **Dashboard → Auto-Approval Rules**
+2. Each rule shows:
+   - **Trigger Count**: How many times it's been used
+   - **Last Triggered**: When it last matched
+   - **Success Rate**: Percentage of successful updates
+
+### Best Practices
+
+#### Start Conservative
+
+Begin with restrictive rules and gradually expand:
+
+**Phase 1: High Confidence Only**
+```
+Rule: High Confidence Small Changes
+- Max Price Change: $10
+- Min Confidence Score: 95
+- Priority: 1
+```
+
+**Phase 2: Add More Conditions**
+```
+Rule: Medium Confidence Moderate Changes
+- Max Price Change: $25
+- Max Percentage Change: 5%
+- Min Confidence Score: 85
+- Priority: 2
+```
+
+**Phase 3: Expand Gradually**
+```
+Rule: Larger Changes with Constraints
+- Max Price Change: $50
+- Allowed Strategies: ["UNDERCUT", "MATCH"]
+- Price Range: $50 - $500
+- Priority: 3
+```
+
+#### Use Multiple Rules
+
+Create specific rules for different scenarios:
+
+```
+Rule 1: Tiny Changes (Priority 1)
+- Max Price Change: $5
+- Any confidence, any strategy
+
+Rule 2: Electronics Only (Priority 2)
+- Categories: ["Electronics"]
+- Max Percentage Change: 10%
+- Min Confidence: 80
+
+Rule 3: High Confidence Any Amount (Priority 3)
+- Min Confidence Score: 95
+- Max Percentage Change: 15%
+```
+
+#### Monitor and Adjust
+
+Regularly review auto-approval performance:
+
+1. Check metrics weekly
+2. Review audit logs for unexpected approvals
+3. Adjust conditions based on results
+4. Disable underperforming rules
+
+#### Safety Guidelines
+
+**Always Include:**
+- At least one limiting condition (price change or percentage)
+- Confidence score threshold for fuzzy matches
+- Price range for high-value products
+
+**Never Create:**
+- Rules with no conditions (would approve everything)
+- Rules that could cause significant losses
+- Overlapping rules with unclear priority
+
+### Troubleshooting
+
+#### Changes Not Being Auto-Approved
+
+**Check:**
+1. ✅ Rule is enabled
+2. ✅ Rule conditions match the change
+3. ✅ Change status is PENDING (not already approved/rejected)
+4. ✅ Cron job is running (check last run time)
+5. ✅ No higher-priority rule is blocking
+
+**Debug Steps:**
+1. View the pending change details
+2. Compare against rule conditions
+3. Check audit logs for evaluation results
+4. Test with a simpler rule first
+
+#### Too Many Auto-Approvals
+
+**Solutions:**
+1. Add more restrictive conditions
+2. Lower the max price change limit
+3. Increase minimum confidence score
+4. Reduce allowed strategies
+5. Temporarily disable aggressive rules
+
+#### Wrong Rule Triggering
+
+**Issue:** Lower priority rule should match, but higher priority rule triggers first.
+
+**Solution:**
+1. Review rule priorities
+2. Adjust priority numbers (lower = higher priority)
+3. Make higher-priority rules more specific
+4. Consider disabling conflicting rules
+
+#### Store Update Failures
+
+If auto-approved changes fail to update your store:
+
+**Check:**
+1. Store API connection is working
+2. API token is valid
+3. Store is accessible
+4. Check error logs in audit trail
+
+**Behavior:** Failed updates are automatically rolled back to PENDING status.
+
+### Advanced Configuration
+
+#### Seasonal Rules
+
+Create rules for specific time periods:
+
+**Holiday Season:**
+```
+Rule: Holiday Aggressive Pricing
+- Max Percentage Change: 20%
+- Allowed Strategies: ["UNDERCUT"]
+- Priority: 1
+- Enabled: Yes (during holidays)
+```
+
+**Regular Season:**
+```
+Rule: Conservative Pricing
+- Max Percentage Change: 5%
+- Min Confidence: 90
+- Priority: 1
+- Enabled: Yes (rest of year)
+```
+
+**Tip:** Enable/disable rules manually based on season, or create separate rules for different periods.
+
+#### Category-Specific Rules
+
+Different rules for different product types:
+
+```
+Rule: Electronics - Aggressive
+- Categories: ["Electronics", "Computers"]
+- Max Percentage Change: 15%
+- Priority: 1
+
+Rule: Clothing - Conservative
+- Categories: ["Clothing", "Apparel"]
+- Max Percentage Change: 5%
+- Priority: 2
+
+Rule: Everything Else - Moderate
+- Max Percentage Change: 10%
+- Priority: 3
+```
+
+#### Strategy-Based Rules
+
+Different rules for different pricing strategies:
+
+```
+Rule: Undercut Only
+- Allowed Strategies: ["UNDERCUT"]
+- Max Price Change: $50
+- Priority: 1
+
+Rule: Match Only
+- Allowed Strategies: ["MATCH"]
+- Min Confidence: 95
+- Priority: 2
+```
+
+### Security & Compliance
+
+#### Data Security
+
+- All rule evaluations are logged
+- Audit trail is immutable
+- API tokens are encrypted
+- Tenant isolation enforced
+
+#### Compliance
+
+- Complete audit trail for all auto-approvals
+- Rollback capability for all changes
+- Manual override always available
+- Email notifications for transparency
+
+#### Access Control
+
+- Only tenant users can create/edit rules
+- Admin users have full access
+- API authentication required
+- Rate limiting enforced
+
+### API Integration
+
+Auto-approval rules can be managed via API:
+
+**List Rules:**
+```bash
+GET /api/v1/auto-approval-rules
+Authorization: Bearer <token>
+```
+
+**Create Rule:**
+```bash
+POST /api/v1/auto-approval-rules
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "Small Changes",
+  "enabled": true,
+  "priority": 1,
+  "conditions": {
+    "maxPriceChange": 20,
+    "minConfidenceScore": 85
+  }
+}
+```
+
+**Update Rule:**
+```bash
+PUT /api/v1/auto-approval-rules/:id
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "enabled": false
+}
+```
+
+**Toggle Rule:**
+```bash
+PATCH /api/v1/auto-approval-rules/:id/toggle
+Authorization: Bearer <token>
+```
+
+**Get Metrics:**
+```bash
+GET /api/v1/auto-approval-rules/metrics
+Authorization: Bearer <token>
+```
+
+For complete API documentation, see the [API Reference](#api-reference) section.
 
 ---
 
@@ -525,6 +1164,44 @@ A: Only if you enable automatic updates. You can also use manual approval mode w
 **Q: What if a pricing rule would make me lose money?**
 A: Use the "Margin Lock" strategy to ensure you never go below a certain profit margin, regardless of competitor prices.
 
+### Auto-Approval Rules Questions
+
+**Q: What are auto-approval rules?**
+A: Auto-approval rules automatically approve price changes that meet specific conditions you define, reducing manual review workload while maintaining control over pricing decisions.
+
+**Q: How do I create an auto-approval rule?**
+A: Go to Dashboard → Auto-Approval Rules → Create New Rule. Set conditions like max price change, percentage change, confidence score, and more. See the [Auto-Approval Rules Guide](#auto-approval-rules-guide) for details.
+
+**Q: Can I have multiple auto-approval rules?**
+A: Yes! You can create multiple rules with different priorities. Rules are evaluated in priority order (lowest number first), and the first matching rule is applied.
+
+**Q: What happens if multiple rules match a price change?**
+A: Only the first matching rule (by priority order) is applied. Evaluation stops after the first match (short-circuit behavior).
+
+**Q: Can I temporarily disable auto-approval?**
+A: Yes! You can disable individual rules using the toggle switch, or disable all rules to return to manual approval only.
+
+**Q: What if I don't want a specific change to be auto-approved?**
+A: You can manually approve or reject any change before auto-approval runs. Manual decisions always take precedence over auto-approval.
+
+**Q: How often does auto-approval run?**
+A: Auto-approval processing runs every hour via a scheduled cron job. It evaluates all PENDING price changes against your enabled rules.
+
+**Q: Can I see which rule auto-approved a change?**
+A: Yes! Go to Dashboard → Price Approvals and look for the "Auto-approved by: [Rule Name]" badge. Full details are available in the audit logs.
+
+**Q: What happens if the store update fails after auto-approval?**
+A: The system automatically rolls back the approval status to PENDING. No price history or audit log is created for failed updates.
+
+**Q: Will auto-approval work with my existing manual approval workflow?**
+A: Yes! Auto-approval and manual approval work together seamlessly. You can use both approaches, and manual approvals always take precedence.
+
+**Q: How do I know if my auto-approval rules are working well?**
+A: Check the metrics dashboard (Dashboard → Auto-Approval Rules → View Metrics) to see auto-approval rates, per-rule statistics, and non-matching changes.
+
+**Q: Can I get notified when prices are auto-approved?**
+A: Yes! Enable email notifications in Dashboard → Settings → Notifications. You'll receive summaries of auto-approved changes with rule details.
+
 ### Technical Questions
 
 **Q: How often does PricePilot check competitor prices?**
@@ -566,6 +1243,40 @@ A: Ensure:
 2. Your pricing rules are active
 3. The API connection to your store is working
 4. Check the update logs for error messages
+
+**Q: Auto-approval rules aren't working**
+A: Check these:
+1. Rule is enabled (toggle switch is ON)
+2. Rule conditions match the pending change
+3. Change status is PENDING (not already approved/rejected)
+4. Cron job is running (check system status)
+5. No higher-priority rule is blocking the match
+6. Review audit logs for evaluation details
+
+**Q: Too many changes are being auto-approved**
+A: Make your rules more restrictive:
+1. Lower the max price change limit
+2. Reduce the max percentage change
+3. Increase the minimum confidence score
+4. Limit allowed strategies
+5. Add product category filters
+6. Temporarily disable aggressive rules
+
+**Q: Wrong auto-approval rule is triggering**
+A: Review rule priorities:
+1. Lower priority numbers are evaluated first
+2. First matching rule wins (short-circuit)
+3. Adjust priority numbers to change evaluation order
+4. Make higher-priority rules more specific
+5. Consider disabling conflicting rules
+
+**Q: Auto-approved changes failed to update my store**
+A: Check:
+1. Store API connection is working (test in Integrations)
+2. API token is valid and not expired
+3. Store is accessible from the internet
+4. Review error messages in audit logs
+5. Failed updates are automatically rolled back to PENDING
 
 ---
 

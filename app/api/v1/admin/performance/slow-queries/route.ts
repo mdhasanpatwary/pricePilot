@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
                 trends: trends.map(trend => ({
                     date: trend.date.toISOString().split('T')[0],
                     avgExecutionTime: trend.avgExecutionTime,
-                    queryCount: trend.queryCount,
+                    queryCount: trend.executionCount,
                 })),
             },
             meta: {

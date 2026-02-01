@@ -27,24 +27,57 @@
       "Product": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "sku": { "type": "string" },
-          "title": { "type": "string" },
-          "currentPrice": { "type": "number" },
-          "currency": { "type": "string" },
-          "inStock": { "type": "boolean" },
-          "url": { "type": "string" },
-          "category": { "type": "string" }
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "currentPrice": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inStock": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
         }
       },
       "Match": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "userProductId": { "type": "string" },
-          "competitorProductId": { "type": "string" },
-          "confidenceScore": { "type": "number" },
-          "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] }
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userProductId": {
+            "type": "string"
+          },
+          "competitorProductId": {
+            "type": "string"
+          },
+          "confidenceScore": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ]
+          }
         }
       },
       "AnalyticsSummary": {
@@ -53,18 +86,32 @@
           "stats": {
             "type": "object",
             "properties": {
-              "totalSKUs": { "type": "integer" },
-              "activeRivals": { "type": "integer" },
-              "criticalAlerts": { "type": "integer" },
-              "marketEdge": { "type": "number" }
+              "totalSKUs": {
+                "type": "integer"
+              },
+              "activeRivals": {
+                "type": "integer"
+              },
+              "criticalAlerts": {
+                "type": "integer"
+              },
+              "marketEdge": {
+                "type": "number"
+              }
             }
           },
           "positionSummary": {
             "type": "object",
             "properties": {
-              "cheapest": { "type": "integer" },
-              "neutral": { "type": "integer" },
-              "expensive": { "type": "integer" }
+              "cheapest": {
+                "type": "integer"
+              },
+              "neutral": {
+                "type": "integer"
+              },
+              "expensive": {
+                "type": "integer"
+              }
             }
           }
         }
@@ -72,10 +119,297 @@
       "Webhook": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "url": { "type": "string", "format": "uri" },
-          "isActive": { "type": "boolean" },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RuleConditions": {
+        "type": "object",
+        "description": "Conditions for auto-approval. All specified conditions must be satisfied (AND logic).",
+        "properties": {
+          "maxPriceChange": {
+            "type": "number",
+            "description": "Maximum absolute price change in currency units (e.g., 50.00)",
+            "minimum": 0,
+            "example": 50.00
+          },
+          "maxPercentageChange": {
+            "type": "number",
+            "description": "Maximum percentage change (0-100)",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 10.0
+          },
+          "minConfidenceScore": {
+            "type": "number",
+            "description": "Minimum product match confidence score (0-100)",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 85
+          },
+          "allowedStrategies": {
+            "type": "array",
+            "description": "List of allowed pricing strategies",
+            "items": {
+              "type": "string",
+              "enum": [
+                "UNDERCUT",
+                "MATCH",
+                "MARGIN_LOCK",
+                "THRESHOLD",
+                "PERCENTAGE"
+              ]
+            },
+            "example": [
+              "UNDERCUT",
+              "MATCH"
+            ]
+          },
+          "productCategories": {
+            "type": "array",
+            "description": "List of allowed product categories",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Electronics",
+              "Computers"
+            ]
+          },
+          "priceRange": {
+            "type": "object",
+            "description": "Allowed price range for the new price",
+            "properties": {
+              "min": {
+                "type": "number",
+                "description": "Minimum price",
+                "example": 50.00
+              },
+              "max": {
+                "type": "number",
+                "description": "Maximum price",
+                "example": 500.00
+              }
+            }
+          }
+        }
+      },
+      "AutoApprovalRule": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "name",
+          "enabled",
+          "priority",
+          "conditions",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique rule identifier"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Tenant identifier"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable rule name",
+            "example": "Small Price Decreases"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional rule description",
+            "example": "Automatically approve price decreases under $50"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the rule is active",
+            "example": true
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Evaluation priority (lower numbers = higher priority)",
+            "minimum": 1,
+            "example": 1
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/RuleConditions"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Rule creation timestamp"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp"
+          }
+        }
+      },
+      "CreateAutoApprovalRule": {
+        "type": "object",
+        "required": [
+          "name",
+          "enabled",
+          "priority",
+          "conditions"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable rule name",
+            "example": "Small Price Decreases"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional rule description",
+            "example": "Automatically approve price decreases under $50"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the rule is active",
+            "default": true,
+            "example": true
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Evaluation priority (lower numbers = higher priority)",
+            "minimum": 1,
+            "default": 1,
+            "example": 1
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/RuleConditions"
+          }
+        }
+      },
+      "UpdateAutoApprovalRule": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable rule name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional rule description"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the rule is active"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Evaluation priority",
+            "minimum": 1
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/RuleConditions"
+          }
+        }
+      },
+      "AutoApprovalMetrics": {
+        "type": "object",
+        "properties": {
+          "totalAutoApprovals": {
+            "type": "integer",
+            "description": "Total number of auto-approved changes",
+            "example": 150
+          },
+          "autoApprovalPercentage": {
+            "type": "number",
+            "description": "Percentage of changes auto-approved",
+            "example": 65.5
+          },
+          "nonMatchingChanges": {
+            "type": "integer",
+            "description": "Number of changes that didn't match any rule",
+            "example": 25
+          },
+          "topRules": {
+            "type": "array",
+            "description": "Most frequently triggered rules",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ruleId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "ruleName": {
+                  "type": "string"
+                },
+                "triggerCount": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "VALIDATION_ERROR"
+              },
+              "message": {
+                "type": "string",
+                "example": "Validation failed"
+              },
+              "details": {
+                "type": "object",
+                "properties": {
+                  "fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "example": {
+                      "maxPriceChange": [
+                        "Must be greater than 0"
+                      ],
+                      "minConfidenceScore": [
+                        "Must be between 0 and 100"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -97,7 +431,9 @@
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/Product" }
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  }
                 }
               }
             }
@@ -114,9 +450,462 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/AnalyticsSummary" }
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSummary"
+                }
               }
             }
+          }
+        }
+      }
+    },
+    "/auto-approval-rules": {
+      "get": {
+        "summary": "List auto-approval rules",
+        "description": "Returns all auto-approval rules for the authenticated tenant, ordered by priority.",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AutoApprovalRule"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "example": 5
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create auto-approval rule",
+        "description": "Creates a new auto-approval rule with specified conditions. All conditions must be satisfied for auto-approval (AND logic).",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAutoApprovalRule"
+              },
+              "examples": {
+                "smallChanges": {
+                  "summary": "Small price changes",
+                  "value": {
+                    "name": "Small Price Changes",
+                    "description": "Auto-approve changes under $20",
+                    "enabled": true,
+                    "priority": 1,
+                    "conditions": {
+                      "maxPriceChange": 20.00,
+                      "minConfidenceScore": 85
+                    }
+                  }
+                },
+                "highConfidence": {
+                  "summary": "High confidence matches",
+                  "value": {
+                    "name": "High Confidence Only",
+                    "description": "Auto-approve high confidence matches",
+                    "enabled": true,
+                    "priority": 2,
+                    "conditions": {
+                      "minConfidenceScore": 95,
+                      "maxPercentageChange": 10.0
+                    }
+                  }
+                },
+                "categorySpecific": {
+                  "summary": "Electronics only",
+                  "value": {
+                    "name": "Electronics Auto-Approval",
+                    "description": "Auto-approve electronics with constraints",
+                    "enabled": true,
+                    "priority": 3,
+                    "conditions": {
+                      "productCategories": [
+                        "Electronics",
+                        "Computers"
+                      ],
+                      "maxPercentageChange": 15.0,
+                      "allowedStrategies": [
+                        "UNDERCUT",
+                        "MATCH"
+                      ],
+                      "priceRange": {
+                        "min": 50.00,
+                        "max": 1000.00
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Rule created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AutoApprovalRule"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - Invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auto-approval-rules/{id}": {
+      "get": {
+        "summary": "Get auto-approval rule",
+        "description": "Returns a single auto-approval rule by ID. Rule must belong to authenticated tenant.",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Rule ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AutoApprovalRule"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "403": {
+            "description": "Forbidden - Rule belongs to different tenant"
+          },
+          "404": {
+            "description": "Not found - Rule does not exist"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update auto-approval rule",
+        "description": "Updates an existing auto-approval rule. All fields are optional. Rule must belong to authenticated tenant.",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Rule ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAutoApprovalRule"
+              },
+              "examples": {
+                "updateConditions": {
+                  "summary": "Update conditions",
+                  "value": {
+                    "conditions": {
+                      "maxPriceChange": 30.00,
+                      "minConfidenceScore": 90
+                    }
+                  }
+                },
+                "disableRule": {
+                  "summary": "Disable rule",
+                  "value": {
+                    "enabled": false
+                  }
+                },
+                "changePriority": {
+                  "summary": "Change priority",
+                  "value": {
+                    "priority": 5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rule updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AutoApprovalRule"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - Invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "403": {
+            "description": "Forbidden - Rule belongs to different tenant"
+          },
+          "404": {
+            "description": "Not found - Rule does not exist"
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete auto-approval rule",
+        "description": "Permanently deletes an auto-approval rule. Rule must belong to authenticated tenant. This action cannot be undone.",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Rule ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rule deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Rule deleted successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "403": {
+            "description": "Forbidden - Rule belongs to different tenant"
+          },
+          "404": {
+            "description": "Not found - Rule does not exist"
+          }
+        }
+      }
+    },
+    "/auto-approval-rules/{id}/toggle": {
+      "patch": {
+        "summary": "Toggle auto-approval rule",
+        "description": "Toggles the enabled status of an auto-approval rule. If enabled, it will be disabled, and vice versa. Rule must belong to authenticated tenant.",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Rule ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rule toggled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AutoApprovalRule"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "403": {
+            "description": "Forbidden - Rule belongs to different tenant"
+          },
+          "404": {
+            "description": "Not found - Rule does not exist"
+          }
+        }
+      }
+    },
+    "/auto-approval-rules/metrics": {
+      "get": {
+        "summary": "Get auto-approval metrics",
+        "description": "Returns metrics about auto-approval effectiveness for the authenticated tenant, including total approvals, approval percentage, and per-rule statistics.",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AutoApprovalMetrics"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "totalAutoApprovals": 150,
+                    "autoApprovalPercentage": 65.5,
+                    "nonMatchingChanges": 25,
+                    "topRules": [
+                      {
+                        "ruleId": "123e4567-e89b-12d3-a456-426614174000",
+                        "ruleName": "Small Price Changes",
+                        "triggerCount": 85
+                      },
+                      {
+                        "ruleId": "123e4567-e89b-12d3-a456-426614174001",
+                        "ruleName": "High Confidence Only",
+                        "triggerCount": 65
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
           }
         }
       }
@@ -131,7 +920,9 @@
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/Webhook" }
+                  "items": {
+                    "$ref": "#/components/schemas/Webhook"
+                  }
                 }
               }
             }
@@ -146,17 +937,25 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["url"],
+                "required": [
+                  "url"
+                ],
                 "properties": {
-                  "url": { "type": "string" },
-                  "secret": { "type": "string" }
+                  "url": {
+                    "type": "string"
+                  },
+                  "secret": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": { "description": "Created" }
+          "201": {
+            "description": "Created"
+          }
         }
       }
     }

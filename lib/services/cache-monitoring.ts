@@ -56,13 +56,6 @@ export class CacheMonitoringService {
     private cacheLayer: CacheLayer;
     private redis: ReturnType<typeof getRedisConnection>;
 
-    private readonly DEFAULT_CONFIG: MonitoringConfig = {
-        hitRateThreshold: 0.6,        // 60%
-        memoryUsageThreshold: 0.8,    // 80%
-        responseTimeThreshold: 100,   // 100ms
-        memoryLimit: this.getMemoryLimitFromEnv(), // Read from env or default to 500MB
-    };
-
     private config: MonitoringConfig;
 
     constructor(config?: Partial<MonitoringConfig>) {

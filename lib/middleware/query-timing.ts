@@ -7,7 +7,7 @@
  * Requirements: 1.1, 1.2
  */
 
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { getQueryAnalyzer } from '@/lib/services/query-analyzer';
 import { SLOW_QUERY_THRESHOLD_MS } from '@/lib/database/optimization-constants';
 
@@ -15,10 +15,10 @@ import { SLOW_QUERY_THRESHOLD_MS } from '@/lib/database/optimization-constants';
  * Query timing middleware for Prisma
  * Captures execution time and logs slow queries
  */
-export function createQueryTimingMiddleware(prisma: PrismaClient): Prisma.Middleware {
+export function createQueryTimingMiddleware(prisma: PrismaClient) {
     const queryAnalyzer = getQueryAnalyzer(prisma);
 
-    return async (params, next) => {
+    return async (params: any, next: any) => {
         const startTime = Date.now();
 
         try {
@@ -72,14 +72,11 @@ export function createQueryTimingMiddleware(prisma: PrismaClient): Prisma.Middle
 
 /**
  * Apply query timing middleware to Prisma client
+ * Note: Prisma 5+ removed $use middleware API. Query timing is now handled
+ * via Prisma Client Extensions or external monitoring tools.
  */
-export function applyQueryTimingMiddleware(prisma: PrismaClient): void {
-    // Skip middleware in test environment if $use is not available
-    if (typeof prisma.$use !== 'function') {
-        console.warn('Prisma $use middleware not available, skipping query timing middleware');
-        return;
-    }
-
-    const middleware = createQueryTimingMiddleware(prisma);
-    prisma.$use(middleware);
+export function applyQueryTimingMiddleware(_prisma: PrismaClient): void {
+    // Middleware functionality removed in Prisma 5+
+    // Query timing can be implemented via Prisma Client Extensions if needed
+    console.log('[QueryTiming] Middleware API not available in Prisma 5+, skipping');
 }

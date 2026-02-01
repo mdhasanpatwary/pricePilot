@@ -1,24 +1,24 @@
 /**
  * Query Optimization Utilities
- * 
+ *
  * Provides utilities for optimized database queries including:
  * - Parameterized query helpers
  * - Cursor-based pagination for large tables
  * - Tenant ID filtering middleware
- * 
+ *
  * Requirements: 5.1, 5.2, 5.4
  */
 
-import { Prisma } from '@prisma/client';
+
 
 /**
  * Parameterized Query Helper
- * 
+ *
  * Ensures all queries use parameterized statements to:
  * - Prevent SQL injection
  * - Enable query plan caching
  * - Improve performance
- * 
+ *
  * Validates: Requirement 5.1
  */
 export class ParameterizedQueryHelper {
@@ -82,10 +82,10 @@ export class ParameterizedQueryHelper {
 
 /**
  * Cursor-Based Pagination Helper
- * 
+ *
  * Implements efficient cursor-based pagination for large tables (>10,000 rows)
  * instead of offset-based pagination which becomes slow on large datasets.
- * 
+ *
  * Validates: Requirement 5.2
  */
 export interface CursorPaginationOptions {
@@ -114,7 +114,7 @@ export class CursorPaginationHelper {
     /**
      * Build cursor-based pagination query
      */
-    static buildCursorQuery<T extends { id: string }>(
+    static buildCursorQuery(
         options: CursorPaginationOptions
     ): any {
         const { cursor, take, orderBy } = options;
@@ -168,10 +168,10 @@ export class CursorPaginationHelper {
 
 /**
  * Tenant ID Filtering Middleware
- * 
+ *
  * Ensures all multi-tenant queries include tenantId in the WHERE clause
  * as the first filter to enforce tenant isolation.
- * 
+ *
  * Validates: Requirement 5.4
  */
 export interface TenantFilterOptions {
@@ -228,7 +228,7 @@ export class TenantFilterMiddleware {
             /**
              * Build a find query with tenant filter
              */
-            findMany: <T>(additionalFilters?: Record<string, any>) => {
+            findMany: (additionalFilters?: Record<string, any>) => {
                 return this.buildTenantQuery({ tenantId, additionalFilters });
             },
 
@@ -281,7 +281,7 @@ export class TenantFilterMiddleware {
 
 /**
  * Query Optimization Utilities
- * 
+ *
  * Collection of utility functions for query optimization
  */
 export class QueryOptimizationUtils {
@@ -347,9 +347,4 @@ export class QueryOptimizationUtils {
 /**
  * Export all utilities
  */
-export {
-    ParameterizedQueryHelper,
-    CursorPaginationHelper,
-    TenantFilterMiddleware,
-    QueryOptimizationUtils,
-};
+

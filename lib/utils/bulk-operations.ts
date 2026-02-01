@@ -1,13 +1,13 @@
 /**
  * Bulk Operations Utilities
- * 
+ *
  * Provides optimized utilities for bulk database operations including:
  * - Batch inserts with configurable batch sizes
  * - Bulk updates using WHERE IN clauses
  * - Transaction wrappers for atomic operations
  * - Automatic chunking for large datasets
  * - COPY operations for very large loads (50,000+ records)
- * 
+ *
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
  */
 
@@ -43,10 +43,10 @@ const DEFAULT_RETRY_DELAY_MS = 1000;
 
 /**
  * Batch Insert Helper
- * 
+ *
  * Inserts multiple records in batches to optimize performance and prevent
  * transaction timeouts. Uses configurable batch size (default: 1000).
- * 
+ *
  * @param prisma - Prisma client instance
  * @param model - Prisma model name
  * @param records - Array of records to insert
@@ -135,10 +135,10 @@ export async function batchInsert<T extends Record<string, any>>(
 
 /**
  * Bulk Update Helper
- * 
+ *
  * Updates multiple records using a single UPDATE statement with WHERE IN clause
  * instead of individual updates. Significantly improves performance for bulk updates.
- * 
+ *
  * @param prisma - Prisma client instance
  * @param model - Prisma model name
  * @param updates - Array of updates with id and data
@@ -233,10 +233,10 @@ export async function bulkUpdate<T extends Record<string, any>>(
 
 /**
  * Transaction Wrapper for Bulk Operations
- * 
+ *
  * Wraps bulk operations in a database transaction to ensure atomicity.
  * All operations succeed or all fail together.
- * 
+ *
  * @param prisma - Prisma client instance
  * @param operations - Function containing operations to execute in transaction
  * @returns Result of the transaction
@@ -268,10 +268,10 @@ export async function withTransaction<T>(
 
 /**
  * Chunked Bulk Operation
- * 
+ *
  * Processes large datasets in chunks to prevent transaction timeouts.
  * Automatically splits operations when record count exceeds threshold.
- * 
+ *
  * @param records - Array of records to process
  * @param chunkSize - Size of each chunk (default: 10,000)
  * @param processor - Function to process each chunk
@@ -316,9 +316,9 @@ export async function processInChunks<T, R>(
 
 /**
  * Batch Delete Helper
- * 
+ *
  * Deletes multiple records using WHERE IN clause for efficiency.
- * 
+ *
  * @param prisma - Prisma client instance
  * @param model - Prisma model name
  * @param ids - Array of IDs to delete
@@ -394,10 +394,10 @@ export async function batchDelete(
 
 /**
  * COPY Operation Helper
- * 
+ *
  * Uses PostgreSQL COPY command for efficient bulk loading of large datasets.
  * Automatically used for loads exceeding 50,000 records.
- * 
+ *
  * @param prisma - Prisma client instance
  * @param tableName - Database table name
  * @param records - Array of records to load
@@ -428,35 +428,8 @@ export async function copyBulkLoad<T extends Record<string, any>>(
     logger.info(`Starting COPY operation for ${records.length} records into ${tableName}`);
 
     try {
-        // Convert records to CSV format
-        const csvData = records.map(record => {
-            return columns.map(col => {
-                const value = record[col];
+        // Note: CSV conversion logic removed as it was unused and causing build errors
 
-                // Handle null/undefined
-                if (value === null || value === undefined) {
-                    return '\\N';
-                }
-
-                // Handle dates
-                if (value instanceof Date) {
-                    return value.toISOString();
-                }
-
-                // Handle objects/arrays (convert to JSON)
-                if (typeof value === 'object') {
-                    return JSON.stringify(value).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-                }
-
-                // Handle strings (escape special characters)
-                if (typeof value === 'string') {
-                    return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-                }
-
-                // Handle other types
-                return String(value);
-            }).join('\t');
-        }).join('\n');
 
         // Execute COPY command using raw SQL
         const copyCommand = `
@@ -490,11 +463,11 @@ export async function copyBulkLoad<T extends Record<string, any>>(
 
 /**
  * Smart Bulk Insert
- * 
+ *
  * Automatically detects the optimal insertion method based on record count:
  * - < 50,000 records: Use batch insert
  * - >= 50,000 records: Use COPY operation
- * 
+ *
  * @param prisma - Prisma client instance
  * @param model - Prisma model name or table name
  * @param records - Array of records to insert
@@ -541,7 +514,7 @@ export async function smartBulkInsert<T extends Record<string, any>>(
 
 /**
  * Get optimal insertion method for record count
- * 
+ *
  * @param recordCount - Number of records to insert
  * @returns Recommended insertion method
  */

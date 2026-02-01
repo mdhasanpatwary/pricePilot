@@ -1,26 +1,22 @@
 /**
  * Performance Testing Service
- * 
+ *
  * Provides comprehensive performance testing capabilities including:
  * - Multi-tenant workload simulation
  * - Query response time measurement (p50, p95, p99)
  * - Concurrent connection testing
  * - Performance baseline establishment
  * - Regression detection
- * 
+ *
  * @module lib/services/performance-tester
  */
 
 import { Pool } from 'pg';
 import {
-    PerformanceBaseline,
-    PerformanceComparison,
     WorkloadSimulation,
-    QueryMetrics,
 } from '@/lib/types/database-optimization';
 import {
     PERFORMANCE_TEST_CONCURRENT_CONNECTIONS,
-    PERFORMANCE_REGRESSION_THRESHOLD,
     PERFORMANCE_BASELINE_SAMPLE_SIZE,
 } from '@/lib/database/optimization-constants';
 import { logger } from '@/lib/logger';

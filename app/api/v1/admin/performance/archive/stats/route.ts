@@ -1,6 +1,6 @@
 /**
  * Archive Statistics API
- * 
+ *
  * Provides statistics about archived data including record counts,
  * storage size, and oldest archived records.
  */
@@ -8,18 +8,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { optimizedPrisma } from '@/lib/database/optimized-prisma';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
-const archiveManager = new ArchiveManager(prisma);
+const archiveManager = new ArchiveManager(optimizedPrisma);
 
 /**
  * GET /api/v1/admin/performance/archive/stats
- * 
+ *
  * Get archive statistics
- * 
+ *
  * Returns:
  * - priceHistoryArchived: Number of archived price history records
  * - auditLogsArchived: Number of archived audit log records

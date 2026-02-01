@@ -39,8 +39,8 @@ export class CacheInvalidationPubSub {
     private isSubscriberReady: boolean = false;
 
     private constructor() {
-        // Generate unique instance ID
-        this.instanceId = `instance-${process.pid}-${Date.now()}`;
+        // Generate unique instance ID (use random for edge compatibility)
+        this.instanceId = `instance-${Math.random().toString(36).substring(7)}-${Date.now()}`;
 
         // Create separate connections for publisher and subscriber
         // Redis pub/sub requires dedicated connections

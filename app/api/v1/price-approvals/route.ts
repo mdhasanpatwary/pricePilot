@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 
 /**
  * GET /api/v1/price-approvals
@@ -18,52 +19,43 @@ async function handleGET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url);
         const status = searchParams.get("status") || "PENDING";
-        const page = parseInt(searchParams.get("page") || "1");
-        const limit = parseInt(searchParams.get("limit") || "50");
-        const skip = (page - 1) * limit;
 
-        const [changes, total] = await Promise.all([
-            prisma.pendingPriceChange.findMany({
-                where: {
-                    tenantId: session.user.tenantId,
-                    status: status as any,
-                },
-                include: {
-                    product: {
-                        select: {
-                            id: true,
-                            title: true,
-                            sku: true,
-                            imageUrl: true,
-                            site: {
-                                select: {
-                                    baseUrl: true,
-                                    type: true,
-                                },
+        // Get pagination parameters
+        const paginationParams = getPaginationParams(searchParams);
+
+        // Use pagination helper
+        const paginatedResult = await paginate(
+            prisma.pendingPriceChange,
+            {
+                tenantId: session.user.tenantId,
+                status: status as any,
+            },
+            {
+                ...paginationParams,
+                sortBy: paginationParams.sortBy || 'createdAt',
+                sortOrder: paginationParams.sortOrder || 'desc'
+            },
+            {
+                product: {
+                    select: {
+                        id: true,
+                        title: true,
+                        sku: true,
+                        imageUrl: true,
+                        site: {
+                            select: {
+                                baseUrl: true,
+                                type: true,
                             },
                         },
                     },
                 },
-                orderBy: { createdAt: "desc" },
-                skip,
-                take: limit,
-            }),
-            prisma.pendingPriceChange.count({
-                where: {
-                    tenantId: session.user.tenantId,
-                    status: status as any,
-                },
-            }),
-        ]);
+            }
+        );
 
         return NextResponse.json({
-            changes,
-            pagination: {
-                page,
-                limit,
-                total,
-                pages: Math.ceil(total / limit),
-            },
+            changes: paginatedResult.data,
+            pagination: paginatedResult.pagination,
         });
     } catch (error) {
         console.error("[API] Error fetching pending price changes:", error);

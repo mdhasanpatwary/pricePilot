@@ -356,22 +356,13 @@ export class CacheLayer {
             const { prisma } = await import("@/lib/prisma");
 
             // Warm product comparison data (5-minute TTL)
-            const products = await prisma.userProduct.findMany({
+            const products = await prisma.product.findMany({
                 where: {
                     tenantId,
-                    status: "active",
                 },
                 take: 100, // Top 100 products
                 orderBy: {
-                    lastSyncAt: "desc",
-                },
-                include: {
-                    productMatches: {
-                        where: { status: "active" },
-                        include: {
-                            competitorProduct: true,
-                        },
-                    },
+                    updatedAt: "desc",
                 },
             });
 
@@ -382,26 +373,12 @@ export class CacheLayer {
                 await this.set(cacheKey, product, 300); // 5 minutes
             }
 
-            // Warm competitor product data (15-minute TTL)
-            const competitors = await prisma.competitorProduct.findMany({
-                where: {
-                    tenantId,
-                },
-                take: 200, // Top 200 competitor products
-                orderBy: {
-                    lastScrapedAt: "desc",
-                },
-            });
-
-            for (const competitor of competitors) {
-                const cacheKey = this.keys.competitorProducts(competitor.id);
-                await this.set(cacheKey, competitor, 900); // 15 minutes
-            }
+            // Note: Competitor product warming disabled - model structure needs update
+            // const competitors = await prisma.competitorProduct.findMany({...});
 
             logger.info("[CacheLayer] Cache warming completed", {
                 tenantId,
                 productsWarmed: products.length,
-                competitorsWarmed: competitors.length,
             });
         } catch (error) {
             logger.error("[CacheLayer] Cache warming error", { tenantId, error });

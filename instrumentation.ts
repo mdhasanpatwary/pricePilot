@@ -1,10 +1,11 @@
+export const runtime = 'nodejs';
+
 /**
  * Next.js instrumentation file for application startup hooks
  * This file runs once when the server starts
  */
 
-import { KeyManager } from './lib/services/encryption';
-import { initializeDistributedCache } from './lib/services/cache-initialization';
+
 
 /**
  * Validates critical environment variables on application startup
@@ -15,13 +16,10 @@ function validateEnvironment(): void {
 
     // Validate encryption key
     try {
-        const keyManager = new KeyManager();
-        keyManager.validateKey();
-        console.log('✓ Encryption key validated successfully');
+        // We handle this in register now to use dynamic imports
+        console.log('✓ Encryption key validation check scheduled');
     } catch (error) {
-        if (error instanceof Error) {
-            errors.push(`Encryption key validation failed: ${error.message}`);
-        }
+        // Handled below
     }
 
     // Add other critical environment variable checks here
@@ -42,27 +40,17 @@ function validateEnvironment(): void {
         console.error('❌ Environment validation failed:');
         errors.forEach(error => console.error(`  - ${error}`));
         console.error('\nApplication cannot start with invalid configuration.');
-        process.exit(1);
+
+        // process.exit is only available in Node.js
+        if (typeof process !== 'undefined' && typeof process.exit === 'function') {
+            process.exit(1);
+        }
     }
 
     console.log('✓ Environment validation completed successfully');
 }
 
-/**
- * Initialize distributed caching infrastructure
- * Non-blocking - application continues if cache initialization fails
- */
-async function initializeCache(): Promise<void> {
-    try {
-        await initializeDistributedCache();
-        console.log('✓ Distributed cache initialized successfully');
-    } catch (error) {
-        console.warn('⚠️  Distributed cache initialization failed, continuing without it');
-        if (error instanceof Error) {
-            console.warn(`  Reason: ${error.message}`);
-        }
-    }
-}
+
 
 /**
  * Register function called when the server starts
@@ -71,9 +59,32 @@ async function initializeCache(): Promise<void> {
 export async function register() {
     // Only run validation in Node.js runtime
     if (process.env.NEXT_RUNTIME === 'nodejs') {
+        const { KeyManager } = await import('./lib/services/encryption');
+        const { initializeDistributedCache } = await import('./lib/services/cache-initialization');
+
+        // Validate encryption key separately because it's the only one using dynamic import
+        try {
+            const keyManager = new KeyManager();
+            keyManager.validateKey();
+            console.log('✓ Encryption key validated successfully');
+        } catch (error) {
+            console.error('❌ Encryption key validation failed:', error instanceof Error ? error.message : String(error));
+            if (typeof process !== 'undefined' && typeof process.exit === 'function') {
+                process.exit(1);
+            }
+        }
+
         validateEnvironment();
 
         // Initialize distributed cache (non-blocking)
-        await initializeCache();
+        try {
+            await initializeDistributedCache();
+            console.log('✓ Distributed cache initialized successfully');
+        } catch (error) {
+            console.warn('⚠️  Distributed cache initialization failed, continuing without it');
+            if (error instanceof Error) {
+                console.warn(`  Reason: ${error.message}`);
+            }
+        }
     }
 }

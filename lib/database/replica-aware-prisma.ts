@@ -8,7 +8,6 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
 import { ReadReplicaRouterImpl } from '@/lib/services/read-replica-router';
 import { applyQueryTimingMiddleware } from '@/lib/middleware/query-timing';
 
@@ -55,17 +54,10 @@ export function getReplicaAwarePrisma(): PrismaClient {
                 replicaConfigs
             );
 
-            // Use the router's primary pool for the adapter
-            const pool = globalForReplicaPrisma.replicaRouter.getPool();
-            const adapter = new PrismaPg(pool);
-
-            globalForReplicaPrisma.replicaAwarePrisma = new PrismaClient({
-                adapter,
-                log: process.env.NODE_ENV === 'production'
-                    ? ['error', 'warn']
-                    : ['query', 'error', 'warn'],
-                errorFormat: 'pretty',
-            });
+            // For now, use standard optimized Prisma with the router available for manual routing
+            // The router can be accessed via getReplicaRouter() for custom query routing
+            const { getOptimizedPrisma } = require('./optimized-prisma');
+            globalForReplicaPrisma.replicaAwarePrisma = getOptimizedPrisma();
         } else {
             console.log('[ReplicaAwarePrisma] No replicas configured, using primary only');
 

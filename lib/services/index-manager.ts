@@ -1,10 +1,10 @@
 /**
  * Index Manager Component
- * 
+ *
  * Manages database indexes for optimal query performance by analyzing table
  * access patterns, suggesting missing indexes, identifying unused indexes,
  * and maintaining index health.
- * 
+ *
  * Features:
  * - Analyzes pg_stat_statements to suggest missing indexes
  * - Identifies unused indexes using pg_stat_user_indexes
@@ -12,7 +12,7 @@
  * - Monitors index fragmentation using pgstattuple
  * - Rebuilds fragmented indexes during maintenance windows
  * - Tracks index usage statistics
- * 
+ *
  * Requirements: 2.2, 2.3, 2.4, 2.5, 2.6
  */
 
@@ -25,11 +25,11 @@ import {
     IndexDefinition,
     IndexStats
 } from '@/lib/types/database-optimization';
-import { OPTIMIZATION_CONFIG, isMaintenanceWindow } from '@/lib/database/optimization-constants';
+import { isMaintenanceWindow } from '@/lib/database/optimization-constants';
 
 /**
  * IndexManager implementation
- * 
+ *
  * Provides comprehensive index management capabilities including analysis,
  * creation, maintenance, and monitoring.
  */
@@ -38,10 +38,10 @@ export class IndexManager implements IIndexManager {
 
     /**
      * Analyze query patterns and suggest missing indexes
-     * 
+     *
      * Uses pg_stat_statements to identify queries with sequential scans
      * on large tables and suggests appropriate indexes.
-     * 
+     *
      * Requirements: 2.2
      */
     async suggestIndexes(): Promise<IndexSuggestion[]> {
@@ -50,7 +50,7 @@ export class IndexManager implements IIndexManager {
         // Query pg_stat_statements for queries with sequential scans
         const result = await pool.query(`
             WITH slow_queries AS (
-                SELECT 
+                SELECT
                     query,
                     calls,
                     mean_exec_time,
@@ -63,7 +63,7 @@ export class IndexManager implements IIndexManager {
                 LIMIT 50
             ),
             table_sizes AS (
-                SELECT 
+                SELECT
                     schemaname,
                     tablename,
                     pg_total_relation_size(schemaname||'.'||tablename) as size_bytes,
@@ -71,7 +71,7 @@ export class IndexManager implements IIndexManager {
                 FROM pg_stat_user_tables
                 WHERE n_live_tup > 10000
             )
-            SELECT 
+            SELECT
                 t.tablename,
                 t.size_bytes,
                 t.write_activity,
@@ -93,7 +93,7 @@ export class IndexManager implements IIndexManager {
 
             // Get existing indexes for this table
             const existingIndexes = await pool.query(`
-                SELECT 
+                SELECT
                     indexname,
                     indexdef
                 FROM pg_indexes
@@ -207,20 +207,20 @@ export class IndexManager implements IIndexManager {
 
     /**
      * Find unused indexes that can be dropped
-     * 
+     *
      * Uses pg_stat_user_indexes to identify indexes with zero scans
      * over the specified time period.
-     * 
+     *
      * Requirements: 2.3
      */
-    async findUnusedIndexes(minDaysSinceUse: number = 30): Promise<UnusedIndex[]> {
+    async findUnusedIndexes(_minDaysSinceUse: number = 30): Promise<UnusedIndex[]> {
         const pool = this.poolManager.getPool();
 
         // Reset stats if needed to get accurate usage data
         // Note: This should be done carefully in production
 
         const result = await pool.query(`
-            SELECT 
+            SELECT
                 schemaname,
                 tablename,
                 indexname,
@@ -252,10 +252,10 @@ export class IndexManager implements IIndexManager {
 
     /**
      * Create an index concurrently to avoid table locking
-     * 
+     *
      * Uses CREATE INDEX CONCURRENTLY to allow normal operations
      * to continue while the index is being built.
-     * 
+     *
      * Requirements: 2.4
      */
     async createIndexConcurrently(indexDef: IndexDefinition): Promise<void> {
@@ -299,10 +299,10 @@ export class IndexManager implements IIndexManager {
 
     /**
      * Rebuild fragmented indexes during maintenance windows
-     * 
+     *
      * Uses pgstattuple to detect fragmentation and rebuilds indexes
      * that exceed the threshold.
-     * 
+     *
      * Requirements: 2.6
      */
     async rebuildFragmentedIndexes(fragmentationThreshold: number = 30): Promise<void> {
@@ -316,7 +316,7 @@ export class IndexManager implements IIndexManager {
 
         // Get all indexes with their fragmentation stats
         const result = await pool.query(`
-            SELECT 
+            SELECT
                 schemaname,
                 tablename,
                 indexname,
@@ -331,7 +331,7 @@ export class IndexManager implements IIndexManager {
             try {
                 // Check fragmentation using pgstattuple
                 const fragResult = await pool.query(`
-                    SELECT 
+                    SELECT
                         (100 - (100.0 * avg_leaf_density / 100.0))::numeric(5,2) as fragmentation_percent
                     FROM pgstatindex($1)
                 `, [row.indexname]);
@@ -355,17 +355,17 @@ export class IndexManager implements IIndexManager {
 
     /**
      * Get index usage statistics for monitoring
-     * 
+     *
      * Returns comprehensive statistics for all indexes including
      * scans, tuples read/returned, size, and fragmentation.
-     * 
+     *
      * Requirements: 2.5
      */
     async getIndexStats(): Promise<IndexStats[]> {
         const pool = this.poolManager.getPool();
 
         const result = await pool.query(`
-            SELECT 
+            SELECT
                 schemaname,
                 tablename,
                 indexname,
@@ -387,7 +387,7 @@ export class IndexManager implements IIndexManager {
             if (row.size_bytes > 10485760) { // > 10MB
                 try {
                     const fragResult = await pool.query(`
-                        SELECT 
+                        SELECT
                             (100 - (100.0 * avg_leaf_density / 100.0))::numeric(5,2) as fragmentation_percent
                         FROM pgstatindex($1)
                     `, [row.indexname]);

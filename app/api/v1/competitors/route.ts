@@ -12,8 +12,9 @@ import {
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { UnauthorizedError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/utils/error-handler";
+import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 
-async function handleGET(_req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -21,6 +22,10 @@ async function handleGET(_req: NextRequest) {
   }
 
   const tenantId = session.user.tenantId;
+
+  // Get pagination parameters
+  const searchParams = req.nextUrl.searchParams;
+  const paginationParams = getPaginationParams(searchParams);
 
   // Get total number of products the user is tracking (from USER site)
   const totalUserProducts = await prisma.product.count({
@@ -30,30 +35,19 @@ async function handleGET(_req: NextRequest) {
     }
   });
 
-  const competitors = await prisma.site.findMany({
-    where: {
+  // Use pagination helper
+  const paginatedResult = await paginate(
+    prisma.site,
+    {
       tenantId,
       type: "COMPETITOR",
     },
-    select: {
-      id: true,
-      tenantId: true,
-      type: true,
-      platform: true,
-      baseUrl: true,
-      apiToken: true,
-      lastSyncAt: true,
-      isSyncing: true,
-      syncTotal: true,
-      syncProcessed: true,
-      syncLastAction: true,
-      syncStartedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      lastSecurityBlockAt: true,
-      isAdvancedProtected: true, // Explicitly select this field
-      currency: true,
-      searchQueryPattern: true,
+    {
+      ...paginationParams,
+      sortBy: paginationParams.sortBy || 'createdAt',
+      sortOrder: paginationParams.sortOrder || 'desc'
+    },
+    {
       _count: {
         select: { products: true },
       },
@@ -61,14 +55,13 @@ async function handleGET(_req: NextRequest) {
         orderBy: { createdAt: "desc" },
         take: 50,
       },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+    }
+  );
+
+  const competitors = paginatedResult.data;
 
   const formattedCompetitors = competitors
-    .map((site) => {
+    .map((site: any) => {
       try {
         let name = "Unknown";
         try {
@@ -118,7 +111,10 @@ async function handleGET(_req: NextRequest) {
     })
     .filter(Boolean);
 
-  return NextResponse.json(formattedCompetitors);
+  return NextResponse.json({
+    competitors: formattedCompetitors,
+    pagination: paginatedResult.pagination,
+  });
 }
 
 async function handlePOST(req: NextRequest) {

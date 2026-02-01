@@ -1,6 +1,6 @@
 /**
  * Archive Price History API
- * 
+ *
  * Provides read-only access to archived price history records.
  * Supports filtering by tenant, product, and date range.
  */
@@ -8,18 +8,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { PrismaClient } from '@prisma/client';
+import { optimizedPrisma } from '@/lib/database/optimized-prisma';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { logger } from '@/lib/logger';
 
-const prisma = new PrismaClient();
-const archiveManager = new ArchiveManager(prisma);
+const archiveManager = new ArchiveManager(optimizedPrisma);
 
 /**
  * GET /api/v1/admin/performance/archive/price-history
- * 
+ *
  * Query archived price history records
- * 
+ *
  * Query Parameters:
  * - tenantId: Filter by tenant ID
  * - productId: Filter by product ID

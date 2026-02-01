@@ -1,12 +1,12 @@
 #!/usr/bin/env ts-node
 /**
  * Refresh Materialized Views Script
- * 
+ *
  * Refreshes all materialized views used for analytics and reporting.
  * Should be run every 15 minutes via cron job.
- * 
+ *
  * Requirements: 5.6
- * 
+ *
  * Usage:
  *   ts-node scripts/refresh-materialized-views.ts
  */
@@ -16,29 +16,30 @@ import { MaterializedViewManager } from '@/lib/services/materialized-view-manage
 
 async function main() {
     const prisma = new PrismaClient();
-    const viewManager = MaterializedViewManager.getInstance(prisma);
+    const viewManager = new MaterializedViewManager(prisma);
 
     try {
         console.log('Refreshing materialized views...');
         const startTime = Date.now();
 
-        await viewManager.refreshAllViews();
+        await viewManager.refreshDailyPriceComparisonView();
 
         const duration = Date.now() - startTime;
-        console.log(`✓ All materialized views refreshed in ${duration}ms`);
+        console.log(`✓ Materialized views refreshed in ${duration}ms`);
 
         // Get view statistics
-        const stats = await viewManager.getViewStats();
+        const stats = await viewManager.getViewStats('daily_price_comparison_summary');
 
         console.log('\nView Statistics:');
         console.log('─'.repeat(80));
-        stats.forEach(stat => {
-            console.log(`${stat.viewName}:`);
-            console.log(`  Rows: ${stat.rowCount}`);
-            console.log(`  Size: ${(stat.sizeBytes / 1024 / 1024).toFixed(2)} MB`);
-            console.log(`  Last Refresh: ${stat.lastRefresh.toISOString()}`);
+
+        if (stats) {
+            console.log(`${stats.name}:`);
+            console.log(`  Rows: ${stats.rowCount}`);
+            console.log(`  Size: ${(stats.sizeBytes / 1024 / 1024).toFixed(2)} MB`);
+            console.log(`  Last Refresh: ${stats.lastRefreshed.toISOString()}`); // corrected property name
             console.log('');
-        });
+        }
 
     } catch (error) {
         console.error('Error refreshing materialized views:', error);

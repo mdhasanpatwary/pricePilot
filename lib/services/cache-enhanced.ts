@@ -4,7 +4,7 @@ import crypto from "crypto";
 
 /**
  * Enhanced Cache Service with Application-Specific Methods
- * 
+ *
  * Extends CacheLayer with domain-specific caching operations for:
  * - Products
  * - Comparisons
@@ -12,13 +12,13 @@ import crypto from "crypto";
  * - Competitor products
  * - Price history
  * - Analytics
- * 
+ *
  * Features:
  * - Tenant isolation
  * - Configurable TTLs
  * - Graceful degradation
  * - Statistics tracking
- * 
+ *
  * Requirements: 1.1, 1.2, 1.3, 1.4, 5.1, 5.2, 5.3
  */
 
@@ -161,7 +161,7 @@ export class CacheEnhancedService {
      * Cache product matches
      * Requirement 1.1: Cache infrastructure integration
      */
-    async cacheMatches(tenantId: string, productId: string, matches: any[], ttl?: number): Promise<void> {
+    async cacheMatches(tenantId: string, productId: string, matches: any, ttl?: number): Promise<void> {
         try {
             const key = this.buildCacheKey(tenantId, 'matching', 'findMatches', { productId });
             await this.cacheLayer.set(key, matches, ttl || this.DEFAULT_TTLS.matches);
@@ -173,7 +173,7 @@ export class CacheEnhancedService {
     /**
      * Get cached product matches
      */
-    async getCachedMatches(tenantId: string, productId: string): Promise<any[] | null> {
+    async getCachedMatches(tenantId: string, productId: string): Promise<any | null> {
         try {
             const key = this.buildCacheKey(tenantId, 'matching', 'findMatches', { productId });
             return await this.cacheLayer.get(key);

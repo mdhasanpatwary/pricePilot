@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getOptimizedPrisma } from '@/lib/database/optimized-prisma';
+import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 import { PerformanceBaselineManager } from '@/lib/services/performance-baseline-manager';
 import { logger } from '@/lib/logger';
 
@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { pool } = getOptimizedPrisma();
+        const poolManager = getConnectionPoolManager();
+        const pool = poolManager.getPool();
         const manager = new PerformanceBaselineManager(pool);
 
         const comparison = await manager.compareAgainstBaseline(

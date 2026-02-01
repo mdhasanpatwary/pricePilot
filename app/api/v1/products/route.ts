@@ -5,7 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
-import { withCache, CacheConfigs } from "@/lib/middleware/api-cache";
+import { withCache } from "@/lib/middleware/api-cache";
+import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -87,9 +88,19 @@ async function handleGET(req: NextRequest) {
     }
   }
 
-  const products = await prisma.product.findMany({
+  // Get pagination parameters
+  const paginationParams = getPaginationParams(searchParams);
+
+  // Use pagination helper
+  const paginatedResult = await paginate(
+    prisma.product,
     where,
-    include: {
+    {
+      ...paginationParams,
+      sortBy: paginationParams.sortBy || 'updatedAt',
+      sortOrder: paginationParams.sortOrder || 'desc'
+    },
+    {
       site: true,
       matchesAsUser: {
         include: {
@@ -100,11 +111,10 @@ async function handleGET(req: NextRequest) {
           },
         },
       },
-    },
-    orderBy: {
-      updatedAt: "desc",
-    },
-  });
+    }
+  );
+
+  const products = paginatedResult.data;
 
   // Aggregate stats
   const stats = {
@@ -116,13 +126,15 @@ async function handleGET(req: NextRequest) {
   };
 
   // Map to the format expected by the frontend
-  const formattedProducts = products.map((product) => {
-    const allMatches = product.matchesAsUser.map((m) => {
+  const formattedProducts = products.map((product: any) => {
+    const allMatches = product.matchesAsUser.map((m: any) => {
       let siteName = "Unknown";
       try {
         const urlObj = new URL(m.competitorProduct.site.baseUrl);
         siteName = urlObj.hostname.replace("www.", "");
-      } catch (e) { }
+      } catch (e) {
+        // Ignore URL parsing errors
+      }
 
       return {
         id: m.id,
@@ -197,6 +209,7 @@ async function handleGET(req: NextRequest) {
     products: formattedProducts,
     stats,
     currency,
+    pagination: paginatedResult.pagination,
   });
 }
 
@@ -207,7 +220,7 @@ export async function GET(req: NextRequest) {
     {
       ttl: 120, // 2 minutes
       keyPrefix: 'api:products',
-      varyBy: ['q', 'brand', 'category', 'stock', 'ram', 'storage', 'processor'],
+      varyBy: ['q', 'brand', 'category', 'stock', 'ram', 'storage', 'processor', 'page', 'limit', 'sortBy', 'sortOrder'],
       tenantIsolated: true,
     }
   );

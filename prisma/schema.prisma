@@ -35,6 +35,8 @@ model Tenant {
   rateLimitMetrics          RateLimitMetric[]
   rateLimitBypasses         RateLimitBypass[]
   rateLimitCustomMultiplier RateLimitCustomMultiplier?
+  autoApprovalRules         AutoApprovalRule[]
+  autoApprovalMetrics       AutoApprovalMetric[]
 }
 
 model Category {
@@ -692,6 +694,8 @@ model PendingPriceChange {
   reviewedAt       DateTime?
   reviewedBy       String?
   expiresAt        DateTime
+  autoApprovedBy   String?
+  autoApprovedAt   DateTime?
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -706,6 +710,42 @@ enum ApprovalStatus {
   APPROVED
   REJECTED
   EXPIRED
+}
+
+model AutoApprovalRule {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  enabled     Boolean  @default(true)
+  priority    Int      @default(1)
+  conditions  Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, enabled, priority])
+  @@index([tenantId])
+}
+
+model AutoApprovalMetric {
+  id               String   @id @default(uuid())
+  tenantId         String
+  ruleId           String?
+  ruleName         String?
+  triggerCount     Int      @default(0)
+  nonMatchingCount Int      @default(0)
+  totalEvaluated   Int      @default(0)
+  date             DateTime @db.Date
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, ruleId, date])
+  @@index([tenantId, date])
+  @@index([ruleId, date])
 }
 
 // Rate Limiting Models

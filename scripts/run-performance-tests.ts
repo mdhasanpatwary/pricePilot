@@ -2,23 +2,23 @@
 
 /**
  * Run Performance Tests
- * 
+ *
  * Executes comprehensive performance tests including:
  * - Multi-tenant workload simulation
  * - Concurrent connection testing
  * - Query response time measurement
  * - Performance baseline comparison
- * 
+ *
  * Usage:
  *   npm run performance:test
  *   npm run performance:test -- --test=concurrent
  *   npm run performance:test -- --duration=120
  */
 
-import { getOptimizedPrisma } from '@/lib/database/optimized-prisma';
+import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 import { PerformanceTester } from '@/lib/services/performance-tester';
 import { PerformanceBaselineManager } from '@/lib/services/performance-baseline-manager';
-import { logger } from '@/lib/logger';
+
 
 interface TestOptions {
     test?: string;
@@ -158,7 +158,7 @@ async function checkRegressions(
 }
 
 async function runAllTests(options: TestOptions): Promise<void> {
-    const { pool } = getOptimizedPrisma();
+    const pool = getConnectionPoolManager().getPool();
     const tester = new PerformanceTester(pool);
     const manager = new PerformanceBaselineManager(pool);
 
@@ -193,7 +193,7 @@ async function runSpecificTest(
     testName: string,
     options: TestOptions
 ): Promise<void> {
-    const { pool } = getOptimizedPrisma();
+    const pool = getConnectionPoolManager().getPool();
     const tester = new PerformanceTester(pool);
     const manager = new PerformanceBaselineManager(pool);
 

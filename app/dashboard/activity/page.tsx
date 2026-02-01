@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   User,
   Search,
   Filter,
   FileText,
   RefreshCw,
+  Undo2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -177,6 +179,38 @@ export default function AuditLogsPage() {
         );
       }
 
+      if (action === "ROLLBACK_PRICE") {
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-foreground">
+              Rolled back price for {details.productTitle || "product"}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] px-1.5 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded line-through">
+                ${details.oldPrice}
+              </span>
+              <span className="text-[10px] text-muted-foreground">→</span>
+              <span className="text-[10px] px-1.5 py-0.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded font-bold">
+                ${details.newPrice}
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      if (action === "ROLLBACK_BULK_OPERATION") {
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-foreground">
+              Rolled back bulk operation
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {details.productCount} products reverted
+            </span>
+          </div>
+        );
+      }
+
       // Fallback for known ID-based entities
       if (details.id || details.targetTenantId) {
         return (
@@ -269,13 +303,22 @@ export default function AuditLogsPage() {
             real-time.
           </p>
         </div>
-        <button
-          onClick={() => fetchLogs(true)}
-          className="p-2 hover:bg-muted border border-border rounded-lg transition-colors group"
-          title="Refresh logs"
-        >
-          <RefreshCw className="w-4 h-4 text-muted-foreground group-active:rotate-180 transition-transform" />
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/activity/rollback"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-semibold"
+          >
+            <Undo2 className="w-4 h-4" />
+            Rollback History
+          </Link>
+          <button
+            onClick={() => fetchLogs(true)}
+            className="p-2 hover:bg-muted border border-border rounded-lg transition-colors group"
+            title="Refresh logs"
+          >
+            <RefreshCw className="w-4 h-4 text-muted-foreground group-active:rotate-180 transition-transform" />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-border">

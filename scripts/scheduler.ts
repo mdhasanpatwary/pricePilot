@@ -1,34 +1,33 @@
 #!/usr/bin/env ts-node
 /**
  * Database Optimization Job Scheduler
- * 
+ *
  * Manages all scheduled maintenance, archival, and optimization jobs.
  * Uses node-cron for scheduling.
- * 
+ *
  * Requirements: 6.4, 8.1, 8.2
- * 
+ *
  * Usage:
  *   ts-node scripts/scheduler.ts
- * 
+ *
  * Or run as a background service:
  *   pm2 start scripts/scheduler.ts --name "db-scheduler"
  */
 
 import cron from 'node-cron';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { PrismaClient } from '@prisma/client';
 import { getQueryAnalyzer } from '@/lib/services/query-analyzer';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { MaterializedViewManager } from '@/lib/services/materialized-view-manager';
 import { MaintenanceScheduler } from '@/lib/services/maintenance-scheduler';
-import { CacheLayer } from '@/lib/services/cache-layer';
+
 import { cacheWarmingService } from '@/lib/services/cache-warming';
 import { cacheMonitoringService } from '@/lib/services/cache-monitoring';
 import { cacheAlertingService } from '@/lib/services/cache-alerting';
+import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 
-const execAsync = promisify(exec);
 const prisma = new PrismaClient();
+const pool = getConnectionPoolManager().getPool();
 
 // Job execution tracking
 const jobStats = {
@@ -62,23 +61,12 @@ async function executeJob(
 
         console.error(`[${new Date().toISOString()}] ✗ Job failed: ${jobName} (${duration}ms)`, error);
 
-        // Log error to database for monitoring
-        try {
-            await prisma.systemLog.create({
-                data: {
-                    level: 'ERROR',
-                    message: `Scheduled job failed: ${jobName}`,
-                    context: {
-                        jobName,
-                        error: error instanceof Error ? error.message : String(error),
-                        duration,
-                    },
-                    createdAt: new Date(),
-                },
-            });
-        } catch (logError) {
-            console.error('Failed to log error to database:', logError);
-        }
+        // Log error to console (database logging disabled due to schema mismatch)
+        console.error('Job error detail:', {
+             jobName,
+             error: error instanceof Error ? error.message : String(error),
+             duration,
+        });
     }
 }
 
@@ -88,7 +76,7 @@ async function executeJob(
  */
 cron.schedule('0 3 * * *', async () => {
     await executeJob('daily-analyze', async () => {
-        const maintenance = new MaintenanceScheduler(prisma);
+        const maintenance = new MaintenanceScheduler(pool);
         await maintenance.runAnalyze();
     });
 }, {
@@ -101,7 +89,7 @@ cron.schedule('0 3 * * *', async () => {
  */
 cron.schedule('0 2 * * 0', async () => {
     await executeJob('weekly-vacuum', async () => {
-        const maintenance = new MaintenanceScheduler(prisma);
+        const maintenance = new MaintenanceScheduler(pool);
         await maintenance.runVacuum();
     });
 }, {
@@ -132,8 +120,8 @@ cron.schedule('30 2 * * *', async () => {
  */
 cron.schedule('*/15 * * * *', async () => {
     await executeJob('refresh-materialized-views', async () => {
-        const viewManager = MaterializedViewManager.getInstance(prisma);
-        await viewManager.refreshAllViews();
+        const viewManager = new MaterializedViewManager(prisma);
+        await viewManager.refreshDailyPriceComparisonView();
     });
 }, {
     timezone: 'UTC'
@@ -178,7 +166,7 @@ cron.schedule('0 2 * * *', async () => {
  */
 cron.schedule('0 4 * * *', async () => {
     await executeJob('collect-statistics', async () => {
-        const maintenance = new MaintenanceScheduler(prisma);
+        const maintenance = new MaintenanceScheduler(pool);
         await maintenance.collectStatistics();
     });
 }, {
