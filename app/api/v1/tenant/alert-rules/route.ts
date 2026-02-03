@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  alertRuleCreateSchema,
+  alertRuleUpdateSchema,
+} from "@/lib/validation";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -37,29 +43,22 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const {
-      name,
-      description,
-      type,
-      target,
-      targetId,
-      condition,
-      value,
-      isActive,
-    } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, alertRuleCreateSchema);
 
-    // Validate value is present as it is required
-    if (value === undefined || value === null) {
-      return NextResponse.json({ error: "Value is required" }, { status: 400 });
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { metric, condition, value, isActive } = validation.data!;
 
     const rule = await prisma.alertRule.create({
       data: {
-        name,
-        description,
-        type,
-        target,
-        targetId,
+        name: `Alert for ${metric}`,
+        description: `Alert when ${metric} ${condition} ${value}`,
+        type: "PRICE_CHANGE",
+        target: "ALL_PRODUCTS",
+        targetId: null,
         condition,
         value,
         isActive: isActive !== undefined ? isActive : true,
@@ -84,25 +83,21 @@ async function handlePATCH(req: NextRequest) {
   }
 
   try {
-    const {
-      id,
-      name,
-      description,
-      type,
-      target,
-      targetId,
-      condition,
-      value,
-      isActive,
-    } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, alertRuleUpdateSchema);
 
-    // Only include defined fields in the update
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { id, metric, condition, value, isActive } = validation.data!;
+
+    // Build update data
     const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (type !== undefined) updateData.type = type;
-    if (target !== undefined) updateData.target = target;
-    if (targetId !== undefined) updateData.targetId = targetId;
+    if (metric !== undefined) {
+      updateData.target = metric;
+      updateData.name = `Alert for ${metric}`;
+    }
     if (condition !== undefined) updateData.condition = condition;
     if (value !== undefined) updateData.value = value;
     if (isActive !== undefined) updateData.isActive = isActive;

@@ -11,6 +11,7 @@ import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
 import { circuitBreakerRegistry } from "@/lib/utils/circuit-breaker";
 import { CacheInvalidationService } from "./cache-invalidation";
+import { AutoApprovalService } from "./auto-approval";
 
 export class SyncOrchestrator {
   /**
@@ -324,16 +325,46 @@ export class SyncOrchestrator {
       // 4. Queue Price Changes for Approval (instead of auto-applying)
       const result = await RulesEngine.executePriceChanges(recommendations);
 
+      // 5. Process Auto-Approvals (Requirement 2.10.1)
+      // After price changes are queued, evaluate them against auto-approval rules
+      let autoApprovedCount = 0;
+      try {
+        autoApprovedCount = await AutoApprovalService.processAutoApprovals(tenantId);
+
+        // Log auto-approval statistics
+        if (autoApprovedCount > 0) {
+          logger.info(`[SyncOrchestrator] Auto-approved ${autoApprovedCount} price changes for tenant ${tenantId}`);
+
+          // SyncLog requires a Site reference. To avoid creating orphaned global logs,
+          // record as a standard application info log instead of inserting into DB.
+          logger.info(`✅ Auto-approved ${autoApprovedCount} price changes based on configured rules`);
+        }
+      } catch (err: any) {
+        // Log error but don't fail the sync
+        logger.error(`[SyncOrchestrator] Error processing auto-approvals for tenant ${tenantId}:`, { error: err });
+
+        // SyncLog requires a Site reference. Record as a warning log instead of DB insert.
+        let autoApprovalErrorMessage: string;
+        if (err instanceof Error) {
+          autoApprovalErrorMessage = err.message;
+        } else {
+          autoApprovalErrorMessage = String(err);
+        }
+
+        logger.warn(`⚠️ Auto-approval processing failed: ${autoApprovalErrorMessage}`);
+      }
+
       const finalResult = {
         success: true,
         scrapped: scrappedCount,
         queued: result.queued,
         failed: result.failed,
+        autoApproved: autoApprovedCount,
       };
 
       await NotificationService.sendSyncSuccess(
         tenantId,
-        `Sync complete! Scrapped ${scrappedCount} products and queued ${result.queued} price changes for your review.`,
+        `Sync complete! Scrapped ${scrappedCount} products, queued ${result.queued} price changes for review, and auto-approved ${autoApprovedCount} changes.`,
       );
 
       return finalResult;
@@ -644,6 +675,19 @@ export class SyncOrchestrator {
               } as any,
             });
 
+            // Invalidate cache for updated product
+            // Requirement 2.9.4: Cache invalidation on data updates
+            try {
+              const { cacheEnhancedService } = await import("./cache-enhanced");
+              await cacheEnhancedService.invalidateProduct(product.tenantId, product.id);
+              await cacheEnhancedService.invalidateComparisons(product.tenantId);
+            } catch (cacheError) {
+              logger.warn('[SyncOrchestrator] Failed to invalidate cache after product update', {
+                productId: product.id,
+                error: cacheError
+              });
+            }
+
             // Trigger Alert Rules Evaluation
             const { AlertService } = await import("./alert-service");
             await AlertService.evaluateRules(
@@ -752,6 +796,34 @@ export class SyncOrchestrator {
         },
       });
 
+      // Process Auto-Approvals after rules evaluation (Requirement 2.10.1)
+      try {
+        const autoApprovedCount = await AutoApprovalService.processAutoApprovals(site.tenantId);
+
+        if (autoApprovedCount > 0) {
+          logger.info(`[SyncOrchestrator] Auto-approved ${autoApprovedCount} price changes for site ${siteId}`);
+
+          await prisma.syncLog.create({
+            data: {
+              siteId,
+              message: `✅ Auto-approved ${autoApprovedCount} price changes based on configured rules`,
+              level: "INFO",
+            },
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail the sync
+        logger.error(`[SyncOrchestrator] Error processing auto-approvals for site ${siteId}:`, { error });
+
+        await prisma.syncLog.create({
+          data: {
+            siteId,
+            message: `⚠️ Auto-approval processing failed: ${error instanceof Error ? error.message : String(error)}`,
+            level: "WARN",
+          },
+        });
+      }
+
       await prisma.syncLog.create({
         data: {
           siteId,
@@ -780,6 +852,18 @@ export class SyncOrchestrator {
             },
           })
           .catch((err) => logger.error("Failed to log error:", { error: err }));
+
+        // Send notification to tenant about sync failure
+        const site = await prisma.site.findUnique({
+          where: { id: siteId },
+          select: { tenantId: true, baseUrl: true },
+        });
+        if (site) {
+          await NotificationService.sendSyncError(
+            site.tenantId,
+            `Failed to sync competitor site ${site.baseUrl}: ${errorMessage}`
+          );
+        }
       }
 
       throw error;
@@ -830,6 +914,19 @@ export class SyncOrchestrator {
         } as any,
       });
 
+      // Invalidate cache for updated product
+      // Requirement 2.9.4: Cache invalidation on data updates
+      try {
+        const { cacheEnhancedService } = await import("./cache-enhanced");
+        await cacheEnhancedService.invalidateProduct(product.tenantId, product.id);
+        await cacheEnhancedService.invalidateComparisons(product.tenantId);
+      } catch (cacheError) {
+        logger.warn('[SyncOrchestrator] Failed to invalidate cache after product update', {
+          productId: product.id,
+          error: cacheError
+        });
+      }
+
       await prisma.priceHistory.create({
         data: {
           productId,
@@ -840,6 +937,18 @@ export class SyncOrchestrator {
     }
 
     await RulesEngine.evaluateAllRules(product.site.tenantId);
+
+    // Process Auto-Approvals after rules evaluation (Requirement 2.10.1)
+    try {
+      const autoApprovedCount = await AutoApprovalService.processAutoApprovals(product.site.tenantId);
+
+      if (autoApprovedCount > 0) {
+        logger.info(`[SyncOrchestrator] Auto-approved ${autoApprovedCount} price changes for product ${productId}`);
+      }
+    } catch (error) {
+      // Log error but don't fail the sync
+      logger.error(`[SyncOrchestrator] Error processing auto-approvals for product ${productId}:`, { error });
+    }
 
     return { success: true, price: result?.price };
   }
@@ -870,6 +979,20 @@ export class SyncOrchestrator {
             lastCrawledAt: new Date(),
           },
         });
+
+        // Invalidate cache for updated product
+        // Requirement 2.9.4: Cache invalidation on data updates
+        try {
+          const { cacheEnhancedService } = await import("./cache-enhanced");
+          await cacheEnhancedService.invalidateProduct(product.tenantId, product.id);
+          await cacheEnhancedService.invalidateComparisons(product.tenantId);
+        } catch (cacheError) {
+          logger.warn('[SyncOrchestrator] Failed to invalidate cache after product update', {
+            productId: product.id,
+            error: cacheError
+          });
+        }
+
         await prisma.priceHistory.create({
           data: { productId: product.id, price: result.price },
         });

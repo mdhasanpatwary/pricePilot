@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ScraperService } from "@/lib/services/scraper";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  scraperPlaygroundSchema,
+} from "@/lib/validation";
 
 async function handlePOST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { url } = body;
-
-    if (!url) {
-      return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    // Validate input
+    const validation = await validateBody(req, scraperPlaygroundSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { url } = validation.data!;
 
     const scraper = new ScraperService();
     // Use scrapeProductPage which is designed for direct URL scraping

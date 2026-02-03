@@ -18,6 +18,8 @@ import {
   ExternalServiceError,
 } from "@/lib/utils/error-handler";
 import { CacheInvalidationService } from "./cache-invalidation";
+import { withRetry, isRetryableHttpError } from "@/lib/utils/retry";
+import { logger } from "@/lib/logger";
 
 interface ExternalProduct {
   external_id: string;
@@ -33,8 +35,10 @@ interface ExternalProduct {
   url: string | null;
 }
 
-const MAX_RETRIES = 3;
-const INITIAL_BACKOFF = 1000;
+// Retry configuration from environment or defaults
+const MAX_RETRIES = parseInt(process.env.SYNC_MAX_RETRIES || '3', 10);
+const INITIAL_BACKOFF = parseInt(process.env.SYNC_INITIAL_BACKOFF_MS || '1000', 10);
+const MAX_BACKOFF = parseInt(process.env.SYNC_MAX_BACKOFF_MS || '30000', 10);
 
 /**
  * Check if mock mode is enabled (for development/testing only)
@@ -202,37 +206,48 @@ export class SyncService {
         });
 
         // 2. Process and Upsert products in transactions
+        // FIX: Fetch all existing products upfront to avoid N+1 queries
+        const externalIds = externalProducts.map(p => p.external_id).filter(Boolean);
+        const existingProducts = await prisma.product.findMany({
+          where: {
+            siteId: site.id,
+            externalId: { in: externalIds },
+          },
+        });
+
+        // Create a map for O(1) lookup
+        const existingProductMap = new Map(
+          existingProducts.map(p => [p.externalId, p])
+        );
+
         const results = [];
         let processed = 0;
 
         for (const extProd of externalProducts) {
           try {
-            // Check if sync was manually stopped
-            const currentSite = await prisma.site.findUnique({
-              where: { id: siteId },
-              select: { isSyncing: true },
-            });
-
-            if (!currentSite?.isSyncing) {
-              console.log(`[SyncService] Sync terminated manually for site ${siteId}`);
-              await prisma.syncLog.create({
-                data: {
-                  siteId,
-                  level: "WARN",
-                  message: "🛑 Synchronization terminated manually by user.",
-                },
+            // Check if sync was manually stopped (check every 10 products to reduce queries)
+            if (processed % 10 === 0) {
+              const currentSite = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: { isSyncing: true },
               });
-              return { count: results.length, siteName: site.baseUrl };
+
+              if (!currentSite?.isSyncing) {
+                console.log(`[SyncService] Sync terminated manually for site ${siteId}`);
+                await prisma.syncLog.create({
+                  data: {
+                    siteId,
+                    level: "WARN",
+                    message: "🛑 Synchronization terminated manually by user.",
+                  },
+                });
+                return { count: results.length, siteName: site.baseUrl };
+              }
             }
 
             const product = await prisma.$transaction(async (tx) => {
-              // Find existing product by externalId within this site
-              const existingProduct = await tx.product.findFirst({
-                where: {
-                  siteId: site.id,
-                  externalId: extProd.external_id,
-                },
-              });
+              // FIX: Use the pre-fetched map instead of querying
+              const existingProduct = existingProductMap.get(extProd.external_id);
 
               let p;
               const productData = {
@@ -379,44 +394,39 @@ export class SyncService {
 
   /**
    * Helper to execute Axios requests with retry logic (Exponential Backoff)
+   *
+   * Uses the centralized retry utility with configurable parameters.
+   * Automatically retries on transient failures like network errors,
+   * server errors (5xx), rate limits (429), and timeouts (408).
    */
   private static async axiosRequestWithRetry<T = any>(
     config: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
-    let lastError: any;
-
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      try {
-        return await axios(config);
-      } catch (error) {
-        lastError = error;
-
-        if (axios.isAxiosError(error)) {
-          const status = error.response?.status;
-          // Don't retry client errors (4xx), except for Rate Limiting (429) and Request Timeout (408)
-          if (
-            status &&
-            status >= 400 &&
-            status < 500 &&
-            status !== 429 &&
-            status !== 408
-          ) {
-            throw error;
-          }
-        }
-
-        // If it's the last attempt, don't wait, just throw
-        if (i === MAX_RETRIES - 1) break;
-
-        const delay = INITIAL_BACKOFF * Math.pow(2, i);
-        console.warn(
-          `[SyncService] Request to ${config.url} failed. Retrying in ${delay}ms... (Attempt ${i + 1}/${MAX_RETRIES})`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, delay));
+    return withRetry(
+      async () => axios<T>(config),
+      {
+        maxRetries: MAX_RETRIES,
+        initialBackoff: INITIAL_BACKOFF,
+        maxBackoff: MAX_BACKOFF,
+        shouldRetry: isRetryableHttpError,
+        operationName: 'HTTP Request',
+        context: {
+          method: config.method,
+          url: config.url,
+        },
+        onRetry: async (error, attempt, delay) => {
+          // Log retry attempt with details
+          const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+          logger.warn(`Request to ${config.url} failed, retrying`, {
+            attempt,
+            maxRetries: MAX_RETRIES,
+            delay: `${delay}ms`,
+            status,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        },
       }
-    }
-
-    throw lastError;
+    );
   }
 
   /**
@@ -438,6 +448,82 @@ export class SyncService {
   }
 
   /**
+   * Generate a smart SKU when the source system doesn't have one
+   *
+   * Strategy (in priority order):
+   * 1. Use existing SKU if available
+   * 2. Use Model if available (common in e-commerce)
+   * 3. Generate from Brand + Model
+   * 4. Generate from Product ID
+   * 5. Generate hash from title (last resort)
+   *
+   * @param product Product data from external system
+   * @returns Generated or existing SKU
+   */
+  private static generateSmartSKU(product: any): string | null {
+    // Strategy 1: Use existing SKU
+    if (product.sku && product.sku.trim()) {
+      return product.sku.trim();
+    }
+
+    // Strategy 2: Use Model (common in OpenCart/Laravel)
+    if (product.model && product.model.trim()) {
+      return product.model.trim();
+    }
+
+    // Strategy 3: Generate from Brand + Model
+    const brand = product.manufacturer || product.brand;
+    const model = product.model;
+    if (brand && model) {
+      return `${this.sanitizeSKU(brand)}-${this.sanitizeSKU(model)}`;
+    }
+
+    // Strategy 4: Use Product ID (most reliable fallback)
+    const productId = product.product_id || product.id;
+    if (productId) {
+      return `PROD-${productId}`;
+    }
+
+    // Strategy 5: Generate from title (last resort)
+    const title = product.name || product.title;
+    if (title) {
+      // Take first 3 words, sanitize, and add hash
+      const words = title.split(/\s+/).slice(0, 3);
+      const sanitized = words.map((w: string) => this.sanitizeSKU(w)).join('-');
+      const hash = this.simpleHash(title).toString(36).substring(0, 6);
+      return `${sanitized}-${hash}`.toUpperCase();
+    }
+
+    // No SKU could be generated
+    return null;
+  }
+
+  /**
+   * Sanitize a string for use in SKU
+   * Removes special characters, keeps alphanumeric and hyphens
+   */
+  private static sanitizeSKU(str: string): string {
+    return str
+      .replace(/[^a-zA-Z0-9-]/g, '')
+      .replace(/^-+|-+$/g, '')
+      .substring(0, 20)
+      .toUpperCase();
+  }
+
+  /**
+   * Simple hash function for generating SKU from title
+   */
+  private static simpleHash(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
    * Fetch products from OpenCart API
    */
   private static async fetchFromOpenCart(
@@ -446,8 +532,20 @@ export class SyncService {
     // Development mock mode (only if explicitly enabled)
     if (isUseMockDataEnabled()) {
       console.warn(`[SyncService] Using mock data for OpenCart (USE_MOCK_DATA=true): ${site.baseUrl}`);
-      const { MOCK_OPENCART_PRODUCTS } = await import("@/__tests__/fixtures/mock-products");
-      return MOCK_OPENCART_PRODUCTS;
+      const { MOCK_OPENCART_PRODUCTS } = await import("@/lib/fixtures/mock-products");
+      return MOCK_OPENCART_PRODUCTS.map((p) => ({
+        external_id: p.product_id,
+        sku: p.sku ?? null,
+        title: p.name,
+        category: null,
+        price: parseFloat(p.price),
+        brand: p.brand ?? null,
+        model: p.model ?? null,
+        in_stock: true,
+        image: p.image,
+        id: p.product_id,
+        url: null,
+      }));
     }
 
     interface OpenCartProduct {
@@ -634,7 +732,7 @@ export class SyncService {
 
       return validProducts.map((p) => ({
         external_id: p.product_id?.toString() || p.id?.toString() || "",
-        sku: p.sku || null,
+        sku: this.generateSmartSKU(p),
         title: p.name || p.title || "Unknown Product",
         category: p.category || null,
         price: parseFloat((p.price || p.special || "0").toString()),
@@ -689,8 +787,20 @@ export class SyncService {
     // Development mock mode (only if explicitly enabled)
     if (isUseMockDataEnabled()) {
       console.warn(`[SyncService] Using mock data for Laravel (USE_MOCK_DATA=true): ${site.baseUrl}`);
-      const { MOCK_LARAVEL_PRODUCTS } = await import("@/__tests__/fixtures/mock-products");
-      return MOCK_LARAVEL_PRODUCTS;
+      const { MOCK_LARAVEL_PRODUCTS } = await import("@/lib/fixtures/mock-products");
+      return MOCK_LARAVEL_PRODUCTS.map((p) => ({
+        external_id: p.id,
+        sku: p.sku ?? null,
+        title: p.name,
+        category: null,
+        price: p.price,
+        brand: p.brand ?? null,
+        model: p.model ?? null,
+        in_stock: true,
+        image: p.image_url,
+        id: p.id,
+        url: null,
+      }));
     }
 
     interface LaravelProduct {
@@ -795,7 +905,7 @@ export class SyncService {
 
       return validProducts.map((p) => ({
         external_id: p.id?.toString() || "",
-        sku: p.sku || null,
+        sku: this.generateSmartSKU(p),
         title: p.name || p.title || "Unknown Product",
         category: p.category || null,
         price: parseFloat((p.price || "0").toString()),

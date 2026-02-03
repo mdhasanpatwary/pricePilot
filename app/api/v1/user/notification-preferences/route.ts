@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  updateNotificationPreferencesSchema,
+} from "@/lib/validation";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,7 +37,13 @@ async function handlePATCH(req: NextRequest) {
   }
 
   try {
-    const { emailNotifications } = await req.json();
+    // Validate input
+    const validation = await validateBody(req, updateNotificationPreferencesSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { emailNotifications } = validation.data!;
 
     const user = await prisma.user.update({
       where: { id: session.user.id },

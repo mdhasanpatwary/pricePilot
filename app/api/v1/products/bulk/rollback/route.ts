@@ -44,6 +44,15 @@ async function handlePOST(req: NextRequest) {
         },
       });
 
+      // Invalidate cache for rolled back product
+      // Requirement 2.9.4: Cache invalidation on data updates
+      try {
+        const { cacheEnhancedService } = await import("@/lib/services/cache-enhanced");
+        await cacheEnhancedService.invalidateProduct(tenantId, product.id);
+      } catch (cacheError) {
+        // Log but don't fail the rollback
+      }
+
       // Create price history entry
       await prisma.priceHistory.create({
         data: {
@@ -53,6 +62,14 @@ async function handlePOST(req: NextRequest) {
       });
 
       rolledBack++;
+    }
+
+    // Invalidate comparisons cache after all products are rolled back
+    try {
+      const { cacheEnhancedService } = await import("@/lib/services/cache-enhanced");
+      await cacheEnhancedService.invalidateComparisons(tenantId);
+    } catch (cacheError) {
+      // Log but don't fail the rollback
     }
 
     // Mark snapshot as rolled back

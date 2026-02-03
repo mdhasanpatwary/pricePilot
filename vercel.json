@@ -11,6 +11,14 @@
     {
       "path": "/api/v1/cron/auto-approval",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/v1/cron/daily-approval-summary",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/v1/cron/cleanup-sessions",
+      "schedule": "0 2 * * *"
     }
   ]
 }

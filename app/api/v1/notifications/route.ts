@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  markNotificationReadSchema,
+  deleteNotificationSchema,
+} from "@/lib/validation";
 
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -57,7 +63,13 @@ async function handlePATCH(req: NextRequest) {
   }
 
   try {
-    const { id, all } = await req.json();
+    // Validate input
+    const validation = await validateBody(req, markNotificationReadSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { id, all } = validation.data!;
 
     if (all) {
       await (prisma as any).notification.updateMany({
@@ -87,7 +99,13 @@ async function handleDELETE(req: NextRequest) {
   }
 
   try {
-    const { id, all } = await req.json();
+    // Validate input
+    const validation = await validateBody(req, deleteNotificationSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { id, all } = validation.data!;
 
     if (all) {
       await (prisma as any).notification.deleteMany({

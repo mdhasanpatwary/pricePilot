@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { escapeHtml, sanitizeUrl } from "@/lib/utils/sanitize";
 
 import {
   TrendingUp,
@@ -98,6 +99,10 @@ export default function ProductDetailDrawer({
 
   if (!product) return null;
 
+  // Sanitize product data to prevent XSS
+  const sanitizedTitle = escapeHtml(product.title);
+  const sanitizedSku = escapeHtml(product.sku);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full max-w-2xl p-0 overflow-hidden">
@@ -107,7 +112,7 @@ export default function ProductDetailDrawer({
             <div className="space-y-2">
               <div className="flex items-center gap-3">
                 <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">
-                  SKU: {product.sku}
+                  SKU: {sanitizedSku}
                 </Badge>
                 <Badge
                   variant={product.status === "RED" ? "destructive" : "success"}
@@ -117,7 +122,7 @@ export default function ProductDetailDrawer({
                 </Badge>
               </div>
               <SheetTitle className="text-3xl font-black tracking-tight">
-                {product.title}
+                {sanitizedTitle}
               </SheetTitle>
               <SheetDescription className="text-muted-foreground font-medium flex items-center gap-2">
                 <Globe className="w-4 h-4" /> Global Tracking Active via 8
@@ -149,7 +154,7 @@ export default function ProductDetailDrawer({
                   </p>
                   {product.url && (
                     <a
-                      href={product.url}
+                      href={sanitizeUrl(product.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 uppercase tracking-tighter mt-2"
@@ -161,37 +166,42 @@ export default function ProductDetailDrawer({
                 </div>
 
                 {product.allMatches && product.allMatches.length > 0 ? (
-                  product.allMatches.map((match, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-muted/30 border border-border rounded-4xl p-6 space-y-1 hover:border-primary/20 transition-all"
-                    >
-                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest opacity-60">
-                        {match.siteName}
-                      </p>
-                      <p className="text-3xl font-black flex items-center gap-2">
-                        {!match.inStock ? (
-                          <span className="text-danger">Stock Out</span>
-                        ) : (
-                          formatCurrency(match.price, currency)
-                        )}
-                        {match.inStock && match.price < product.yourPrice && (
-                          <TrendingDown className="w-4 h-4 text-danger" />
-                        )}
-                        {match.inStock && match.price > product.yourPrice && (
-                          <TrendingUp className="w-4 h-4 text-success" />
-                        )}
-                      </p>
-                      <a
-                        href={match.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 uppercase tracking-tighter"
+                  product.allMatches.map((match, idx) => {
+                    const sanitizedSiteName = escapeHtml(match.siteName);
+                    const sanitizedMatchUrl = sanitizeUrl(match.url);
+
+                    return (
+                      <div
+                        key={idx}
+                        className="bg-muted/30 border border-border rounded-4xl p-6 space-y-1 hover:border-primary/20 transition-all"
                       >
-                        View Website <ArrowUpRight className="w-2.5 h-2.5" />
-                      </a>
-                    </div>
-                  ))
+                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest opacity-60">
+                          {sanitizedSiteName}
+                        </p>
+                        <p className="text-3xl font-black flex items-center gap-2">
+                          {!match.inStock ? (
+                            <span className="text-danger">Stock Out</span>
+                          ) : (
+                            formatCurrency(match.price, currency)
+                          )}
+                          {match.inStock && match.price < product.yourPrice && (
+                            <TrendingDown className="w-4 h-4 text-danger" />
+                          )}
+                          {match.inStock && match.price > product.yourPrice && (
+                            <TrendingUp className="w-4 h-4 text-success" />
+                          )}
+                        </p>
+                        <a
+                          href={sanitizedMatchUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 uppercase tracking-tighter"
+                        >
+                          View Website <ArrowUpRight className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    )
+                  })
                 ) : (
                   <div className="col-span-1 md:col-span-2 py-10 text-center bg-muted/20 border border-dashed border-border rounded-4xl">
                     <p className="text-sm font-bold text-muted-foreground italic uppercase tracking-widest opacity-40">

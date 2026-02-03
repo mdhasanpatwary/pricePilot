@@ -1,7 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PricingRule } from "@prisma/client";
-import { WebhookService } from "./webhook";
-import { NotificationService } from "./notification";
 import { ValidationError, NotFoundError, AppError } from "@/lib/utils/error-handler";
 
 interface PriceRecommendation {
@@ -414,120 +412,50 @@ export class RulesEngine {
 
   /**
    * Apply approved price changes to products and push to stores
+   *
+   * This method now delegates to BulkApprovalService for optimized batch processing.
+   * For backward compatibility, it maintains the same interface.
    */
   static async applyApprovedChanges(
     changeIds: string[],
     reviewedBy: string,
   ): Promise<{ updated: number; failed: number }> {
-    let updated = 0;
-    let failed = 0;
+    // Use optimized bulk approval service for better performance
+    const { BulkApprovalService } = await import("@/lib/services/bulk-approval");
 
-    for (const changeId of changeIds) {
-      try {
-        const change = await prisma.pendingPriceChange.findUnique({
-          where: { id: changeId },
-          include: { product: true },
-        });
+    const result = await BulkApprovalService.applyApprovedChanges(
+      changeIds,
+      reviewedBy
+    );
 
-        if (!change || change.status !== "PENDING") {
-          failed++;
-          continue;
-        }
-
-        // Atomic Database Operations
-        await prisma.$transaction(async (tx) => {
-          // Update product price
-          await tx.product.update({
-            where: { id: change.productId },
-            data: {
-              currentPrice: change.recommendedPrice,
-              lastCrawledAt: new Date(),
-            },
-          });
-
-          // Record price history
-          await tx.priceHistory.create({
-            data: {
-              productId: change.productId,
-              price: change.recommendedPrice,
-            },
-          });
-
-          // Mark change as approved
-          await tx.pendingPriceChange.update({
-            where: { id: changeId },
-            data: {
-              status: "APPROVED",
-              reviewedAt: new Date(),
-              reviewedBy,
-            },
-          });
-        });
-
-        // External Side Effects (Post-Transaction)
-        const product = change.product;
-
-        // Dispatch webhook
-        await WebhookService.dispatch(product.tenantId, "price.updated", {
-          productId: product.id,
-          sku: product.sku,
-          title: product.title,
-          oldPrice: change.currentPrice.toString(),
-          newPrice: change.recommendedPrice.toString(),
-          reason: change.reason,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Send Notification
-        await NotificationService.sendPriceAlert(
-          product.tenantId,
-          product.title,
-          parseFloat(change.currentPrice.toString()),
-          parseFloat(change.recommendedPrice.toString()),
-        );
-
-        updated++;
-      } catch (error) {
-        if (process.env.NODE_ENV !== "test") {
-          console.error(
-            `[SAFE-RULES] Failed to apply approved change ${changeId}:`,
-            error,
-          );
-        }
-        failed++;
-      }
-    }
-
-    return { updated, failed };
+    return {
+      updated: result.successful,
+      failed: result.failed,
+    };
   }
 
   /**
    * Reject pending price changes
+   *
+   * This method now delegates to BulkApprovalService for optimized batch processing.
+   * For backward compatibility, it maintains the same interface.
    */
   static async rejectPendingChanges(
     changeIds: string[],
     reviewedBy: string,
   ): Promise<{ rejected: number; failed: number }> {
-    let rejected = 0;
-    let failed = 0;
+    // Use optimized bulk approval service for better performance
+    const { BulkApprovalService } = await import("@/lib/services/bulk-approval");
 
-    for (const changeId of changeIds) {
-      try {
-        await prisma.pendingPriceChange.update({
-          where: { id: changeId, status: "PENDING" },
-          data: {
-            status: "REJECTED",
-            reviewedAt: new Date(),
-            reviewedBy,
-          },
-        });
-        rejected++;
-      } catch (error) {
-        failed++;
-      }
-    }
+    const result = await BulkApprovalService.rejectPendingChanges(
+      changeIds,
+      reviewedBy
+    );
 
-    return { rejected, failed };
+    return {
+      rejected: result.successful,
+      failed: result.failed,
+    };
   }
 
   /**

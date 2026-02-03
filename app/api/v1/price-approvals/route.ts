@@ -89,6 +89,28 @@ async function handlePOST(req: NextRequest) {
         const body = await req.json();
         const { action, changeIds } = actionSchema.parse(body);
 
+        // Check if user has permission to approve (either directly or via delegation)
+        const { ApprovalDelegationService } = await import("@/lib/services/approval-delegation");
+        const canApprove = await ApprovalDelegationService.canApprove(
+            session.user.id,
+            session.user.tenantId
+        );
+
+        if (!canApprove) {
+            return NextResponse.json(
+                { error: "You do not have permission to approve price changes" },
+                { status: 403 }
+            );
+        }
+
+        // Check if user is acting via delegation
+        const activeDelegations = await ApprovalDelegationService.getActiveDelegationsForUser(
+            session.user.id,
+            session.user.tenantId
+        );
+        const isDelegated = activeDelegations.length > 0;
+        const delegationInfo = isDelegated ? activeDelegations[0] : null;
+
         // Verify all changes belong to this tenant
         const changes = await prisma.pendingPriceChange.findMany({
             where: {
@@ -115,6 +137,27 @@ async function handlePOST(req: NextRequest) {
                 session.user.email
             );
 
+            // Log delegation usage in audit logs
+            if (isDelegated && delegationInfo) {
+                await prisma.tenantAuditLog.create({
+                    data: {
+                        tenantId: session.user.tenantId,
+                        userId: session.user.id,
+                        userEmail: session.user.email,
+                        action: "APPROVE_PRICE_VIA_DELEGATION",
+                        entityId: changeIds.join(","),
+                        details: JSON.stringify({
+                            changeCount: changeIds.length,
+                            delegatedFrom: delegationInfo.fromUser.email,
+                            delegatedFromName: delegationInfo.fromUser.name,
+                            delegationId: delegationInfo.id,
+                            delegationStartDate: delegationInfo.startDate,
+                            delegationEndDate: delegationInfo.endDate,
+                        }),
+                    },
+                });
+            }
+
             // Push approved changes to stores
             const userSites = await prisma.site.findMany({
                 where: { tenantId: session.user.tenantId, type: "USER" },
@@ -128,9 +171,10 @@ async function handlePOST(req: NextRequest) {
 
             return NextResponse.json({
                 success: true,
-                message: `${result.updated} price changes approved and applied`,
+                message: `${result.updated} price changes approved and applied${isDelegated ? " (via delegation)" : ""}`,
                 updated: result.updated,
                 failed: result.failed,
+                delegated: isDelegated,
             });
         } else {
             result = await RulesEngine.rejectPendingChanges(
@@ -138,11 +182,33 @@ async function handlePOST(req: NextRequest) {
                 session.user.email
             );
 
+            // Log delegation usage in audit logs
+            if (isDelegated && delegationInfo) {
+                await prisma.tenantAuditLog.create({
+                    data: {
+                        tenantId: session.user.tenantId,
+                        userId: session.user.id,
+                        userEmail: session.user.email,
+                        action: "REJECT_PRICE_VIA_DELEGATION",
+                        entityId: changeIds.join(","),
+                        details: JSON.stringify({
+                            changeCount: changeIds.length,
+                            delegatedFrom: delegationInfo.fromUser.email,
+                            delegatedFromName: delegationInfo.fromUser.name,
+                            delegationId: delegationInfo.id,
+                            delegationStartDate: delegationInfo.startDate,
+                            delegationEndDate: delegationInfo.endDate,
+                        }),
+                    },
+                });
+            }
+
             return NextResponse.json({
                 success: true,
-                message: `${result.rejected} price changes rejected`,
+                message: `${result.rejected} price changes rejected${isDelegated ? " (via delegation)" : ""}`,
                 rejected: result.rejected,
                 failed: result.failed,
+                delegated: isDelegated,
             });
         }
     } catch (error) {

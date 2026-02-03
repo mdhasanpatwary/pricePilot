@@ -2812,7 +2812,7 @@ export class ScraperService {
           for (let i = 0; i < hoverCount; i++) {
             const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
             try {
-              await HumanSimulation.hoverElement(page, `${selector}: nth - child(${randomIndex + 1})`);
+              await HumanSimulation.hoverElement(page, `${selector}:nth-child(${randomIndex + 1})`);
               await HumanSimulation.randomPause(300, 800);
             } catch (e) {
               // Continue if hover fails
@@ -2837,9 +2837,9 @@ export class ScraperService {
         // Simulate hovering over the product link before navigating
         // This makes the behavior more human-like
         try {
-          const linkElement = await page.$(`a[href = "${productLink}"]`);
+          const linkElement = await page.$(`a[href="${productLink}"]`);
           if (linkElement) {
-            await HumanSimulation.hoverElement(page, `a[href = "${productLink}"]`);
+            await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
             await HumanSimulation.randomPause(200, 500);
           }
         } catch (e) {

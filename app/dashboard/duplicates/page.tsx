@@ -29,14 +29,28 @@ export default function DuplicateDetectionPage() {
         try {
             const query = impersonateId ? `?tenantId=${impersonateId}` : "";
             const res = await fetch(`/api/v1/analytics/duplicates${query}`);
-            if (res.ok) {
-                const data = await res.json();
-                setGroups(data.groups);
-            } else {
-                toast.error("Failed to detect duplicates");
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+                console.error("API Error:", res.status, errorData);
+
+                if (res.status === 401) {
+                    toast.error("Authentication required. Please log in.");
+                } else if (res.status === 400) {
+                    toast.error(errorData.error || "Invalid request");
+                } else {
+                    toast.error(errorData.error || "Failed to detect duplicates");
+                }
+                setGroups([]);
+                return;
             }
+
+            const data = await res.json();
+            setGroups(data.groups || []);
         } catch (e) {
+            console.error("Fetch error:", e);
             toast.error("Network error during detection");
+            setGroups([]);
         } finally {
             setIsLoading(false);
         }
@@ -60,13 +74,23 @@ export default function DuplicateDetectionPage() {
                 })
             });
 
-            if (res.ok) {
-                toast.success("Duplicates merged successfully. Marketplace intelligence unified.");
-                fetchDuplicates(); // Refresh catalog
-            } else {
-                toast.error("Merge operation failed");
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+                console.error("Merge error:", res.status, errorData);
+
+                if (res.status === 401) {
+                    toast.error("Authentication required. Please log in.");
+                } else {
+                    toast.error(errorData.error || "Merge operation failed");
+                }
+                return;
             }
+
+            const data = await res.json();
+            toast.success(data.message || "Duplicates merged successfully. Marketplace intelligence unified.");
+            fetchDuplicates(); // Refresh catalog
         } catch (e) {
+            console.error("Network error:", e);
             toast.error("Network error during merge");
         } finally {
             setIsMerging(null);

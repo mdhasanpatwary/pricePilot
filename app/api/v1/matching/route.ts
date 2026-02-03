@@ -10,6 +10,7 @@ import {
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { CacheInvalidationService } from "@/lib/services/cache-invalidation";
+import { sanitizeProductMatch } from "@/lib/middleware/sanitize-response";
 
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -95,7 +96,11 @@ async function handleGET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json(formattedMatches);
+    // Sanitize product matches to prevent XSS attacks
+    // Requirement 2.7.3: XSS prevention for competitor product data
+    const sanitizedMatches = formattedMatches.map(sanitizeProductMatch);
+
+    return NextResponse.json(sanitizedMatches);
   } catch (error) {
     console.error("Match fetch error:", error);
     return NextResponse.json(

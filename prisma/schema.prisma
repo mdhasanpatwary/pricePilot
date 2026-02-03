@@ -37,6 +37,8 @@ model Tenant {
   rateLimitCustomMultiplier RateLimitCustomMultiplier?
   autoApprovalRules         AutoApprovalRule[]
   autoApprovalMetrics       AutoApprovalMetric[]
+  approvalDelegations       ApprovalDelegation[]
+  monitoringAlertRules      MonitoringAlertRule[]     @relation("MonitoringAlertRules")
 }
 
 model Category {
@@ -77,26 +79,28 @@ model Brand {
 }
 
 model User {
-  id                 String            @id @default(uuid())
-  email              String            @unique
+  id                 String               @id @default(uuid())
+  email              String               @unique
   name               String?
   passwordHash       String
-  role               Role              @default(ADMIN)
+  role               Role                 @default(ADMIN)
   tenantId           String
-  emailNotifications Boolean           @default(true)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  passwordUpdatedAt  DateTime          @default(now())
+  emailNotifications Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  passwordUpdatedAt  DateTime             @default(now())
   emailVerified      DateTime?
   verificationToken  String?
   resetToken         String?
   resetTokenExpires  DateTime?
-  isSuperAdmin       Boolean           @default(false)
-  tenant             Tenant            @relation(fields: [tenantId], references: [id])
+  isSuperAdmin       Boolean              @default(false)
+  tenant             Tenant               @relation(fields: [tenantId], references: [id])
   passwordHistory    PasswordHistory[]
   accounts           Account[]
   sessions           Session[]
   apiKeys            ApiKey[]
+  delegationsFrom    ApprovalDelegation[] @relation("DelegationFrom")
+  delegationsTo      ApprovalDelegation[] @relation("DelegationTo")
 }
 
 model Account {
@@ -795,6 +799,24 @@ model RateLimitCustomMultiplier {
   @@index([tenantId])
 }
 
+model ApprovalDelegation {
+  id         String   @id @default(uuid())
+  tenantId   String
+  fromUserId String
+  toUserId   String
+  startDate  DateTime
+  endDate    DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fromUser User   @relation("DelegationFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User   @relation("DelegationTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, toUserId, isActive])
+  @@index([tenantId, fromUserId])
+}
+
 // Database Optimization Models
 
 model SlowQuery {
@@ -842,4 +864,109 @@ model IndexRecommendation {
 
   @@index([status])
   @@index([tableName])
+}
+
+// Monitoring and Alerting Models
+
+model MonitoringAlertRule {
+  id                   String                    @id @default(uuid())
+  tenantId             String?
+  name                 String
+  description          String?
+  severity             MonitoringAlertSeverity   @default(WARNING)
+  enabled              Boolean                   @default(true)
+  metricType           String // 'error_rate', 'response_time', 'scraping_block_rate', etc.
+  conditionOperator    MonitoringConditionOp     @default(GT)
+  conditionAggregation MonitoringAggregationType @default(AVG)
+  timeWindowSeconds    Int // Time window for metric aggregation
+  threshold            Decimal                   @db.Decimal(10, 2)
+  notificationChannels String[] // Array of channel IDs
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  tenant       Tenant?                    @relation("MonitoringAlertRules", fields: [tenantId], references: [id], onDelete: Cascade)
+  alertHistory MonitoringAlertHistory[]
+
+  @@index([tenantId])
+  @@index([enabled])
+  @@index([metricType])
+}
+
+model MonitoringNotificationChannel {
+  id        String                      @id @default(uuid())
+  type      MonitoringChannelType
+  name      String
+  enabled   Boolean                     @default(true)
+  config    Json // Channel-specific configuration (email recipients, Slack webhook, etc.)
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
+
+  @@index([type])
+  @@index([enabled])
+}
+
+model MonitoringAlertHistory {
+  id                 String                  @id @default(uuid())
+  ruleId             String
+  ruleName           String
+  severity           MonitoringAlertSeverity
+  triggeredAt        DateTime                @default(now())
+  resolvedAt         DateTime?
+  metricValue        Decimal                 @db.Decimal(10, 2)
+  threshold          Decimal                 @db.Decimal(10, 2)
+  tenantId           String?
+  context            Json? // Additional context data
+  notificationsSent  Json? // Array of notification delivery results
+  acknowledgedAt     DateTime?
+  acknowledgedBy     String?
+
+  rule MonitoringAlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([tenantId])
+  @@index([triggeredAt])
+  @@index([severity])
+}
+
+model MonitoringMaintenanceWindow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startTime, endTime])
+  @@index([isActive])
+}
+
+enum MonitoringAlertSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum MonitoringConditionOp {
+  GT  // Greater than
+  GTE // Greater than or equal
+  LT  // Less than
+  LTE // Less than or equal
+  EQ  // Equal
+}
+
+enum MonitoringAggregationType {
+  COUNT
+  AVG
+  SUM
+  MAX
+  MIN
+  P95
+  P99
+}
+
+enum MonitoringChannelType {
+  EMAIL
+  SLACK
 }

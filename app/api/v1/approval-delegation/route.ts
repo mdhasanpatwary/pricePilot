@@ -1,0 +1,107 @@
+/**
+ * API endpoints for managing approval delegations
+ * 
+ * GET    /api/v1/approval-delegation - List all delegations for tenant
+ * POST   /api/v1/approval-delegation - Create a new delegation
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { ApprovalDelegationService } from '@/lib/services/approval-delegation';
+import { z } from 'zod';
+
+const createDelegationSchema = z.object({
+    toUserId: z.string().uuid(),
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+});
+
+/**
+ * GET /api/v1/approval-delegation
+ * List all delegations for the authenticated user's tenant
+ */
+export async function GET() {
+    try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        const delegations = await ApprovalDelegationService.getDelegations(
+            session.user.tenantId
+        );
+
+        return NextResponse.json({
+            success: true,
+            data: delegations
+        });
+    } catch (error) {
+        console.error('Error fetching delegations:', error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to fetch delegations'
+            },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * POST /api/v1/approval-delegation
+ * Create a new delegation
+ */
+export async function POST(req: NextRequest) {
+    try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        const body = await req.json();
+        const validated = createDelegationSchema.parse(body);
+
+        const delegation = await ApprovalDelegationService.createDelegation({
+            tenantId: session.user.tenantId,
+            fromUserId: session.user.id,
+            toUserId: validated.toUserId,
+            startDate: new Date(validated.startDate),
+            endDate: new Date(validated.endDate),
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: delegation
+        }, { status: 201 });
+    } catch (error) {
+        console.error('Error creating delegation:', error);
+
+        if (error instanceof z.ZodError) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Validation error',
+                    details: error.issues
+                },
+                { status: 422 }
+            );
+        }
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to create delegation'
+            },
+            { status: 500 }
+        );
+    }
+}

@@ -1,18 +1,27 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "PricePilot Core API",
-    "description": "Professional-grade API for automated e-commerce monitoring and dynamic pricing. Access your products, matches, and market intelligence programmatically.",
+    "title": "PricePilot API",
+    "description": "Professional-grade API for automated e-commerce price monitoring and dynamic pricing management. Access your products, competitors, price approvals, and market intelligence programmatically.",
     "version": "1.0.0",
     "contact": {
       "name": "PricePilot Support",
-      "email": "support@pricepilot.com"
+      "email": "support@pricepilot.com",
+      "url": "https://pricepilot.com/support"
+    },
+    "license": {
+      "name": "Proprietary",
+      "url": "https://pricepilot.com/terms"
     }
   },
   "servers": [
     {
       "url": "http://localhost:3000/api/v1",
       "description": "Development server"
+    },
+    {
+      "url": "https://api.pricepilot.com/v1",
+      "description": "Production server"
     }
   ],
   "components": {
@@ -20,353 +29,28 @@
       "ApiKeyAuth": {
         "type": "apiKey",
         "in": "header",
-        "name": "x-api-key"
+        "name": "x-api-key",
+        "description": "API key for authentication. Generate from your dashboard under Settings > API Keys."
+      },
+      "SessionAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "next-auth.session-token",
+        "description": "Session-based authentication for web application"
       }
     },
     "schemas": {
-      "Product": {
+      "Error": {
         "type": "object",
         "properties": {
-          "id": {
+          "error": {
             "type": "string",
-            "format": "uuid"
-          },
-          "sku": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "currentPrice": {
-            "type": "number"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "inStock": {
-            "type": "boolean"
-          },
-          "url": {
-            "type": "string"
-          },
-          "category": {
-            "type": "string"
+            "description": "Error message"
           }
-        }
-      },
-      "Match": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "userProductId": {
-            "type": "string"
-          },
-          "competitorProductId": {
-            "type": "string"
-          },
-          "confidenceScore": {
-            "type": "number"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "REJECTED"
-            ]
-          }
-        }
-      },
-      "AnalyticsSummary": {
-        "type": "object",
-        "properties": {
-          "stats": {
-            "type": "object",
-            "properties": {
-              "totalSKUs": {
-                "type": "integer"
-              },
-              "activeRivals": {
-                "type": "integer"
-              },
-              "criticalAlerts": {
-                "type": "integer"
-              },
-              "marketEdge": {
-                "type": "number"
-              }
-            }
-          },
-          "positionSummary": {
-            "type": "object",
-            "properties": {
-              "cheapest": {
-                "type": "integer"
-              },
-              "neutral": {
-                "type": "integer"
-              },
-              "expensive": {
-                "type": "integer"
-              }
-            }
-          }
-        }
-      },
-      "Webhook": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "url": {
-            "type": "string",
-            "format": "uri"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "RuleConditions": {
-        "type": "object",
-        "description": "Conditions for auto-approval. All specified conditions must be satisfied (AND logic).",
-        "properties": {
-          "maxPriceChange": {
-            "type": "number",
-            "description": "Maximum absolute price change in currency units (e.g., 50.00)",
-            "minimum": 0,
-            "example": 50.00
-          },
-          "maxPercentageChange": {
-            "type": "number",
-            "description": "Maximum percentage change (0-100)",
-            "minimum": 0,
-            "maximum": 100,
-            "example": 10.0
-          },
-          "minConfidenceScore": {
-            "type": "number",
-            "description": "Minimum product match confidence score (0-100)",
-            "minimum": 0,
-            "maximum": 100,
-            "example": 85
-          },
-          "allowedStrategies": {
-            "type": "array",
-            "description": "List of allowed pricing strategies",
-            "items": {
-              "type": "string",
-              "enum": [
-                "UNDERCUT",
-                "MATCH",
-                "MARGIN_LOCK",
-                "THRESHOLD",
-                "PERCENTAGE"
-              ]
-            },
-            "example": [
-              "UNDERCUT",
-              "MATCH"
-            ]
-          },
-          "productCategories": {
-            "type": "array",
-            "description": "List of allowed product categories",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "Electronics",
-              "Computers"
-            ]
-          },
-          "priceRange": {
-            "type": "object",
-            "description": "Allowed price range for the new price",
-            "properties": {
-              "min": {
-                "type": "number",
-                "description": "Minimum price",
-                "example": 50.00
-              },
-              "max": {
-                "type": "number",
-                "description": "Maximum price",
-                "example": 500.00
-              }
-            }
-          }
-        }
-      },
-      "AutoApprovalRule": {
-        "type": "object",
+        },
         "required": [
-          "id",
-          "tenantId",
-          "name",
-          "enabled",
-          "priority",
-          "conditions",
-          "createdAt",
-          "updatedAt"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Unique rule identifier"
-          },
-          "tenantId": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Tenant identifier"
-          },
-          "name": {
-            "type": "string",
-            "description": "Human-readable rule name",
-            "example": "Small Price Decreases"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "description": "Optional rule description",
-            "example": "Automatically approve price decreases under $50"
-          },
-          "enabled": {
-            "type": "boolean",
-            "description": "Whether the rule is active",
-            "example": true
-          },
-          "priority": {
-            "type": "integer",
-            "description": "Evaluation priority (lower numbers = higher priority)",
-            "minimum": 1,
-            "example": 1
-          },
-          "conditions": {
-            "$ref": "#/components/schemas/RuleConditions"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Rule creation timestamp"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Last update timestamp"
-          }
-        }
-      },
-      "CreateAutoApprovalRule": {
-        "type": "object",
-        "required": [
-          "name",
-          "enabled",
-          "priority",
-          "conditions"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Human-readable rule name",
-            "example": "Small Price Decreases"
-          },
-          "description": {
-            "type": "string",
-            "description": "Optional rule description",
-            "example": "Automatically approve price decreases under $50"
-          },
-          "enabled": {
-            "type": "boolean",
-            "description": "Whether the rule is active",
-            "default": true,
-            "example": true
-          },
-          "priority": {
-            "type": "integer",
-            "description": "Evaluation priority (lower numbers = higher priority)",
-            "minimum": 1,
-            "default": 1,
-            "example": 1
-          },
-          "conditions": {
-            "$ref": "#/components/schemas/RuleConditions"
-          }
-        }
-      },
-      "UpdateAutoApprovalRule": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Human-readable rule name"
-          },
-          "description": {
-            "type": "string",
-            "description": "Optional rule description"
-          },
-          "enabled": {
-            "type": "boolean",
-            "description": "Whether the rule is active"
-          },
-          "priority": {
-            "type": "integer",
-            "description": "Evaluation priority",
-            "minimum": 1
-          },
-          "conditions": {
-            "$ref": "#/components/schemas/RuleConditions"
-          }
-        }
-      },
-      "AutoApprovalMetrics": {
-        "type": "object",
-        "properties": {
-          "totalAutoApprovals": {
-            "type": "integer",
-            "description": "Total number of auto-approved changes",
-            "example": 150
-          },
-          "autoApprovalPercentage": {
-            "type": "number",
-            "description": "Percentage of changes auto-approved",
-            "example": 65.5
-          },
-          "nonMatchingChanges": {
-            "type": "integer",
-            "description": "Number of changes that didn't match any rule",
-            "example": 25
-          },
-          "topRules": {
-            "type": "array",
-            "description": "Most frequently triggered rules",
-            "items": {
-              "type": "object",
-              "properties": {
-                "ruleId": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "ruleName": {
-                  "type": "string"
-                },
-                "triggerCount": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        }
+          "error"
+        ]
       },
       "ValidationError": {
         "type": "object",
@@ -396,19 +80,311 @@
                       "items": {
                         "type": "string"
                       }
-                    },
-                    "example": {
-                      "maxPriceChange": [
-                        "Must be greater than 0"
-                      ],
-                      "minConfidenceScore": [
-                        "Must be between 0 and 100"
-                      ]
                     }
                   }
                 }
               }
             }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "description": "Current page number",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Items per page",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of items",
+            "example": 150
+          },
+          "totalPages": {
+            "type": "integer",
+            "description": "Total number of pages",
+            "example": 8
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique product identifier"
+          },
+          "sku": {
+            "type": "string",
+            "description": "Stock keeping unit"
+          },
+          "title": {
+            "type": "string",
+            "description": "Product title"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Product brand"
+          },
+          "model": {
+            "type": "string",
+            "description": "Product model"
+          },
+          "category": {
+            "type": "string",
+            "description": "Product category"
+          },
+          "yourPrice": {
+            "type": "number",
+            "format": "float",
+            "description": "Your current price"
+          },
+          "compPrice": {
+            "type": "number",
+            "format": "float",
+            "nullable": true,
+            "description": "Competitor's price (if matched)"
+          },
+          "diff": {
+            "type": "number",
+            "format": "float",
+            "description": "Price difference (compPrice - yourPrice)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RED",
+              "GREEN",
+              "NEUTRAL",
+              "COMP_OOS",
+              "NOT_FOUND"
+            ],
+            "description": "Price status: RED (competitor cheaper), GREEN (you're cheaper), NEUTRAL (same price), COMP_OOS (competitor out of stock), NOT_FOUND (no match)"
+          },
+          "inStock": {
+            "type": "boolean",
+            "description": "Your stock status"
+          },
+          "compInStock": {
+            "type": "boolean",
+            "description": "Competitor stock status"
+          },
+          "image": {
+            "type": "string",
+            "nullable": true,
+            "description": "Product image URL"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Product URL"
+          },
+          "specifications": {
+            "type": "object",
+            "description": "Product specifications (RAM, storage, processor, etc.)"
+          }
+        }
+      },
+      "Competitor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Competitor name"
+          },
+          "url": {
+            "type": "string",
+            "description": "Competitor website URL"
+          },
+          "products": {
+            "type": "integer",
+            "description": "Number of matched products"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SYNCING",
+              "ACTIVE",
+              "NO MATCHES",
+              "PENDING"
+            ],
+            "description": "Competitor status"
+          },
+          "health": {
+            "type": "integer",
+            "description": "Health score (0-100)"
+          },
+          "isSyncing": {
+            "type": "boolean",
+            "description": "Whether currently syncing"
+          },
+          "isAdvancedProtected": {
+            "type": "boolean",
+            "description": "Whether site has advanced bot protection"
+          }
+        }
+      },
+      "PriceApproval": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "oldPrice": {
+            "type": "number",
+            "format": "float"
+          },
+          "newPrice": {
+            "type": "number",
+            "format": "float"
+          },
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "UNDERCUT",
+              "MATCH",
+              "MARGIN_LOCK",
+              "THRESHOLD",
+              "PERCENTAGE"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "EXPIRED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "product": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "imageUrl": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        }
+      },
+      "Integration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "OPENCART",
+              "LARAVEL",
+              "SHOPIFY",
+              "WOOCOMMERCE",
+              "MAGENTO"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "COMPETITOR"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "products": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CONNECTED",
+              "PENDING",
+              "ERROR"
+            ]
+          },
+          "lastSync": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ProductMatch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "float",
+            "description": "Match confidence score (0-100)"
+          },
+          "matchType": {
+            "type": "string",
+            "enum": [
+              "SKU",
+              "BRAND_MODEL",
+              "FUZZY",
+              "MANUAL"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ]
+          },
+          "product": {
+            "type": "object",
+            "description": "Your product"
+          },
+          "competitor": {
+            "type": "object",
+            "description": "Competitor product"
           }
         }
       }
@@ -417,13 +393,706 @@
   "security": [
     {
       "ApiKeyAuth": []
+    },
+    {
+      "SessionAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User authentication and registration"
+    },
+    {
+      "name": "Products",
+      "description": "Manage your product catalog"
+    },
+    {
+      "name": "Competitors",
+      "description": "Track competitor websites"
+    },
+    {
+      "name": "Price Approvals",
+      "description": "Review and approve price changes"
+    },
+    {
+      "name": "Integrations",
+      "description": "Connect your e-commerce platforms"
+    },
+    {
+      "name": "Matching",
+      "description": "Product matching between your catalog and competitors"
+    },
+    {
+      "name": "Auto-Approval Rules",
+      "description": "Automated price approval rules"
+    },
+    {
+      "name": "Analytics",
+      "description": "Market intelligence and reporting"
+    },
+    {
+      "name": "Sync",
+      "description": "Data synchronization operations"
     }
   ],
   "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register new user",
+        "description": "Create a new user account and tenant. This endpoint is rate-limited to prevent abuse.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password",
+                  "companyName"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "User email address"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8,
+                    "description": "Password (minimum 8 characters)"
+                  },
+                  "companyName": {
+                    "type": "string",
+                    "description": "Company or tenant name"
+                  }
+                }
+              },
+              "example": {
+                "email": "john@example.com",
+                "password": "SecurePass123!",
+                "companyName": "Acme Electronics"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "User registered successfully",
+                  "userId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "User already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "User with this email already exists"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Rate limit exceeded. Please try again later."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/products": {
       "get": {
+        "tags": [
+          "Products"
+        ],
         "summary": "List all products",
-        "description": "Returns a paginated list of your products integrated with PricePilot.",
+        "description": "Returns a paginated list of your products with competitor price comparisons. Supports filtering, searching, and sorting.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query (searches title, SKU, brand, model)"
+          },
+          {
+            "name": "brand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by brand"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by category"
+          },
+          {
+            "name": "stock",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "INSTOCK",
+                "OOS",
+                "ALL"
+              ]
+            },
+            "description": "Filter by stock status"
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "updatedAt"
+            },
+            "description": "Sort field"
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            },
+            "description": "Sort order"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Product"
+                      }
+                    },
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "atRisk": {
+                          "type": "integer",
+                          "description": "Products where competitor is cheaper"
+                        },
+                        "optimal": {
+                          "type": "integer",
+                          "description": "Products where you're cheaper"
+                        },
+                        "parity": {
+                          "type": "integer",
+                          "description": "Products with same price"
+                        },
+                        "competitorOos": {
+                          "type": "integer",
+                          "description": "Products where competitor is out of stock"
+                        },
+                        "notFound": {
+                          "type": "integer",
+                          "description": "Products with no competitor match"
+                        }
+                      }
+                    },
+                    "currency": {
+                      "type": "string",
+                      "description": "Currency code"
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                },
+                "example": {
+                  "products": [
+                    {
+                      "id": "prod-123",
+                      "sku": "LAPTOP-001",
+                      "title": "Dell XPS 15 Laptop",
+                      "brand": "Dell",
+                      "model": "XPS 15",
+                      "category": "Laptops",
+                      "yourPrice": 1299.99,
+                      "compPrice": 1249.99,
+                      "diff": -50.00,
+                      "status": "RED",
+                      "inStock": true,
+                      "compInStock": true,
+                      "image": "https://example.com/image.jpg",
+                      "url": "https://yourstore.com/laptop-001"
+                    }
+                  ],
+                  "stats": {
+                    "atRisk": 15,
+                    "optimal": 45,
+                    "parity": 10,
+                    "competitorOos": 5,
+                    "notFound": 25
+                  },
+                  "currency": "USD",
+                  "pagination": {
+                    "page": 1,
+                    "limit": 20,
+                    "total": 100,
+                    "totalPages": 5
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/competitors": {
+      "get": {
+        "tags": [
+          "Competitors"
+        ],
+        "summary": "List competitors",
+        "description": "Returns all competitor websites you're tracking with their sync status and product counts.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "competitors": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Competitor"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                },
+                "example": {
+                  "competitors": [
+                    {
+                      "id": "comp-123",
+                      "name": "TechStore",
+                      "url": "https://techstore.com",
+                      "products": 45,
+                      "status": "ACTIVE",
+                      "health": 95,
+                      "isSyncing": false,
+                      "isAdvancedProtected": false
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "limit": 20,
+                    "total": 5,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Competitors"
+        ],
+        "summary": "Add competitor",
+        "description": "Add a new competitor website to track. The system will automatically start scraping products.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Competitor website URL"
+                  },
+                  "searchQueryPattern": {
+                    "type": "string",
+                    "description": "Optional search query pattern for advanced scraping"
+                  }
+                }
+              },
+              "example": {
+                "url": "https://competitor.com",
+                "searchQueryPattern": "/search?q={query}"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Competitor added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Competitor"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Competitor limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Competitor tracking limit reached (5). Please upgrade your plan to track more sites."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Competitors"
+        ],
+        "summary": "Remove competitor",
+        "description": "Remove a competitor from tracking. This will delete all associated products and matches.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Competitor ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Competitor removed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Competitor not found"
+          }
+        }
+      }
+    },
+    "/price-approvals": {
+      "get": {
+        "tags": [
+          "Price Approvals"
+        ],
+        "summary": "List price approvals",
+        "description": "Get all pending price changes awaiting approval. Supports pagination and status filtering.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "APPROVED",
+                "REJECTED",
+                "EXPIRED"
+              ],
+              "default": "PENDING"
+            },
+            "description": "Filter by approval status"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PriceApproval"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                },
+                "example": {
+                  "changes": [
+                    {
+                      "id": "change-123",
+                      "productId": "prod-456",
+                      "oldPrice": 299.99,
+                      "newPrice": 279.99,
+                      "strategy": "UNDERCUT",
+                      "status": "PENDING",
+                      "createdAt": "2026-02-01T10:00:00Z",
+                      "expiresAt": "2026-02-08T10:00:00Z",
+                      "product": {
+                        "id": "prod-456",
+                        "title": "Wireless Mouse",
+                        "sku": "MOUSE-001",
+                        "imageUrl": "https://example.com/mouse.jpg"
+                      }
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "limit": 20,
+                    "total": 15,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Price Approvals"
+        ],
+        "summary": "Approve or reject price changes",
+        "description": "Approve or reject one or more pending price changes. Approved changes will be pushed to your store.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action",
+                  "changeIds"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ],
+                    "description": "Action to perform"
+                  },
+                  "changeIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "description": "Array of price change IDs"
+                  }
+                }
+              },
+              "example": {
+                "action": "approve",
+                "changeIds": [
+                  "change-123",
+                  "change-456"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "updated": {
+                      "type": "integer",
+                      "description": "Number of changes processed"
+                    },
+                    "failed": {
+                      "type": "integer",
+                      "description": "Number of changes that failed"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "message": "2 price changes approved and applied",
+                  "updated": 2,
+                  "failed": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - Some changes not found or already processed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/integrations": {
+      "get": {
+        "tags": [
+          "Integrations"
+        ],
+        "summary": "List integrations",
+        "description": "Get all connected e-commerce platforms (your stores).",
         "responses": {
           "200": {
             "description": "Success",
@@ -432,26 +1101,417 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Product"
+                    "$ref": "#/components/schemas/Integration"
+                  }
+                },
+                "example": [
+                  {
+                    "id": "int-123",
+                    "platform": "OPENCART",
+                    "type": "USER",
+                    "name": "mystore.com",
+                    "url": "https://mystore.com",
+                    "products": 150,
+                    "status": "CONNECTED",
+                    "lastSync": "2026-02-01T09:30:00Z"
+                  }
+                ]
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Integrations"
+        ],
+        "summary": "Add integration",
+        "description": "Connect a new e-commerce platform. Requires API token from your store.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "platform",
+                  "baseUrl",
+                  "apiToken"
+                ],
+                "properties": {
+                  "platform": {
+                    "type": "string",
+                    "enum": [
+                      "OPENCART",
+                      "LARAVEL"
+                    ],
+                    "description": "E-commerce platform type"
+                  },
+                  "baseUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Store base URL"
+                  },
+                  "apiToken": {
+                    "type": "string",
+                    "description": "API token from your store (will be encrypted)"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "USER",
+                      "COMPETITOR"
+                    ],
+                    "default": "USER",
+                    "description": "Integration type"
+                  }
+                }
+              },
+              "example": {
+                "platform": "OPENCART",
+                "baseUrl": "https://mystore.com",
+                "apiToken": "your-secure-api-token-here",
+                "type": "USER"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Integration created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "platform": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
                   }
                 }
               }
             }
+          },
+          "403": {
+            "description": "Store limit reached"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Integrations"
+        ],
+        "summary": "Remove integration",
+        "description": "Disconnect an e-commerce platform. This will delete all associated products.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Integration ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Integration removed successfully"
+          },
+          "404": {
+            "description": "Integration not found"
           }
         }
       }
     },
-    "/analytics/summary": {
+    "/matching": {
       "get": {
-        "summary": "Market intelligence summary",
-        "description": "Get real-time aggregated stats of your market position.",
+        "tags": [
+          "Matching"
+        ],
+        "summary": "List pending matches",
+        "description": "Get all pending product matches awaiting approval. These are automatically generated matches between your products and competitor products.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnalyticsSummary"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductMatch"
+                  }
+                },
+                "example": [
+                  {
+                    "id": "match-123",
+                    "confidence": 95.5,
+                    "matchType": "SKU",
+                    "status": "PENDING",
+                    "product": {
+                      "id": "prod-123",
+                      "title": "Dell XPS 15",
+                      "sku": "LAPTOP-001",
+                      "price": 1299.99
+                    },
+                    "competitor": {
+                      "id": "comp-prod-456",
+                      "title": "Dell XPS 15 Laptop",
+                      "sku": "LAPTOP-001",
+                      "price": 1249.99,
+                      "siteName": "techstore.com"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Matching"
+        ],
+        "summary": "Approve or reject match",
+        "description": "Approve or reject a product match. Approved matches will be used for price comparisons.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "matchId",
+                  "action"
+                ],
+                "properties": {
+                  "matchId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Match ID"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "APPROVE",
+                      "REJECT"
+                    ],
+                    "description": "Action to perform"
+                  }
+                }
+              },
+              "example": {
+                "matchId": "match-123",
+                "action": "APPROVE"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Action failed"
+          }
+        }
+      }
+    },
+    "/price-update/bulk": {
+      "post": {
+        "tags": [
+          "Price Updates"
+        ],
+        "summary": "Bulk price update",
+        "description": "Execute bulk price updates for multiple products. Updates are applied immediately to your store.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "product_ids",
+                  "logic_type",
+                  "value"
+                ],
+                "properties": {
+                  "product_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "description": "Array of product IDs to update"
+                  },
+                  "logic_type": {
+                    "type": "string",
+                    "enum": [
+                      "UNDERCUT",
+                      "MATCH",
+                      "PERCENTAGE",
+                      "FIXED"
+                    ],
+                    "description": "Pricing strategy"
+                  },
+                  "value": {
+                    "type": "number",
+                    "description": "Value for the strategy (e.g., 50 for $50 undercut, 10 for 10% discount)"
+                  },
+                  "min_price": {
+                    "type": "number",
+                    "description": "Optional minimum price floor"
+                  }
+                }
+              },
+              "example": {
+                "product_ids": [
+                  "prod-123",
+                  "prod-456"
+                ],
+                "logic_type": "UNDERCUT",
+                "value": 50,
+                "min_price": 100
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "Price updates completed",
+                  "updated": 2,
+                  "failed": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        }
+      }
+    },
+    "/sync/full": {
+      "post": {
+        "tags": [
+          "Sync"
+        ],
+        "summary": "Trigger full sync",
+        "description": "Trigger a full competitive sync: scrape competitors, match products, calculate price changes. This is a long-running operation.",
+        "responses": {
+          "200": {
+            "description": "Sync started successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "syncId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "Full sync initiated",
+                  "syncId": "sync-123"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "Sync already in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "skipped": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "skipped": true,
+                  "message": "Sync already in progress"
                 }
               }
             }
@@ -461,11 +1521,11 @@
     },
     "/auto-approval-rules": {
       "get": {
-        "summary": "List auto-approval rules",
-        "description": "Returns all auto-approval rules for the authenticated tenant, ordered by priority.",
         "tags": [
           "Auto-Approval Rules"
         ],
+        "summary": "List auto-approval rules",
+        "description": "Returns all auto-approval rules for the authenticated tenant, ordered by priority.",
         "responses": {
           "200": {
             "description": "Success",
@@ -481,456 +1541,97 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/AutoApprovalRule"
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "priority": {
+                            "type": "integer"
+                          },
+                          "conditions": {
+                            "type": "object",
+                            "properties": {
+                              "maxPriceChange": {
+                                "type": "number"
+                              },
+                              "maxPercentageChange": {
+                                "type": "number"
+                              },
+                              "minConfidenceScore": {
+                                "type": "number"
+                              },
+                              "allowedStrategies": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "productCategories": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     },
                     "meta": {
                       "type": "object",
                       "properties": {
                         "total": {
-                          "type": "integer",
-                          "example": 5
+                          "type": "integer"
                         }
                       }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          }
-        }
-      },
-      "post": {
-        "summary": "Create auto-approval rule",
-        "description": "Creates a new auto-approval rule with specified conditions. All conditions must be satisfied for auto-approval (AND logic).",
-        "tags": [
-          "Auto-Approval Rules"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAutoApprovalRule"
-              },
-              "examples": {
-                "smallChanges": {
-                  "summary": "Small price changes",
-                  "value": {
-                    "name": "Small Price Changes",
-                    "description": "Auto-approve changes under $20",
-                    "enabled": true,
-                    "priority": 1,
-                    "conditions": {
-                      "maxPriceChange": 20.00,
-                      "minConfidenceScore": 85
-                    }
-                  }
-                },
-                "highConfidence": {
-                  "summary": "High confidence matches",
-                  "value": {
-                    "name": "High Confidence Only",
-                    "description": "Auto-approve high confidence matches",
-                    "enabled": true,
-                    "priority": 2,
-                    "conditions": {
-                      "minConfidenceScore": 95,
-                      "maxPercentageChange": 10.0
-                    }
-                  }
-                },
-                "categorySpecific": {
-                  "summary": "Electronics only",
-                  "value": {
-                    "name": "Electronics Auto-Approval",
-                    "description": "Auto-approve electronics with constraints",
-                    "enabled": true,
-                    "priority": 3,
-                    "conditions": {
-                      "productCategories": [
-                        "Electronics",
-                        "Computers"
-                      ],
-                      "maxPercentageChange": 15.0,
-                      "allowedStrategies": [
-                        "UNDERCUT",
-                        "MATCH"
-                      ],
-                      "priceRange": {
-                        "min": 50.00,
-                        "max": 1000.00
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Rule created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/AutoApprovalRule"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request - Invalid input"
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          },
-          "422": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auto-approval-rules/{id}": {
-      "get": {
-        "summary": "Get auto-approval rule",
-        "description": "Returns a single auto-approval rule by ID. Rule must belong to authenticated tenant.",
-        "tags": [
-          "Auto-Approval Rules"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "description": "Rule ID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/AutoApprovalRule"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          },
-          "403": {
-            "description": "Forbidden - Rule belongs to different tenant"
-          },
-          "404": {
-            "description": "Not found - Rule does not exist"
-          }
-        }
-      },
-      "put": {
-        "summary": "Update auto-approval rule",
-        "description": "Updates an existing auto-approval rule. All fields are optional. Rule must belong to authenticated tenant.",
-        "tags": [
-          "Auto-Approval Rules"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "description": "Rule ID"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAutoApprovalRule"
-              },
-              "examples": {
-                "updateConditions": {
-                  "summary": "Update conditions",
-                  "value": {
-                    "conditions": {
-                      "maxPriceChange": 30.00,
-                      "minConfidenceScore": 90
-                    }
-                  }
-                },
-                "disableRule": {
-                  "summary": "Disable rule",
-                  "value": {
-                    "enabled": false
-                  }
-                },
-                "changePriority": {
-                  "summary": "Change priority",
-                  "value": {
-                    "priority": 5
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Rule updated successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/AutoApprovalRule"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request - Invalid input"
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          },
-          "403": {
-            "description": "Forbidden - Rule belongs to different tenant"
-          },
-          "404": {
-            "description": "Not found - Rule does not exist"
-          },
-          "422": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "summary": "Delete auto-approval rule",
-        "description": "Permanently deletes an auto-approval rule. Rule must belong to authenticated tenant. This action cannot be undone.",
-        "tags": [
-          "Auto-Approval Rules"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "description": "Rule ID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Rule deleted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Rule deleted successfully"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          },
-          "403": {
-            "description": "Forbidden - Rule belongs to different tenant"
-          },
-          "404": {
-            "description": "Not found - Rule does not exist"
-          }
-        }
-      }
-    },
-    "/auto-approval-rules/{id}/toggle": {
-      "patch": {
-        "summary": "Toggle auto-approval rule",
-        "description": "Toggles the enabled status of an auto-approval rule. If enabled, it will be disabled, and vice versa. Rule must belong to authenticated tenant.",
-        "tags": [
-          "Auto-Approval Rules"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "description": "Rule ID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Rule toggled successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/AutoApprovalRule"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          },
-          "403": {
-            "description": "Forbidden - Rule belongs to different tenant"
-          },
-          "404": {
-            "description": "Not found - Rule does not exist"
-          }
-        }
-      }
-    },
-    "/auto-approval-rules/metrics": {
-      "get": {
-        "summary": "Get auto-approval metrics",
-        "description": "Returns metrics about auto-approval effectiveness for the authenticated tenant, including total approvals, approval percentage, and per-rule statistics.",
-        "tags": [
-          "Auto-Approval Rules"
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/AutoApprovalMetrics"
                     }
                   }
                 },
                 "example": {
                   "success": true,
-                  "data": {
-                    "totalAutoApprovals": 150,
-                    "autoApprovalPercentage": 65.5,
-                    "nonMatchingChanges": 25,
-                    "topRules": [
-                      {
-                        "ruleId": "123e4567-e89b-12d3-a456-426614174000",
-                        "ruleName": "Small Price Changes",
-                        "triggerCount": 85
-                      },
-                      {
-                        "ruleId": "123e4567-e89b-12d3-a456-426614174001",
-                        "ruleName": "High Confidence Only",
-                        "triggerCount": 65
+                  "data": [
+                    {
+                      "id": "rule-123",
+                      "name": "Small Price Changes",
+                      "description": "Auto-approve changes under $20",
+                      "enabled": true,
+                      "priority": 1,
+                      "conditions": {
+                        "maxPriceChange": 20.00,
+                        "minConfidenceScore": 85
                       }
-                    ]
+                    }
+                  ],
+                  "meta": {
+                    "total": 1
                   }
                 }
               }
             }
           },
           "401": {
-            "description": "Unauthorized - Invalid or missing API key"
-          }
-        }
-      }
-    },
-    "/webhooks": {
-      "get": {
-        "summary": "List webhooks",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Webhook"
-                  }
-                }
-              }
-            }
+            "description": "Unauthorized"
           }
         }
       },
       "post": {
-        "summary": "Register a new webhook",
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "summary": "Create auto-approval rule",
+        "description": "Creates a new auto-approval rule with specified conditions. All conditions must be satisfied for auto-approval (AND logic).",
         "requestBody": {
           "required": true,
           "content": {
@@ -938,15 +1639,75 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "url"
+                  "name",
+                  "enabled",
+                  "priority",
+                  "conditions"
                 ],
                 "properties": {
-                  "url": {
+                  "name": {
                     "type": "string"
                   },
-                  "secret": {
+                  "description": {
                     "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1
+                  },
+                  "conditions": {
+                    "type": "object",
+                    "properties": {
+                      "maxPriceChange": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "maxPercentageChange": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "minConfidenceScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "allowedStrategies": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "UNDERCUT",
+                            "MATCH",
+                            "MARGIN_LOCK",
+                            "THRESHOLD",
+                            "PERCENTAGE"
+                          ]
+                        }
+                      },
+                      "productCategories": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
+                }
+              },
+              "example": {
+                "name": "Small Price Changes",
+                "description": "Auto-approve changes under $20",
+                "enabled": true,
+                "priority": 1,
+                "conditions": {
+                  "maxPriceChange": 20.00,
+                  "minConfidenceScore": 85
                 }
               }
             }
@@ -954,10 +1715,259 @@
         },
         "responses": {
           "201": {
-            "description": "Created"
+            "description": "Rule created successfully"
+          },
+          "422": {
+            "description": "Validation error"
           }
         }
       }
+    },
+    "/auto-approval-rules/{id}": {
+      "get": {
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "summary": "Get auto-approval rule",
+        "description": "Returns a single auto-approval rule by ID.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "404": {
+            "description": "Rule not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "summary": "Update auto-approval rule",
+        "description": "Updates an existing auto-approval rule. All fields are optional.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "priority": {
+                    "type": "integer"
+                  },
+                  "conditions": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rule updated successfully"
+          },
+          "404": {
+            "description": "Rule not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Auto-Approval Rules"
+        ],
+        "summary": "Delete auto-approval rule",
+        "description": "Permanently deletes an auto-approval rule. This action cannot be undone.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rule deleted successfully"
+          },
+          "404": {
+            "description": "Rule not found"
+          }
+        }
+      }
+    },
+    "/analytics/summary": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "Market intelligence summary",
+        "description": "Get real-time aggregated stats of your market position.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "totalSKUs": {
+                          "type": "integer",
+                          "description": "Total products tracked"
+                        },
+                        "activeRivals": {
+                          "type": "integer",
+                          "description": "Number of active competitors"
+                        },
+                        "criticalAlerts": {
+                          "type": "integer",
+                          "description": "Products where competitor is cheaper"
+                        },
+                        "marketEdge": {
+                          "type": "number",
+                          "description": "Percentage of products where you're competitive"
+                        }
+                      }
+                    },
+                    "positionSummary": {
+                      "type": "object",
+                      "properties": {
+                        "cheapest": {
+                          "type": "integer",
+                          "description": "Products where you're cheapest"
+                        },
+                        "neutral": {
+                          "type": "integer",
+                          "description": "Products at same price"
+                        },
+                        "expensive": {
+                          "type": "integer",
+                          "description": "Products where competitor is cheaper"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "stats": {
+                    "totalSKUs": 150,
+                    "activeRivals": 3,
+                    "criticalAlerts": 15,
+                    "marketEdge": 75.5
+                  },
+                  "positionSummary": {
+                    "cheapest": 85,
+                    "neutral": 20,
+                    "expensive": 45
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health check",
+        "description": "Check API health status",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-error-codes": {
+    "VALIDATION_ERROR": {
+      "description": "Request validation failed",
+      "httpStatus": 422
+    },
+    "UNAUTHORIZED": {
+      "description": "Authentication required or invalid credentials",
+      "httpStatus": 401
+    },
+    "FORBIDDEN": {
+      "description": "Insufficient permissions or resource limit reached",
+      "httpStatus": 403
+    },
+    "NOT_FOUND": {
+      "description": "Resource not found",
+      "httpStatus": 404
+    },
+    "CONFLICT": {
+      "description": "Resource already exists or operation conflicts with current state",
+      "httpStatus": 409
+    },
+    "RATE_LIMIT_EXCEEDED": {
+      "description": "Too many requests. Rate limit exceeded.",
+      "httpStatus": 429
+    },
+    "INTERNAL_ERROR": {
+      "description": "Internal server error",
+      "httpStatus": 500
     }
   }
 }

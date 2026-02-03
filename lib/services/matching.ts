@@ -33,7 +33,7 @@ const TECH_SYNONYMS: Record<string, string> = {
 /**
  * Advanced Product Matching Service
  * Uses multi-pass strategy: SKU → Brand/Model → Semantic Similarity
- * 
+ *
  * Integrated with CacheEnhancedService for performance optimization
  * Requirements: 1.1, 1.6
  */
@@ -46,8 +46,9 @@ export class MatchingService {
   // Cache service instance
   private static cacheService: CacheEnhancedService;
 
-  // TTL for matching operations (15 minutes = 900 seconds)
-  private static readonly MATCHING_TTL = 900;
+  // TTL for matching operations
+  // Requirement 2.9.4: Cache competitor products with 1 hour TTL
+  private static readonly MATCHING_TTL = 900; // 15 minutes for match results
 
 
   // Common e-commerce noise to strip during matching
@@ -155,6 +156,12 @@ export class MatchingService {
       });
 
       const matchesCreated = [];
+      const matchesToCreate: Array<{
+        userProductId: string;
+        competitorProductId: string;
+        matchType: MatchType;
+        confidenceScore: number;
+      }> = [];
 
       for (const up of userProducts) {
         const match = await this.findBestMatch(
@@ -164,16 +171,23 @@ export class MatchingService {
         );
 
         if (match) {
-          matchesCreated.push(
-            await this.createMatch(
-              up.id,
-              match.product.id,
-              match.type,
-              match.confidence,
-              tenantId,
-            ),
-          );
+          // FIX: Collect matches to create in batch instead of creating one by one
+          matchesToCreate.push({
+            userProductId: up.id,
+            competitorProductId: match.product.id,
+            matchType: match.type,
+            confidenceScore: match.confidence,
+          });
         }
+      }
+
+      // FIX: Batch create all matches at once
+      if (matchesToCreate.length > 0) {
+        const created = await prisma.productMatch.createMany({
+          data: matchesToCreate,
+          skipDuplicates: true,
+        });
+        matchesCreated.push(...Array(created.count).fill(null));
       }
 
       const result = {

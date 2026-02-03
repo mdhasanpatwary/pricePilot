@@ -220,7 +220,7 @@ function DashboardContent() {
             Command Dashboard
           </h1>
           <p className="text-muted-foreground mt-1 text-lg">
-            Monitor your market position and pricing performance.
+            Monitor your market position and pricing performance. Competitor prices are automatically monitored daily at midnight UTC.
           </p>
         </div>
         <div className="flex items-center gap-3">

@@ -12,7 +12,7 @@ function parseCSVLine(line: string): string[] {
   const result = [];
   let current = "";
   let inQuotes = false;
-  
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     if (char === '"') {
@@ -61,12 +61,12 @@ async function handleImport(req: NextRequest) {
     }
 
     const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-    
+
     // Core Columns
     const skuIdx = headers.findIndex(h => h.includes("sku"));
     const priceIdx = headers.findIndex(h => h.includes("price"));
     const titleIdx = headers.findIndex(h => h.includes("title"));
-    
+
     // Tech Meta Columns
     const brandIdx = headers.findIndex(h => h.includes("brand"));
     const modelIdx = headers.findIndex(h => h.includes("model"));
@@ -97,65 +97,86 @@ async function handleImport(req: NextRequest) {
     const errors: string[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-        try {
-            const values = parseCSVLine(lines[i]);
-            const sku = values[skuIdx];
-            const priceVal = values[priceIdx];
-            const price = parseFloat(priceVal.replace(/[^0-9.]/g, ''));
-            
-            if (!sku || isNaN(price)) {
-                errors.push(`Row ${i+1}: Invalid SKU or Price`);
-                continue;
-            }
+      try {
+        const values = parseCSVLine(lines[i]);
+        const sku = values[skuIdx];
+        const priceVal = values[priceIdx];
+        const price = parseFloat(priceVal.replace(/[^0-9.]/g, ''));
 
-            const title = titleIdx !== -1 ? values[titleIdx] : sku;
-            const brand = brandIdx !== -1 ? values[brandIdx] : null;
-            const model = modelIdx !== -1 ? values[modelIdx] : null;
-            const category = categoryIdx !== -1 ? values[categoryIdx] : null;
-            
-            // Build specs JSON
-            const specs: Record<string, string> = {};
-            if (ramIdx !== -1 && values[ramIdx]) specs.ram = values[ramIdx];
-            if (storageIdx !== -1 && values[storageIdx]) specs.storage = values[storageIdx];
-
-            const existingProduct = await prisma.product.findFirst({
-                where: { tenantId, sku, site: { type: "USER" } },
-                select: { id: true }
-            });
-
-            if (existingProduct) {
-                await prisma.product.update({
-                    where: { id: existingProduct.id },
-                    data: {
-                        currentPrice: price,
-                        title: title || undefined,
-                        brand: brand || undefined,
-                        model: model || undefined,
-                        category: category || undefined,
-                        specifications: Object.keys(specs).length > 0 ? specs : undefined
-                    }
-                });
-                updatedCount++;
-            } else {
-                await prisma.product.create({
-                    data: {
-                        tenantId,
-                        siteId: userSite.id,
-                        sku,
-                        title: title || sku,
-                        currentPrice: price,
-                        brand: brand || null,
-                        model: model || null,
-                        category: category || "Uncategorized",
-                        specifications: specs,
-                        currency: userSite.currency || "USD"
-                    }
-                });
-                createdCount++;
-            }
-        } catch (e) {
-            errors.push(`Row ${i+1}: Critical Processing Error`);
+        if (!sku || isNaN(price)) {
+          errors.push(`Row ${i + 1}: Invalid SKU or Price`);
+          continue;
         }
+
+        const title = titleIdx !== -1 ? values[titleIdx] : sku;
+        const brand = brandIdx !== -1 ? values[brandIdx] : null;
+        const model = modelIdx !== -1 ? values[modelIdx] : null;
+        const category = categoryIdx !== -1 ? values[categoryIdx] : null;
+
+        // Build specs JSON
+        const specs: Record<string, string> = {};
+        if (ramIdx !== -1 && values[ramIdx]) specs.ram = values[ramIdx];
+        if (storageIdx !== -1 && values[storageIdx]) specs.storage = values[storageIdx];
+
+        const existingProduct = await prisma.product.findFirst({
+          where: { tenantId, sku, site: { type: "USER" } },
+          select: { id: true }
+        });
+
+        if (existingProduct) {
+          await prisma.product.update({
+            where: { id: existingProduct.id },
+            data: {
+              currentPrice: price,
+              title: title || undefined,
+              brand: brand || undefined,
+              model: model || undefined,
+              category: category || undefined,
+              specifications: Object.keys(specs).length > 0 ? specs : undefined
+            }
+          });
+
+          // Invalidate cache for updated product
+          // Requirement 2.9.4: Cache invalidation on data updates
+          try {
+            const { cacheEnhancedService } = await import("@/lib/services/cache-enhanced");
+            await cacheEnhancedService.invalidateProduct(tenantId, existingProduct.id);
+            await cacheEnhancedService.invalidateComparisons(tenantId);
+          } catch (cacheError) {
+            // Log but don't fail the import
+          }
+
+          updatedCount++;
+        } else {
+          await prisma.product.create({
+            data: {
+              tenantId,
+              siteId: userSite.id,
+              sku,
+              title: title || sku,
+              currentPrice: price,
+              brand: brand || null,
+              model: model || null,
+              category: category || "Uncategorized",
+              specifications: specs,
+              currency: userSite.currency || "USD"
+            }
+          });
+
+          // Invalidate cache for new product
+          // Requirement 2.9.4: Cache invalidation on data updates
+          try {
+            const { cacheEnhancedService } = await import("@/lib/services/cache-enhanced");
+            await cacheEnhancedService.invalidateComparisons(tenantId);
+          } catch (cacheError) {
+            // Log but don't fail the import
+          }
+
+          createdCount++;
+        }
+      } catch (e) {
+        errors.push(`Row ${i + 1}: Critical Processing Error`);
+      }
     }
 
     await recordAuditLog({

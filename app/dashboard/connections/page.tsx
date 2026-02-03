@@ -348,7 +348,7 @@ export default function ConnectionsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Integrations</h2>
           <p className="text-muted-foreground text-sm">
-            Manage your e-commerce store connections.
+            Manage your e-commerce store connections. Products sync automatically daily at midnight UTC.
           </p>
         </div>
         {!isAdding && connections.length < limits.storeLimit && (

@@ -1,6 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NextResponse } from "next/server";
+import { securityMonitoringService } from "@/lib/services/monitoring/security-monitoring";
 
 /**
  * Rate limiting configuration for API routes
@@ -194,11 +195,13 @@ export async function checkRateLimit(
  * Create HTTP 429 rate limit error response with appropriate headers
  * 
  * This function generates a standardized rate limit error response
- * with all required headers for client-side handling.
+ * with all required headers for client-side handling. Also records
+ * the rate limit violation for security monitoring.
  * 
  * @param limit - Total requests allowed in the time window
  * @param remaining - Remaining requests in current window
  * @param reset - Unix timestamp (ms) when the limit resets
+ * @param context - Optional security context for monitoring
  * @returns NextResponse with 429 status and rate limit headers
  * 
  * @example
@@ -207,7 +210,8 @@ export async function checkRateLimit(
  *   return createRateLimitResponse(
  *     rateLimitResult.limit,
  *     rateLimitResult.remaining,
- *     rateLimitResult.reset
+ *     rateLimitResult.reset,
+ *     { ipAddress: '192.168.1.1', endpoint: '/api/v1/products' }
  *   );
  * }
  * ```
@@ -231,7 +235,25 @@ export function createRateLimitResponse(
   limit: number,
   remaining: number,
   reset: number,
+  context?: {
+    ipAddress: string;
+    endpoint?: string;
+    userId?: string;
+    userAgent?: string;
+  }
 ): NextResponse {
+  // Record rate limit violation for security monitoring
+  if (context) {
+    securityMonitoringService.recordRateLimitViolation({
+      ipAddress: context.ipAddress,
+      endpoint: context.endpoint,
+      userId: context.userId,
+      userAgent: context.userAgent,
+    }).catch(err => {
+      console.error('[RateLimit] Failed to record violation:', err);
+    });
+  }
+
   return new NextResponse(
     JSON.stringify({
       error: "Too Many Requests",

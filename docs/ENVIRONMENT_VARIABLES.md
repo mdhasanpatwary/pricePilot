@@ -382,17 +382,62 @@ Challenge solve rate threshold for triggering fallback strategies.
 
 **Recommendation**: Lower values (0.2-0.3) trigger fallback sooner, higher values (0.4-0.5) are more tolerant.
 
-## Email Configuration (Future)
+## Email Configuration
 
-```env
-SMTP_HOST="smtp.example.com"
-SMTP_PORT="587"
-SMTP_USER="your_email@example.com"
-SMTP_PASSWORD="your_email_password"
-SMTP_FROM="noreply@pricepilot.com"
+Email notifications in PricePilot are configured through the **SystemConfig** database table, managed by the Super Admin through the admin dashboard. This approach provides centralized, secure configuration without requiring environment variables.
+
+### Required SystemConfig Keys
+
+The following keys must be configured in the SystemConfig table for email notifications to work:
+
+```
+NOTIFICATIONS_EMAIL_ENABLED: "true" or "false"
+SMTP_HOST: "smtp.example.com"
+SMTP_PORT: "587" or "465"
+SMTP_USER: "your_email@example.com"
+SMTP_PASS: "your_email_password"
+SMTP_FROM: "PricePilot <noreply@pricepilot.com>"
 ```
 
-SMTP configuration for email notifications. Not yet implemented.
+### Configuration via Admin Dashboard
+
+1. Log in as Super Admin
+2. Navigate to Admin → System Configuration
+3. Add/update the SMTP configuration keys
+4. Test email sending from the dashboard
+
+### User Preferences
+
+Individual users can enable/disable email notifications in their account settings:
+- Navigate to Dashboard → Settings
+- Toggle "Email Notifications"
+- This setting is stored in `User.emailNotifications` field
+
+### Email Notification Types
+
+1. **Pending Approval Notifications**: Sent when price changes await approval
+2. **Daily Approval Summary**: Sent daily at 8 AM with approval statistics
+3. **Auto-Approval Notifications**: Sent when auto-approval rules process changes
+
+For detailed information, see [Email Notifications Guide](./EMAIL_NOTIFICATIONS.md).
+
+### Cron Job Configuration
+
+The daily approval summary requires a cron job configured in `vercel.json`:
+
+```json
+{
+  "path": "/api/v1/cron/daily-approval-summary",
+  "schedule": "0 8 * * *"
+}
+```
+
+### Security Considerations
+
+- SMTP credentials are stored encrypted in the database
+- Only Super Admin can view/edit SMTP configuration
+- Email sending respects user notification preferences
+- Failed emails are logged but don't block operations
 
 ## Webhook Configuration
 
@@ -401,6 +446,31 @@ WEBHOOK_SECRET="your_webhook_secret"
 ```
 
 Secret for validating incoming webhooks. Used for integration security.
+
+## Cron Job Configuration
+
+```env
+CRON_SECRET="your_secure_random_string"
+```
+
+Secret for authenticating cron job requests. Required for all scheduled tasks.
+
+**Generate**: `openssl rand -base64 32`
+
+**Security**: This secret is used to verify that cron job requests are legitimate and not from unauthorized sources. Keep this value secret and never commit it to version control.
+
+**Usage**: All cron job endpoints (e.g., `/api/v1/cron/daily-approval-summary`) require this secret in the Authorization header:
+
+```bash
+curl https://yourdomain.com/api/v1/cron/daily-approval-summary \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+**Cron Jobs**:
+- `/api/cron/global-sync` - Daily product sync (0 0 * * *)
+- `/api/v1/cron/cleanup-expired-approvals` - Cleanup expired approvals (0 2 * * *)
+- `/api/v1/cron/auto-approval` - Process auto-approval rules (0 * * * *)
+- `/api/v1/cron/daily-approval-summary` - Send daily email summaries (0 8 * * *)
 
 ## Development Variables
 

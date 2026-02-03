@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { cacheWarmingService } from "@/lib/services/cache-warming";
+import { securityMonitoringService } from "@/lib/services/monitoring/security-monitoring";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
@@ -13,6 +14,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        rememberMe: { label: "Remember Me", type: "checkbox" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -25,6 +27,18 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.passwordHash) {
+          // Record authentication failure for security monitoring
+          // Note: We can't get IP address here, but we can track the email attempt
+          await securityMonitoringService.recordAuthFailure({
+            ipAddress: 'unknown', // Will be enriched by middleware
+            email: credentials.email,
+            additionalData: {
+              reason: 'user_not_found',
+            },
+          }).catch(err => {
+            console.error('[Auth] Failed to record auth failure:', err);
+          });
+
           throw new Error("Invalid credentials");
         }
 
@@ -34,6 +48,18 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (!isPasswordCorrect) {
+          // Record authentication failure for security monitoring
+          await securityMonitoringService.recordAuthFailure({
+            ipAddress: 'unknown', // Will be enriched by middleware
+            email: credentials.email,
+            userId: user.id,
+            additionalData: {
+              reason: 'invalid_password',
+            },
+          }).catch(err => {
+            console.error('[Auth] Failed to record auth failure:', err);
+          });
+
           throw new Error("Invalid credentials");
         }
 
@@ -48,12 +74,13 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           tenantId: user.tenantId,
           isSuperAdmin: user.isSuperAdmin,
+          rememberMe: credentials.rememberMe === 'true' || credentials.rememberMe === 'on',
         };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.sub = user.id; // Also set standard sub claim
@@ -64,6 +91,10 @@ export const authOptions: NextAuthOptions = {
         // Generate a unique session ID for this login
         const sessionId = Math.random().toString(36).substring(2, 15);
         token.sessionId = sessionId;
+
+        // Check if "remember me" was requested (passed via user object)
+        const rememberMe = (user as any).rememberMe || false;
+        token.rememberMe = rememberMe;
 
         // ENFORCE CONCURRENT SESSION LIMIT (Max 5)
         const activeSessions = await (prisma as any).session.count({
@@ -83,12 +114,15 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
+        // Set expiration based on remember me
+        const expiresIn = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000; // 30 days or 24 hours
+
         // Record the session in DB for device management/revocation
         await (prisma as any).session.create({
           data: {
             sessionToken: sessionId,
             userId: user.id,
-            expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            expires: new Date(Date.now() + expiresIn),
           },
         });
 
@@ -102,6 +136,12 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
+      // Handle session updates (e.g., password change)
+      if (trigger === 'update' && session?.invalidateSession) {
+        // Force logout by returning null
+        return null as any;
+      }
+
       // ON EVERY REQUEST: Verify session still exists in DB (revocation check)
       if (token.sessionId) {
         const sessionRecord = await (prisma as any).session.findUnique({
@@ -110,6 +150,17 @@ export const authOptions: NextAuthOptions = {
 
         if (!sessionRecord) {
           // Session was revoked! Force logout by returning empty token
+          return null as any;
+        }
+
+        // Check if session has expired
+        if (new Date(sessionRecord.expires) < new Date()) {
+          // Session expired, delete it and force logout
+          await (prisma as any).session.delete({
+            where: { id: sessionRecord.id },
+          }).catch(() => {
+            // Ignore errors if already deleted
+          });
           return null as any;
         }
 
@@ -141,8 +192,37 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
+    maxAge: 30 * 24 * 60 * 60, // 30 days (will be overridden by token expiry for non-remember-me)
     updateAge: 60 * 60, // 1 hour
+  },
+  cookies: {
+    sessionToken: {
+      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+    callbackUrl: {
+      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+    csrfToken: {
+      name: `${process.env.NODE_ENV === 'production' ? '__Host-' : ''}next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

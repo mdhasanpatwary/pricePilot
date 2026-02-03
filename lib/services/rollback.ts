@@ -209,7 +209,8 @@ export class RollbackService {
      * 4. Records price history for each product
      * 5. Marks the snapshot as rolled back
      * 6. Creates an audit log entry
-     * 7. Sends a notification to the tenant
+     * 7. Syncs the rollback to all affected stores
+     * 8. Sends a notification to the tenant
      *
      * @param snapshotId - ID of the bulk operation snapshot to rollback
      * @param userId - ID of the user performing the rollback
@@ -268,6 +269,14 @@ export class RollbackService {
                 productCount: snapshot.productCount,
                 tenantId,
             });
+
+            // Collect unique site IDs for syncing
+            const productIds = changes.map(c => c.productId);
+            const products = await prisma.product.findMany({
+                where: { id: { in: productIds } },
+                select: { siteId: true },
+            });
+            const uniqueSiteIds = [...new Set(products.map(p => p.siteId))];
 
             // Perform rollback in a transaction to ensure atomicity
             await prisma.$transaction(async (tx) => {
@@ -329,7 +338,43 @@ export class RollbackService {
                 });
             });
 
-            // 4. Send notification
+            // 4. Sync rollback to stores
+            const syncResults: Array<{ siteId: string; success: boolean; error?: string }> = [];
+
+            for (const siteId of uniqueSiteIds) {
+                try {
+                    await SyncService.syncProductsToStore(siteId);
+                    syncResults.push({ siteId, success: true });
+                    logger.info('[RollbackService] Successfully synced bulk rollback to store', {
+                        siteId,
+                        snapshotId,
+                    });
+                } catch (syncError) {
+                    const errorMessage = syncError instanceof Error ? syncError.message : String(syncError);
+                    syncResults.push({ siteId, success: false, error: errorMessage });
+
+                    // Log sync error but don't fail the rollback
+                    logger.error('[RollbackService] Failed to sync bulk rollback to store', {
+                        error: syncError,
+                        siteId,
+                        snapshotId,
+                    });
+                }
+            }
+
+            // 5. Check if any syncs failed and create notification if needed
+            const failedSyncs = syncResults.filter(r => !r.success);
+            if (failedSyncs.length > 0) {
+                await NotificationService.create({
+                    tenantId,
+                    type: 'SYNC_ERROR',
+                    title: 'Bulk Rollback Sync Failed',
+                    message: `Prices were rolled back in database but failed to sync to ${failedSyncs.length} store(s). Please sync manually.`,
+                    link: `/dashboard/integrations`,
+                });
+            }
+
+            // 6. Send success notification
             await NotificationService.create({
                 tenantId,
                 type: 'SYSTEM',

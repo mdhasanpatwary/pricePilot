@@ -43,6 +43,7 @@ const menuItems = [
   { icon: Globe, label: "Integrations", href: "/dashboard/connections" },
   { icon: Zap, label: "Pricing Rules", href: "/dashboard/rules" },
   { icon: Bell, label: "Alert Center", href: "/dashboard/alerts" },
+  { icon: Activity, label: "System Monitoring", href: "/dashboard/monitoring" },
   { icon: HistoryIcon, label: "Activity Logs", href: "/dashboard/activity" },
   {
     icon: Database,
@@ -66,12 +67,13 @@ function Sidebar({
   const tenantId = searchParams.get("tenantId");
 
   const filteredMenuItems = menuItems.filter((item) => {
-    // Only admins can see Activity Logs, Rules, and Competitors
+    // Only admins can see Activity Logs, Rules, Competitors, and System Monitoring
     if (session?.user?.role !== "ADMIN") {
       if (
         item.href === "/dashboard/activity" ||
         item.href === "/dashboard/rules" ||
-        item.href === "/dashboard/competitors"
+        item.href === "/dashboard/competitors" ||
+        item.href === "/dashboard/monitoring"
       ) {
         return false;
       }

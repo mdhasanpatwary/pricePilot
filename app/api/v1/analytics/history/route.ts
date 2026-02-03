@@ -3,10 +3,19 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 
 /**
  * GET /api/analytics/history
  * Price history data for dashboard charts
+ * 
+ * Query Parameters:
+ * - productId: Optional product ID to get history for a specific product
+ * - days: Number of days of history to fetch (default: 7)
+ * - page: Page number for pagination (default: 1)
+ * - limit: Items per page (default: 20, max: 100)
+ * - sortBy: Field to sort by (default: recordedAt)
+ * - sortOrder: Sort order (asc/desc, default: asc)
  */
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -33,30 +42,40 @@ async function handleGET(req: NextRequest) {
   const productId = url.searchParams.get("productId");
   const days = parseInt(url.searchParams.get("days") || "7");
 
+  // Get pagination parameters
+  const paginationParams = getPaginationParams(searchParams);
+
   try {
     if (productId) {
-      // Get history for a specific product
-      const history = await prisma.priceHistory.findMany({
-        where: {
+      // Get history for a specific product with pagination
+      const paginatedResult = await paginate(
+        prisma.priceHistory,
+        {
           productId,
           product: { tenantId },
           recordedAt: {
             gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
           },
         },
-        orderBy: {
-          recordedAt: "asc",
-        },
-      });
+        {
+          ...paginationParams,
+          sortBy: paginationParams.sortBy || 'recordedAt',
+          sortOrder: paginationParams.sortOrder || 'asc'
+        }
+      );
 
-      const formattedHistory = history.map((h) => ({
+      const formattedHistory = paginatedResult.data.map((h: any) => ({
         date: h.recordedAt.toISOString().split("T")[0],
         price: parseFloat(h.price.toString()),
       }));
 
-      return NextResponse.json(formattedHistory);
+      return NextResponse.json({
+        history: formattedHistory,
+        pagination: paginatedResult.pagination,
+      });
     } else {
       // Get aggregated price trend for ALL products (User and competitors)
+      // With pagination support
       const allProducts = await prisma.product.findMany({
         where: { tenantId },
         select: {
@@ -76,17 +95,22 @@ async function handleGET(req: NextRequest) {
         .filter((p) => p.site.type === "COMPETITOR")
         .map((p) => p.id);
 
-      const history = await prisma.priceHistory.findMany({
-        where: {
+      const paginatedResult = await paginate(
+        prisma.priceHistory,
+        {
           productId: { in: [...userProductIds, ...rivalProductIds] },
           recordedAt: {
             gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
           },
         },
-        orderBy: {
-          recordedAt: "asc",
-        },
-      });
+        {
+          ...paginationParams,
+          sortBy: paginationParams.sortBy || 'recordedAt',
+          sortOrder: paginationParams.sortOrder || 'asc'
+        }
+      );
+
+      const history = paginatedResult.data;
 
       // Group by date and calculate average for each type
       interface GroupedData {
@@ -96,7 +120,7 @@ async function handleGET(req: NextRequest) {
         };
       }
 
-      const grouped = history.reduce((acc: GroupedData, h) => {
+      const grouped = history.reduce((acc: GroupedData, h: any) => {
         const date = h.recordedAt.toISOString().split("T")[0];
         const isUser = userProductIds.includes(h.productId);
 
@@ -127,7 +151,10 @@ async function handleGET(req: NextRequest) {
         }))
         .filter((d) => d.index !== null || d.rivals !== null);
 
-      return NextResponse.json(chartData);
+      return NextResponse.json({
+        chartData,
+        pagination: paginatedResult.pagination,
+      });
     }
   } catch (error) {
     console.error("Error fetching price history:", error);

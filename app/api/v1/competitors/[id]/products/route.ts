@@ -13,6 +13,7 @@ import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
 import { UnauthorizedError, NotFoundError } from "@/lib/utils/error-handler";
 import { prisma } from "@/lib/prisma";
+import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
 
 async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions);
@@ -89,8 +90,12 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
         specifications: product.specifications || {},
     }));
 
+    // Sanitize competitor products to prevent XSS attacks
+    // Requirement 2.7.3: XSS prevention for competitor product data
+    const sanitizedProducts = sanitizeProducts(formattedProducts);
+
     return NextResponse.json({
-        products: formattedProducts,
+        products: sanitizedProducts,
         pagination: {
             page,
             limit,

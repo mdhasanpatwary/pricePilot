@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
 
 export default function UsersManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -464,12 +465,15 @@ export default function UsersManagementPage() {
                 </div>
                 <Input
                   type="password"
-                  placeholder="New strong password..."
+                  placeholder="New strong password (min 12 chars)..."
                   value={editForm.password}
                   onChange={(e) =>
                     setEditForm({ ...editForm, password: e.target.value })
                   }
                 />
+                {editForm.password && (
+                  <PasswordStrengthIndicator password={editForm.password} />
+                )}
               </div>
 
               <div className="mt-4 flex items-center justify-end gap-3">

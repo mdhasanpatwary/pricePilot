@@ -115,7 +115,7 @@ export class NotificationService {
       type: "SYNC_ERROR",
       title: "Sync Process Failed",
       message: error,
-      link: "/dashboard/activity",
+      link: "/dashboard/integrations",
     });
   }
 
@@ -147,6 +147,45 @@ export class NotificationService {
       title: "🛡️ Advanced Bot Protection Detected",
       message: `Heads up! ${siteName} has increased security. We've switched to "Golden Rule" mode. Scraping will be much slower to avoid bans. Estimated completion: ~${eta}.`,
       link: "/dashboard/competitors",
+    });
+  }
+
+  /**
+   * Send a bulk approval summary notification
+   * 
+   * This method sends a single notification summarizing multiple price approvals
+   * instead of sending individual notifications for each approval.
+   * 
+   * @param tenantId - The tenant ID
+   * @param count - Number of approvals
+   * @param changes - Array of price changes with product details
+   */
+  static async sendBulkApprovalSummary(
+    tenantId: string,
+    count: number,
+    changes: Array<{
+      productTitle: string;
+      oldPrice: number;
+      newPrice: number;
+    }>
+  ) {
+    // Create a summary message
+    const totalSavings = changes.reduce((sum, change) => {
+      return sum + (change.oldPrice - change.newPrice);
+    }, 0);
+
+    const message = count <= 5
+      ? `Approved ${count} price changes:\n${changes.map(c =>
+        `• ${c.productTitle}: $${c.oldPrice.toFixed(2)} → $${c.newPrice.toFixed(2)}`
+      ).join('\n')}`
+      : `Approved ${count} price changes. Total price adjustment: $${Math.abs(totalSavings).toFixed(2)}`;
+
+    return this.create({
+      tenantId,
+      type: "PRICE_ALERT",
+      title: `Bulk Price Approval: ${count} Products Updated`,
+      message,
+      link: "/dashboard/price-approvals",
     });
   }
 }

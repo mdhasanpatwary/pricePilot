@@ -5,10 +5,10 @@ import { ScraperService } from "./scraper";
 
 /**
  * Retry Queue Processor
- * 
+ *
  * Background worker that processes the retry queue, executing failed scraping
  * requests with fresh contexts and updating product data on success.
- * 
+ *
  * Implements Requirements 8.2, 8.3, 8.4
  */
 
@@ -37,7 +37,7 @@ export class RetryQueueProcessor {
 
     /**
      * Start the retry queue processor
-     * 
+     *
      * @param intervalMs Processing interval in milliseconds (default: 60000 = 1 minute)
      */
     async start(intervalMs: number = 60000): Promise<void> {
@@ -125,7 +125,7 @@ export class RetryQueueProcessor {
     /**
      * Process a single retry item
      * Implements Requirements 8.2, 8.3, 8.4
-     * 
+     *
      * @param item Retry queue item to process
      */
     private async processRetryItem(item: RetryQueueItem): Promise<void> {
@@ -140,9 +140,7 @@ export class RetryQueueProcessor {
 
             if (scrapedData && scrapedData.price > 0) {
                 // Success! Update product data
-                await this.updateProductData(item.productId, scrapedData);
-
-                // Mark retry as successful
+                await this.updateProductData(item.tenantId, item.productId, scrapedData);
                 await this.retryQueueService.markSuccess(item.id);
 
                 logger.info(`[RetryQueueProcessor] ✅ Successfully retried product ${item.productId}`);
@@ -182,11 +180,12 @@ export class RetryQueueProcessor {
     /**
      * Update product data in database
      * Implements Requirement 8.3
-     * 
+     *
      * @param productId Product ID to update
      * @param scrapedData Scraped product data
      */
     private async updateProductData(
+        tenantId: string,
         productId: string,
         scrapedData: {
             title: string;
@@ -218,6 +217,19 @@ export class RetryQueueProcessor {
                     updatedAt: new Date(),
                 },
             });
+
+            // Invalidate cache for updated product
+            // Requirement 2.9.4: Cache invalidation on data updates
+            try {
+                const { cacheEnhancedService } = await import("./cache-enhanced");
+                await cacheEnhancedService.invalidateProduct(tenantId, productId);
+                await cacheEnhancedService.invalidateComparisons(tenantId);
+            } catch (cacheError) {
+                logger.warn('[RetryQueueProcessor] Failed to invalidate cache after product update', {
+                    productId,
+                    error: cacheError
+                });
+            }
 
             // Create price history entry
             await prisma.priceHistory.create({

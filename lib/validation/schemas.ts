@@ -36,11 +36,12 @@ export const emailSchema = z
   .trim();
 
 /**
- * Password validation with security requirements
+ * Password validation with enhanced security requirements
+ * Requirement 2.7.6: Enforce strong password policies
  */
 export const passwordSchema = z
   .string()
-  .min(8, "Password must be at least 8 characters")
+  .min(12, "Password must be at least 12 characters")
   .max(128, "Password must not exceed 128 characters")
   .regex(
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
@@ -728,7 +729,7 @@ export const backupConfigSchema = z.object({
 
 export const alertRuleCreateSchema = z.object({
   metric: z.string().trim().min(1).max(100),
-  condition: z.enum(["GREATER_THAN", "LESS_THAN", "EQUALS"]),
+  condition: z.enum(["GREATER_THAN", "LESS_THAN", "DECREASED_BY", "INCREASED_BY", "OUT_OF_STOCK", "BACK_IN_STOCK"]),
   value: z.number().finite(),
   isActive: z.boolean().optional().default(true),
 });
@@ -736,7 +737,7 @@ export const alertRuleCreateSchema = z.object({
 export const alertRuleUpdateSchema = z.object({
   id: uuidSchema,
   metric: z.string().trim().min(1).max(100).optional(),
-  condition: z.enum(["GREATER_THAN", "LESS_THAN", "EQUALS"]).optional(),
+  condition: z.enum(["GREATER_THAN", "LESS_THAN", "DECREASED_BY", "INCREASED_BY", "OUT_OF_STOCK", "BACK_IN_STOCK"]).optional(),
   value: z.number().finite().optional(),
   isActive: z.boolean().optional(),
 });

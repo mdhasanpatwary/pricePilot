@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 
 export const maxDuration = 300; // 5 minutes max duration for Vercel functions (Pro plan)
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  // Optional: Verify Vercel Cron Secret for security
-  // const authHeader = req.headers.get("authorization");
-  // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-  //   return new NextResponse("Unauthorized", { status: 401 });
-  // }
+async function handleGET(req: NextRequest) {
+  // Verify Vercel Cron Secret for security
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
 
   console.log("[Cron] Starting Global Price Sync");
   let errorsCount = 0;
@@ -49,4 +49,10 @@ export async function GET() {
       { status: 500 },
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  // Cron jobs don't need rate limiting as they're authenticated via CRON_SECRET
+  // and called by Vercel's cron scheduler, not by users
+  return handleGET(req);
 }

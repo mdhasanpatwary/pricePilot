@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  syncSiteSchema,
+} from "@/lib/validation";
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -11,14 +16,14 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const { siteId } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, syncSiteSchema);
 
-    if (!siteId) {
-      return NextResponse.json(
-        { error: "Site ID is required" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { siteId } = validation.data!;
 
     const { getSyncQueue } = await import("@/lib/queue/client");
     const { QUEUE_NAMES } = await import("@/lib/queue/types");

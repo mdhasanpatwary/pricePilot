@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import axios from "axios";
 import { prisma } from "@/lib/prisma";
 import { logger } from "../logger";
+import { withRetry, RetryPresets } from "@/lib/utils/retry";
 
 export class NotificationSender {
   private static async getConfigs() {
@@ -83,7 +84,10 @@ export class NotificationSender {
   }
 
   /**
-   * Send a Slack notification
+   * Send a Slack notification with retry logic
+   * 
+   * Retries up to 3 times with exponential backoff to handle
+   * transient network failures and Slack API rate limits.
    */
   static async sendSlack(message: string, tenantId?: string) {
     const configs = await this.getConfigs();
@@ -126,17 +130,39 @@ export class NotificationSender {
     }
 
     try {
-      await axios.post(webhookUrl, {
-        text: message,
-      });
+      // Use retry logic for Slack webhook delivery
+      await withRetry(
+        async () => {
+          return axios.post(webhookUrl, {
+            text: message,
+          });
+        },
+        {
+          ...RetryPresets.STANDARD,
+          operationName: 'Slack Notification',
+          context: {
+            tenantId: tenantId || 'Global',
+            messagePreview: message.substring(0, 50),
+          },
+          onRetry: async (error, attempt, delay) => {
+            logger.warn(`Slack notification failed, retrying`, {
+              tenantId,
+              attempt,
+              delay: `${delay}ms`,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        }
+      );
 
       logger.info(
         `[NotificationSender] Slack notification sent (Tenant: ${tenantId || "Global"})`,
       );
       return true;
     } catch (error) {
-      logger.error("[NotificationSender] Failed to send Slack notification:", {
+      logger.error("[NotificationSender] Failed to send Slack notification after retries:", {
         error,
+        tenantId,
       });
       return false;
     }
@@ -176,6 +202,8 @@ export class NotificationSender {
   }
   /**
    * Send a custom webhook notification to all registered endpoints for a tenant
+   * 
+   * Uses retry logic for each webhook delivery to handle transient failures.
    */
   static async sendCustomWebhook(tenantId: string, payload: any) {
     try {
@@ -204,17 +232,41 @@ export class NotificationSender {
             headers["X-PricePilot-Secret"] = webhook.secret;
           }
 
-          await axios.post(webhook.url, payload, {
-            headers,
-            timeout: 8000,
-          });
+          // Use retry logic for webhook delivery
+          await withRetry(
+            async () => {
+              return axios.post(webhook.url, payload, {
+                headers,
+                timeout: 8000,
+              });
+            },
+            {
+              ...RetryPresets.STANDARD,
+              operationName: 'Custom Webhook',
+              context: {
+                tenantId,
+                webhookId: webhook.id,
+                url: webhook.url,
+                eventType: payload.type,
+              },
+              onRetry: async (error, attempt, delay) => {
+                logger.warn(`Custom webhook delivery failed, retrying`, {
+                  webhookId: webhook.id,
+                  url: webhook.url,
+                  attempt,
+                  delay: `${delay}ms`,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              },
+            }
+          );
 
           logger.info(
             `[NotificationSender] Webhook successfully delivered to ${webhook.url}`,
           );
         } catch (err: any) {
           logger.warn(
-            `[NotificationSender] Webhook delivery failed for ${webhook.url}: ${err.message}`,
+            `[NotificationSender] Webhook delivery failed after retries for ${webhook.url}: ${err.message}`,
           );
         }
       });

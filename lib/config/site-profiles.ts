@@ -42,7 +42,7 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       stock: ['.stock-status', '.text-discontinued']
     },
     waitTime: 2000,
-    cacheTime: 1800, // 30 mins
+    cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.95,
     retryCount: 2
   },
@@ -54,7 +54,7 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       stock: ['.availability']
     },
     waitTime: 4000, // Heavier site
-    cacheTime: 900, // 15 mins (prices change often)
+    cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.88,
     retryCount: 3
   },
@@ -66,7 +66,7 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       stock: ['.stock-info']
     },
     waitTime: 1000,
-    cacheTime: 3600, // 1 hour
+    cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.90,
     retryCount: 1
   },
@@ -79,7 +79,7 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       stock: ['.stock-status', '#product .availability']
     },
     waitTime: 2000,
-    cacheTime: 1800, // 30 mins
+    cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.92,
     retryCount: 2
   }
@@ -170,11 +170,12 @@ export function getSiteProfile(hostname: string): SiteProfile {
   }
 
   // 3. Default Profile
+  // Requirement 2.9.4: Cache scraping results for 24 hours
   return {
     strategy: 'full-js', // Safest default
     selectors: {},
     waitTime: 3000,
-    cacheTime: 1800,
+    cacheTime: 86400, // 24 hours for scraping results
     successRate: 0.7,
     retryCount: 2
   };

@@ -43,13 +43,15 @@ export class CacheEnhancedService {
     private cacheLayer: CacheLayer;
 
     // Default TTLs (in seconds)
+    // Requirement 2.9.4: Cache expensive operations with appropriate TTLs
     private readonly DEFAULT_TTLS = {
-        products: 300,           // 5 minutes
+        products: 300,           // 5 minutes - dashboard product lists
         comparisons: 300,        // 5 minutes
         matches: 900,            // 15 minutes
-        competitorProducts: 1800, // 30 minutes
+        competitorProducts: 3600, // 1 hour - competitor products in matching
         priceHistory: 3600,      // 1 hour
         analytics: 600,          // 10 minutes
+        scrapingResults: 86400,  // 24 hours - scraping results
     };
 
     constructor(cacheLayer?: CacheLayer) {

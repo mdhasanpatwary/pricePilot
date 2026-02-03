@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -31,6 +32,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid work email"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  rememberMe: z.boolean(),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -43,6 +45,11 @@ export default function LoginPage() {
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      rememberMe: false,
+    },
   });
 
   const onSubmit = async (data: LoginFormValues) => {
@@ -53,6 +60,7 @@ export default function LoginPage() {
       const result = await signIn("credentials", {
         email: data.email,
         password: data.password,
+        rememberMe: data.rememberMe ? 'true' : 'false',
         redirect: false,
       });
 
@@ -197,6 +205,24 @@ export default function LoginPage() {
                         </Button>
                       </div>
                       <FormMessage className="text-xs font-bold ml-1" />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="rememberMe"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormLabel className="text-sm font-medium cursor-pointer">
+                        Remember me for 30 days
+                      </FormLabel>
                     </FormItem>
                   )}
                 />

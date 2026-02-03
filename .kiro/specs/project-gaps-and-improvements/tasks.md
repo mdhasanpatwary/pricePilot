@@ -1,317 +1,588 @@
-# Project Gaps and Improvements - Tasks
+# Implementation Plan: Project Gaps and Improvements
 
-## Task Status Legend
-- `[ ]` Not Started
-- `[~]` Queued
-- `[-]` In Progress
-- `[x]` Completed
+## Overview
+
+This implementation plan addresses critical gaps, inconsistencies, and missing features identified in the PricePilot project. The plan is organized into 4 phases over 4 weeks, prioritizing critical issues first while maintaining backward compatibility.
+
+**Key Principles:**
+- Fix issues without major refactoring
+- Maintain existing functionality
+- Security first approach
+- Incremental deployment with rollback capability
 
 ---
 
 ## Phase 1: Critical Fixes (Week 1)
 
-### 1. Documentation Corrections
-- [x] 1.1 Update scraping frequency in DOCUMENTATION.md (15min → 24hr)
-- [x] 1.2 Update scraping frequency in README.md
-- [x] 1.3 Update scraping frequency in docs/ARCHITECTURE.md
-- [x] 1.4 Update UI text showing scraping schedule
-- [x] 1.5 Verify cron configuration matches documentation
+### 1. Documentation Consistency Fixes
 
-### 2. Platform Support Corrections
-- [x] 2.1 Update DOCUMENTATION.md with accurate platform support status
-- [x] 2.2 Add platform status badges (✅ Supported, 🚧 In Development, ⏳ Planned)
-- [x] 2.3 Update UI to disable unsupported platforms
-- [x] 2.4 Add "Coming Soon" messages for planned platforms
-- [x] 2.5 Remove or complete partial Shopify/WooCommerce/Magento implementations
+- [x] 1.1 Update documentation for scraping frequency
+  - Search and replace all "15 minutes" references with "24 hours" in DOCUMENTATION.md, README.md, and docs/ARCHITECTURE.md
+  - Update UI components showing scraping frequency in dashboard pages
+  - Verify cron configuration in vercel.json matches documentation (daily at midnight)
+  - Add user-facing help text documenting actual behavior
+  - _Requirements: 2.1.1, 2.1.2, 2.1.3, 2.1.4_
 
-### 3. Remove Mock Data Fallbacks
-- [x] 3.1 Remove mock data from lib/services/sync.ts OpenCart method
-- [x] 3.2 Remove mock data from lib/services/sync.ts Laravel method
-- [x] 3.3 Add comprehensive error logging for sync failures
-- [x] 3.4 Create user notifications for sync failures
-- [x] 3.5 Move mock data to __tests__/fixtures/mock-products.ts
-- [x] 3.6 Add environment variable for development mock mode
+- [x] 1.2 Update platform support documentation
+  - Update DOCUMENTATION.md to clearly state "Currently Supported: OpenCart, Laravel"
+  - Add platform status badges (✅ Supported, 🚧 In Development, ⏳ Planned)
+  - List Shopify, WooCommerce, Magento as "In Development"
+  - List PrestaShop, BigCommerce as "Planned"
+  - _Requirements: 2.2.1, 2.2.2_
 
-### 4. Complete Price Update APIs
-- [x] 4.1 Implement complete OpenCart price update with verification
-  - [x] 4.1.1 Add price verification in response
-  - [x] 4.1.2 Add SKU verification
-  - [x] 4.1.3 Add comprehensive error handling
-  - [x] 4.1.4 Add price update logging
-- [x] 4.2 Implement complete Laravel price update with verification
-  - [x] 4.2.1 Add price verification in response
-  - [x] 4.2.2 Add SKU verification
-  - [x] 4.2.3 Add comprehensive error handling
-  - [x] 4.2.4 Add price update logging
-- [x] 4.3 Update OpenCart extension with complete update endpoint
-- [ ] 4.4 Test price updates with real OpenCart instance (Test price updates with real OpenCart instance)
-- [ ] 4.5 Test price updates with real Laravel instance (Test price updates with real Laravel instance)
+- [x] 1.3 Update UI for platform support
+  - Create SUPPORTED_PLATFORMS, IN_DEVELOPMENT, and PLANNED constants in integrations page
+  - Disable unsupported platform selection in UI
+  - Show "Coming Soon" message for planned platforms
+  - Add appropriate badges to platform cards
+  - _Requirements: 2.2.3_
 
-### 5. Security - API Token Encryption
-- [x] 5.1 Create lib/security.ts with encryption functions
-- [x] 5.2 Add ENCRYPTION_KEY to environment variables
-- [x] 5.3 Create encryption middleware
-- [x] 5.4 Update Site model to use encrypted tokens
-- [x] 5.5 Migrate existing tokens to encrypted format
-- [x] 5.6 Test encryption/decryption
+### 2. Remove Mock Data Fallbacks
 
-### 6. Security - Rate Limiting
-- [x] 6.1 Set up Upstash Redis for rate limiting
-- [x] 6.2 Create lib/middleware/ratelimit.ts
-- [x] 6.3 Implement rate limiters for different user types
-- [x] 6.4 Add rate limiting to all API routes
-- [x] 6.5 Add rate limit headers to responses
-- [x] 6.6 Test rate limiting enforcement
+- [x] 2.1 Remove production mock data fallbacks
+  - Remove all mock data fallback logic from lib/services/sync.ts
+  - Add comprehensive error logging with context (siteId, tenantId, error details)
+  - Create sync log entries for user visibility when errors occur
+  - Throw errors instead of returning mock data
+  - _Requirements: 2.4.1, 2.4.2_
+  - _Note: Mock data only used when USE_MOCK_DATA=true (development only)_
 
-### 7. Security - Input Validation
-- [x] 7.1 Create lib/validation/middleware.ts
-- [x] 7.2 Add validation schemas for all API endpoints
-- [x] 7.3 Implement validateRequest middleware
-- [x] 7.4 Add validation to all POST/PUT/PATCH endpoints
-- [x] 7.5 Add XSS prevention with DOMPurify
-- [x] 7.6 Test validation with malicious inputs
+- [x] 2.2 Implement user notifications for sync failures
+  - Create NotificationService.create() calls for sync errors
+  - Include link to integrations dashboard in notifications
+  - Add notification type "SYNC_ERROR" to notification system
+  - _Requirements: 2.4.2_
+
+- [x] 2.3 Move mock data to development fixtures
+  - Create lib/fixtures/mock-products.ts for development use
+  - Move MOCK_OPENCART_PRODUCTS and MOCK_LARAVEL_PRODUCTS to fixtures
+  - Add environment variable ENABLE_MOCK_MODE for development
+  - _Requirements: 2.4.3, 2.4.4_
+
+### 3. Complete Price Update APIs
+
+- [x] 3.1 Implement complete OpenCart price update API
+  - Complete updateOpenCartPrice() method in lib/services/sync.ts
+  - Add price verification in response (compare expected vs actual)
+  - Create priceUpdateLog entries for successful updates
+  - Add comprehensive error handling and logging
+  - Implement retry logic with exponential backoff
+  - _Requirements: 2.5.1, 2.5.4_
+
+- [x] 3.2 Update OpenCart extension API endpoint
+  - Complete integrations/opencart/catalog/controller/api/pricepilot.php update() method
+  - Add API token validation
+  - Add product existence verification
+  - Add SKU verification (if provided)
+  - Return old_price and updated_price in response
+  - Add timestamp to response
+  - _Requirements: 2.5.1, 2.5.3_
+
+- [x] 3.3 Implement complete Laravel price update API
+  - Complete updateLaravelPrice() method in lib/services/sync.ts
+  - Add price verification in response
+  - Create priceUpdateLog entries for successful updates
+  - Add comprehensive error handling and logging
+  - Implement retry logic with exponential backoff
+  - _Requirements: 2.5.2, 2.5.4_
+
+- [x] 3.4 Verify price update APIs with real instances
+  - Set up staging OpenCart instance
+  - Set up staging Laravel instance
+  - Verify successful price updates
+  - Verify error scenarios (invalid token, product not found, network errors)
+  - Verify price update logs are created correctly
+  - _Requirements: 2.5.3_
+
+### 4. Security - API Token Encryption
+
+- [x] 4.1 Implement encryption utilities
+  - Create lib/security.ts with encryptApiToken() and decryptApiToken() functions
+  - Use AES-256-GCM encryption algorithm
+  - Generate and store ENCRYPTION_KEY in environment variables
+  - Add IV and auth tag to encrypted token format
+  - _Requirements: 2.7.1_
+
+- [x] 4.2 Create encryption middleware
+  - Create lib/middleware/encryption.ts
+  - Implement encryptSiteToken() for encrypting before database save
+  - Implement decryptSiteToken() for decrypting after database read
+  - Add error handling for decryption failures
+  - _Requirements: 2.7.1_
+
+- [x] 4.3 Migrate existing API tokens
+  - Create database migration to encrypt existing tokens
+  - Backup database before migration
+  - Test migration on staging environment
+  - Update all Site queries to use encryption middleware
+  - _Requirements: 2.7.1_
+
+### 5. Security - Rate Limiting Enhancement
+
+- [x] 5.1 Implement enhanced rate limiting
+  - Create lib/middleware/ratelimit.ts using @upstash/ratelimit
+  - Configure different limits: api (100/hour), scraping (10/min), admin (1000/hour)
+  - Add rate limit headers (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset)
+  - Return 429 status with clear error message when limit exceeded
+  - _Requirements: 2.7.2, 2.19.1, 2.19.2, 2.19.3, 2.19.4_
+
+- [x] 5.2 Apply rate limiting to API routes
+  - Add rate limiting middleware to all public API endpoints
+  - Use appropriate limiter type based on endpoint (api, scraping, admin)
+  - Verify rate limiting with concurrent requests
+  - Document rate limits in API documentation
+  - _Requirements: 2.7.2, 2.19.5_
+
+### 6. Checkpoint - Week 1 Review ✅
+  - ✅ Ensure all critical fixes are complete
+  - ✅ Verify documentation is accurate
+  - ✅ Verify price update APIs with real stores
+  - ✅ Confirm security measures are in place
+  - ✅ Ask user if questions arise
 
 ---
 
 ## Phase 2: Core Functionality (Week 2)
 
-### 8. Error Handling Enhancement
-- [x] 8.1 Create lib/utils/error-handler.ts with custom error classes
-- [x] 8.2 Create AppError, ValidationError, NotFoundError classes
-- [x] 8.3 Create global error handler middleware
-- [x] 8.4 Add error handling to SyncService
-- [x] 8.5 Add error handling to ScraperService
-- [x] 8.6 Add error handling to RulesEngine
-- [x] 8.7 Add error handling to MatchingService
-- [x] 8.8 Add user-friendly error messages
-- [x] 8.9 Add error logging with context
-- [x] 8.10 Test error handling
+### 7. Error Handling Enhancement
 
-### 9. Performance - Database Optimization
-- [x] 9.1 Audit all database queries for N+1 problems
-- [x] 9.2 Create migration for missing indexes
-  - [x] 9.2.1 Add idx_product_tenant_site
-  - [x] 9.2.2 Add idx_product_external_id
-  - [x] 9.2.3 Add idx_product_updated_at
-  - [x] 9.2.4 Add idx_match_user_product
-  - [x] 9.2.5 Add idx_match_competitor_product
-  - [x] 9.2.6 Add idx_price_history_product_date
-  - [x] 9.2.7 Add idx_site_tenant_type
-  - [x] 9.2.8 Add idx_notification_tenant_read
-- [x] 9.3 Optimize Prisma queries with proper includes
-- [x] 9.4 Test query performance improvements
+- [x] 7.1 Create custom error classes
+  - Create lib/utils/error-handler.ts with AppError base class
+  - Implement ValidationError, NotFoundError, UnauthorizedError, RateLimitError classes
+  - Add error code, message, statusCode, and details properties
+  - _Requirements: 2.8.4_
 
-### 10. Performance - Caching
-- [x] 10.1 Set up Upstash Redis for caching
-- [x] 10.2 Create lib/services/cache-enhanced.ts
-- [x] 10.3 Implement cache wrapper methods
-- [x] 10.4 Add caching to MatchingService
-- [x] 10.5 Add caching to expensive queries
-- [x] 10.6 Implement cache invalidation
-- [x] 10.7 Test caching functionality
+- [x] 7.2 Implement global error handler
+  - Create lib/middleware/error-handler.ts with handleApiError() function
+  - Handle AppError instances with appropriate status codes
+  - Log unexpected errors with full context
+  - Return standardized error response format
+  - _Requirements: 2.8.3, 2.8.4_
+  - _Note: Implemented as lib/middleware/global-error-handler.ts_
 
-### 11. Performance - Pagination
-- [x] 11.1 Create lib/utils/pagination.ts
-- [x] 11.2 Implement paginate helper function
-- [x] 11.3 Add pagination to GET /api/v1/products
-- [x] 11.4 Add pagination to GET /api/v1/competitors
-- [x] 11.5 Add pagination to GET /api/v1/price-approvals
-- [x] 11.6 Update UI to use pagination
-- [x] 11.7 Test pagination
+- [x] 7.3 Add error handling to all services
+  - Update SyncService with try-catch blocks and custom errors
+  - Update ScraperService with comprehensive error handling
+  - Update MatchingService with error handling
+  - Update RulesEngine with error handling
+  - Add error logging with context to all services
+  - _Requirements: 2.8.1, 2.8.2_
 
-### 12. Rollback Mechanism
-- [x] 12.1 Create lib/services/rollback.ts
-- [x] 12.2 Implement rollbackPriceChange method
-- [x] 12.3 Implement rollbackBulkOperation method
-- [x] 12.4 Create POST /api/v1/price-update/rollback endpoint
-- [x] 12.5 Add rollback UI in dashboard
-- [x] 12.6 Add rollback history tracking
-- [x] 12.7 Test rollback with real stores
-- [x] 12.8 Document rollback procedures
+- [x] 7.4 Implement retry logic for transient failures
+  - Add retry logic to external API calls (OpenCart, Laravel)
+  - Implement exponential backoff strategy
+  - Add maximum retry attempts configuration
+  - Log retry attempts for debugging
+  - _Requirements: 2.8.5_
+
+### 8. Performance Optimization
+
+- [x] 8.1 Audit and fix N+1 query problems
+  - Review all Prisma queries in services
+  - Replace sequential queries with includes
+  - Add proper relations to Prisma queries
+  - Verify query performance with large datasets
+  - _Requirements: 2.9.2_
+
+- [x] 8.2 Add database indexes
+  - Create migration file: prisma/migrations/add_performance_indexes.sql
+  - Add indexes for Product (tenantId+siteId, externalId, updatedAt)
+  - Add indexes for ProductMatch (userProductId+status, competitorProductId, confidence)
+  - Add indexes for PriceHistory (productId+recordedAt)
+  - Add indexes for Site (tenantId+type, isSyncing+syncStartedAt)
+  - Add indexes for Notification (tenantId+isRead+createdAt)
+  - Add indexes for TenantAuditLog (tenantId+createdAt)
+  - Run migration on staging and verify performance improvement
+  - _Requirements: 2.9.1_
+
+- [x] 8.3 Implement Redis caching
+  - Create lib/services/cache-enhanced.ts with CacheService class
+  - Implement get(), set(), invalidate(), and wrap() methods
+  - Add error handling for cache failures (graceful degradation)
+  - Configure TTL for different data types
+  - _Requirements: 2.9.4_
+
+- [x] 8.4 Add caching to expensive operations
+  - Cache competitor products in MatchingService (1 hour TTL)
+  - Cache product lists in dashboard (5 minutes TTL)
+  - Cache scraping results (24 hours TTL)
+  - Add cache invalidation on data updates
+  - _Requirements: 2.9.4_
+
+- [x] 8.5 Implement pagination
+  - Create lib/utils/pagination.ts with paginate() function
+  - Add PaginationParams and PaginatedResponse interfaces
+  - Support page, limit, sortBy, sortOrder parameters
+  - Return pagination metadata (total, totalPages, hasNext, hasPrev)
+  - _Requirements: 2.9.3_
+
+- [x] 8.6 Add pagination to API endpoints
+  - Update GET /api/v1/products with pagination
+  - Update GET /api/v1/competitors with pagination
+  - Update GET /api/v1/price-history with pagination
+  - Limit maximum page size to 100 items
+  - _Requirements: 2.9.3_
+
+### 9. Rollback Mechanism
+
+- [x] 9.1 Implement single price change rollback
+  - Create lib/services/rollback.ts with RollbackService class
+  - Implement rollbackPriceChange() method
+  - Revert product price in database transaction
+  - Create price history record for rollback
+  - Create rollback log entry
+  - Create audit log entry
+  - _Requirements: 2.16.1, 2.16.3_
+
+- [x] 9.2 Implement bulk operation rollback
+  - Add BulkOperationSnapshot model to Prisma schema
+  - Implement rollbackBulkOperation() method
+  - Rollback all products in transaction
+  - Mark snapshot as rolled back
+  - Create audit log entry
+  - _Requirements: 2.16.1, 2.16.3, 2.16.4_
+
+- [x] 9.3 Sync rollback to stores
+  - Call SyncService.syncProductsToStore() after rollback
+  - Verify price was updated in store
+  - Handle sync failures gracefully
+  - _Requirements: 2.16.5_
+
+- [x] 9.4 Add rollback notifications
+  - Send notification when rollback completes
+  - Include product details and price information
+  - Add link to product or activity page
+  - _Requirements: 2.16.1_
+
+- [x] 9.5 Create rollback API endpoint
+  - Create app/api/v1/price-update/rollback/route.ts
+  - Support both single and bulk rollback
+  - Require authentication
+  - Return success/error response
+  - _Requirements: 2.16.2_
+
+- [x] 9.6 Add rollback UI
+  - Add "Rollback" button to price update logs
+  - Add "Rollback" button to bulk operation history
+  - Show confirmation dialog before rollback
+  - Display success/error message after rollback
+  - Refresh data after successful rollback
+  - _Requirements: 2.16.2_
+  - _Note: Implemented as components/dashboard/rollback-button.tsx_
+
+### 10. Checkpoint - Week 2 Review
+  - Ensure all error handling is comprehensive
+  - Verify performance improvements with metrics
+  - Verify rollback functionality thoroughly
+  - Confirm all changes work in staging
+  - Ask user if questions arise
 
 ---
 
 ## Phase 3: Enhancements (Week 3)
 
-### 13. Price Approval - Auto-Approval Rules
-- [ ] 13.1 Add AutoApprovalRule model to Prisma schema
-- [ ] 13.2 Create lib/services/auto-approval.ts
-- [ ] 13.3 Implement shouldAutoApprove method
-- [ ] 13.4 Implement processAutoApprovals method
-- [ ] 13.5 Create cron job for auto-approval processing
-- [ ] 13.6 Add UI for managing auto-approval rules
-- [ ] 13.7 Test auto-approval logic
+### 11. Price Approval Enhancements
 
-### 14. Price Approval - Email Notifications
-- [ ] 14.1 Set up SMTP configuration
-- [ ] 14.2 Create lib/services/email.ts
-- [ ] 14.3 Implement sendPendingApprovalNotification
-- [ ] 14.4 Implement sendDailyApprovalSummary
-- [ ] 14.5 Create cron job for daily summary
-- [ ] 14.6 Add email notification preferences to user settings
-- [ ] 14.7 Test email notifications
+- [x] 11.1 Create auto-approval rules schema
+  - Add AutoApprovalRule model to Prisma schema
+  - Include fields: id, tenantId, name, enabled, priority, conditions, timestamps
+  - Add indexes for tenantId and enabled
+  - Run migration
+  - _Requirements: 2.10.1_
 
-### 15. Price Approval - Delegation
-- [ ] 15.1 Add ApprovalDelegation model to Prisma schema
-- [ ] 15.2 Create lib/services/approval-delegation.ts
-- [ ] 15.3 Implement canApprove method
-- [ ] 15.4 Implement createDelegation method
-- [ ] 15.5 Add delegation UI in dashboard
-- [ ] 15.6 Add delegation notification emails
-- [ ] 15.7 Test delegation workflow
+- [x] 11.2 Implement auto-approval service
+  - Create lib/services/auto-approval.ts with AutoApprovalService class
+  - Implement shouldAutoApprove() method with rule evaluation
+  - Check maxPriceChange, maxPercentageChange, minConfidenceScore conditions
+  - Check allowedStrategies, productCategories, priceRange conditions
+  - Return approval decision with reason
+  - _Requirements: 2.10.1_
 
-### 16. Test Suite Cleanup - Reduce to Core Business Logic Only
-- [x] 16.1 Analyze and categorize all existing tests
-  - [x] 16.1.1 Identify core business logic tests (keep)
-  - [x] 16.1.2 Identify duplicate tests (remove)
-  - [x] 16.1.3 Identify site-specific/selector tests (remove)
-  - [x] 16.1.4 Identify low-value/happy-path-only tests (remove)
-  - [x] 16.1.5 Identify third-party library validation tests (remove)
-  - [x] 16.1.6 Identify UI/snapshot tests (remove)
-  - [x] 16.1.7 Identify tests with real HTTP/DB dependencies (evaluate)
-- [x] 16.2 Core Scraping Engine Tests (KEEP)
-  - [x] 16.2.1 Scraper - Product extraction with mocked HTML
-  - [x] 16.2.2 Scraper - Challenge detection logic
-  - [x] 16.2.3 Scraper - HTML parsing edge cases
-  - [x] 16.2.4 Scraper - Data normalization (price, currency, stock)
-  - [x] 16.2.5 Scraper - Deduplication logic
-- [x] 16.3 Retry & Rate Limiting Tests (KEEP)
-  - [x] 16.3.1 Retry strategy - exponential backoff
-  - [x] 16.3.2 Retry queue - failure classification
-  - [x] 16.3.3 Rate limiter - enforcement logic
-  - [x] 16.3.4 Timeout handling - critical edge cases
-- [x] 16.4 Proxy & Rotation Tests (KEEP)
-  - [x] 16.4.1 Proxy manager - rotation logic
-  - [x] 16.4.2 Proxy manager - failure detection
-  - [x] 16.4.3 Proxy manager - health tracking
-- [x] 16.5 Product Matching Tests (KEEP)
-  - [x] 16.5.1 Matching - SKU exact match
-  - [x] 16.5.2 Matching - Brand + model match
-  - [x] 16.5.3 Matching - Fuzzy title match edge cases
-  - [x] 16.5.4 Matching - Confidence scoring
-- [x] 16.6 Pricing Rules Tests (KEEP)
-  - [x] 16.6.1 Rules engine - undercut strategy
-  - [x] 16.6.2 Rules engine - margin lock
-  - [x] 16.6.3 Rules engine - min/max constraints
-  - [x] 16.6.4 Rules engine - edge cases (zero, negative, null)
-- [x] 16.7 Price Update Tests (KEEP)
-  - [x] 16.7.1 Price updates - OpenCart API integration
-  - [x] 16.7.2 Price updates - Laravel API integration
-  - [x] 16.7.3 Price updates - validation logic
-  - [x] 16.7.4 Price updates - error handling
-- [x] 16.8 Authentication & Authorization Tests (KEEP)
-  - [x] 16.8.1 Auth - tenant isolation enforcement
-  - [x] 16.8.2 Auth - API token validation
-  - [x] 16.8.3 Auth - role-based access control
-- [x] 16.9 Delete Non-Core Tests
-  - [x] 16.9.1 Remove website-specific selector tests
-  - [x] 16.9.2 Remove duplicate happy-path tests
-  - [x] 16.9.3 Remove UI component snapshot tests
-  - [x] 16.9.4 Remove third-party library validation tests
-  - [x] 16.9.5 Remove tests with unstable external dependencies
-  - [x] 16.9.6 Remove low-value integration tests
-- [x] 16.10 Verify Final Test Suite
-  - [x] 16.10.1 Ensure test count is 30-50 (hard limit)
-  - [x] 16.10.2 Ensure test runtime is under 1 minute
-  - [x] 16.10.3 Ensure all core business logic is covered
-  - [x] 16.10.4 Document kept tests with reasons
-  - [x] 16.10.5 Document removed tests grouped by reason
-  - [x] 16.10.6 Fix any real issues in remaining tests
-  - [x] 16.10.7 Update test documentation
+- [x] 11.3 Implement auto-approval processing
+  - Implement processAutoApprovals() method
+  - Fetch all pending price changes
+  - Evaluate each change against auto-approval rules
+  - Auto-approve matching changes
+  - Create audit log entries for auto-approvals
+  - _Requirements: 2.10.1_
 
-### 17. API Documentation
-- [ ] 17.1 Update public/openapi.json with all endpoints
-- [ ] 17.2 Add request/response examples for each endpoint
-- [ ] 17.3 Document authentication requirements
-- [ ] 17.4 Document error codes
-- [ ] 17.5 Test interactive API documentation
-- [ ] 17.6 Add API usage examples
+- [x] 11.4 Add auto-approval to workflow
+  - Call processAutoApprovals() after price comparison runs
+  - Add cron job for periodic auto-approval processing
+  - Log auto-approval statistics
+  - _Requirements: 2.10.1_
+
+- [x] 11.5 Implement email notification system
+  - Create lib/services/email.ts with EmailService class
+  - Configure nodemailer with SMTP settings
+  - Implement sendPendingApprovalNotification() method
+  - Implement sendDailyApprovalSummary() method
+  - Add email templates with HTML formatting
+  - _Requirements: 2.10.2_
+
+- [x] 11.6 Create email notification cron jobs
+  - Create app/api/v1/cron/daily-approval-summary/route.ts
+  - Add cron job to vercel.json for daily summary
+  - Verify cron secret for security
+  - Send summary to all tenants with email notifications enabled
+  - _Requirements: 2.10.2_
+
+- [x] 11.7 Implement approval delegation
+  - Add ApprovalDelegation model to Prisma schema
+  - Create lib/services/approval-delegation.ts with ApprovalDelegationService class
+  - Implement canApprove() method to check delegation
+  - Implement createDelegation() method
+  - Add delegation notification email
+  - _Requirements: 2.10.3_
+
+- [x] 11.8 Add delegation to approval workflow
+  - Check delegation when user attempts to approve
+  - Allow delegated users to approve on behalf of others
+  - Log delegation usage in audit logs
+  - _Requirements: 2.10.3_
+
+- [x] 11.9 Optimize bulk approval operations
+  - Batch database operations for bulk approvals
+  - Use transactions for consistency
+  - Add progress tracking for large bulk operations
+  - Optimize notification sending for bulk approvals
+  - _Requirements: 2.10.4_
+
+- [x] 11.10 Add approval history tracking
+  - Ensure all approvals are logged in audit logs
+  - Add approval history view in UI
+  - Include approver, timestamp, and reason
+  - Make history searchable and filterable
+  - _Requirements: 2.10.5_
+
+### 12. Security - Input Validation & XSS Prevention
+
+- [x] 12.1 Create validation middleware
+  - Create lib/validation/middleware.ts with validateRequest() function
+  - Use Zod for schema validation
+  - Return 422 status with detailed validation errors
+  - _Requirements: 2.7.3_
+
+- [x] 12.2 Create validation schemas
+  - Create lib/validation/schemas.ts with Zod schemas
+  - Add schemas for product creation, site creation, price updates
+  - Add schemas for user registration, settings updates
+  - Include type checking, length limits, format validation
+  - _Requirements: 2.7.3_
+
+- [x] 12.3 Apply validation to API routes
+  - Add validation to all POST/PUT/PATCH endpoints
+  - Validate request body, query parameters, and URL parameters
+  - Verify validation with invalid inputs
+  - _Requirements: 2.7.3_
+
+- [x] 12.4 Implement XSS prevention
+  - Create lib/utils/sanitize.ts with sanitizeHtml() and escapeHtml() functions
+  - Use DOMPurify for HTML sanitization
+  - Define allowed tags and attributes
+  - _Requirements: 2.7.3_
+
+- [x] 12.5 Apply XSS prevention to user-generated content
+  - Sanitize product descriptions before rendering
+  - Escape user input in notifications
+  - Sanitize competitor product data
+  - Verify with XSS payloads
+  - _Requirements: 2.7.3_
+
+### 13. Security - Additional Measures
+
+- [x] 13.1 Audit SQL injection risks
+  - Review all Prisma queries for raw SQL usage
+  - Ensure parameterized queries are used everywhere
+  - Remove any unsafe $queryRaw usage
+  - Document safe query patterns
+  - _Requirements: 2.7.3_
+
+- [x] 13.2 Implement CORS restrictions
+  - Configure CORS in next.config.js
+  - Whitelist allowed origins (no wildcards in production)
+  - Restrict allowed methods and headers
+  - Verify CORS with different origins
+  - _Requirements: 2.7.4_
+
+- [x] 13.3 Add security headers
+  - Add Content-Security-Policy header
+  - Add X-Frame-Options header
+  - Add X-Content-Type-Options header
+  - Add Strict-Transport-Security header
+  - Verify headers with security scanner
+  - _Requirements: 2.7.4_
+
+- [x] 13.4 Implement password policies
+  - Add password strength validation
+  - Require minimum length (12 characters)
+  - Require mix of uppercase, lowercase, numbers, symbols
+  - Add password strength indicator in UI
+  - _Requirements: 2.7.6_
+
+- [x] 13.5 Enhance session management
+  - Configure secure session cookies (httpOnly, secure, sameSite)
+  - Implement session timeout (24 hours)
+  - Add session invalidation on password change
+  - Implement "remember me" functionality securely
+  - _Requirements: 2.7.7_
+
+- [x] 13.6 Prevent sensitive data logging
+  - Audit all logger calls for sensitive data
+  - Remove API tokens, passwords from logs
+  - Mask sensitive fields in error logs
+  - Add logging guidelines to documentation
+  - _Requirements: 2.7.5_
+
+### 14. Checkpoint - Week 3 Review ✅
+  - ✅ Ensure all approval enhancements work correctly
+  - ✅ Verify security measures are comprehensive
+  - ✅ Verify all validation and sanitization
+  - ✅ Confirm email notifications are sent
+  - ✅ Ask user if questions arise
 
 ---
 
-## Phase 4: Polish & Deploy (Week 4)
+### 16. API Documentation
 
-### 18. Bug Fixes & Edge Cases
-- [ ] 18.1 Review complete scraper.ts file (all 2784 lines)
-- [ ] 18.2 Fix any identified bugs in scraper
-- [ ] 18.3 Test edge cases in matching algorithm
-- [ ] 18.4 Test edge cases in pricing rules
-- [ ] 18.5 Test edge cases in sync service
-- [ ] 18.6 Improve error messages
-- [ ] 18.7 Add loading states to UI
-- [ ] 18.8 Add success/error toasts
+- [ ] 16.1 Update OpenAPI specification
+  - Review and update all endpoint definitions
+  - Add missing endpoints (rollback, auto-approval rules, delegation)
+  - Update request/response schemas
+  - _Requirements: 2.13.1_
+
+- [ ] 16.2 Add request/response examples
+  - Add example requests for all endpoints
+  - Add example responses (success and error cases)
+  - Include authentication examples
+  - _Requirements: 2.13.2_
+
+- [ ] 16.3 Document authentication
+  - Document API token authentication flow
+  - Document session authentication for web UI
+  - Add authentication troubleshooting guide
+  - _Requirements: 2.13.3_
+
+- [ ] 16.4 Document error codes
+  - Create comprehensive error code reference
+  - Document all error codes with descriptions
+  - Add examples of error responses
+  - _Requirements: 2.13.4_
+
+- [ ] 16.5 Set up interactive API documentation
+  - Deploy Swagger UI or similar tool
+  - Make documentation accessible at /api/docs
+  - Verify all endpoints through interactive docs
+  - _Requirements: 2.13.5_
+
+### 17. Monitoring & Alerting
+
+- [ ] 17.1 Configure critical alerts
+  - Set up alert for high block rate (>30%)
+  - Set up alert for proxy failures
+  - Set up alert for high error rate (>1%)
+  - Set up alert for slow response times (>500ms)
+  - _Requirements: 2.15.1_
+
+- [ ] 17.2 Implement alert notifications
+  - Configure email notifications for alerts
+  - Configure Slack notifications (if available)
+  - Add alert notification preferences to user settings
+  - _Requirements: 2.15.2_
+
+- [ ] 17.3 Make alert thresholds configurable
+  - Add alert configuration to admin settings
+  - Allow per-tenant alert customization
+  - Store alert configurations in database
+  - _Requirements: 2.15.3_
+
+- [ ] 17.4 Implement alert history tracking
+  - Create AlertHistory model in Prisma schema
+  - Log all triggered alerts
+  - Add alert history view in admin dashboard
+  - _Requirements: 2.15.4_
+
+- [ ] 17.5 Implement alert acknowledgment workflow
+  - Add "Acknowledge" button to alerts
+  - Track who acknowledged each alert
+  - Stop sending notifications for acknowledged alerts
+  - _Requirements: 2.15.5_
+
+### 18. Data Retention & Cleanup
+
+- [ ] 18.1 Define data retention policies
+  - Define retention periods for each data type
+  - Document retention policies in DOCUMENTATION.md
+  - Get approval for retention periods
+  - _Requirements: 2.17.1_
+
+- [ ] 18.2 Implement automated cleanup jobs
+  - Create cleanup cron job for old price history (>90 days)
+  - Create cleanup cron job for old audit logs (>1 year)
+  - Create cleanup cron job for old notifications (>30 days)
+  - Add cleanup job to vercel.json
+  - _Requirements: 2.17.2_
+
+- [ ] 18.3 Implement archive mechanism
+  - Create archive tables for old data
+  - Implement archiveOldData() method
+  - Move old data to archive tables before deletion
+  - _Requirements: 2.17.3_
+
+- [ ] 18.4 Ensure GDPR compliance
+  - Implement user data export functionality
+  - Implement user data deletion functionality
+  - Add privacy policy and terms of service
+  - Document GDPR compliance measures
+  - _Requirements: 2.17.4, 2.17.5_
 
 ### 19. Documentation Updates
-- [ ] 19.1 Update DOCUMENTATION.md with all changes
-- [ ] 19.2 Update README.md
-- [ ] 19.3 Update docs/ARCHITECTURE.md
-- [ ] 19.4 Update docs/STEALTH_SCRAPING.md
-- [ ] 19.5 Add troubleshooting guide
-- [ ] 19.6 Update FAQ with new questions
-- [ ] 19.7 Add migration guide for users
-- [ ] 19.8 Update API documentation
 
-### 20. Monitoring & Alerting
-- [ ] 20.1 Set up error monitoring (Sentry)
-- [ ] 20.2 Configure critical alerts
-  - [ ] 20.2.1 High error rate alert (>1%)
-  - [ ] 20.2.2 Slow response time alert (>500ms)
-  - [ ] 20.2.3 High block rate alert (>30%)
-  - [ ] 20.2.4 Failed price update alert
-  - [ ] 20.2.5 Security incident alert
-- [ ] 20.3 Set up email notifications for alerts
-- [ ] 20.4 Set up Slack notifications for alerts
-- [ ] 20.5 Create monitoring dashboard
-- [ ] 20.6 Test alerting system
+- [ ] 19.1 Update user documentation
+  - Update DOCUMENTATION.md with all changes
+  - Update README.md with new features
+  - Update FAQ with common questions
+  - Add troubleshooting guides for common issues
+  - _Requirements: 2.1.1, 2.2.1_
 
-### 21. Staging Deployment
-- [ ] 21.1 Deploy to staging environment
-- [ ] 21.2 Run database migrations on staging
-- [ ] 21.3 Run integration tests on staging
-- [ ] 21.4 Run E2E tests on staging
-- [ ] 21.5 Perform manual testing
-- [ ] 21.6 User acceptance testing
-- [ ] 21.7 Fix any issues found
-- [ ] 21.8 Performance testing on staging
+- [ ] 19.2 Update technical documentation
+  - Update ARCHITECTURE.md with new components
+  - Document all new services and utilities
+  - Add deployment guide with step-by-step instructions
+  - Create runbook for common operations
+  - _Requirements: 2.13.1_
 
-### 22. Production Deployment
-- [ ] 22.1 Create backup of production database
-- [ ] 22.2 Prepare rollback plan
-- [ ] 22.3 Schedule maintenance window
-- [ ] 22.4 Deploy to production
-- [ ] 22.5 Run database migrations on production
-- [ ] 22.6 Verify deployment
-- [ ] 22.7 Monitor error rates
-- [ ] 22.8 Monitor performance metrics
-- [ ] 22.9 Communicate changes to users
-- [ ] 22.10 Update status page
+- [ ] 19.3 Add code documentation
+  - Add JSDoc comments to all public functions
+  - Document complex algorithms with inline comments
+  - Update type definitions
+  - Add examples to documentation
+  - _Requirements: 2.13.1_
 
 ---
 
-## Summary
+## Notes
 
-**Total Tasks**: 22 main tasks
-**Required Tasks**: 22 (Tasks 1-22)
-**Estimated Duration**: 4 weeks
+- All tasks reference specific requirements for traceability
+- Tasks are organized into logical phases with checkpoints
+- Security and critical fixes are prioritized in early phases
+- Documentation is comprehensive in final phase
+- Each phase ends with a checkpoint for review and validation
+- Deployment is incremental with staging validation before production
 
-**Critical Path**:
-1. Week 1: Tasks 1-7 (Documentation, Platform Support, Security Basics)
-2. Week 2: Tasks 8-12 (Error Handling, Performance, Rollback)
-3. Week 3: Tasks 13-17 (Price Approval, Testing, API Docs)
-4. Week 4: Tasks 18-22 (Bug Fixes, Documentation, Deployment)
+## Success Criteria
 
-**Success Criteria**:
-- All critical issues resolved (Tasks 1-7)
-- All high priority issues resolved (Tasks 8-12)
-- Core enhancements complete (Tasks 13-17)
-- Production deployment successful (Tasks 18-22)
-- Zero security vulnerabilities
-- Test coverage >80% for critical paths
-- Documentation accuracy >95%
-- System uptime >99.9%
+- [ ] All critical issues resolved (2.1-2.5)
+- [ ] All security vulnerabilities addressed (2.7)
+- [ ] Documentation accuracy >95% (2.1, 2.2)
+- [ ] Price update success rate >99% (2.5)
+- [ ] System uptime >99.9% maintained
+- [ ] Zero security incidents post-deployment
+- [ ] User satisfaction score >4.5/5
 
 ---
 
-**Tasks Version**: 1.0
-**Last Updated**: January 28, 2026
+**Plan Version**: 1.0  
+**Last Updated**: January 28, 2026  
+**Estimated Duration**: 4 weeks  
 **Status**: Ready for Execution

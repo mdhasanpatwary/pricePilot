@@ -1,134 +1,177 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import bcrypt from "bcryptjs";
-import {
-  validateBody,
-  validationErrorResponse,
-  changePasswordSchema,
-} from "@/lib/validation";
-import { recordAuditLog, getIpAddress } from "@/lib/audit";
-import { withErrorHandling } from "@/lib/error-api";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+/**
+ * Password Change API Endpoint
+ * 
+ * Handles password changes with session invalidation
+ * Requirements: 2.7.7
+ */
 
-const PASSWORD_HISTORY_LIMIT = 5; // Prevent reuse of last 5 passwords
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import { SessionManager } from '@/lib/utils/session-manager';
+import { z } from 'zod';
 
-async function handleChangePassword(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const userId = session.user.id;
-  const tenantId = session.user.tenantId;
-
-  const validation = await validateBody(req, changePasswordSchema);
-  if (!validation.success) {
-    return validationErrorResponse(validation);
-  }
-
-  const { currentPassword, newPassword } = validation.data!;
-
-  // 1. Fetch user to verify current password
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      passwordHistory: {
-        orderBy: { createdAt: "desc" },
-        take: PASSWORD_HISTORY_LIMIT,
-      },
-    },
-  });
-
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  // 2. Verify current password
-  const isCurrentPasswordCorrect = await bcrypt.compare(
-    currentPassword,
-    user.passwordHash,
-  );
-
-  if (!isCurrentPasswordCorrect) {
-    return NextResponse.json(
-      { error: "Incorrect current password" },
-      { status: 400 },
-    );
-  }
-
-  // 3. Check against password history
-  for (const history of user.passwordHistory) {
-    const isReused = await bcrypt.compare(newPassword, history.passwordHash);
-    if (isReused) {
-      return NextResponse.json(
-        {
-          error: "You cannot reuse any of your last 5 passwords",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  // 4. Update password and history in a transaction
-  const newPasswordHash = await bcrypt.hash(newPassword, 12);
-
-  await prisma.$transaction(async (tx) => {
-    // Update user's current password
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        passwordHash: newPasswordHash,
-        passwordUpdatedAt: new Date(),
-      },
-    });
-
-    // Add to history
-    await tx.passwordHistory.create({
-      data: {
-        userId,
-        passwordHash: newPasswordHash,
-      },
-    });
-
-    // Optional: Clean up old history beyond limit
-    const historyCount = await tx.passwordHistory.count({
-      where: { userId },
-    });
-
-    if (historyCount > PASSWORD_HISTORY_LIMIT) {
-      const oldestHistory = await tx.passwordHistory.findMany({
-        where: { userId },
-        orderBy: { createdAt: "asc" },
-        take: historyCount - PASSWORD_HISTORY_LIMIT,
-      });
-
-      await tx.passwordHistory.deleteMany({
-        where: {
-          id: {
-            in: oldestHistory.map((h) => h.id),
-          },
-        },
-      });
-    }
-  });
-
-  // 5. Audit Log
-  await recordAuditLog({
-    tenantId,
-    userId,
-    userEmail: session.user.email!,
-    action: "CHANGE_PASSWORD",
-    entityId: userId,
-    ipAddress: getIpAddress(req),
-    details: { success: true },
-  });
-
-  return NextResponse.json({ message: "Password updated successfully" });
-}
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string()
+    .min(12, 'Password must be at least 12 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  confirmPassword: z.string(),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "auth", withErrorHandling(handleChangePassword));
+  try {
+    // Check authentication
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Parse and validate request body
+    const body = await req.json();
+    const validation = changePasswordSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.issues,
+        },
+        { status: 422 }
+      );
+    }
+
+    const { currentPassword, newPassword } = validation.data;
+
+    // Get user from database
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        passwordHash: true,
+        passwordHistory: {
+          orderBy: { createdAt: 'desc' },
+          take: 5, // Check last 5 passwords
+        },
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash
+    );
+
+    if (!isCurrentPasswordValid) {
+      return NextResponse.json(
+        { success: false, error: 'Current password is incorrect' },
+        { status: 400 }
+      );
+    }
+
+    // Check if new password was used recently
+    for (const oldPassword of user.passwordHistory) {
+      const isReused = await bcrypt.compare(newPassword, oldPassword.passwordHash);
+      if (isReused) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Password was used recently. Please choose a different password.',
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Hash new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    // Update password and invalidate all sessions in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Update user password
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: newPasswordHash,
+          passwordUpdatedAt: new Date(),
+        },
+      });
+
+      // Add old password to history
+      await tx.passwordHistory.create({
+        data: {
+          userId: user.id,
+          passwordHash: user.passwordHash,
+        },
+      });
+
+      // Clean up old password history (keep only last 5)
+      const allHistory = await tx.passwordHistory.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        skip: 5,
+      });
+
+      if (allHistory.length > 0) {
+        await tx.passwordHistory.deleteMany({
+          where: {
+            id: {
+              in: allHistory.map((h) => h.id),
+            },
+          },
+        });
+      }
+
+      // Create audit log
+      await tx.tenantAuditLog.create({
+        data: {
+          tenantId: session.user.tenantId,
+          userId: user.id,
+          userEmail: session.user.email || 'unknown',
+          action: 'PASSWORD_CHANGED',
+          entityId: user.id,
+          details: JSON.stringify({
+            timestamp: new Date().toISOString(),
+            ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
+          }),
+        },
+      });
+    });
+
+    // Invalidate all user sessions (force re-login)
+    await SessionManager.invalidateAllUserSessions(user.id);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Password changed successfully. Please log in again.',
+    });
+  } catch (error) {
+    console.error('[ChangePassword] Error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to change password',
+      },
+      { status: 500 }
+    );
+  }
 }

@@ -16,17 +16,23 @@ export class UpdateExecutionService {
     const results = [];
     const successfulProductIds: string[] = [];
 
-    for (const pid of productIds) {
-      const product = await prisma.product.findUnique({
-        where: { id: pid },
-        include: {
-          site: true,
-          matchesAsUser: {
-            include: { competitorProduct: true },
-            take: 1,
-          },
+    // FIX: Fetch all products in a single query instead of N queries
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      include: {
+        site: true,
+        matchesAsUser: {
+          include: { competitorProduct: true },
+          take: 1,
         },
-      });
+      },
+    });
+
+    // Create a map for O(1) lookup
+    const productMap = new Map(products.map(p => [p.id, p]));
+
+    for (const pid of productIds) {
+      const product = productMap.get(pid);
 
       if (!product || product.matchesAsUser.length === 0) continue;
 

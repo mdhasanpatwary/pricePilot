@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  verifyAdminCodeSchema,
+} from "@/lib/validation";
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -12,7 +17,13 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const { code } = await req.json();
+    // Validate input
+    const validation = await validateBody(req, verifyAdminCodeSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { code } = validation.data!;
     const secretCode = process.env.SUPER_ADMIN_LOGIN_CODE;
 
     if (!code || code !== secretCode) {

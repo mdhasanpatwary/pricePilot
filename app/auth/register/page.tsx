@@ -29,11 +29,18 @@ import {
 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
 
 const registerSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),
   email: z.string().email("Please enter a valid work email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z
+    .string()
+    .min(12, "Password must be at least 12 characters")
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
+      "Password must contain uppercase, lowercase, number, and special character"
+    ),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -45,6 +52,11 @@ export default function RegisterPage() {
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
+    defaultValues: {
+      companyName: "",
+      email: "",
+      password: "",
+    },
   });
 
   const onSubmit = async (data: RegisterFormValues) => {
@@ -210,7 +222,7 @@ export default function RegisterPage() {
                             {...field}
                             type={showPassword ? "text" : "password"}
                             className="pl-12 pr-12"
-                            placeholder="••••••••"
+                            placeholder="••••••••••••"
                           />
                         </FormControl>
                         <Button
@@ -230,6 +242,7 @@ export default function RegisterPage() {
                           )}
                         </Button>
                       </div>
+                      <PasswordStrengthIndicator password={field.value} />
                       <FormMessage className="text-xs font-bold ml-1" />
                     </FormItem>
                   )}

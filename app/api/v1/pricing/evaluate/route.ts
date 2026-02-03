@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { RulesEngine } from "@/lib/services/rules-engine";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  evaluatePricingSchema,
+} from "@/lib/validation";
 
 /**
  * POST /api/pricing/evaluate
@@ -18,8 +23,13 @@ async function handlePOST(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const body = await req.json();
-    const { execute } = body;
+    // Validate input
+    const validation = await validateBody(req, evaluatePricingSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { execute } = validation.data!;
 
     // Get recommendations
     const recommendations = await RulesEngine.evaluateAllRules(tenantId);

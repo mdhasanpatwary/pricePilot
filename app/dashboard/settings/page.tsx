@@ -32,6 +32,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { PasswordStrengthIndicator } from "@/components/ui/password-strength-indicator";
 
 const generalSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -43,8 +44,12 @@ const securitySchema = z
     currentPassword: z.string().min(1, "Current password is required"),
     newPassword: z
       .string()
-      .min(8, "New password must be at least 8 characters"),
-    confirmPassword: z.string().min(8, "Please confirm your password"),
+      .min(12, "New password must be at least 12 characters")
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
+        "Password must contain uppercase, lowercase, number, and special character"
+      ),
+    confirmPassword: z.string().min(12, "Please confirm your password"),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords don't match",
@@ -125,10 +130,13 @@ export default function SettingsPage() {
     register: registerSecurity,
     handleSubmit: handleSubmitSecurity,
     reset: resetSecurity,
+    watch: watchSecurity,
     formState: { errors: errorsSecurity },
   } = useForm<SecurityFormValues>({
     resolver: zodResolver(securitySchema),
   });
+
+  const newPasswordValue = watchSecurity("newPassword");
 
   const onGeneralSubmit = (_data: GeneralFormValues) => {
     setIsSaving(true);
@@ -518,7 +526,7 @@ export default function SettingsPage() {
                         className={cn(
                           "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
                           errorsGeneral.name &&
-                            "border-destructive focus:ring-destructive/20",
+                          "border-destructive focus:ring-destructive/20",
                         )}
                       />
                       {errorsGeneral.name && (
@@ -537,7 +545,7 @@ export default function SettingsPage() {
                         className={cn(
                           "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm",
                           errorsGeneral.email &&
-                            "border-destructive focus:ring-destructive/20",
+                          "border-destructive focus:ring-destructive/20",
                         )}
                       />
                       {errorsGeneral.email && (
@@ -744,7 +752,7 @@ export default function SettingsPage() {
                           className={cn(
                             "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm pr-10",
                             errorsSecurity.currentPassword &&
-                              "border-destructive focus:ring-destructive/20",
+                            "border-destructive focus:ring-destructive/20",
                           )}
                         />
                         <button
@@ -779,7 +787,7 @@ export default function SettingsPage() {
                             className={cn(
                               "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm pr-10",
                               errorsSecurity.newPassword &&
-                                "border-destructive focus:ring-destructive/20",
+                              "border-destructive focus:ring-destructive/20",
                             )}
                           />
                           <button
@@ -794,6 +802,7 @@ export default function SettingsPage() {
                             )}
                           </button>
                         </div>
+                        <PasswordStrengthIndicator password={newPasswordValue || ""} />
                         {errorsSecurity.newPassword && (
                           <p className="text-xs text-destructive font-bold">
                             {errorsSecurity.newPassword.message}
@@ -811,7 +820,7 @@ export default function SettingsPage() {
                             className={cn(
                               "w-full bg-background border border-border rounded-md py-2 px-3 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm pr-10",
                               errorsSecurity.confirmPassword &&
-                                "border-destructive focus:ring-destructive/20",
+                              "border-destructive focus:ring-destructive/20",
                             )}
                           />
                           <button
@@ -1103,9 +1112,12 @@ export default function SettingsPage() {
                                 password: e.target.value,
                               })
                             }
-                            placeholder="••••••••"
+                            placeholder="••••••••••••"
                             className="w-full bg-background border border-border rounded-md py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-primary/20 transition-all font-medium"
                           />
+                          {memberForm.password && (
+                            <PasswordStrengthIndicator password={memberForm.password} showRequirements={false} />
+                          )}
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">

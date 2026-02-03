@@ -27,12 +27,30 @@ export interface MaterializedViewStats {
 /**
  * Materialized View Manager Implementation
  */
+// Whitelist of allowed materialized view names to prevent SQL injection
+const ALLOWED_VIEW_NAMES = [
+    'daily_price_comparison_summary',
+    // Add other materialized views here as they are created
+] as const;
+
+type AllowedViewName = typeof ALLOWED_VIEW_NAMES[number];
+
 export class MaterializedViewManager {
     private prisma: PrismaClient;
     private refreshIntervals: Map<string, NodeJS.Timeout> = new Map();
 
     constructor(prisma?: PrismaClient) {
         this.prisma = prisma || optimizedPrisma;
+    }
+
+    /**
+     * Validate that a view name is in the whitelist
+     * Prevents SQL injection through dynamic view names
+     */
+    private validateViewName(viewName: string): void {
+        if (!ALLOWED_VIEW_NAMES.includes(viewName as AllowedViewName)) {
+            throw new Error(`Invalid view name: ${viewName}. Allowed views: ${ALLOWED_VIEW_NAMES.join(', ')}`);
+        }
     }
 
     /**
@@ -82,6 +100,7 @@ export class MaterializedViewManager {
      * Refresh a materialized view
      */
     async refreshView(viewName: string): Promise<void> {
+        this.validateViewName(viewName);
         const sql = `REFRESH MATERIALIZED VIEW CONCURRENTLY ${viewName}`;
         await this.prisma.$executeRawUnsafe(sql);
     }
@@ -138,6 +157,8 @@ export class MaterializedViewManager {
      * Get statistics for a materialized view
      */
     async getViewStats(viewName: string): Promise<MaterializedViewStats | null> {
+        this.validateViewName(viewName);
+
         try {
             const result = await this.prisma.$queryRawUnsafe<any[]>(`
                 SELECT 
@@ -153,12 +174,12 @@ export class MaterializedViewManager {
                 return null;
             }
 
-            // Get row count
+            // Get row count - safe because viewName is validated
             const countResult = await this.prisma.$queryRawUnsafe<any[]>(
                 `SELECT COUNT(*) as count FROM ${viewName}`
             );
 
-            // Get last refresh time from the view itself
+            // Get last refresh time from the view itself - safe because viewName is validated
             const refreshResult = await this.prisma.$queryRawUnsafe<any[]>(
                 `SELECT refreshed_at FROM ${viewName} LIMIT 1`
             );
@@ -196,6 +217,7 @@ export class MaterializedViewManager {
      * Drop a materialized view
      */
     async dropView(viewName: string): Promise<void> {
+        this.validateViewName(viewName);
         await this.prisma.$executeRawUnsafe(`DROP MATERIALIZED VIEW IF EXISTS ${viewName} CASCADE`);
     }
 

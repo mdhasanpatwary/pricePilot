@@ -50,6 +50,11 @@ export class KeyManager implements IKeyManager {
      */
     public validateKey(): void {
         try {
+            // Load the key if not already loaded
+            if (!this.masterKey) {
+                this.loadMasterKey();
+            }
+
             if (!this.masterKey) {
                 throw new KeyNotFoundError('Master key not loaded');
             }

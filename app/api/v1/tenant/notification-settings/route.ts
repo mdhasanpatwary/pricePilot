@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  notificationSettingsSchema,
+} from "@/lib/validation";
 
 async function handleGET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,7 +37,14 @@ async function handlePATCH(req: NextRequest) {
   }
 
   try {
-    const { slackEnabled, slackWebhookUrl } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, notificationSettingsSchema);
+
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { slackEnabled, slackWebhookUrl } = validation.data!;
 
     const tenant = await prisma.tenant.update({
       where: { id: session.user.tenantId },

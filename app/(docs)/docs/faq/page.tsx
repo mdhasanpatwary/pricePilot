@@ -12,7 +12,7 @@ export default function FAQDocsPage() {
         },
         {
           q: "How often are prices synced?",
-          a: "The standard sync interval is every 24 hours. This ensures comprehensive competitor price monitoring while respecting rate limits and system resources.",
+          a: "Competitor prices are automatically monitored every 24 hours (daily at midnight UTC). This ensures comprehensive price monitoring while respecting rate limits and system resources. The sync schedule is configured in your dashboard settings.",
         },
       ],
     },

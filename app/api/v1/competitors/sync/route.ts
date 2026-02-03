@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  syncSiteSchema,
+} from "@/lib/validation";
 
 /**
  * POST /api/competitors/sync
@@ -16,14 +21,14 @@ async function handleSync(req: NextRequest) {
   }
 
   try {
-    const { siteId } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, syncSiteSchema);
 
-    if (!siteId) {
-      return NextResponse.json(
-        { error: "Site ID is required" },
-        { status: 400 },
-      );
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { siteId } = validation.data!;
 
     // Check if site is already syncing
     const { prisma } = await import("@/lib/prisma");
@@ -50,8 +55,8 @@ async function handleSync(req: NextRequest) {
     const now = new Date();
     await prisma.site.update({
       where: { id: siteId },
-      data: { 
-        isSyncing: true, 
+      data: {
+        isSyncing: true,
         syncStartedAt: now,
         syncLastAction: "Queuing sync job...",
         syncProcessed: 0

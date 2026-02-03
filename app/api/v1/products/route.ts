@@ -7,6 +7,7 @@ import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
 import { paginate, getPaginationParams } from "@/lib/utils/pagination";
+import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
 
 async function handleGET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -205,8 +206,12 @@ async function handleGET(req: NextRequest) {
     };
   });
 
+  // Sanitize products to prevent XSS attacks
+  // Requirement 2.7.3: XSS prevention for user-generated content
+  const sanitizedProducts = sanitizeProducts(formattedProducts);
+
   return NextResponse.json({
-    products: formattedProducts,
+    products: sanitizedProducts,
     stats,
     currency,
     pagination: paginatedResult.pagination,
@@ -214,11 +219,12 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // Apply caching with 2-minute TTL (120 seconds)
+  // Apply caching with 5-minute TTL (300 seconds)
+  // Requirement 2.9.4: Cache product lists with 5 minutes TTL
   const cachedHandler = withCache(
     (req) => withRateLimit(req, "read", withErrorHandling(handleGET)),
     {
-      ttl: 120, // 2 minutes
+      ttl: 300, // 5 minutes
       keyPrefix: 'api:products',
       varyBy: ['q', 'brand', 'category', 'stock', 'ram', 'storage', 'processor', 'page', 'limit', 'sortBy', 'sortOrder'],
       tenantIsolated: true,

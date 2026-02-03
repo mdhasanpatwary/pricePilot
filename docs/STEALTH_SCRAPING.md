@@ -390,6 +390,273 @@ const result = await scrapeProduct('https://example.com/product/123');
 - **Proxy Health Checks**: Run every 5-10 minutes to avoid overhead
 - **Navigation History**: Keep only last 10 URLs per domain
 
+## Troubleshooting
+
+### High Block Rate
+
+**Symptoms**:
+- Many scraping attempts blocked
+- Challenge detection rate > 50%
+- Success rate < 50%
+
+**Causes**:
+- Aggressive bot protection on target site
+- IP address blacklisted
+- Too many requests too fast
+- Suspicious behavior detected
+
+**Solutions**:
+
+1. **Enable Session Warmup**:
+   ```typescript
+   const profile = {
+     sessionWarmup: true,
+     warmupSteps: 3
+   };
+   ```
+   Increases success rate by 30-50%
+
+2. **Increase Delays**:
+   ```typescript
+   const profile = {
+     minDelay: 3000,  // 3 seconds
+     maxDelay: 5000   // 5 seconds
+   };
+   ```
+
+3. **Use Residential Proxies**:
+   - Higher success rate than datacenter proxies
+   - More expensive but worth it for difficult sites
+   - Contact support to enable residential proxy pool
+
+4. **Reduce Scraping Frequency**:
+   - Scrape less frequently (every 48 hours instead of 24)
+   - Reduces detection risk
+   - Spreads load over time
+
+### Proxy Failures
+
+**Symptoms**:
+- Connection timeouts
+- Proxy marked as unhealthy
+- All proxies failing
+
+**Causes**:
+- Proxy server down
+- Proxy credentials incorrect
+- Network connectivity issues
+- Proxy IP blacklisted
+
+**Solutions**:
+
+1. **Check Proxy Configuration**:
+   ```bash
+   # Test proxy manually
+   curl -x http://proxy:8080 -U username:password https://example.com
+   ```
+
+2. **Verify Credentials**:
+   - Check PROXY_USERNAME and PROXY_PASSWORD in .env
+   - Ensure no extra spaces or special characters
+   - Test with proxy provider's dashboard
+
+3. **Monitor Proxy Health**:
+   - Admin Panel → Proxy Health Dashboard
+   - Check success rates and response times
+   - Replace consistently failing proxies
+
+4. **Enable Proxy Recovery**:
+   ```typescript
+   const proxyManager = new ProxyManager(proxies, {
+     recoveryCheckInterval: 300000  // Check every 5 minutes
+   });
+   ```
+
+### Challenge Detection Issues
+
+**Symptoms**:
+- Challenges not being detected
+- Scraper hangs on challenge pages
+- False positive challenge detection
+
+**Causes**:
+- New challenge type not recognized
+- Challenge detection timeout too short
+- Page structure changed
+
+**Solutions**:
+
+1. **Increase Challenge Timeout**:
+   ```typescript
+   const result = await handler.waitForChallenge(page, 120000); // 2 minutes
+   ```
+
+2. **Update Challenge Selectors**:
+   - Check if site updated their challenge page
+   - Update selectors in ChallengeHandler
+   - Contact support for assistance
+
+3. **Enable Debug Logging**:
+   ```typescript
+   const handler = new ChallengeHandler({
+     debug: true  // Logs all detection attempts
+   });
+   ```
+
+4. **Manual Verification**:
+   - Visit site manually with same proxy
+   - Check if challenge appears
+   - Note challenge type and behavior
+
+### Memory Leaks
+
+**Symptoms**:
+- Memory usage grows over time
+- Application crashes after extended use
+- Slow performance after many scrapes
+
+**Causes**:
+- Browser contexts not closed
+- Page objects not disposed
+- Event listeners not removed
+- Large data structures retained
+
+**Solutions**:
+
+1. **Ensure Proper Cleanup**:
+   ```typescript
+   try {
+     const page = await context.newPage();
+     // ... scraping logic
+   } finally {
+     await page.close();
+     await context.close();
+   }
+   ```
+
+2. **Limit Concurrent Browsers**:
+   ```typescript
+   const MAX_CONCURRENT = 5;  // Limit to 5 concurrent browsers
+   ```
+
+3. **Monitor Memory Usage**:
+   - Admin Panel → System Health Monitor
+   - Check memory trends over time
+   - Restart workers if memory exceeds threshold
+
+4. **Use Browser Pool**:
+   ```typescript
+   const pool = new BrowserPool({
+     maxSize: 10,
+     idleTimeout: 300000  // Close idle browsers after 5 minutes
+   });
+   ```
+
+### Slow Scraping Performance
+
+**Symptoms**:
+- Scraping takes much longer than expected
+- Response times > 10 seconds
+- Timeouts frequently
+
+**Causes**:
+- Slow proxy servers
+- Network latency
+- Target site slow to respond
+- Too many concurrent requests
+
+**Solutions**:
+
+1. **Optimize Proxy Selection**:
+   ```typescript
+   // Use fastest proxies first
+   const proxy = await proxyManager.getHealthyProxy('fastest');
+   ```
+
+2. **Adjust Timeouts**:
+   ```typescript
+   const page = await context.newPage();
+   page.setDefaultTimeout(30000);  // 30 seconds
+   page.setDefaultNavigationTimeout(60000);  // 60 seconds
+   ```
+
+3. **Reduce Concurrent Requests**:
+   ```typescript
+   const MAX_CONCURRENT = 3;  // Reduce from 5 to 3
+   ```
+
+4. **Use Faster Proxies**:
+   - Check proxy response times in dashboard
+   - Replace slow proxies (> 2s response time)
+   - Consider premium proxy providers
+
+### Data Extraction Failures
+
+**Symptoms**:
+- Products not being extracted
+- Missing product data (price, name, etc.)
+- Extraction returns empty results
+
+**Causes**:
+- Website structure changed
+- Selectors outdated
+- JavaScript rendering required
+- Data in different format
+
+**Solutions**:
+
+1. **Update Selectors**:
+   - Inspect target website HTML
+   - Update selectors in scraper configuration
+   - Test with browser dev tools
+
+2. **Wait for Content**:
+   ```typescript
+   await page.waitForSelector('.product-price', { timeout: 10000 });
+   await page.waitForLoadState('networkidle');
+   ```
+
+3. **Handle Dynamic Content**:
+   ```typescript
+   // Wait for JavaScript to render
+   await page.waitForFunction(() => {
+     return document.querySelectorAll('.product').length > 0;
+   });
+   ```
+
+4. **Debug Extraction**:
+   ```typescript
+   // Take screenshot for debugging
+   await page.screenshot({ path: 'debug.png' });
+   
+   // Log page content
+   const html = await page.content();
+   console.log(html);
+   ```
+
+### Getting Help
+
+If you're still experiencing issues:
+
+1. **Check System Status**:
+   - Admin Panel → System Health Monitor
+   - Look for system-wide issues
+
+2. **Review Logs**:
+   - Admin Panel → Scraping Metrics
+   - Filter by site and time range
+   - Look for error patterns
+
+3. **Contact Support**:
+   - Email: support@pricepilot.com
+   - Include: Site URL, error messages, screenshots
+   - Provide: Proxy configuration, scraping frequency
+
+4. **Community Forum**:
+   - Search for similar issues
+   - Post detailed problem description
+   - Share configuration (without credentials)
+
 ## Security Considerations
 
 - Store proxy credentials securely in environment variables
@@ -406,3 +673,8 @@ const result = await scrapeProduct('https://example.com/product/123');
 - Real-time proxy marketplace integration
 - Advanced fingerprint randomization
 - Browser profile persistence and rotation
+
+---
+
+*Last Updated: February 1, 2026*  
+*Version: 1.5*

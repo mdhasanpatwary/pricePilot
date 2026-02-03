@@ -4,6 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { randomBytes, createHash } from "crypto";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  createApiKeySchema,
+} from "@/lib/validation";
 
 /**
  * GET /api/v1/user/api-keys
@@ -51,11 +56,14 @@ async function handlePOST(req: NextRequest) {
   }
 
   try {
-    const { name, expiresDays } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, createApiKeySchema);
 
-    if (!name) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    if (!validation.success) {
+      return validationErrorResponse(validation);
     }
+
+    const { name, expiresDays } = validation.data!;
 
     const rawToken = `pp_${randomBytes(32).toString("hex")}`;
     const prefix = rawToken.substring(0, 11);

@@ -53,12 +53,33 @@ export default function PriceApprovalsPage() {
         try {
             setLoading(true);
             const res = await fetch("/api/v1/price-approvals?status=PENDING");
-            if (!res.ok) throw new Error("Failed to fetch");
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+                console.error("API Error:", res.status, errorData);
+
+                if (res.status === 401) {
+                    toast({
+                        title: "Authentication Required",
+                        description: "Please log in to view price approvals",
+                        variant: "destructive",
+                    });
+                } else {
+                    toast({
+                        title: "Error",
+                        description: errorData.error || "Failed to load pending price changes",
+                        variant: "destructive",
+                    });
+                }
+                setChanges([]);
+                return;
+            }
+
             const data = await res.json();
-            setChanges(data.changes);
+            setChanges(data.changes || []);
 
             // Fetch auto-approval rule names for changes that were auto-approved
-            const autoApprovedRuleIds = data.changes
+            const autoApprovedRuleIds = (data.changes || [])
                 .filter((c: PendingChange) => c.autoApprovedBy)
                 .map((c: PendingChange) => c.autoApprovedBy);
 
@@ -74,11 +95,13 @@ export default function PriceApprovalsPage() {
                 }
             }
         } catch (error) {
+            console.error("Fetch error:", error);
             toast({
                 title: "Error",
                 description: "Failed to load pending price changes",
                 variant: "destructive",
             });
+            setChanges([]);
         } finally {
             setLoading(false);
         }
@@ -167,11 +190,19 @@ export default function PriceApprovalsPage() {
     if (changes.length === 0) {
         return (
             <div className="container mx-auto p-6">
-                <div className="mb-6">
-                    <h1 className="text-3xl font-bold">Price Approvals</h1>
-                    <p className="text-muted-foreground mt-2">
-                        Review and approve price changes before they are applied to your store
-                    </p>
+                <div className="mb-6 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl font-bold">Price Approvals</h1>
+                        <p className="text-muted-foreground mt-2">
+                            Review and approve price changes before they are applied to your store
+                        </p>
+                    </div>
+                    <Button
+                        variant="outline"
+                        onClick={() => window.location.href = "/dashboard/price-approvals/history"}
+                    >
+                        View History
+                    </Button>
                 </div>
                 <EmptyState
                     title="No Pending Changes"
@@ -183,11 +214,19 @@ export default function PriceApprovalsPage() {
 
     return (
         <div className="container mx-auto p-6">
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold">Price Approvals</h1>
-                <p className="text-muted-foreground mt-2">
-                    Review and approve {changes.length} pending price changes
-                </p>
+            <div className="mb-6 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold">Price Approvals</h1>
+                    <p className="text-muted-foreground mt-2">
+                        Review and approve {changes.length} pending price changes
+                    </p>
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => window.location.href = "/dashboard/price-approvals/history"}
+                >
+                    View History
+                </Button>
             </div>
 
             <div className="mb-4 flex gap-2">

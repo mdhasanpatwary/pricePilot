@@ -5,6 +5,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { sanitizeNotification } from "@/lib/utils/sanitize";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge, BadgeProps } from "@/components/ui/badge";
 import { Button, ButtonProps } from "@/components/ui/button";
@@ -63,6 +64,10 @@ export function Notification({
     const config = notificationConfig[type];
     const Icon = config.icon;
 
+    // Sanitize user-generated content to prevent XSS
+    const sanitizedTitle = sanitizeNotification(title);
+    const sanitizedMessage = sanitizeNotification(message);
+
     const formatTimestamp = (date: Date) => {
         const now = new Date();
         const diff = now.getTime() - date.getTime();
@@ -84,7 +89,10 @@ export function Notification({
                         </div>
                         <div className="space-y-1 flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-semibold leading-none">{title}</h4>
+                                <h4
+                                    className="text-sm font-semibold leading-none"
+                                    dangerouslySetInnerHTML={{ __html: sanitizedTitle }}
+                                />
                                 <Badge variant={config.badgeVariant} className="text-[10px] uppercase">
                                     {type}
                                 </Badge>
@@ -110,9 +118,10 @@ export function Notification({
                 </div>
             </CardHeader>
             <CardContent className="pt-0">
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                    {message}
-                </p>
+                <p
+                    className="text-sm text-muted-foreground leading-relaxed mb-4"
+                    dangerouslySetInnerHTML={{ __html: sanitizedMessage }}
+                />
                 {actions && actions.length > 0 && (
                     <div className="flex items-center gap-2">
                         {actions.map((action, index) => (

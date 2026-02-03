@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  backupConfigSchema,
+} from "@/lib/validation";
 
 /**
  * GET: Export all data for the current tenant
@@ -90,7 +95,14 @@ async function handlePATCH(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const { googleDriveLink } = await req.json();
+    // Validate request body
+    const validation = await validateBody(req, backupConfigSchema);
+
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const { googleDriveLink } = validation.data!;
 
     const tenant = await (prisma.tenant as any).findUnique({
       where: { id: tenantId },

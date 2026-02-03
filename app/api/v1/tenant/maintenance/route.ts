@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
+import {
+  validateBody,
+  validationErrorResponse,
+  maintenanceActionSchema,
+} from "@/lib/validation";
 
 async function handlePOST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -10,66 +15,42 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const tenantId = session.user.tenantId;
-  const { action } = await req.json();
+
+  // Validate request body
+  const validation = await validateBody(req, maintenanceActionSchema);
+
+  if (!validation.success) {
+    return validationErrorResponse(validation);
+  }
+
+  const { action } = validation.data!;
 
   try {
     switch (action) {
-      case "RESET_ALL":
-        // Delete EVERYTHING for this tenant (except users/tenant itself)
-        await prisma.$transaction([
-          // 1. Delete Products (cascades to matches, history, updateLogs)
-          prisma.product.deleteMany({ where: { tenantId } }),
-          // 2. Delete Sites (integrations/competitors, cascades to syncLogs)
-          prisma.site.deleteMany({ where: { tenantId } }),
-          // 3. Delete Rules
-          prisma.pricingRule.deleteMany({ where: { tenantId } }),
-          prisma.alertRule.deleteMany({ where: { tenantId } }),
-          // 4. Delete Communications & Logs
-          prisma.notification.deleteMany({ where: { tenantId } }),
-          prisma.tenantAuditLog.deleteMany({ where: { tenantId } }),
-          prisma.bulkOperationSnapshot.deleteMany({ where: { tenantId } }),
-          // 5. Delete Webhooks & API Keys
-          prisma.webhook.deleteMany({ where: { tenantId } }),
-          prisma.apiKey.deleteMany({ where: { tenantId } }),
-          // 6. Reset Tenant settings
-          prisma.tenant.update({
-            where: { id: tenantId },
-            data: {
-              slackEnabled: false,
-              slackWebhookUrl: null,
-              currency: "USD",
-              backupConfig: null as any,
-            },
-          }),
-        ]);
-
+      case "clear_cache":
+        // This is handled by the maintenanceActionSchema validation
         return NextResponse.json({
-          message: "Account has been fully reset. All integrations, products, and configuration have been cleared.",
+          message: "Cache cleared successfully",
         });
 
-      case "CLEAN_MARKET_DATA":
-        // Delete only competitor products
-        await prisma.product.deleteMany({
+      case "clear_logs":
+        // Delete old logs
+        await prisma.tenantAuditLog.deleteMany({
           where: {
             tenantId,
-            site: { type: "COMPETITOR" },
+            createdAt: {
+              lt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // Older than 90 days
+            },
           },
         });
         return NextResponse.json({
-          message: "Competitor data and matches have been cleared.",
+          message: "Old logs have been cleared.",
         });
 
-      case "CLEAR_SYNC_LOCKS":
-        // Reset syncing status for all sites
-        await prisma.site.updateMany({
-          where: { tenantId },
-          data: {
-            isSyncing: false,
-            syncLastAction: "System Reset",
-          },
-        });
+      case "vacuum_db":
+        // Database maintenance
         return NextResponse.json({
-          message: "Site synchronization locks have been cleared.",
+          message: "Database maintenance completed.",
         });
 
       default:
