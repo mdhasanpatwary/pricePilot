@@ -130,6 +130,20 @@ This document provides an index of all documentation for the PricePilot platform
 
 ## General Documentation
 
+### Authentication & Security
+
+- **[Authentication Guide](./AUTHENTICATION_GUIDE.md)** ⭐ NEW - Complete authentication documentation
+  - API token authentication flow
+  - Session authentication for web UI
+  - Security best practices
+  - Comprehensive troubleshooting guide
+  - Code examples in multiple languages
+- **[Authentication Troubleshooting Quick Reference](./AUTHENTICATION_TROUBLESHOOTING_QUICK_REFERENCE.md)** ⭐ NEW - Quick troubleshooting guide
+- **[API Authentication](./API_AUTHENTICATION.md)** - Quick reference for API authentication
+- **[Security Headers](./SECURITY_HEADERS.md)** - Security headers configuration
+- **[SQL Injection Quick Reference](./SQL_INJECTION_QUICK_REFERENCE.md)** - SQL injection prevention
+- **[XSS Prevention Guide](./XSS_PREVENTION_GUIDE.md)** - XSS prevention strategies
+
 ### Platform Guides
 
 - **[Accessibility Guide](./ACCESSIBILITY_GUIDE.md)** - Accessibility features and compliance

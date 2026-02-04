@@ -108,6 +108,8 @@ npm run dev
 
 ### User Guides
 - **[Main Documentation](DOCUMENTATION.md)**: Complete user guide for merchants and administrators
+- **[User Satisfaction Guide](docs/USER_SATISFACTION_GUIDE.md)**: Feedback system and satisfaction tracking
+- **[Feedback Quick Reference](docs/FEEDBACK_QUICK_REFERENCE.md)**: Quick guide for providing feedback
 - **[Auto-Approval Rules Guide](DOCUMENTATION.md#auto-approval-rules-guide)**: Automate price approval workflows
 - **[Email Notifications Guide](DOCUMENTATION.md#email-notifications)**: Configure email alerts and summaries
 - **[Approval Delegation Guide](DOCUMENTATION.md#approval-delegation)**: Delegate approval authority to team members
@@ -163,6 +165,7 @@ npm run dev
 - **Pagination**: Efficient pagination on all list endpoints (max 100 items/page)
 
 ### New Features
+- **User Satisfaction Tracking**: Comprehensive feedback system with NPS scoring and trend analysis
 - **Rollback System**: Undo single or bulk price changes with full audit trail
 - **Email Notifications**: Pending approvals, daily summaries, and auto-approval alerts
 - **Approval Delegation**: Temporarily delegate approval authority to team members

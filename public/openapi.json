@@ -50,6 +50,17 @@
         },
         "required": [
           "error"
+        ],
+        "examples": [
+          {
+            "error": "Unauthorized - Invalid API key"
+          },
+          {
+            "error": "Resource not found"
+          },
+          {
+            "error": "Rate limit exceeded. Please try again later."
+          }
         ]
       },
       "ValidationError": {
@@ -86,7 +97,43 @@
               }
             }
           }
-        }
+        },
+        "examples": [
+          {
+            "success": false,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Validation failed",
+              "details": {
+                "fields": {
+                  "email": [
+                    "Invalid email format"
+                  ],
+                  "password": [
+                    "Password must be at least 8 characters"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "success": false,
+            "error": {
+              "code": "VALIDATION_ERROR",
+              "message": "Validation failed",
+              "details": {
+                "fields": {
+                  "product_ids": [
+                    "At least one product ID is required"
+                  ],
+                  "logic_type": [
+                    "Invalid pricing strategy"
+                  ]
+                }
+              }
+            }
+          }
+        ]
       },
       "Pagination": {
         "type": "object",
@@ -387,6 +434,116 @@
             "description": "Competitor product"
           }
         }
+      },
+      "ApprovalDelegation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique delegation identifier"
+          },
+          "fromUserId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User delegating approval authority"
+          },
+          "toUserId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User receiving approval authority"
+          },
+          "fromUser": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          },
+          "toUser": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Delegation start date and time"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Delegation end date and time"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether delegation is currently active"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RollbackHistory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "single",
+              "bulk"
+            ],
+            "description": "Type of rollback operation"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Product ID (for single rollback)"
+          },
+          "oldPrice": {
+            "type": "number",
+            "format": "float",
+            "description": "Price before rollback"
+          },
+          "newPrice": {
+            "type": "number",
+            "format": "float",
+            "description": "Price after rollback"
+          },
+          "rolledBackAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the rollback was performed"
+          },
+          "rolledBackBy": {
+            "type": "string",
+            "description": "User who performed the rollback"
+          }
+        }
       }
     }
   },
@@ -398,6 +555,30 @@
       "SessionAuth": []
     }
   ],
+  "x-authentication-examples": {
+    "apiKey": {
+      "description": "API Key authentication using x-api-key header",
+      "example": {
+        "headers": {
+          "x-api-key": "pk_live_1234567890abcdef",
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    "session": {
+      "description": "Session-based authentication for web application (cookie automatically sent by browser)",
+      "example": {
+        "headers": {
+          "Cookie": "next-auth.session-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    "curl": {
+      "description": "Example cURL request with API key authentication",
+      "example": "curl -X GET 'https://api.pricepilot.com/v1/products' \\\n  -H 'x-api-key: pk_live_1234567890abcdef' \\\n  -H 'Content-Type: application/json'"
+    }
+  },
   "tags": [
     {
       "name": "Authentication",
@@ -416,6 +597,10 @@
       "description": "Review and approve price changes"
     },
     {
+      "name": "Price Updates",
+      "description": "Execute and rollback price updates"
+    },
+    {
       "name": "Integrations",
       "description": "Connect your e-commerce platforms"
     },
@@ -428,12 +613,20 @@
       "description": "Automated price approval rules"
     },
     {
+      "name": "Approval Delegation",
+      "description": "Delegate price approval authority to team members"
+    },
+    {
       "name": "Analytics",
       "description": "Market intelligence and reporting"
     },
     {
       "name": "Sync",
       "description": "Data synchronization operations"
+    },
+    {
+      "name": "System",
+      "description": "System health and status endpoints"
     }
   ],
   "paths": {
@@ -723,6 +916,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "missingApiKey": {
+                    "summary": "Missing API key",
+                    "value": {
+                      "error": "Unauthorized - API key required"
+                    }
+                  },
+                  "invalidApiKey": {
+                    "summary": "Invalid API key",
+                    "value": {
+                      "error": "Unauthorized - Invalid API key"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Rate limit exceeded. Please try again in 60 seconds."
                 }
               }
             }
@@ -843,6 +1063,29 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Competitor"
+                },
+                "example": {
+                  "id": "comp-789",
+                  "name": "TechStore",
+                  "url": "https://techstore.com",
+                  "products": 0,
+                  "status": "PENDING",
+                  "health": 100,
+                  "isSyncing": true,
+                  "isAdvancedProtected": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
                 }
               }
             }
@@ -861,7 +1104,29 @@
             }
           },
           "422": {
-            "description": "Validation error"
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {
+                      "fields": {
+                        "url": [
+                          "Invalid URL format",
+                          "URL must start with http:// or https://"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -893,14 +1158,44 @@
                   "properties": {
                     "success": {
                       "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "success": true,
+                  "message": "Competitor removed successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
                 }
               }
             }
           },
           "404": {
-            "description": "Competitor not found"
+            "description": "Competitor not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Competitor not found"
+                }
+              }
+            }
           }
         }
       }
@@ -994,7 +1289,41 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {
+                      "fields": {
+                        "status": [
+                          "Invalid status value. Must be one of: PENDING, APPROVED, REJECTED, EXPIRED"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -1204,15 +1533,105 @@
                       "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "id": "int-456",
+                  "platform": "OPENCART",
+                  "type": "USER",
+                  "url": "https://mystore.com",
+                  "status": "CONNECTED"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
                 }
               }
             }
           },
           "403": {
-            "description": "Store limit reached"
+            "description": "Store limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Store connection limit reached. Please upgrade your plan."
+                }
+              }
+            }
           },
           "422": {
-            "description": "Validation error"
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "examples": {
+                  "invalidPlatform": {
+                    "summary": "Invalid platform",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "platform": [
+                              "Invalid platform. Must be one of: OPENCART, LARAVEL"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "invalidUrl": {
+                    "summary": "Invalid URL",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "baseUrl": [
+                              "Invalid URL format"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "connectionFailed": {
+                    "summary": "Connection test failed",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Failed to connect to store",
+                        "details": {
+                          "fields": {
+                            "apiToken": [
+                              "Invalid API token or unable to connect to store"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -1350,6 +1769,25 @@
                   "properties": {
                     "success": {
                       "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "approved": {
+                    "summary": "Match approved",
+                    "value": {
+                      "success": true,
+                      "message": "Match approved successfully"
+                    }
+                  },
+                  "rejected": {
+                    "summary": "Match rejected",
+                    "value": {
+                      "success": true,
+                      "message": "Match rejected successfully"
                     }
                   }
                 }
@@ -1357,10 +1795,67 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Match not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Product match not found"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {
+                      "fields": {
+                        "action": [
+                          "Invalid action. Must be one of: APPROVE, REJECT"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
-            "description": "Action failed"
+            "description": "Action failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Failed to process match action. Please try again."
+                }
+              }
+            }
           }
         }
       }
@@ -1441,22 +1936,155 @@
                     },
                     "failed": {
                       "type": "integer"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "productId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "oldPrice": {
+                            "type": "number"
+                          },
+                          "newPrice": {
+                            "type": "number"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     }
                   }
                 },
-                "example": {
-                  "message": "Price updates completed",
-                  "updated": 2,
-                  "failed": 0
+                "examples": {
+                  "allSuccess": {
+                    "summary": "All updates successful",
+                    "value": {
+                      "message": "Price updates completed",
+                      "updated": 2,
+                      "failed": 0,
+                      "details": [
+                        {
+                          "productId": "prod-123",
+                          "status": "success",
+                          "oldPrice": 299.99,
+                          "newPrice": 249.99
+                        },
+                        {
+                          "productId": "prod-456",
+                          "status": "success",
+                          "oldPrice": 199.99,
+                          "newPrice": 149.99
+                        }
+                      ]
+                    }
+                  },
+                  "partialSuccess": {
+                    "summary": "Some updates failed",
+                    "value": {
+                      "message": "Price updates completed with errors",
+                      "updated": 1,
+                      "failed": 1,
+                      "details": [
+                        {
+                          "productId": "prod-123",
+                          "status": "success",
+                          "oldPrice": 299.99,
+                          "newPrice": 249.99
+                        },
+                        {
+                          "productId": "prod-456",
+                          "status": "failed",
+                          "error": "Product not found in store"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
           },
           "422": {
-            "description": "Validation error"
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "examples": {
+                  "missingProducts": {
+                    "summary": "Missing product IDs",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "product_ids": [
+                              "At least one product ID is required"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "invalidStrategy": {
+                    "summary": "Invalid pricing strategy",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "logic_type": [
+                              "Invalid pricing strategy. Must be one of: UNDERCUT, MATCH, PERCENTAGE, FIXED"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "invalidValue": {
+                    "summary": "Invalid value",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "value": [
+                              "Value must be greater than 0"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1492,7 +2120,17 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
           },
           "409": {
             "description": "Sync already in progress",
@@ -1715,10 +2353,108 @@
         },
         "responses": {
           "201": {
-            "description": "Rule created successfully"
+            "description": "Rule created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "priority": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "rule-456",
+                    "name": "Small Price Changes",
+                    "enabled": true,
+                    "priority": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
           },
           "422": {
-            "description": "Validation error"
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "examples": {
+                  "missingName": {
+                    "summary": "Missing rule name",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "name": [
+                              "Rule name is required"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "invalidConditions": {
+                    "summary": "Invalid conditions",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "conditions.maxPercentageChange": [
+                              "Must be between 0 and 100"
+                            ],
+                            "conditions.minConfidenceScore": [
+                              "Must be between 0 and 100"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1743,10 +2479,64 @@
         ],
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "rule-123",
+                    "name": "Small Price Changes",
+                    "description": "Auto-approve changes under $20",
+                    "enabled": true,
+                    "priority": 1,
+                    "conditions": {
+                      "maxPriceChange": 20.00,
+                      "minConfidenceScore": 85
+                    },
+                    "createdAt": "2026-01-15T10:00:00Z",
+                    "updatedAt": "2026-02-01T14:30:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Rule not found"
+            "description": "Rule not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Auto-approval rule not found"
+                }
+              }
+            }
           }
         }
       },
@@ -1796,10 +2586,82 @@
         },
         "responses": {
           "200": {
-            "description": "Rule updated successfully"
+            "description": "Rule updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "rule-123",
+                    "name": "Small Price Changes - Updated",
+                    "enabled": false,
+                    "priority": 2,
+                    "updatedAt": "2026-02-03T10:00:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Rule not found"
+            "description": "Rule not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Auto-approval rule not found"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {
+                      "fields": {
+                        "priority": [
+                          "Priority must be greater than 0"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -1822,10 +2684,52 @@
         ],
         "responses": {
           "200": {
-            "description": "Rule deleted successfully"
+            "description": "Rule deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "message": "Auto-approval rule deleted successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Rule not found"
+            "description": "Rule not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Auto-approval rule not found"
+                }
+              }
+            }
           }
         }
       }
@@ -1907,6 +2811,832 @@
         }
       }
     },
+    "/price-update/rollback": {
+      "get": {
+        "tags": [
+          "Price Updates"
+        ],
+        "summary": "Get rollback history",
+        "description": "Retrieves rollback history for the authenticated tenant. Shows all price changes and bulk operations that have been rolled back.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            },
+            "description": "Maximum number of history records to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "history": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "single",
+                                  "bulk"
+                                ]
+                              },
+                              "productId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "nullable": true
+                              },
+                              "oldPrice": {
+                                "type": "number",
+                                "format": "float"
+                              },
+                              "newPrice": {
+                                "type": "number",
+                                "format": "float"
+                              },
+                              "rolledBackAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "rolledBackBy": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "count": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "withHistory": {
+                    "summary": "Rollback history with records",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "history": [
+                          {
+                            "id": "rollback-123",
+                            "type": "single",
+                            "productId": "prod-456",
+                            "oldPrice": 249.99,
+                            "newPrice": 299.99,
+                            "rolledBackAt": "2026-02-03T09:30:00Z",
+                            "rolledBackBy": "john@example.com"
+                          },
+                          {
+                            "id": "rollback-789",
+                            "type": "bulk",
+                            "productId": null,
+                            "oldPrice": 0,
+                            "newPrice": 0,
+                            "rolledBackAt": "2026-02-02T14:15:00Z",
+                            "rolledBackBy": "admin@example.com"
+                          }
+                        ],
+                        "count": 2
+                      },
+                      "meta": {
+                        "timestamp": "2026-02-03T10:00:00Z"
+                      }
+                    }
+                  },
+                  "emptyHistory": {
+                    "summary": "No rollback history",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "history": [],
+                        "count": 0
+                      },
+                      "meta": {
+                        "timestamp": "2026-02-03T10:00:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Price Updates"
+        ],
+        "summary": "Rollback price change or bulk operation",
+        "description": "Rollback a single price change or an entire bulk operation. The rollback will revert prices to their previous values and sync the changes to your store. Supports both single price change rollback (via updateLogId) and bulk operation rollback (via snapshotId).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "updateLogId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID of the price update log to rollback (for single price change)"
+                  },
+                  "snapshotId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID of the bulk operation snapshot to rollback (for bulk operation)"
+                  }
+                },
+                "oneOf": [
+                  {
+                    "required": [
+                      "updateLogId"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "snapshotId"
+                    ]
+                  }
+                ]
+              },
+              "examples": {
+                "singleRollback": {
+                  "summary": "Rollback single price change",
+                  "value": {
+                    "updateLogId": "update-123"
+                  }
+                },
+                "bulkRollback": {
+                  "summary": "Rollback bulk operation",
+                  "value": {
+                    "snapshotId": "snapshot-456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rollback successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "single",
+                            "bulk"
+                          ]
+                        },
+                        "updateLogId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "Present for single rollback"
+                        },
+                        "snapshotId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "Present for bulk rollback"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "singleRollback": {
+                    "summary": "Single rollback response",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "type": "single",
+                        "updateLogId": "update-123",
+                        "message": "Price change rolled back successfully"
+                      },
+                      "meta": {
+                        "timestamp": "2026-02-03T10:00:00Z"
+                      }
+                    }
+                  },
+                  "bulkRollback": {
+                    "summary": "Bulk rollback response",
+                    "value": {
+                      "success": true,
+                      "data": {
+                        "type": "bulk",
+                        "snapshotId": "snapshot-456",
+                        "message": "Bulk operation rolled back successfully"
+                      },
+                      "meta": {
+                        "timestamp": "2026-02-03T10:00:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rollback not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "ROLLBACK_NOT_ALLOWED"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "Cannot rollback this price change"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        }
+      }
+    },
+    "/approval-delegation": {
+      "get": {
+        "tags": [
+          "Approval Delegation"
+        ],
+        "summary": "List approval delegations",
+        "description": "Returns all approval delegations for the authenticated tenant. Shows both active and expired delegations.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "fromUserId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "toUserId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "fromUser": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "toUser": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "startDate": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "endDate": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "isActive": {
+                            "type": "boolean",
+                            "description": "Whether delegation is currently active"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": "delegation-123",
+                      "fromUserId": "user-456",
+                      "toUserId": "user-789",
+                      "fromUser": {
+                        "id": "user-456",
+                        "name": "John Doe",
+                        "email": "john@example.com"
+                      },
+                      "toUser": {
+                        "id": "user-789",
+                        "name": "Jane Smith",
+                        "email": "jane@example.com"
+                      },
+                      "startDate": "2026-02-01T00:00:00Z",
+                      "endDate": "2026-02-15T23:59:59Z",
+                      "isActive": true,
+                      "createdAt": "2026-01-31T10:00:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Approval Delegation"
+        ],
+        "summary": "Create approval delegation",
+        "description": "Delegate price approval authority to another user for a specified time period. The delegated user will be able to approve price changes on your behalf.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "toUserId",
+                  "startDate",
+                  "endDate"
+                ],
+                "properties": {
+                  "toUserId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID of the user to delegate to"
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Delegation start date and time"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Delegation end date and time"
+                  }
+                }
+              },
+              "example": {
+                "toUserId": "user-789",
+                "startDate": "2026-02-01T00:00:00Z",
+                "endDate": "2026-02-15T23:59:59Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Delegation created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "fromUserId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "toUserId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "startDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "delegation-789",
+                    "fromUserId": "user-456",
+                    "toUserId": "user-789",
+                    "startDate": "2026-02-01T00:00:00Z",
+                    "endDate": "2026-02-15T23:59:59Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "examples": {
+                  "invalidDates": {
+                    "summary": "Invalid date range",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "endDate": [
+                              "End date must be after start date"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "userNotFound": {
+                    "summary": "User not found",
+                    "value": {
+                      "success": false,
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Validation failed",
+                        "details": {
+                          "fields": {
+                            "toUserId": [
+                              "User not found or not in your tenant"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approval-delegation/{id}": {
+      "patch": {
+        "tags": [
+          "Approval Delegation"
+        ],
+        "summary": "Update approval delegation",
+        "description": "Update the start and end dates of an existing delegation. Can only update delegations that belong to your tenant.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Delegation ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "startDate",
+                  "endDate"
+                ],
+                "properties": {
+                  "startDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "New delegation start date and time"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "New delegation end date and time"
+                  }
+                }
+              },
+              "example": {
+                "startDate": "2026-02-01T00:00:00Z",
+                "endDate": "2026-02-28T23:59:59Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delegation updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "startDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "delegation-123",
+                    "startDate": "2026-02-01T00:00:00Z",
+                    "endDate": "2026-02-28T23:59:59Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Delegation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Approval delegation not found"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "example": {
+                  "success": false,
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {
+                      "fields": {
+                        "endDate": [
+                          "End date must be after start date"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Approval Delegation"
+        ],
+        "summary": "Revoke approval delegation",
+        "description": "Permanently revoke an approval delegation. The delegated user will immediately lose approval authority. This action cannot be undone.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Delegation ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delegation revoked successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Delegation revoked successfully"
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "message": "Delegation revoked successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized - Invalid API key"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Delegation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Approval delegation not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -1930,8 +3660,39 @@
                     "timestamp": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "version": {
+                      "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "status": "ok",
+                  "timestamp": "2026-02-03T10:00:00Z",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "error",
+                  "message": "Database connection failed"
                 }
               }
             }
@@ -1964,6 +3725,18 @@
     "RATE_LIMIT_EXCEEDED": {
       "description": "Too many requests. Rate limit exceeded.",
       "httpStatus": 429
+    },
+    "ROLLBACK_NOT_ALLOWED": {
+      "description": "Rollback operation is not allowed for this resource",
+      "httpStatus": 400
+    },
+    "ROLLBACK_ERROR": {
+      "description": "Failed to perform rollback operation",
+      "httpStatus": 500
+    },
+    "ROLLBACK_HISTORY_ERROR": {
+      "description": "Failed to retrieve rollback history",
+      "httpStatus": 500
     },
     "INTERNAL_ERROR": {
       "description": "Internal server error",

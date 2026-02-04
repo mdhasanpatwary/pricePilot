@@ -273,6 +273,187 @@ Encrypts sensitive data at rest.
 Manages internal and external alerts.
 - **Channels**: In-App (Db), Webhooks, Email (v1.5)
 
+### `DataCleanupService` (`lib/services/data-cleanup.ts`)
+Manages automated data retention and cleanup operations.
+- **Features**: Archive old data, automated cleanup jobs, configurable retention periods
+- **Capabilities**: Price history cleanup (90 days), audit log cleanup (1 year), notification cleanup (30 days)
+- **Safety**: Archive before deletion, transaction-based operations, comprehensive logging
+- **Scheduling**: Daily cron jobs for automated cleanup
+
+### `GDPRService` (`lib/services/gdpr-service.ts`)
+Handles GDPR compliance operations for user data.
+- **Features**: Data export (Article 15 & 20), data deletion (Article 17), consent management
+- **Capabilities**: Complete user data export to JSON, anonymization of deleted user data
+- **Compliance**: GDPR Article 15, 17, 20 compliant, audit trail for all operations
+- **Security**: Tenant isolation, authentication required, comprehensive logging
+
+### `BulkApprovalService` (`lib/services/bulk-approval.ts`)
+Optimizes bulk price approval operations.
+- **Features**: Batch database operations, transaction-based updates, progress tracking
+- **Capabilities**: Bulk approve/reject, snapshot creation, rollback support
+- **Performance**: Processes 1000+ products in seconds, optimized notification batching
+- **Safety**: Transaction rollback on failure, validation before execution
+
+### `ComparisonService` (`lib/services/comparison.ts`)
+Handles product price comparison logic with caching.
+- **Features**: Price difference calculation, status determination, caching layer
+- **Capabilities**: Competitor price analysis, price trend detection, comparison history
+- **Performance**: 5-minute cache TTL, automatic invalidation on price updates
+- **Logic**: RED (competitor lower), GREEN (competitor higher), NEUTRAL (same price)
+
+### `DiscoveryService` (`lib/services/discovery.ts`)
+Discovers and matches products on competitor sites.
+- **Features**: Automated product discovery, intelligent matching, queue-based processing
+- **Capabilities**: URL crawling, product extraction, automatic matching
+- **Integration**: Works with ScraperService and MatchingService
+- **Performance**: Queue-based for scalability, batch processing support
+
+### `WebsiteService` (`lib/services/website-service.ts`)
+Manages user website integrations with encryption.
+- **Features**: Website registration, API token encryption, connection testing
+- **Capabilities**: Multi-platform support (OpenCart, Laravel), token validation
+- **Security**: Automatic token encryption, secure storage, audit logging
+- **Integration**: Validates connectivity before saving
+
+### `MaintenanceService` (`lib/services/maintenance.ts`)
+Enforces data retention policies and system maintenance.
+- **Features**: Automated purging, retention policy enforcement, system cleanup
+- **Capabilities**: Old record deletion, database optimization, storage management
+- **Scheduling**: Configurable retention periods, automated execution
+- **Safety**: Backup before deletion, transaction-based operations
+
+### `WebhookService` (`lib/services/webhook.ts`)
+Dispatches webhook events to external systems.
+- **Features**: Event dispatching, retry logic, signature verification
+- **Capabilities**: Multiple webhook endpoints per tenant, event filtering
+- **Reliability**: Exponential backoff retry, delivery confirmation
+- **Security**: HMAC signature, HTTPS only, timeout protection
+
+### `AlertService` (`lib/services/alert-service.ts`)
+Evaluates alert rules and triggers notifications.
+- **Features**: Rule evaluation, threshold monitoring, alert dispatching
+- **Capabilities**: Multiple alert types, configurable thresholds, alert history
+- **Integration**: Works with MonitoringDashboardService and EmailNotificationService
+- **Performance**: Efficient rule evaluation, batch processing
+
+### `ExportService` (`lib/services/export-service.ts`)
+Handles data export operations in multiple formats.
+- **Features**: CSV, JSON, Excel export, large dataset handling
+- **Capabilities**: Session data export, metrics export, error log export
+- **Performance**: Streaming for large datasets, memory-efficient processing
+- **Security**: Tenant isolation, authentication required, audit logging
+
+### `SystemHealthService` (`lib/services/system-health.ts`)
+Monitors overall system health and component status.
+- **Features**: Database health checks, Redis connectivity, external API status
+- **Capabilities**: Component-level health monitoring, performance metrics
+- **Alerting**: Automatic alerts on component failures, degradation detection
+- **Dashboard**: Real-time health status display
+
+### `RetryQueueService` (`lib/services/retry-queue.ts`)
+Manages retry logic for failed operations.
+- **Features**: Exponential backoff, max retry limits, dead letter queue
+- **Capabilities**: Failed sync retry, failed scrape retry, failed notification retry
+- **Performance**: Queue-based processing, priority support
+- **Monitoring**: Retry metrics, failure tracking, success rate monitoring
+
+### Monitoring Services (v1.5)
+
+### `MonitoringDashboardService` (`lib/services/monitoring/dashboard.ts`)
+Provides comprehensive system monitoring and analytics.
+- **Features**: System health status, performance metrics, real-time monitoring
+- **Capabilities**: Multi-tenant metrics, time-series data, trend analysis
+- **Metrics**: Request rates, error rates, response times, resource utilization
+- **Dashboard**: Real-time updates, historical data, customizable views
+
+### `ErrorCaptureService` (`lib/services/monitoring/error-capture.ts`)
+Captures and tracks application errors.
+- **Features**: Error logging, Sentry integration, error categorization
+- **Capabilities**: Stack trace capture, context preservation, error grouping
+- **Integration**: Sentry for production, local logging for development
+- **Analysis**: Error trends, frequency analysis, impact assessment
+
+### `EmailNotificationService` (`lib/services/monitoring/email-notification.ts`)
+Sends email notifications for monitoring alerts.
+- **Features**: SMTP integration, retry logic, template support
+- **Capabilities**: Alert emails, summary emails, custom templates
+- **Reliability**: 3 retry attempts, exponential backoff, delivery tracking
+- **Configuration**: Multiple SMTP providers, configurable settings
+
+### `AlertConfigurationService` (`lib/services/monitoring/alert-configuration.ts`)
+Manages alert rule configuration and evaluation.
+- **Features**: Rule CRUD operations, threshold configuration, tenant-specific rules
+- **Capabilities**: Multiple alert types, priority levels, notification routing
+- **Flexibility**: Per-tenant customization, global defaults, rule inheritance
+- **Validation**: Rule syntax validation, threshold validation
+
+### `AlertNotificationPreferencesService` (`lib/services/monitoring/alert-notification-preferences.ts`)
+Manages user preferences for alert notifications.
+- **Features**: Channel preferences (email, Slack, webhook), frequency settings
+- **Capabilities**: Per-alert-type preferences, quiet hours, notification batching
+- **Flexibility**: User-level and tenant-level preferences
+- **Compliance**: Opt-in/opt-out support, unsubscribe handling
+
+### `SecurityMonitoringService` (`lib/services/monitoring/security-monitoring.ts`)
+Monitors security events and detects threats.
+- **Features**: Brute force detection, suspicious activity tracking, IP blocking
+- **Capabilities**: Failed login tracking, rate limit violations, unauthorized access attempts
+- **Response**: Automatic account lockout, IP blacklisting, alert generation
+- **Compliance**: Security audit logging, incident reporting
+
+### Cache Services (v1.5)
+
+### `CacheEnhancedService` (`lib/services/cache-enhanced.ts`)
+Advanced caching layer with multiple strategies.
+- **Features**: Multi-layer caching, TTL management, cache invalidation
+- **Strategies**: Cache-aside, write-through, cache warming
+- **Performance**: 80% query reduction, 50% faster response times
+- **Reliability**: Graceful degradation on cache failures
+
+### `CacheMonitoringService` (`lib/services/cache-monitoring.ts`)
+Monitors cache performance and health.
+- **Features**: Hit rate tracking, memory usage monitoring, performance metrics
+- **Capabilities**: Cache statistics, trend analysis, optimization recommendations
+- **Alerting**: Low hit rate alerts, memory pressure alerts
+- **Dashboard**: Real-time cache metrics, historical data
+
+### `CacheAlertingService` (`lib/services/cache-alerting.ts`)
+Manages cache-related alerts and notifications.
+- **Features**: Threshold-based alerting, alert deduplication, notification routing
+- **Capabilities**: Hit rate alerts, memory alerts, eviction alerts
+- **Configuration**: Configurable thresholds, alert frequency limits
+- **Integration**: Works with AlertService and EmailNotificationService
+
+### `CacheWarmingService` (`lib/services/cache-warming.ts`)
+Proactively warms cache with frequently accessed data.
+- **Features**: Scheduled warming, intelligent prefetching, priority-based warming
+- **Capabilities**: Product data warming, comparison data warming, rule warming
+- **Performance**: Reduces cold start latency, improves user experience
+- **Scheduling**: Configurable warming schedules, automatic triggering
+
+### `CacheInvalidationService` (`lib/services/cache-invalidation.ts`)
+Manages cache invalidation strategies.
+- **Features**: Pattern-based invalidation, event-driven invalidation, manual invalidation
+- **Capabilities**: Selective invalidation, bulk invalidation, cascade invalidation
+- **Reliability**: Guaranteed invalidation, retry on failure
+- **Performance**: Efficient invalidation, minimal overhead
+
+### Encryption Services (v1.5)
+
+### `EncryptionService` (`lib/services/encryption/encryption-service.ts`)
+Core cryptographic operations for sensitive data.
+- **Algorithm**: AES-256-GCM with unique IV per encryption
+- **Features**: Token encryption/decryption, key rotation support, integrity verification
+- **Security**: FIPS 140-2 compliant, authentication tags, secure key storage
+- **Performance**: Fast encryption/decryption, minimal overhead
+
+### `TokenRecoveryService` (`lib/services/encryption/token-recovery.ts`)
+Handles corrupted token recovery and migration.
+- **Features**: Corrupted token detection, recovery flow, migration support
+- **Capabilities**: Automatic recovery attempts, manual recovery options
+- **Safety**: Backup before recovery, audit logging, rollback support
+- **User Experience**: Clear error messages, recovery instructions
+
 ---
 
 ## V1.5 Enhanced Data Flows

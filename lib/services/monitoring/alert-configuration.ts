@@ -53,6 +53,7 @@ export interface ValidationError {
  */
 export interface IAlertConfigurationService {
     listRules(tenantId?: string): Promise<AlertRule[]>;
+    getEffectiveRules(tenantId: string): Promise<AlertRule[]>;
     getRule(ruleId: string): Promise<AlertRule>;
     createRule(rule: Omit<AlertRule, 'id'>): Promise<AlertRule>;
     updateRule(ruleId: string, updates: Partial<AlertRule>): Promise<AlertRule>;
@@ -99,6 +100,72 @@ export class AlertConfigurationService implements IAlertConfigurationService {
                 tenantId,
             });
             throw new Error('Failed to list alert rules');
+        }
+    }
+
+    /**
+     * Get effective alert rules for a tenant
+     * 
+     * Returns tenant-specific rules if they exist, otherwise returns global rules.
+     * This allows per-tenant customization while falling back to global defaults.
+     * 
+     * Requirement 2.15.3: Allow per-tenant alert customization
+     * 
+     * @param tenantId - Tenant ID to get effective rules for
+     * @returns Array of effective alert rules (tenant-specific or global)
+     */
+    async getEffectiveRules(tenantId: string): Promise<AlertRule[]> {
+        try {
+            // Get tenant-specific rules
+            const tenantRules = await prisma.monitoringAlertRule.findMany({
+                where: { tenantId },
+                orderBy: [
+                    { severity: 'desc' },
+                    { name: 'asc' },
+                ],
+            });
+
+            // Get global rules
+            const globalRules = await prisma.monitoringAlertRule.findMany({
+                where: { tenantId: null },
+                orderBy: [
+                    { severity: 'desc' },
+                    { name: 'asc' },
+                ],
+            });
+
+            // Create a map of metric types to rules
+            const effectiveRulesMap = new Map<string, any>();
+
+            // First, add all global rules
+            for (const rule of globalRules) {
+                effectiveRulesMap.set(rule.metricType, rule);
+            }
+
+            // Then, override with tenant-specific rules
+            for (const rule of tenantRules) {
+                effectiveRulesMap.set(rule.metricType, rule);
+            }
+
+            // Convert to AlertRule array
+            const effectiveRules = Array.from(effectiveRulesMap.values()).map((dbRule) =>
+                this.convertDbRuleToAlertRule(dbRule)
+            );
+
+            logger.info('Retrieved effective alert rules', {
+                tenantId,
+                totalRules: effectiveRules.length,
+                tenantSpecificRules: tenantRules.length,
+                globalRules: globalRules.length,
+            });
+
+            return effectiveRules;
+        } catch (error) {
+            logger.error('Failed to get effective alert rules', {
+                error: error instanceof Error ? error.message : String(error),
+                tenantId,
+            });
+            throw new Error('Failed to get effective alert rules');
         }
     }
 

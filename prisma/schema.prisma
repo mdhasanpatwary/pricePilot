@@ -207,6 +207,7 @@ model Product {
 
   priceHistory PriceHistory[]
   updateLogs   PriceUpdateLog[]
+  retryQueue   PriceUpdateRetryQueue[]
   site         Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   tenant       Tenant           @relation(fields: [tenantId], references: [id])
 
@@ -257,6 +258,21 @@ model PriceUpdateLog {
   errorDetails String?
   executedAt   DateTime     @default(now())
   product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model PriceUpdateRetryQueue {
+  id          String   @id @default(uuid())
+  productId   String
+  tenantId    String
+  retryCount  Int      @default(0)
+  lastError   String?
+  nextRetryAt DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, nextRetryAt])
+  @@index([productId])
 }
 
 model PricingRule {
@@ -969,4 +985,229 @@ enum MonitoringAggregationType {
 enum MonitoringChannelType {
   EMAIL
   SLACK
+}
+
+// Archive Tables for Data Retention
+
+model ArchivedPriceHistory {
+  id         String   @id @default(uuid())
+  productId  String
+  price      Decimal  @db.Decimal(10, 2)
+  recordedAt DateTime
+  archivedAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([recordedAt])
+  @@index([archivedAt])
+}
+
+model ArchivedTenantAuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  userEmail  String
+  action     String
+  entityId   String
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([archivedAt])
+}
+
+model ArchivedNotification {
+  id         String   @id @default(uuid())
+  tenantId   String
+  type       String
+  title      String
+  message    String
+  link       String?
+  isRead     Boolean
+  createdAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt])
+  @@index([archivedAt])
+}
+
+model ArchivedSyncLog {
+  id         String   @id @default(uuid())
+  siteId     String
+  message    String
+  level      String
+  createdAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@index([siteId])
+  @@index([createdAt])
+  @@index([archivedAt])
+}
+
+model ArchivedPriceUpdateLog {
+  id           String   @id @default(uuid())
+  productId    String
+  oldPrice     Decimal  @db.Decimal(10, 2)
+  newPrice     Decimal  @db.Decimal(10, 2)
+  logicType    String
+  status       String
+  errorDetails String?
+  executedAt   DateTime
+  archivedAt   DateTime @default(now())
+
+  @@index([productId])
+  @@index([executedAt])
+  @@index([archivedAt])
+}
+
+model ArchivedBulkOperationSnapshot {
+  id             String   @id @default(uuid())
+  tenantId       String
+  operation      String
+  productCount   Int
+  snapshot       String   @db.Text
+  changes        String   @db.Text
+  rolledBack     Boolean
+  idempotencyKey String?
+  createdAt      DateTime
+  archivedAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt])
+  @@index([archivedAt])
+}
+
+// Uptime Tracking Models
+
+model SystemUptimeLog {
+  id           String   @id @default(uuid())
+  timestamp    DateTime @default(now())
+  status       String // 'UP', 'DOWN', 'DEGRADED'
+  responseTime Int // in milliseconds
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([timestamp(sort: Desc)])
+  @@index([status])
+}
+
+model DowntimeIncident {
+  id        String    @id @default(uuid())
+  startTime DateTime
+  endTime   DateTime?
+  duration  Int? // in minutes
+  reason    String?
+  resolved  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([startTime(sort: Desc)])
+  @@index([resolved])
+}
+
+// User Satisfaction Tracking Models
+
+model UserFeedback {
+  id               String       @id @default(uuid())
+  tenantId         String
+  userId           String
+  rating           Int // 1-5 stars
+  category         FeedbackCategory
+  feature          String? // Specific feature being rated
+  comment          String?      @db.Text
+  sentiment        String? // 'positive', 'neutral', 'negative'
+  context          Json? // Additional context (page, action, etc.)
+  resolved         Boolean      @default(false)
+  resolvedAt       DateTime?
+  resolvedBy       String?
+  resolutionNotes  String?      @db.Text
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([rating])
+  @@index([category])
+  @@index([createdAt(sort: Desc)])
+  @@index([resolved])
+}
+
+model SatisfactionMetric {
+  id                  String   @id @default(uuid())
+  tenantId            String?
+  date                DateTime @db.Date
+  totalResponses      Int      @default(0)
+  averageRating       Decimal  @db.Decimal(3, 2)
+  rating1Count        Int      @default(0)
+  rating2Count        Int      @default(0)
+  rating3Count        Int      @default(0)
+  rating4Count        Int      @default(0)
+  rating5Count        Int      @default(0)
+  nps                 Decimal? @db.Decimal(5, 2) // Net Promoter Score
+  promoters           Int      @default(0) // 9-10 ratings
+  passives            Int      @default(0) // 7-8 ratings
+  detractors          Int      @default(0) // 0-6 ratings
+  categoryBreakdown   Json? // Breakdown by category
+  featureBreakdown    Json? // Breakdown by feature
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([tenantId, date])
+  @@index([date(sort: Desc)])
+  @@index([averageRating])
+}
+
+model FeedbackPrompt {
+  id               String   @id @default(uuid())
+  tenantId         String?
+  trigger          String // 'after_price_update', 'after_sync', 'periodic', 'feature_use'
+  feature          String? // Specific feature to prompt about
+  enabled          Boolean  @default(true)
+  promptText       String   @db.Text
+  promptFrequency  Int      @default(7) // Days between prompts
+  minActionsCount  Int      @default(5) // Minimum actions before prompting
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([enabled])
+  @@index([trigger])
+}
+
+model UserFeedbackHistory {
+  id               String   @id @default(uuid())
+  userId           String
+  tenantId         String
+  lastPromptedAt   DateTime?
+  promptCount      Int      @default(0)
+  responseCount    Int      @default(0)
+  lastResponseAt   DateTime?
+  averageRating    Decimal? @db.Decimal(3, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, tenantId])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([lastPromptedAt])
+}
+
+enum FeedbackCategory {
+  OVERALL_EXPERIENCE
+  EASE_OF_USE
+  PERFORMANCE
+  FEATURES
+  SUPPORT
+  DOCUMENTATION
+  PRICE_UPDATES
+  PRODUCT_MATCHING
+  SCRAPING_ACCURACY
+  DASHBOARD_UI
+  NOTIFICATIONS
+  SECURITY
+  RELIABILITY
 }

@@ -1,6 +1,27 @@
 # PricePilot API Authentication Guide
 
-This document explains how to authenticate with the PricePilot API.
+> **📖 For comprehensive authentication documentation, see the [Authentication Guide](./AUTHENTICATION_GUIDE.md)**
+
+This document provides a quick reference for API authentication. For detailed information including troubleshooting, security best practices, and code examples, refer to the complete [Authentication Guide](./AUTHENTICATION_GUIDE.md).
+
+## Quick Start
+
+### API Token Authentication
+
+```bash
+curl -X GET https://api.pricepilot.com/v1/products \
+  -H "x-api-key: pp_your_token_here"
+```
+
+### Session Authentication
+
+```bash
+curl -X POST https://pricepilot.com/api/auth/signin/credentials \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "your-password"}'
+```
+
+---
 
 ## Table of Contents
 
@@ -416,72 +437,40 @@ puts products
 
 ## Troubleshooting
 
-### Error: "Authentication required"
+For detailed troubleshooting information, see the [Authentication Guide - Troubleshooting Section](./AUTHENTICATION_GUIDE.md#troubleshooting).
 
-**Cause:** Missing or invalid API key
+### Quick Diagnostics
 
-**Solution:**
-```bash
-# Check if API key is included
-curl -v https://api.pricepilot.com/v1/products \
-  -H "x-api-key: your-api-key-here"
-
-# Look for the header in the request
-> x-api-key: your-api-key-here
-```
-
-### Error: "Invalid API key"
-
-**Cause:** API key is incorrect or revoked
-
-**Solutions:**
-1. Verify API key is correct (no extra spaces)
-2. Check if key was revoked
-3. Generate new API key
-
-### Error: "Rate limit exceeded"
-
-**Cause:** Too many requests in time window
-
-**Solution:**
-```javascript
-// Check rate limit headers
-const remaining = response.headers.get('X-RateLimit-Remaining');
-const reset = response.headers.get('X-RateLimit-Reset');
-
-if (remaining === '0') {
-  const waitTime = (reset * 1000) - Date.now();
-  console.log(`Wait ${waitTime}ms before next request`);
-}
-```
-
-### Error: "Session expired"
-
-**Cause:** Session cookie expired
-
-**Solution:**
-1. Re-authenticate via login endpoint
-2. Use API key authentication for long-running processes
-
-### Testing Authentication
-
-**Test API key:**
+**Test API Token:**
 ```bash
 curl -X GET https://api.pricepilot.com/v1/health \
-  -H "x-api-key: your-api-key-here" \
+  -H "x-api-key: pp_your_token_here" \
   -v
 ```
 
-**Expected response:**
+**Test Session:**
+```bash
+curl -X GET https://api.pricepilot.com/v1/user/profile \
+  -H "Cookie: next-auth.session-token=your-session-token" \
+  -v
 ```
-< HTTP/2 200
-< x-ratelimit-limit: 1000
-< x-ratelimit-remaining: 999
-{
-  "status": "ok",
-  "timestamp": "2026-02-01T10:00:00Z"
-}
+
+**Check Rate Limits:**
+```bash
+curl -X GET https://api.pricepilot.com/v1/rate-limit \
+  -H "x-api-key: pp_your_token_here"
 ```
+
+### Common Issues
+
+| Error | Quick Fix |
+|-------|-----------|
+| "Authentication required" | Include `x-api-key` header or session cookie |
+| "Invalid API key" | Verify token format starts with `pp_` |
+| "Session expired" | Log in again or enable "Remember Me" |
+| "Rate limit exceeded" | Wait for reset time in `X-RateLimit-Reset` header |
+
+For complete troubleshooting guide with detailed solutions, see [Authentication Guide](./AUTHENTICATION_GUIDE.md#troubleshooting).
 
 ---
 

@@ -20,9 +20,10 @@ Welcome to PricePilot - Your intelligent e-commerce pricing automation platform.
 10. [Monitoring & Analytics](#monitoring--analytics)
 11. [Security & Performance](#security--performance)
 12. [API Reference](#api-reference)
-13. [Troubleshooting Guide](#troubleshooting-guide)
-14. [FAQ](#faq)
-15. [Support](#support)
+13. [Data Retention & Privacy](#data-retention--privacy)
+14. [Troubleshooting Guide](#troubleshooting-guide)
+15. [FAQ](#faq)
+16. [Support](#support)
 
 ---
 
@@ -2730,6 +2731,279 @@ DATABASE_URL="postgresql://user:pass@host:5432/db?connection_limit=10&pool_timeo
    - Filter by "Auto-approved"
    - Rollback unwanted changes
 
+#### Email Notification Issues
+
+##### Not Receiving Emails
+
+**Symptoms:**
+- No email notifications received
+- Emails expected but not arriving
+- Other users receiving emails
+
+**Causes:**
+- Notifications disabled
+- Email in spam folder
+- Email address incorrect
+- SMTP configuration issue
+
+**Solutions:**
+
+1. **Check Settings:**
+   - Dashboard → Settings → Notifications
+   - Ensure notifications are enabled
+   - Verify email address is correct
+
+2. **Check Spam Folder:**
+   - Look for emails from noreply@pricepilot.com
+   - Mark as "Not Spam"
+   - Add to contacts
+
+3. **Whitelist Domain:**
+   - Add pricepilot.com to email whitelist
+   - Contact IT department if corporate email
+
+4. **Test Email:**
+   - Dashboard → Settings → Notifications
+   - Click "Send Test Email"
+   - Should receive within 1 minute
+
+5. **Check Email Logs:**
+   - Dashboard → Settings → Email Logs
+   - Look for delivery failures
+
+##### Emails Going to Spam
+
+**Symptoms:**
+- Emails consistently in spam folder
+- Gmail/Outlook marks as spam
+- Email provider blocking
+
+**Solutions:**
+
+1. **Mark as Not Spam:**
+   - Open email in spam folder
+   - Click "Not Spam" or "Not Junk"
+   - Move to inbox
+
+2. **Add to Contacts:**
+   - Add noreply@pricepilot.com to contacts
+   - Prevents future spam filtering
+
+3. **Create Filter:**
+   - Create email filter/rule
+   - Move PricePilot emails to inbox automatically
+
+4. **Contact IT:**
+   - If corporate email, ask IT to whitelist domain
+   - Provide SPF/DKIM records if needed
+
+#### Data Retention & Privacy Issues
+
+##### Cannot Export My Data
+
+**Symptoms:**
+- Export button not working
+- No download link received
+- Export fails with error
+
+**Causes:**
+- Large dataset taking time to process
+- Email delivery issue
+- System error
+
+**Solutions:**
+
+1. **Wait for Email:**
+   - Export can take up to 24 hours for large datasets
+   - Check spam folder for download link
+   - Link expires after 7 days
+
+2. **Check Export Status:**
+   - Dashboard → Settings → Privacy
+   - View export request status
+   - See estimated completion time
+
+3. **Retry Export:**
+   - If export failed, try again
+   - Choose smaller date range if needed
+   - Select specific data types instead of "All Data"
+
+4. **Contact Support:**
+   - If export fails repeatedly
+   - Provide error message
+   - Support can manually generate export
+
+##### Account Deletion Not Working
+
+**Symptoms:**
+- Delete account button disabled
+- Deletion request not processing
+- Account still active after deletion
+
+**Causes:**
+- Active subscription
+- Pending payments
+- System error
+
+**Solutions:**
+
+1. **Cancel Subscription First:**
+   - Dashboard → Settings → Billing
+   - Cancel active subscription
+   - Wait for current period to end
+
+2. **Resolve Pending Payments:**
+   - Dashboard → Settings → Billing
+   - Pay any outstanding invoices
+   - Then request deletion
+
+3. **Confirm Deletion:**
+   - Check email for confirmation link
+   - Click link to confirm deletion
+   - Account enters 30-day soft-delete period
+
+4. **Recovery Period:**
+   - Account can be recovered within 30 days
+   - Contact support to recover
+   - After 30 days, deletion is permanent
+
+##### Data Not Being Cleaned Up
+
+**Symptoms:**
+- Old data still visible
+- Database size not decreasing
+- Cleanup jobs not running
+
+**Causes:**
+- Cleanup jobs disabled
+- Cron job not running
+- Retention policies too long
+
+**Solutions:**
+
+1. **Check Cleanup Status:**
+   - Dashboard → System Status
+   - Verify cleanup jobs show recent runs
+   - Check for error messages
+
+2. **Verify Retention Policies:**
+   - Admin → System Settings → Data Retention
+   - Review retention periods for each data type
+   - Ensure policies are reasonable
+
+3. **Manual Cleanup:**
+   - Admin → System Settings → Data Retention
+   - Click "Run Cleanup Now"
+   - Wait for completion
+
+4. **Contact Support:**
+   - If cleanup jobs consistently fail
+   - Provide error logs
+   - May need database optimization
+
+#### Monitoring & Alert Issues
+
+##### Alerts Not Triggering
+
+**Symptoms:**
+- No alerts received despite issues
+- Alert thresholds exceeded but no notification
+- Alert history empty
+
+**Causes:**
+- Alerts disabled
+- Thresholds too high
+- Notification preferences not set
+- Alert evaluation not running
+
+**Solutions:**
+
+1. **Check Alert Configuration:**
+   - Admin → Alert Settings
+   - Ensure alerts are enabled
+   - Verify thresholds are appropriate
+
+2. **Check Notification Preferences:**
+   - Admin → Alert Settings → Notifications
+   - Ensure email/Slack is configured
+   - Test notification delivery
+
+3. **Verify Alert Evaluation:**
+   - Dashboard → System Status
+   - Check "Alert Evaluation" shows recent runs
+   - If not running, contact support
+
+4. **Review Alert Rules:**
+   - Admin → Alert Settings
+   - Check if rules are too restrictive
+   - Adjust thresholds if needed
+
+##### Too Many Alerts
+
+**Symptoms:**
+- Constant alert notifications
+- Alert fatigue
+- Many false positives
+
+**Causes:**
+- Thresholds too sensitive
+- Normal fluctuations triggering alerts
+- Multiple overlapping alerts
+
+**Solutions:**
+
+1. **Adjust Thresholds:**
+   - Admin → Alert Settings
+   - Increase thresholds for noisy alerts
+   - Example: Block rate 30% → 40%
+
+2. **Acknowledge Alerts:**
+   - Admin → Alerts
+   - Acknowledge known issues
+   - Stops notifications for that alert
+
+3. **Disable Non-Critical Alerts:**
+   - Admin → Alert Settings
+   - Disable alerts that aren't actionable
+   - Focus on critical alerts only
+
+4. **Set Quiet Hours:**
+   - Admin → Alert Settings → Notifications
+   - Configure quiet hours (e.g., nights/weekends)
+   - Alerts still logged but not sent
+
+##### Monitoring Dashboard Slow
+
+**Symptoms:**
+- Dashboards take long to load
+- Charts not rendering
+- Timeout errors
+
+**Causes:**
+- Large dataset
+- Too many metrics
+- No data aggregation
+
+**Solutions:**
+
+1. **Reduce Time Range:**
+   - Select shorter time range (24h instead of 30d)
+   - Use aggregated views for longer periods
+
+2. **Filter Data:**
+   - Filter by specific sites or tenants
+   - Reduce number of metrics displayed
+
+3. **Clear Browser Cache:**
+   - Clear browser cache and cookies
+   - Disable browser extensions
+   - Try different browser
+
+4. **Contact Support:**
+   - If dashboards consistently slow
+   - May need database optimization
+   - Consider upgrading plan for better performance
+
 #### Performance Issues
 
 ##### Slow Dashboard Loading
@@ -3390,7 +3664,65 @@ A: PricePilot will retry the connection and log the error. You'll receive a noti
 A: Yes! You can export product catalogs, price history, and reports in CSV format.
 
 **Q: Does PricePilot work with multi-currency stores?**
-A: Currently, PricePilot works best with single-currency stores. Multi-currency support is coming in v2.0.
+A: Currently, PricePilot works best with single-currency stores. Multi-currency support is coming in v2.
+
+**Q: How do I know if my data is secure?**
+A: PricePilot uses industry-standard security measures:
+- AES-256-GCM encryption for all API tokens at rest
+- TLS 1.3 for all data in transit
+- Rate limiting on all endpoints to prevent abuse
+- Comprehensive input validation to prevent SQL injection and XSS
+- Complete audit trail of all actions
+- Regular security audits and penetration testing
+
+**Q: What happens to my data when I delete my account?**
+A: When you request account deletion:
+1. Your account is immediately soft-deleted (30-day recovery period)
+2. You can recover your account within 30 days by contacting support
+3. After 30 days, all your data is permanently deleted
+4. You can export your data before deletion (Dashboard → Settings → Privacy → Export My Data)
+5. Some data may be retained for legal compliance (financial records for 7 years, security logs for 5 years)
+
+**Q: Can I customize data retention periods?**
+A: Enterprise plans can customize retention policies to meet specific compliance requirements. Contact support@pricepilot.com for custom retention policies.
+
+**Q: How do I export my data?**
+A: Go to Dashboard → Settings → Privacy → Export My Data. You'll receive a download link via email within 24 hours. The export includes all your personal data in JSON format.
+
+**Q: What data retention policies does PricePilot follow?**
+A: PricePilot implements comprehensive data retention policies:
+- Price history: 90 days (hot), 1-3 years (archived)
+- Audit logs: 2 years (5 years for critical security events)
+- Price update logs: 180 days
+- Notifications: 90 days
+- Sync logs: 30 days
+- See the [Data Retention & Privacy](#data-retention--privacy) section for complete details
+
+**Q: Is PricePilot GDPR compliant?**
+A: Yes! PricePilot is fully GDPR compliant and supports:
+- Right to Access (export your data)
+- Right to Erasure (delete your account)
+- Right to Rectification (update your information)
+- Right to Data Portability (export in machine-readable formats)
+- See the [Data Retention & Privacy](#data-retention--privacy) section for details
+
+**Q: How does PricePilot handle database performance with large datasets?**
+A: PricePilot uses multiple optimization strategies:
+- 15+ strategic database indexes for 10x faster queries
+- Redis caching for expensive operations (1-hour TTL)
+- Elimination of N+1 query problems
+- Efficient pagination (max 100 items per page)
+- Connection pooling for optimal database usage
+- See the [Security & Performance](#security--performance) section for details
+
+**Q: What monitoring tools are available for administrators?**
+A: Administrators have access to comprehensive monitoring dashboards:
+- Proxy Health Dashboard: Monitor proxy pool performance
+- Challenge Detection Dashboard: Track anti-bot challenge handling
+- Scraping Metrics Dashboard: View platform-wide performance
+- Real-Time Monitor: Live view of active scraping sessions
+- Alert Management: Stay informed about critical issues
+- See the [Monitoring & Analytics](#monitoring--analytics) section for details0.
 
 ### Troubleshooting
 
@@ -3450,6 +3782,653 @@ A: Check:
 3. Store is accessible from the internet
 4. Review error messages in audit logs
 5. Failed updates are automatically rolled back to PENDING
+
+**Q: How do I troubleshoot slow dashboard performance?**
+A: Try these solutions:
+1. Use pagination (reduce items per page to 20)
+2. Use filters to narrow results
+3. Clear old data (Dashboard → Settings → Data Retention)
+4. Clear browser cache and disable extensions
+5. Try a different browser
+6. Contact support for database optimization if issues persist
+
+**Q: My API requests are timing out**
+A: Solutions:
+1. Use pagination: `GET /api/v1/products?page=1&limit=20`
+2. Request only needed fields
+3. Use filters to narrow results
+4. Increase timeout in your API client (30 seconds recommended)
+5. Contact support to enable Redis caching
+
+**Q: How do I check if automated cleanup jobs are running?**
+A: Go to Dashboard → System Status to verify:
+1. Auto-Approval Cron shows recent run time
+2. Data Cleanup Jobs show last execution
+3. Alert Evaluation shows recent activity
+4. If jobs aren't running, contact support
+
+**Q: Can I manually trigger data cleanup?**
+A: Yes! Administrators can manually trigger cleanup:
+1. Go to Admin → System Settings → Data Retention
+2. Click "Run Cleanup Now" for specific data types
+3. View cleanup job history and statistics
+4. Note: Manual cleanup follows configured retention policies
+
+**Q: How do I monitor system health?**
+A: Use the monitoring dashboards:
+1. **Admin Panel → Monitor**: Real-time scraping sessions
+2. **Admin Panel → Scraping Metrics**: Platform-wide performance
+3. **Admin Panel → Proxy Health**: Proxy pool status
+4. **Admin Panel → Alerts**: Critical system alerts
+5. **Dashboard → Metrics**: Your tenant's performance
+
+**Q: What should I do if I see high block rates?**
+A: Follow these steps:
+1. Enable Session Warmup (Dashboard → Site Config)
+2. Increase delays (Min: 3000ms, Max: 5000ms)
+3. Contact support to enable residential proxies
+4. Reduce scraping frequency (every 48 hours instead of 24)
+5. Check if competitor site has new bot protection
+
+**Q: How do I configure alert thresholds?**
+A: Administrators can configure alerts:
+1. Go to Admin → Alert Settings
+2. Adjust thresholds for each alert type:
+   - High block rate (default: >30%)
+   - Proxy failures (default: >50%)
+   - High error rate (default: >1%)
+   - Slow response times (default: >500ms)
+3. Set notification preferences (email/Slack)
+4. Save changes (apply immediately)
+
+**Q: Can I acknowledge alerts to stop notifications?**
+A: Yes! To acknowledge an alert:
+1. Go to Admin → Alerts or Dashboard → Alerts
+2. Find the alert you want to acknowledge
+3. Click "Acknowledge"
+4. Add optional notes about resolution
+5. Notifications stop for that alert
+6. Alert remains in history for tracking
+
+**Q: How do I view alert history?**
+A: View complete alert history:
+1. Go to Admin → Alert History
+2. Filter by:
+   - Severity (critical, warning, info)
+   - Status (active, acknowledged, resolved)
+   - Date range
+   - Alert type
+3. Export to CSV for analysis
+4. Click any alert for full details
+
+---
+
+## 🗄️ Data Retention & Privacy
+
+### Overview
+
+PricePilot implements comprehensive data retention policies to balance operational needs, performance optimization, regulatory compliance, and user privacy. This section outlines how long different types of data are retained and the automated processes that manage data lifecycle.
+
+### Data Retention Policies
+
+#### 1. User & Account Data
+
+**Retention Period**: Indefinite (while account is active)
+
+**Data Types**:
+- User profiles (name, email, role)
+- Account credentials (password hashes)
+- Tenant information (company name, plan type)
+- API keys and tokens (encrypted)
+- User preferences and settings
+
+**Deletion Policy**:
+- Retained for the lifetime of the account
+- Deleted within 30 days of account closure request
+- Password history retained for 90 days (for password reuse prevention)
+- Deleted accounts can be recovered within 30 days (soft delete)
+
+**Compliance**: GDPR Article 17 (Right to Erasure)
+
+---
+
+#### 2. Product Data
+
+**Retention Period**: Indefinite (while product is active)
+
+**Data Types**:
+- Product catalog (SKU, title, brand, model)
+- Current prices and stock levels
+- Product specifications and images
+- Product matches and relationships
+
+**Deletion Policy**:
+- Active products retained indefinitely
+- Deleted products soft-deleted for 90 days (recovery period)
+- Permanently deleted after 90 days
+- Associated price history archived before deletion
+
+**Archival**: Products deleted for >90 days are archived to cold storage
+
+---
+
+#### 3. Price History
+
+**Retention Period**: 
+- **Hot Data**: 90 days (fast access)
+- **Warm Data**: 91-365 days (archived)
+- **Cold Data**: 1-3 years (long-term storage)
+
+**Data Types**:
+- Historical price points
+- Price change timestamps
+- Currency information
+
+**Deletion Policy**:
+- Price history older than 90 days is automatically archived
+- Archived data moved to separate tables for performance
+- Data older than 3 years is permanently deleted
+- Exception: Price history for active products retained longer
+
+**Automated Cleanup**: Daily at 2:00 AM UTC
+
+**Business Justification**: 
+- 90 days covers most pricing trend analysis needs
+- Archived data available for long-term analytics
+- Reduces database size and improves query performance
+
+---
+
+#### 4. Price Update Logs
+
+**Retention Period**: 180 days
+
+**Data Types**:
+- Price update execution records
+- Old price and new price
+- Update strategy and status
+- Error details (if failed)
+- Execution timestamps
+
+**Deletion Policy**:
+- Logs older than 180 days are automatically deleted
+- Failed update logs retained for 365 days (debugging)
+- Successful updates archived after 180 days
+
+**Automated Cleanup**: Daily at 2:30 AM UTC
+
+**Business Justification**:
+- 6 months sufficient for audit and troubleshooting
+- Failed updates retained longer for pattern analysis
+- Reduces log table size significantly
+
+---
+
+#### 5. Audit Logs
+
+**Retention Period**: 2 years
+
+**Data Types**:
+- User actions (approvals, rejections, configuration changes)
+- System events (auto-approvals, bulk operations)
+- Security events (login attempts, permission changes)
+- IP addresses and user agents
+- Timestamps and user context
+
+**Deletion Policy**:
+- Audit logs older than 2 years are automatically archived
+- Archived logs moved to cold storage
+- Critical security events retained for 5 years
+- Logs can be exported before deletion
+
+**Automated Cleanup**: Monthly on the 1st at 3:00 AM UTC
+
+**Compliance**: 
+- GDPR Article 5 (Storage Limitation)
+- SOC 2 audit trail requirements
+- Industry standard for audit log retention
+
+**Business Justification**:
+- 2 years covers most compliance requirements
+- Sufficient for security investigations
+- Balances compliance with storage costs
+
+---
+
+#### 6. Notifications
+
+**Retention Period**: 90 days
+
+**Data Types**:
+- System notifications
+- Price change alerts
+- Approval notifications
+- Error notifications
+
+**Deletion Policy**:
+- Read notifications deleted after 90 days
+- Unread notifications deleted after 180 days
+- Critical notifications retained for 365 days
+- Notification preferences retained indefinitely
+
+**Automated Cleanup**: Daily at 1:00 AM UTC
+
+**Business Justification**:
+- Most notifications are time-sensitive
+- Reduces notification table bloat
+- Improves dashboard performance
+
+---
+
+#### 7. Sync Logs
+
+**Retention Period**: 30 days
+
+**Data Types**:
+- Product sync execution logs
+- Sync success/failure messages
+- Sync timestamps and durations
+- Error details
+
+**Deletion Policy**:
+- Sync logs older than 30 days are automatically deleted
+- Failed sync logs retained for 90 days
+- Summary statistics retained indefinitely
+
+**Automated Cleanup**: Daily at 1:30 AM UTC
+
+**Business Justification**:
+- Recent logs sufficient for troubleshooting
+- Failed syncs need longer retention for pattern analysis
+- Reduces log table size dramatically
+
+---
+
+#### 8. Scraping Metrics & Sessions
+
+**Retention Period**: 
+- **Real-time metrics**: 7 days
+- **Aggregated metrics**: 90 days
+- **Historical trends**: 1 year
+
+**Data Types**:
+- Scraping session details
+- Success/failure rates
+- Block rates and challenge attempts
+- Proxy performance metrics
+- Response times
+
+**Deletion Policy**:
+- Raw session data deleted after 7 days
+- Aggregated daily metrics retained for 90 days
+- Monthly summaries retained for 1 year
+- Trends and analytics retained for 3 years
+
+**Automated Cleanup**: Daily at 4:00 AM UTC
+
+**Business Justification**:
+- Real-time monitoring needs recent data only
+- Aggregated data sufficient for trend analysis
+- Reduces metrics table size by 90%
+
+---
+
+#### 9. Monitoring & Alert History
+
+**Retention Period**: 90 days (active), 1 year (archived)
+
+**Data Types**:
+- Alert trigger events
+- Alert acknowledgments
+- Metric values at trigger time
+- Notification delivery status
+
+**Deletion Policy**:
+- Active alerts retained for 90 days
+- Resolved alerts archived after 90 days
+- Archived alerts deleted after 1 year
+- Critical alerts retained for 2 years
+
+**Automated Cleanup**: Weekly on Sundays at 3:00 AM UTC
+
+**Business Justification**:
+- Recent alerts needed for incident response
+- Historical alerts useful for pattern analysis
+- Balances operational needs with storage
+
+---
+
+#### 10. Sessions & Authentication
+
+**Retention Period**: 
+- **Active sessions**: 30 days (with "remember me")
+- **Expired sessions**: 7 days
+- **Password reset tokens**: 1 hour
+- **Email verification tokens**: 24 hours
+
+**Data Types**:
+- Session tokens
+- Session metadata (IP, user agent)
+- Last used timestamps
+- Authentication tokens
+
+**Deletion Policy**:
+- Expired sessions deleted after 7 days
+- Active sessions expire after 30 days of inactivity
+- Password reset tokens expire after 1 hour
+- Email verification tokens expire after 24 hours
+
+**Automated Cleanup**: Daily at 2:00 AM UTC
+
+**Security Justification**:
+- Reduces attack surface for session hijacking
+- Complies with security best practices
+- Prevents token reuse attacks
+
+---
+
+#### 11. Temporary & Cache Data
+
+**Retention Period**: 
+- **Redis cache**: 1-24 hours (TTL-based)
+- **Temporary files**: 24 hours
+- **Export files**: 7 days
+
+**Data Types**:
+- Cached API responses
+- Cached product lists
+- Temporary export files
+- Session data
+
+**Deletion Policy**:
+- Cache entries expire automatically (TTL)
+- Temporary files deleted after 24 hours
+- Export files deleted after 7 days
+- User can download exports before deletion
+
+**Automated Cleanup**: Hourly via Redis TTL and daily file cleanup at 5:00 AM UTC
+
+**Business Justification**:
+- Cache improves performance
+- Temporary data not needed long-term
+- Reduces storage costs
+
+---
+
+#### 12. Bulk Operation Snapshots
+
+**Retention Period**: 90 days
+
+**Data Types**:
+- Bulk operation snapshots (for rollback)
+- Original data state
+- Changes applied
+- Rollback status
+
+**Deletion Policy**:
+- Snapshots older than 90 days are automatically deleted
+- Rolled-back snapshots retained for 180 days
+- Snapshots can be manually deleted after successful operation
+
+**Automated Cleanup**: Weekly on Sundays at 4:00 AM UTC
+
+**Business Justification**:
+- 90 days sufficient for rollback needs
+- Most rollbacks happen within 7 days
+- Reduces snapshot table size
+
+---
+
+### Data Archival Process
+
+#### What Gets Archived
+
+Data that is:
+- Older than retention period but still valuable
+- Infrequently accessed but needed for compliance
+- Required for long-term analytics
+
+#### Archive Storage
+
+- **Location**: Separate archive tables in database
+- **Access**: Read-only via admin interface
+- **Performance**: Optimized for bulk reads, not real-time queries
+- **Backup**: Included in regular backup schedule
+
+#### Archive Tables
+
+- `PriceHistoryArchive`: Price history older than 90 days
+- `AuditLogArchive`: Audit logs older than 2 years
+- `AlertHistoryArchive`: Alert history older than 90 days
+- `SyncLogArchive`: Sync logs older than 30 days
+
+---
+
+### GDPR Compliance
+
+#### Right to Access (Article 15)
+
+Users can request a complete export of their data:
+
+1. Go to **Dashboard → Settings → Privacy**
+2. Click **Export My Data**
+3. Receive download link via email within 24 hours
+4. Export includes all personal data in JSON format
+
+**Export Contents**:
+- User profile and account information
+- Product data and price history
+- Audit logs and activity history
+- Notification history
+- API keys and integrations
+
+#### Right to Erasure (Article 17)
+
+Users can request account deletion:
+
+1. Go to **Dashboard → Settings → Privacy**
+2. Click **Delete My Account**
+3. Confirm deletion request
+4. Account soft-deleted immediately (30-day recovery period)
+5. Permanent deletion after 30 days
+
+**What Gets Deleted**:
+- User profile and credentials
+- Personal preferences and settings
+- Product data and price history
+- Audit logs (except those required for legal compliance)
+- API keys and tokens
+
+**What Gets Retained** (legal basis):
+- Financial transaction records (7 years - tax compliance)
+- Security incident logs (5 years - legal defense)
+- Aggregated anonymous analytics (no personal data)
+
+#### Right to Rectification (Article 16)
+
+Users can update their personal information:
+
+1. Go to **Dashboard → Settings → Profile**
+2. Update any personal information
+3. Changes take effect immediately
+4. Audit log created for compliance
+
+#### Right to Data Portability (Article 20)
+
+Users can export data in machine-readable format:
+
+1. Go to **Dashboard → Settings → Privacy**
+2. Click **Export My Data**
+3. Choose format: JSON, CSV, or XML
+4. Receive download link via email
+
+---
+
+### Data Security During Retention
+
+#### Encryption
+
+- **At Rest**: All sensitive data encrypted with AES-256-GCM
+- **In Transit**: TLS 1.3 for all data transmission
+- **Backups**: Encrypted backups stored securely
+- **API Tokens**: Encrypted before storage, decrypted on use
+
+#### Access Control
+
+- **Role-Based Access**: Users can only access their tenant's data
+- **Admin Access**: Logged and audited
+- **API Access**: Authenticated and rate-limited
+- **Database Access**: Restricted to application layer only
+
+#### Audit Trail
+
+- All data access logged
+- Deletion operations logged
+- Export operations logged
+- Retention policy changes logged
+
+---
+
+### Automated Cleanup Schedule
+
+| Data Type | Cleanup Frequency | Time (UTC) | Retention Period |
+|-----------|------------------|------------|------------------|
+| Notifications | Daily | 1:00 AM | 90 days |
+| Sync Logs | Daily | 1:30 AM | 30 days |
+| Sessions | Daily | 2:00 AM | 7 days (expired) |
+| Price History | Daily | 2:00 AM | 90 days (archive) |
+| Price Update Logs | Daily | 2:30 AM | 180 days |
+| Audit Logs | Monthly | 3:00 AM (1st) | 2 years |
+| Alert History | Weekly | 3:00 AM (Sun) | 90 days |
+| Bulk Snapshots | Weekly | 4:00 AM (Sun) | 90 days |
+| Scraping Metrics | Daily | 4:00 AM | 7 days (raw) |
+| Temporary Files | Daily | 5:00 AM | 24 hours |
+| Cache Data | Hourly | Continuous | 1-24 hours (TTL) |
+
+**Monitoring**: All cleanup jobs are monitored and logged. Failed cleanups trigger alerts.
+
+---
+
+### Manual Data Management
+
+#### Export Data
+
+Users can manually export data at any time:
+
+1. **Product Data**: Dashboard → Products → Export
+2. **Price History**: Dashboard → Analytics → Export
+3. **Audit Logs**: Dashboard → Settings → Audit Logs → Export
+4. **Complete Export**: Dashboard → Settings → Privacy → Export My Data
+
+**Export Formats**: JSON, CSV, PDF
+
+#### Delete Data
+
+Users can manually delete specific data:
+
+1. **Products**: Dashboard → Products → Select → Delete
+2. **Notifications**: Dashboard → Notifications → Clear All
+3. **API Keys**: Dashboard → Settings → API Keys → Revoke
+4. **Account**: Dashboard → Settings → Privacy → Delete Account
+
+**Note**: Deleted data enters soft-delete state with recovery period before permanent deletion.
+
+---
+
+### Backup & Disaster Recovery
+
+#### Backup Schedule
+
+- **Full Backup**: Daily at 3:00 AM UTC
+- **Incremental Backup**: Every 6 hours
+- **Retention**: 30 days of daily backups, 12 months of monthly backups
+
+#### Backup Contents
+
+- All database tables (including archived data)
+- User-uploaded files and images
+- Configuration and settings
+- Encryption keys (stored separately)
+
+#### Recovery Time Objective (RTO)
+
+- **Critical Data**: 1 hour
+- **Non-Critical Data**: 4 hours
+- **Complete System**: 24 hours
+
+#### Recovery Point Objective (RPO)
+
+- **Maximum Data Loss**: 6 hours (incremental backup interval)
+- **Typical Data Loss**: <1 hour
+
+---
+
+### Data Retention Configuration
+
+#### Admin Controls
+
+System administrators can configure retention policies:
+
+1. Go to **Admin → System Settings → Data Retention**
+2. Adjust retention periods for each data type
+3. Enable/disable automated cleanup jobs
+4. Schedule manual cleanup operations
+5. View cleanup job history and statistics
+
+**Note**: Reducing retention periods does not immediately delete data. Next scheduled cleanup will apply new policy.
+
+#### Tenant-Specific Policies
+
+Enterprise plans can customize retention policies:
+
+- Longer retention for compliance requirements
+- Custom archival schedules
+- On-demand data exports
+- Dedicated backup storage
+
+Contact support@pricepilot.com for custom retention policies.
+
+---
+
+### Compliance Certifications
+
+PricePilot's data retention policies comply with:
+
+- ✅ **GDPR** (General Data Protection Regulation)
+- ✅ **CCPA** (California Consumer Privacy Act)
+- ✅ **SOC 2 Type II** (Security and Availability)
+- ✅ **ISO 27001** (Information Security Management)
+- ✅ **PCI DSS** (Payment Card Industry Data Security Standard)
+
+**Audit Reports**: Available upon request for Enterprise customers.
+
+---
+
+### Questions About Data Retention?
+
+**Q: Can I extend retention periods for my account?**
+A: Yes, Enterprise plans can customize retention policies. Contact support@pricepilot.com.
+
+**Q: What happens to my data if I cancel my subscription?**
+A: Your account enters a 30-day grace period. Data is retained for 30 days, then permanently deleted. You can export your data before cancellation.
+
+**Q: Can I recover deleted data?**
+A: Data in soft-delete state (within recovery period) can be recovered. Contact support. Permanently deleted data cannot be recovered.
+
+**Q: How do I export all my data?**
+A: Go to Dashboard → Settings → Privacy → Export My Data. You'll receive a download link via email within 24 hours.
+
+**Q: Are archived logs accessible?**
+A: Yes, archived logs are accessible via the admin interface. They're read-only and optimized for bulk access, not real-time queries.
+
+**Q: How long are backups retained?**
+A: Daily backups for 30 days, monthly backups for 12 months. Enterprise plans can request longer retention.
+
+**Q: What data is never deleted?**
+A: Financial transaction records (7 years for tax compliance) and critical security incident logs (5 years for legal defense). All other data follows retention policies.
+
+**Q: Can I request immediate data deletion?**
+A: Yes, you can request account deletion at any time. Account is soft-deleted immediately with 30-day recovery period, then permanently deleted.
 
 ---
 

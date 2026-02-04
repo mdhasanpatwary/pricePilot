@@ -7,7 +7,7 @@
  * Useful for vacation coverage, team collaboration, and workflow flexibility.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

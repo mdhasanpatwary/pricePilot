@@ -21,17 +21,32 @@ import { CacheInvalidationService } from "./cache-invalidation";
 import { withRetry, isRetryableHttpError } from "@/lib/utils/retry";
 import { logger } from "@/lib/logger";
 
+/**
+ * Represents a product from an external e-commerce platform
+ * Used as an intermediate format during product synchronization
+ */
 interface ExternalProduct {
+  /** Unique identifier from the external platform */
   external_id: string;
+  /** Stock Keeping Unit (SKU) identifier */
   sku: string | null;
+  /** Product title/name */
   title: string;
+  /** Product category */
   category?: string | null;
+  /** Current price of the product */
   price: number;
+  /** Brand/manufacturer name */
   brand: string | null;
+  /** Model number or identifier */
   model: string | null;
+  /** Stock availability status */
   in_stock: boolean;
+  /** Product image URL */
   image?: string;
+  /** Alternative product ID */
   id?: string;
+  /** Product URL on the external platform */
   url: string | null;
 }
 
@@ -42,14 +57,110 @@ const MAX_BACKOFF = parseInt(process.env.SYNC_MAX_BACKOFF_MS || '30000', 10);
 
 /**
  * Check if mock mode is enabled (for development/testing only)
+ * 
+ * @returns {boolean} True if USE_MOCK_DATA environment variable is set to "true"
+ * @private
  */
 function isUseMockDataEnabled(): boolean {
   return process.env.USE_MOCK_DATA === "true";
 }
 
+/**
+ * SyncService - Product Synchronization Service
+ * 
+ * Handles bidirectional synchronization of products between PricePilot and external e-commerce platforms.
+ * Supports multiple platforms including OpenCart, Laravel, Shopify, WooCommerce, and Magento.
+ * 
+ * **Key Features:**
+ * - Fetches products from external platforms via API
+ * - Updates product prices in external platforms
+ * - Maintains price history for all changes
+ * - Implements retry logic with exponential backoff
+ * - Provides comprehensive error handling and logging
+ * - Supports batch processing for performance
+ * 
+ * **Supported Platforms:**
+ * - OpenCart (fully supported)
+ * - Laravel (fully supported)
+ * - Shopify (in development)
+ * - WooCommerce (in development)
+ * - Magento (in development)
+ * 
+ * **Security:**
+ * - Uses encrypted API tokens
+ * - Validates all API responses
+ * - Implements rate limiting
+ * - Logs all operations for audit trail
+ * 
+ * @example
+ * ```typescript
+ * // Sync products from a site
+ * const result = await SyncService.syncSite('site-id-123');
+ * console.log(`Synced ${result.count} products from ${result.siteName}`);
+ * 
+ * // Push price updates to a store
+ * const pushResult = await SyncService.syncProductsToStore('site-id-123');
+ * console.log(`Updated ${pushResult.updated} products`);
+ * ```
+ * 
+ * @see {@link https://docs.pricepilot.com/api/sync PricePilot Sync API Documentation}
+ */
 export class SyncService {
   /**
-   * Triggers a sync for a specific site
+   * Synchronizes products from an external e-commerce platform to PricePilot
+   * 
+   * This method performs a complete product synchronization:
+   * 1. Fetches products from the external platform API
+   * 2. Validates and transforms product data
+   * 3. Upserts products in the database (creates new or updates existing)
+   * 4. Records price history for all products
+   * 5. Invalidates relevant caches
+   * 6. Sends notifications on errors
+   * 
+   * **Process Flow:**
+   * - Validates site exists and has valid API token
+   * - Clears previous sync logs
+   * - Fetches products from platform-specific API
+   * - Processes products in batches to avoid memory issues
+   * - Updates sync progress every 10 products
+   * - Handles manual sync termination
+   * - Maintains transaction integrity
+   * 
+   * **Error Handling:**
+   * - Validates input parameters
+   * - Handles API token decryption failures
+   * - Manages network and API errors with retry logic
+   * - Logs all errors with context
+   * - Sends user notifications on failures
+   * - Ensures sync lock is released on error
+   * 
+   * @param {string} siteId - Unique identifier of the site to synchronize
+   * @returns {Promise<{count: number, siteName: string}>} Result object containing:
+   *   - count: Number of products successfully synchronized
+   *   - siteName: Base URL of the synchronized site
+   * 
+   * @throws {ValidationError} If siteId is invalid or missing
+   * @throws {NotFoundError} If site does not exist
+   * @throws {ExternalServiceError} If API communication fails
+   * @throws {DecryptionError} If API token decryption fails
+   * 
+   * @example
+   * ```typescript
+   * try {
+   *   const result = await SyncService.syncSite('site-abc-123');
+   *   console.log(`Successfully synced ${result.count} products from ${result.siteName}`);
+   * } catch (error) {
+   *   if (error instanceof NotFoundError) {
+   *     console.error('Site not found');
+   *   } else if (error instanceof ExternalServiceError) {
+   *     console.error('API communication failed:', error.message);
+   *   }
+   * }
+   * ```
+   * 
+   * @see {@link syncProductsToStore} For pushing price updates to stores
+   * @see {@link fetchFromOpenCart} For OpenCart-specific implementation
+   * @see {@link fetchFromLaravel} For Laravel-specific implementation
    */
   static async syncSite(siteId: string) {
     try {
@@ -393,11 +504,43 @@ export class SyncService {
   }
 
   /**
-   * Helper to execute Axios requests with retry logic (Exponential Backoff)
-   *
-   * Uses the centralized retry utility with configurable parameters.
-   * Automatically retries on transient failures like network errors,
-   * server errors (5xx), rate limits (429), and timeouts (408).
+   * Executes HTTP requests with automatic retry logic and exponential backoff
+   * 
+   * This helper method wraps Axios requests with intelligent retry behavior:
+   * - Automatically retries on transient failures (network errors, timeouts, 5xx errors)
+   * - Implements exponential backoff between retries
+   * - Logs retry attempts with detailed context
+   * - Respects configurable retry limits
+   * 
+   * **Retry Conditions:**
+   * - Network errors (ECONNREFUSED, ETIMEDOUT, ENOTFOUND)
+   * - HTTP 5xx server errors
+   * - HTTP 429 (Too Many Requests)
+   * - HTTP 408 (Request Timeout)
+   * 
+   * **Configuration:**
+   * - MAX_RETRIES: Maximum number of retry attempts (default: 3)
+   * - INITIAL_BACKOFF: Initial delay in milliseconds (default: 1000ms)
+   * - MAX_BACKOFF: Maximum delay in milliseconds (default: 30000ms)
+   * 
+   * @template T - Expected response data type
+   * @param {AxiosRequestConfig} config - Axios request configuration
+   * @returns {Promise<AxiosResponse<T>>} Axios response with typed data
+   * 
+   * @throws {AxiosError} If all retry attempts fail
+   * 
+   * @example
+   * ```typescript
+   * const response = await this.axiosRequestWithRetry<ProductData>({
+   *   method: 'GET',
+   *   url: 'https://api.example.com/products',
+   *   timeout: 10000
+   * });
+   * ```
+   * 
+   * @private
+   * @see {@link withRetry} Core retry utility function
+   * @see {@link isRetryableHttpError} Retry condition checker
    */
   private static async axiosRequestWithRetry<T = any>(
     config: AxiosRequestConfig,
@@ -430,7 +573,39 @@ export class SyncService {
   }
 
   /**
-   * Helper to determine if an error is retryable
+   * Determines if an error should trigger a retry attempt
+   * 
+   * Analyzes error characteristics to decide if the operation should be retried.
+   * Focuses on transient failures that are likely to succeed on retry.
+   * 
+   * **Retryable Conditions:**
+   * - No HTTP status code (network failure)
+   * - HTTP 5xx (server errors)
+   * - HTTP 429 (rate limiting)
+   * - HTTP 408 (request timeout)
+   * - Network error codes (ECONNREFUSED, ETIMEDOUT, ENOTFOUND)
+   * 
+   * **Non-Retryable Conditions:**
+   * - HTTP 4xx (except 408, 429) - client errors
+   * - HTTP 2xx, 3xx - successful responses
+   * 
+   * @param {any} error - Error object to analyze (typically AxiosError)
+   * @returns {boolean} True if the error is retryable, false otherwise
+   * 
+   * @example
+   * ```typescript
+   * try {
+   *   await axios.get('https://api.example.com/data');
+   * } catch (error) {
+   *   if (this.isRetryableError(error)) {
+   *     // Retry the request
+   *   } else {
+   *     // Fail immediately
+   *   }
+   * }
+   * ```
+   * 
+   * @private
    */
   private static isRetryableError(error: any): boolean {
     if (axios.isAxiosError(error)) {
@@ -448,17 +623,53 @@ export class SyncService {
   }
 
   /**
-   * Generate a smart SKU when the source system doesn't have one
-   *
-   * Strategy (in priority order):
-   * 1. Use existing SKU if available
-   * 2. Use Model if available (common in e-commerce)
-   * 3. Generate from Brand + Model
-   * 4. Generate from Product ID
-   * 5. Generate hash from title (last resort)
-   *
-   * @param product Product data from external system
-   * @returns Generated or existing SKU
+   * Generates a smart SKU when the source system doesn't provide one
+   * 
+   * Implements a multi-strategy approach to SKU generation, prioritizing
+   * existing data and falling back to intelligent generation when needed.
+   * 
+   * **Strategy Priority (in order):**
+   * 1. **Use existing SKU** - If product already has a SKU, use it
+   * 2. **Use Model** - Common in e-commerce platforms (OpenCart/Laravel)
+   * 3. **Generate from Brand + Model** - Combines both for uniqueness
+   * 4. **Generate from Product ID** - Most reliable fallback (PROD-{id})
+   * 5. **Generate from Title** - Last resort using title hash
+   * 
+   * **Title-Based Generation:**
+   * - Takes first 3 words from title
+   * - Sanitizes to alphanumeric characters
+   * - Adds 6-character hash for uniqueness
+   * - Format: WORD1-WORD2-WORD3-HASH6
+   * 
+   * @param {any} product - Product data from external system
+   * @returns {string | null} Generated or existing SKU, or null if generation fails
+   * 
+   * @example
+   * ```typescript
+   * // Example 1: Existing SKU
+   * const sku1 = this.generateSmartSKU({ sku: 'ABC-123' });
+   * // Returns: 'ABC-123'
+   * 
+   * // Example 2: From Model
+   * const sku2 = this.generateSmartSKU({ model: 'iPhone-15-Pro' });
+   * // Returns: 'iPhone-15-Pro'
+   * 
+   * // Example 3: From Brand + Model
+   * const sku3 = this.generateSmartSKU({ brand: 'Apple', model: 'iPhone-15' });
+   * // Returns: 'APPLE-IPHONE-15'
+   * 
+   * // Example 4: From Product ID
+   * const sku4 = this.generateSmartSKU({ product_id: '12345' });
+   * // Returns: 'PROD-12345'
+   * 
+   * // Example 5: From Title
+   * const sku5 = this.generateSmartSKU({ name: 'Apple iPhone 15 Pro Max' });
+   * // Returns: 'APPLE-IPHONE-15-A3F9D2'
+   * ```
+   * 
+   * @private
+   * @see {@link sanitizeSKU} For SKU string sanitization
+   * @see {@link simpleHash} For title hashing
    */
   private static generateSmartSKU(product: any): string | null {
     // Strategy 1: Use existing SKU
@@ -499,8 +710,28 @@ export class SyncService {
   }
 
   /**
-   * Sanitize a string for use in SKU
-   * Removes special characters, keeps alphanumeric and hyphens
+   * Sanitizes a string for use in SKU generation
+   * 
+   * Removes special characters and normalizes the string to create
+   * a clean, URL-safe SKU component.
+   * 
+   * **Transformations:**
+   * - Removes all non-alphanumeric characters except hyphens
+   * - Removes leading and trailing hyphens
+   * - Truncates to 20 characters maximum
+   * - Converts to uppercase
+   * 
+   * @param {string} str - String to sanitize
+   * @returns {string} Sanitized string suitable for SKU
+   * 
+   * @example
+   * ```typescript
+   * this.sanitizeSKU('Apple iPhone 15!');  // Returns: 'APPLEIPHONE15'
+   * this.sanitizeSKU('Model-X (2024)');    // Returns: 'MODELX2024'
+   * this.sanitizeSKU('---test---');        // Returns: 'TEST'
+   * ```
+   * 
+   * @private
    */
   private static sanitizeSKU(str: string): string {
     return str
@@ -511,7 +742,32 @@ export class SyncService {
   }
 
   /**
-   * Simple hash function for generating SKU from title
+   * Generates a simple hash from a string for SKU generation
+   * 
+   * Uses a basic hash algorithm to create a numeric hash from a string.
+   * The hash is deterministic (same input always produces same output)
+   * and suitable for creating unique SKU suffixes.
+   * 
+   * **Algorithm:**
+   * - Iterates through each character
+   * - Applies bit-shifting and addition
+   * - Converts to 32-bit integer
+   * - Returns absolute value
+   * 
+   * @param {string} str - String to hash
+   * @returns {number} Positive integer hash value
+   * 
+   * @example
+   * ```typescript
+   * const hash1 = this.simpleHash('Apple iPhone 15');
+   * const hash2 = this.simpleHash('Apple iPhone 15'); // Same as hash1
+   * const hash3 = this.simpleHash('Apple iPhone 16'); // Different from hash1
+   * 
+   * // Convert to base36 for compact representation
+   * const compact = hash1.toString(36).substring(0, 6); // e.g., 'a3f9d2'
+   * ```
+   * 
+   * @private
    */
   private static simpleHash(str: string): number {
     let hash = 0;
@@ -524,7 +780,48 @@ export class SyncService {
   }
 
   /**
-   * Fetch products from OpenCart API
+   * Fetches products from an OpenCart store via API
+   * 
+   * Connects to the OpenCart PricePilot extension API to retrieve product data.
+   * Handles various response formats, validates data, and transforms it into
+   * the standard ExternalProduct format.
+   * 
+   * **API Endpoint:**
+   * - URL: `{baseUrl}/index.php?route=api/pricepilot&api_token={token}`
+   * - Method: GET
+   * - Timeout: 30 seconds
+   * 
+   * **Features:**
+   * - Validates API responses
+   * - Handles corrupted JSON responses
+   * - Generates smart SKUs for products without SKUs
+   * - Validates products against schema
+   * - Logs validation errors
+   * - Supports mock data mode for development
+   * 
+   * **Error Handling:**
+   * - Detects HTML responses (indicates extension not installed)
+   * - Handles JSON parsing errors
+   * - Validates each product against schema
+   * - Logs skipped products with reasons
+   * - Wraps errors in ExternalServiceError
+   * 
+   * @param {Site & { decryptedToken: string | null }} site - Site object with decrypted API token
+   * @returns {Promise<ExternalProduct[]>} Array of validated products
+   * 
+   * @throws {ValidationError} If API token is missing
+   * @throws {ExternalServiceError} If API communication fails or returns invalid data
+   * 
+   * @example
+   * ```typescript
+   * const site = await WebsiteService.getWebsiteWithToken('site-id', 'tenant-id', 'sync');
+   * const products = await this.fetchFromOpenCart(site);
+   * console.log(`Fetched ${products.length} products from OpenCart`);
+   * ```
+   * 
+   * @private
+   * @see {@link fetchFromLaravel} For Laravel implementation
+   * @see {@link generateSmartSKU} For SKU generation
    */
   private static async fetchFromOpenCart(
     site: Site & { decryptedToken: string | null },
@@ -779,7 +1076,56 @@ export class SyncService {
   }
 
   /**
-   * Fetch products from Laravel API
+   * Fetches products from a Laravel store via API
+   * 
+   * Connects to the Laravel PricePilot package API to retrieve product data.
+   * Uses custom authentication header and validates responses.
+   * 
+   * **API Endpoint:**
+   * - URL: `{baseUrl}/api/pricepilot/sync`
+   * - Method: GET
+   * - Headers: X-PricePilot-Token, Accept: application/json
+   * - Timeout: 30 seconds
+   * 
+   * **Expected Response Format:**
+   * ```json
+   * {
+   *   "data": [
+   *     {
+   *       "id": "123",
+   *       "sku": "PROD-001",
+   *       "name": "Product Name",
+   *       "price": "99.99",
+   *       "brand": "Brand Name",
+   *       "model": "Model-X",
+   *       "in_stock": true
+   *     }
+   *   ]
+   * }
+   * ```
+   * 
+   * **Features:**
+   * - Custom authentication via X-PricePilot-Token header
+   * - Schema validation for each product
+   * - Smart SKU generation for products without SKUs
+   * - Supports mock data mode for development
+   * - Comprehensive error handling
+   * 
+   * @param {Site & { decryptedToken: string | null }} site - Site object with decrypted API token
+   * @returns {Promise<ExternalProduct[]>} Array of validated products
+   * 
+   * @throws {ValidationError} If API token is missing
+   * @throws {ExternalServiceError} If API communication fails
+   * 
+   * @example
+   * ```typescript
+   * const site = await WebsiteService.getWebsiteWithToken('site-id', 'tenant-id', 'sync');
+   * const products = await this.fetchFromLaravel(site);
+   * console.log(`Fetched ${products.length} products from Laravel`);
+   * ```
+   * 
+   * @private
+   * @see {@link fetchFromOpenCart} For OpenCart implementation
    */
   private static async fetchFromLaravel(
     site: Site & { decryptedToken: string | null },
@@ -952,7 +1298,49 @@ export class SyncService {
   }
 
   /**
-   * Pushes latest price updates for all products of a site back to the external platform
+   * Pushes price updates from PricePilot to an external e-commerce platform
+   * 
+   * Synchronizes product prices from the PricePilot database to the connected
+   * external store. Processes products in batches to respect API rate limits
+   * and prevent overwhelming the external platform.
+   * 
+   * **Process Flow:**
+   * 1. Validates site exists and has API token
+   * 2. Decrypts API token for secure communication
+   * 3. Filters products with external IDs
+   * 4. Processes products in batches of 5
+   * 5. Calls platform-specific update method
+   * 6. Adds delay between batches (500ms)
+   * 7. Returns success count
+   * 
+   * **Batch Processing:**
+   * - Batch size: 5 products
+   * - Inter-batch delay: 500ms
+   * - Parallel processing within batch
+   * - Continues on individual failures
+   * 
+   * **Supported Platforms:**
+   * - OpenCart: via updateOpenCartPrice()
+   * - Laravel: via updateLaravelPrice()
+   * 
+   * @param {string} siteId - Unique identifier of the site to update
+   * @returns {Promise<{success: boolean, updated: number}>} Result object containing:
+   *   - success: Whether the operation completed
+   *   - updated: Number of products successfully updated
+   * 
+   * @throws {ValidationError} If siteId is invalid
+   * @throws {NotFoundError} If site does not exist
+   * @throws {ExternalServiceError} If token decryption fails
+   * 
+   * @example
+   * ```typescript
+   * const result = await SyncService.syncProductsToStore('site-abc-123');
+   * console.log(`Updated ${result.updated} products in store`);
+   * ```
+   * 
+   * @see {@link updateOpenCartPrice} For OpenCart price updates
+   * @see {@link updateLaravelPrice} For Laravel price updates
+   * @see {@link syncSite} For pulling products from stores
    */
   static async syncProductsToStore(siteId: string) {
     try {
@@ -1079,9 +1467,71 @@ export class SyncService {
   }
 
   /**
-   * Update price in OpenCart with verification
+   * Updates a product price in an OpenCart store with verification
+   * 
+   * Sends a price update request to the OpenCart PricePilot extension API
+   * and verifies the update was successful. Includes comprehensive error
+   * handling and logging.
+   * 
+   * **API Endpoint:**
+   * - URL: `{baseUrl}/index.php?route=api/pricepilot/update&api_token={token}`
+   * - Method: POST
+   * - Timeout: 10 seconds
+   * 
+   * **Request Payload:**
+   * ```json
+   * {
+   *   "product_id": "123",
+   *   "price": "99.99",
+   *   "sku": "PROD-001",
+   *   "verify": true
+   * }
+   * ```
+   * 
+   * **Expected Response:**
+   * ```json
+   * {
+   *   "success": true,
+   *   "product_id": "123",
+   *   "old_price": "89.99",
+   *   "new_price": "99.99",
+   *   "sku": "PROD-001",
+   *   "timestamp": "2024-01-15 10:30:00"
+   * }
+   * ```
+   * 
+   * **Verification:**
+   * - Checks success flag in response
+   * - Verifies new_price matches expected price (within 0.01 tolerance)
+   * - Validates SKU if provided in response
+   * - Creates price update log entry
+   * 
+   * **Error Handling:**
+   * - Handles rate limiting (429) and loop detection (508)
+   * - Validates response structure
+   * - Logs all failures with context
+   * - Creates failed update log entries
+   * 
+   * @param {Site & { decryptedToken: string | null }} site - Site object with decrypted API token
+   * @param {Product} product - Product to update
+   * @returns {Promise<boolean>} True if update successful, false otherwise
+   * 
+   * @throws {ValidationError} If API token is missing
+   * @throws {ExternalServiceError} If API communication fails
+   * 
+   * @example
+   * ```typescript
+   * const site = await WebsiteService.getWebsiteWithToken('site-id', 'tenant-id', 'update');
+   * const product = await prisma.product.findUnique({ where: { id: 'prod-id' } });
+   * const success = await this.updateOpenCartPrice(site, product);
+   * ```
+   * 
+   * @private
+   * @see {@link updateLaravelPrice} For Laravel implementation
    */
   private static async updateOpenCartPrice(site: Site & { decryptedToken: string | null }, product: Product): Promise<boolean> {
+    const startTime = Date.now();
+
     try {
       // Use decrypted token for API call
       const apiToken = site.decryptedToken || site.apiToken;
@@ -1124,6 +1574,18 @@ export class SyncService {
             console.warn(
               `[SyncService] OpenCart Rate Limit/Loop Warning (Status ${statusCode}). Retrying skipped for ${product.id}`,
             );
+
+            // Record failure
+            const duration = Date.now() - startTime;
+            const { priceUpdateMonitor } = await import('./price-update-monitor');
+            await priceUpdateMonitor.recordUpdate(site.tenantId, {
+              productId: product.id,
+              externalId: product.externalId || '',
+              success: false,
+              error: `Rate limit or loop detected (${statusCode})`,
+              duration,
+            });
+
             return false;
           }
 
@@ -1226,9 +1688,21 @@ export class SyncService {
         `[SyncService] Successfully updated price for product ${product.id} (${product.externalId}): ${response.data.old_price} → ${response.data.new_price}`
       );
 
+      // Record success in monitoring
+      const duration = Date.now() - startTime;
+      const { priceUpdateMonitor } = await import('./price-update-monitor');
+      await priceUpdateMonitor.recordUpdate(site.tenantId, {
+        productId: product.id,
+        externalId: product.externalId || '',
+        success: true,
+        duration,
+      });
+
       return true;
 
     } catch (error) {
+      const duration = Date.now() - startTime;
+
       // If already an AppError, log and re-throw
       if (error instanceof ValidationError || error instanceof ExternalServiceError) {
         // Log failed update
@@ -1243,6 +1717,17 @@ export class SyncService {
             executedAt: new Date()
           }
         });
+
+        // Record failure in monitoring
+        const { priceUpdateMonitor } = await import('./price-update-monitor');
+        await priceUpdateMonitor.recordUpdate(site.tenantId, {
+          productId: product.id,
+          externalId: product.externalId || '',
+          success: false,
+          error: error.message,
+          duration,
+        });
+
         console.error(`[SyncService] OpenCart Update Error for ${product.id}:`, error.message);
         return false;
       }
@@ -1261,6 +1746,16 @@ export class SyncService {
         }
       });
 
+      // Record failure in monitoring
+      const { priceUpdateMonitor } = await import('./price-update-monitor');
+      await priceUpdateMonitor.recordUpdate(site.tenantId, {
+        productId: product.id,
+        externalId: product.externalId || '',
+        success: false,
+        error: errorMessage,
+        duration,
+      });
+
       console.error(
         `[SyncService] OpenCart Update Error for ${product.id}:`,
         errorMessage
@@ -1271,9 +1766,71 @@ export class SyncService {
   }
 
   /**
-   * Update price in Laravel with verification
+   * Updates a product price in a Laravel store with verification
+   * 
+   * Sends a price update request to the Laravel PricePilot package API
+   * and verifies the update was successful. Uses custom authentication
+   * header and validates responses.
+   * 
+   * **API Endpoint:**
+   * - URL: `{baseUrl}/api/pricepilot/update`
+   * - Method: POST
+   * - Headers: X-PricePilot-Token, Accept: application/json
+   * - Timeout: 10 seconds
+   * 
+   * **Request Payload:**
+   * ```json
+   * {
+   *   "product_id": "123",
+   *   "price": "99.99",
+   *   "sku": "PROD-001",
+   *   "verify": true
+   * }
+   * ```
+   * 
+   * **Expected Response:**
+   * ```json
+   * {
+   *   "success": true,
+   *   "product_id": "123",
+   *   "old_price": "89.99",
+   *   "new_price": "99.99",
+   *   "sku": "PROD-001"
+   * }
+   * ```
+   * 
+   * **Verification:**
+   * - Checks success flag in response
+   * - Verifies new_price matches expected price (within 0.01 tolerance)
+   * - Validates SKU if provided in response
+   * - Creates price update log entry
+   * 
+   * **Error Handling:**
+   * - Validates response structure
+   * - Logs all failures with context
+   * - Creates failed update log entries
+   * - Returns false on any error
+   * 
+   * @param {Site & { decryptedToken: string | null }} site - Site object with decrypted API token
+   * @param {Product} product - Product to update
+   * @returns {Promise<boolean>} True if update successful, false otherwise
+   * 
+   * @throws {ValidationError} If API token is missing
+   * @throws {ExternalServiceError} If API communication fails
+   * 
+   * @example
+   * ```typescript
+   * const site = await WebsiteService.getWebsiteWithToken('site-id', 'tenant-id', 'update');
+   * const product = await prisma.product.findUnique({ where: { id: 'prod-id' } });
+   * const success = await this.updateLaravelPrice(site, product);
+   * ```
+   * 
+   * @private
+   * @see {@link updateOpenCartPrice} For OpenCart implementation
    */
   private static async updateLaravelPrice(site: Site & { decryptedToken: string | null }, product: Product): Promise<boolean> {
+    const startTime = Date.now();
+
     try {
       const url = `${site.baseUrl}/api/pricepilot/update`;
 
@@ -1415,9 +1972,21 @@ export class SyncService {
         `[SyncService] Successfully updated price for product ${product.id} (${product.externalId}): ${response.data.old_price} → ${response.data.new_price}`
       );
 
+      // Record success in monitoring
+      const duration = Date.now() - startTime;
+      const { priceUpdateMonitor } = await import('./price-update-monitor');
+      await priceUpdateMonitor.recordUpdate(site.tenantId, {
+        productId: product.id,
+        externalId: product.externalId || '',
+        success: true,
+        duration,
+      });
+
       return true;
 
     } catch (error) {
+      const duration = Date.now() - startTime;
+
       // If already an AppError, log and re-throw
       if (error instanceof ValidationError || error instanceof ExternalServiceError) {
         // Log failed update
@@ -1432,6 +2001,17 @@ export class SyncService {
             executedAt: new Date()
           }
         });
+
+        // Record failure in monitoring
+        const { priceUpdateMonitor } = await import('./price-update-monitor');
+        await priceUpdateMonitor.recordUpdate(site.tenantId, {
+          productId: product.id,
+          externalId: product.externalId || '',
+          success: false,
+          error: error.message,
+          duration,
+        });
+
         console.error(`[SyncService] Laravel Update Error for ${product.id}:`, error.message);
         return false;
       }
@@ -1448,6 +2028,16 @@ export class SyncService {
           errorDetails: errorMessage,
           executedAt: new Date()
         }
+      });
+
+      // Record failure in monitoring
+      const { priceUpdateMonitor } = await import('./price-update-monitor');
+      await priceUpdateMonitor.recordUpdate(site.tenantId, {
+        productId: product.id,
+        externalId: product.externalId || '',
+        success: false,
+        error: errorMessage,
+        duration,
       });
 
       console.error(

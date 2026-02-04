@@ -5,6 +5,7 @@ Welcome to the PricePilot API documentation. This index provides quick access to
 ## Quick Links
 
 - **OpenAPI Specification:** [/public/openapi.json](../public/openapi.json)
+- **Request/Response Examples:** [API Request/Response Examples](./API_REQUEST_RESPONSE_EXAMPLES.md) - **Comprehensive examples for all endpoints**
 - **Interactive API Docs:** https://api.pricepilot.com/docs
 - **API Status:** https://status.pricepilot.com
 - **Support:** support@pricepilot.com
