@@ -47,11 +47,11 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 
 ## 📝 Tasks
 * list the uncompleted features and anything which in uncompleted.
-* after implement any feature or change anything need to run build for errors
+* after implement any feature or change anything, need to run build for errors
 
 
 ## Questions
-* what's wrong things exist in this project?
+* what's wrong things exist, in this project?
 * amake menually korte hove amon ki ki kaj remaining ache?
 * competitor site advanced bot protection service, ip block kore, fake price দেখায়, empty response দেয়, random redirect, delayed response (timeout), CAPTCHA (worst). ei case gulote amra kon strategy follow kortechi? debuggin & user ke proper msg ki dicci?
 

@@ -1,0 +1,709 @@
+/**
+ * Scrape Orchestrator for Bot Protection Handling
+ * 
+ * Coordinates the entire scraping workflow from request to result storage.
+ * Integrates detection engine, proxy manager, rate limiter, session manager,
+ * and scraping strategies to handle bot protection mechanisms.
+ * 
+ * Requirements: 7.1, 7.2, 7.6
+ */
+
+import { logger } from '@/lib/logger';
+import { DetectionEngine, ProtectionType, HttpResponse } from './detection-engine';
+import { ProxyManager, Proxy } from './proxy-manager';
+import { RateLimiter } from './rate-limiter';
+import { SessionManager } from './session-manager';
+import { HttpScraper, ScrapeConfig, ScrapeResponse } from './http-scraper';
+import {
+    HeadlessBrowserScraper,
+    BrowserScrapeConfig,
+    BrowserScrapeResponse,
+} from './headless-browser-scraper';
+import { DataExtractor, ExtractionResult } from './data-extractor';
+import {
+    StrategySelector,
+    ScrapingStrategy,
+    StrategyContext,
+    FailureContext,
+    SiteConfiguration,
+    ScrapeAttempt,
+} from './strategy-selector';
+import { generateHeaders } from './header-generator';
+import { UserAgentPool } from './user-agent-pool';
+
+/**
+ * Scrape request interface
+ */
+export interface ScrapeRequest {
+    competitorProductId: string;
+    competitorWebsiteId: string;
+    url: string;
+    tenantId: string;
+    priority: 'high' | 'normal' | 'low';
+}
+
+/**
+ * Scrape result interface
+ */
+export interface ScrapeResult {
+    success: boolean;
+    price?: number;
+    currency?: string;
+    protectionDetected: boolean;
+    protectionType?: ProtectionType;
+    attempts: number;
+    finalStrategy: ScrapingStrategy;
+    responseTime: number;
+    timestamp: Date;
+    errorMessage?: string;
+    screenshot?: Buffer;
+}
+
+/**
+ * ScrapeOrchestrator class
+ * 
+ * Orchestrates the complete scraping workflow, coordinating all components
+ * to handle bot protection and extract price data.
+ */
+export class ScrapeOrchestrator {
+    private detectionEngine: DetectionEngine;
+    private proxyManager: ProxyManager;
+    private rateLimiter: RateLimiter;
+    private sessionManager: SessionManager;
+    private httpScraper: HttpScraper;
+    private browserScraper: HeadlessBrowserScraper;
+    private dataExtractor: DataExtractor;
+    private strategySelector: StrategySelector;
+    private userAgentPool: UserAgentPool;
+
+    constructor() {
+        this.detectionEngine = new DetectionEngine();
+        this.proxyManager = new ProxyManager();
+        this.rateLimiter = new RateLimiter();
+        this.sessionManager = new SessionManager();
+        this.httpScraper = new HttpScraper();
+        this.browserScraper = new HeadlessBrowserScraper(true); // Use browser pool
+        this.dataExtractor = new DataExtractor();
+        this.strategySelector = new StrategySelector();
+        this.userAgentPool = new UserAgentPool();
+    }
+
+    /**
+     * Execute a scrape request
+     * 
+     * Coordinates all components to:
+     * 1. Load site configuration
+     * 2. Select scraping strategy
+     * 3. Acquire rate limit permit
+     * 4. Execute scrape with selected strategy
+     * 5. Analyze response for bot protection
+     * 6. Extract price data if successful
+     * 7. Handle failures with retry logic
+     * 
+     * Requirements: 7.1, 7.2, 7.6
+     * 
+     * @param request - Scrape request
+     * @returns Promise resolving to scrape result
+     */
+    async executeScrape(request: ScrapeRequest): Promise<ScrapeResult> {
+        const startTime = Date.now();
+        const timestamp = new Date();
+
+        logger.info('[ScrapeOrchestrator] Starting scrape', {
+            competitorProductId: request.competitorProductId,
+            competitorWebsiteId: request.competitorWebsiteId,
+            url: request.url,
+        });
+
+        try {
+            // Load site configuration
+            const siteConfig = await this.loadSiteConfiguration(request.competitorWebsiteId);
+
+            // Initialize strategy context
+            const strategyContext: StrategyContext = {
+                competitorWebsiteId: request.competitorWebsiteId,
+                siteConfig,
+                recentHistory: await this.loadRecentHistory(request.competitorWebsiteId),
+                currentAttempt: 1,
+            };
+
+            // Select initial strategy
+            const strategy = this.strategySelector.selectStrategy(strategyContext);
+
+            logger.info('[ScrapeOrchestrator] Selected initial strategy', {
+                strategy,
+                competitorWebsiteId: request.competitorWebsiteId,
+            });
+
+            // Execute scrape with retry logic
+            const result = await this.executeScrapeWithRetry(
+                request,
+                siteConfig,
+                strategy,
+                strategyContext
+            );
+
+            const responseTime = Date.now() - startTime;
+
+            logger.info('[ScrapeOrchestrator] Scrape completed', {
+                success: result.success,
+                attempts: result.attempts,
+                finalStrategy: result.finalStrategy,
+                responseTime,
+            });
+
+            return {
+                ...result,
+                responseTime,
+                timestamp,
+            };
+        } catch (error) {
+            const responseTime = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            logger.error('[ScrapeOrchestrator] Scrape failed with error', {
+                error: errorMessage,
+                competitorProductId: request.competitorProductId,
+                url: request.url,
+            });
+
+            return {
+                success: false,
+                protectionDetected: false,
+                attempts: 1,
+                finalStrategy: ScrapingStrategy.HTTP_CLIENT,
+                responseTime,
+                timestamp,
+                errorMessage,
+            };
+        }
+    }
+
+    /**
+     * Retry a failed scrape request
+     * 
+     * Used for manual retry or scheduled retry of previously failed scrapes.
+     * 
+     * Requirements: 7.2, 7.6
+     * 
+     * @param request - Scrape request
+     * @returns Promise resolving to scrape result
+     */
+    async retryFailedScrape(request: ScrapeRequest): Promise<ScrapeResult> {
+        logger.info('[ScrapeOrchestrator] Retrying failed scrape', {
+            competitorProductId: request.competitorProductId,
+            url: request.url,
+        });
+
+        // Execute as new scrape request
+        return this.executeScrape(request);
+    }
+
+    /**
+     * Execute scrape with retry logic
+     * 
+     * Implements retry logic with strategy adaptation based on failures.
+     * 
+     * Requirements: 7.2, 7.6
+     * 
+     * @param request - Scrape request
+     * @param siteConfig - Site configuration
+     * @param initialStrategy - Initial scraping strategy
+     * @param strategyContext - Strategy context
+     * @returns Promise resolving to scrape result
+     */
+    private async executeScrapeWithRetry(
+        request: ScrapeRequest,
+        siteConfig: SiteConfiguration,
+        initialStrategy: ScrapingStrategy,
+        strategyContext: StrategyContext
+    ): Promise<ScrapeResult> {
+        let currentStrategy = initialStrategy;
+        let attemptNumber = 1;
+        let lastProtectionType: ProtectionType | undefined;
+        let lastErrorMessage: string | undefined;
+        let lastScreenshot: Buffer | undefined;
+
+        // Retry loop
+        while (attemptNumber <= siteConfig.maxRetries) {
+            logger.info('[ScrapeOrchestrator] Executing attempt', {
+                attemptNumber,
+                maxRetries: siteConfig.maxRetries,
+                strategy: currentStrategy,
+                competitorWebsiteId: request.competitorWebsiteId,
+            });
+
+            try {
+                // Acquire rate limit permit
+                await this.rateLimiter.acquirePermit(request.competitorWebsiteId);
+
+                // Execute scrape with current strategy
+                const attemptResult = await this.executeSingleAttempt(
+                    request,
+                    siteConfig,
+                    currentStrategy
+                );
+
+                // Log attempt
+                await this.logScrapeAttempt(attemptResult, currentStrategy, attemptNumber);
+
+                // Check if successful
+                if (attemptResult.success) {
+                    // Record success in rate limiter
+                    await this.rateLimiter.recordSuccess(request.competitorWebsiteId);
+
+                    // Record proxy success if used
+                    if (attemptResult.proxyId) {
+                        await this.proxyManager.markProxySuccess(
+                            attemptResult.proxyId,
+                            request.competitorWebsiteId
+                        );
+                    }
+
+                    logger.info('[ScrapeOrchestrator] Scrape successful', {
+                        attemptNumber,
+                        strategy: currentStrategy,
+                        price: attemptResult.price,
+                    });
+
+                    return {
+                        success: true,
+                        price: attemptResult.price,
+                        currency: attemptResult.currency,
+                        protectionDetected: attemptResult.protectionDetected,
+                        protectionType: attemptResult.protectionType,
+                        attempts: attemptNumber,
+                        finalStrategy: currentStrategy,
+                        responseTime: 0, // Will be set by caller
+                        timestamp: new Date(),
+                        screenshot: attemptResult.screenshot,
+                    };
+                }
+
+                // Attempt failed, record failure
+                lastProtectionType = attemptResult.protectionType;
+                lastErrorMessage = attemptResult.errorMessage;
+                lastScreenshot = attemptResult.screenshot;
+
+                // Record failure in rate limiter
+                await this.rateLimiter.recordFailure(
+                    request.competitorWebsiteId,
+                    attemptResult.protectionType
+                );
+
+                // Record proxy failure if used
+                if (attemptResult.proxyId) {
+                    await this.proxyManager.markProxyFailed(
+                        attemptResult.proxyId,
+                        request.competitorWebsiteId
+                    );
+                }
+
+                // Check if we should retry
+                if (attemptNumber >= siteConfig.maxRetries) {
+                    logger.warn('[ScrapeOrchestrator] Max retries reached', {
+                        attemptNumber,
+                        maxRetries: siteConfig.maxRetries,
+                    });
+                    break;
+                }
+
+                // Select retry strategy
+                const failureContext: FailureContext = {
+                    ...strategyContext,
+                    currentAttempt: attemptNumber + 1,
+                    lastProtectionType: attemptResult.protectionType || ProtectionType.UNKNOWN,
+                    lastStrategy: currentStrategy,
+                };
+
+                const retryStrategy = this.strategySelector.selectRetryStrategy(failureContext);
+
+                if (!retryStrategy) {
+                    logger.warn('[ScrapeOrchestrator] No retry strategy available', {
+                        lastProtectionType: attemptResult.protectionType,
+                        attemptNumber,
+                    });
+                    break;
+                }
+
+                currentStrategy = retryStrategy;
+                attemptNumber++;
+
+                logger.info('[ScrapeOrchestrator] Retrying with new strategy', {
+                    attemptNumber,
+                    newStrategy: currentStrategy,
+                    lastProtectionType: attemptResult.protectionType,
+                });
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                lastErrorMessage = errorMessage;
+
+                logger.error('[ScrapeOrchestrator] Attempt failed with error', {
+                    attemptNumber,
+                    strategy: currentStrategy,
+                    error: errorMessage,
+                });
+
+                // Record failure
+                await this.rateLimiter.recordFailure(request.competitorWebsiteId);
+
+                // Check if we should retry
+                if (attemptNumber >= siteConfig.maxRetries) {
+                    break;
+                }
+
+                attemptNumber++;
+            }
+        }
+
+        // All retries exhausted
+        logger.error('[ScrapeOrchestrator] All retries exhausted', {
+            attempts: attemptNumber,
+            lastProtectionType,
+            lastErrorMessage,
+        });
+
+        return {
+            success: false,
+            protectionDetected: lastProtectionType !== undefined,
+            protectionType: lastProtectionType,
+            attempts: attemptNumber,
+            finalStrategy: currentStrategy,
+            responseTime: 0, // Will be set by caller
+            timestamp: new Date(),
+            errorMessage: lastErrorMessage || 'All retry attempts failed',
+            screenshot: lastScreenshot,
+        };
+    }
+
+    /**
+     * Execute a single scrape attempt with the specified strategy
+     * 
+     * @param request - Scrape request
+     * @param siteConfig - Site configuration
+     * @param strategy - Scraping strategy to use
+     * @returns Promise resolving to attempt result
+     */
+    private async executeSingleAttempt(
+        request: ScrapeRequest,
+        siteConfig: SiteConfiguration,
+        strategy: ScrapingStrategy
+    ): Promise<AttemptResult> {
+        // Get proxy if strategy requires it
+        const proxy = this.shouldUseProxy(strategy)
+            ? await this.proxyManager.getProxy(request.competitorWebsiteId)
+            : null;
+
+        // Get user agent
+        const userAgent = this.userAgentPool.getRandomUserAgent();
+
+        // Get cookies
+        const cookies = await this.sessionManager.getCookies(request.competitorWebsiteId);
+
+        // Execute based on strategy
+        if (this.isHttpStrategy(strategy)) {
+            return this.executeHttpScrape(request, siteConfig, proxy, userAgent, cookies);
+        } else {
+            return this.executeBrowserScrape(request, siteConfig, strategy, proxy, userAgent, cookies);
+        }
+    }
+
+    /**
+     * Execute HTTP-based scrape
+     * 
+     * @param request - Scrape request
+     * @param siteConfig - Site configuration
+     * @param proxy - Proxy to use (if any)
+     * @param userAgent - User agent string
+     * @param cookies - Cookies to include
+     * @returns Promise resolving to attempt result
+     */
+    private async executeHttpScrape(
+        request: ScrapeRequest,
+        siteConfig: SiteConfiguration,
+        proxy: Proxy | null,
+        userAgent: string,
+        cookies: any[]
+    ): Promise<AttemptResult> {
+        // Generate headers
+        const headers = generateHeaders({
+            userAgent,
+            profile: 'desktop',
+            randomizeOrder: true,
+        });
+
+        // Build scrape config
+        const scrapeConfig: ScrapeConfig = {
+            url: request.url,
+            proxy: proxy ? {
+                host: proxy.host,
+                port: proxy.port,
+                protocol: proxy.protocol,
+                username: proxy.username,
+                password: proxy.password,
+            } : undefined,
+            userAgent,
+            headers,
+            cookies,
+            timeout: 30000, // 30 seconds
+            followRedirects: true,
+        };
+
+        // Execute scrape
+        const response: ScrapeResponse = await this.httpScraper.scrape(scrapeConfig);
+
+        // Store cookies
+        if (response.headers['set-cookie']) {
+            const parsedCookies = this.sessionManager.parseCookiesFromHeaders(response.headers);
+            if (parsedCookies.length > 0) {
+                // Set domain from URL if not set
+                const urlObj = new URL(request.url);
+                parsedCookies.forEach(cookie => {
+                    if (!cookie.domain) {
+                        cookie.domain = urlObj.hostname;
+                    }
+                });
+                await this.sessionManager.updateCookies(request.competitorWebsiteId, parsedCookies);
+            }
+        }
+
+        // Analyze response
+        return this.analyzeResponse(request, siteConfig, response, proxy?.id);
+    }
+
+    /**
+     * Execute browser-based scrape
+     * 
+     * @param request - Scrape request
+     * @param siteConfig - Site configuration
+     * @param strategy - Scraping strategy
+     * @param proxy - Proxy to use (if any)
+     * @param userAgent - User agent string
+     * @param cookies - Cookies to include
+     * @returns Promise resolving to attempt result
+     */
+    private async executeBrowserScrape(
+        request: ScrapeRequest,
+        siteConfig: SiteConfiguration,
+        strategy: ScrapingStrategy,
+        proxy: Proxy | null,
+        userAgent: string,
+        cookies: any[]
+    ): Promise<AttemptResult> {
+        // Generate headers
+        const headers = generateHeaders({
+            userAgent,
+            profile: 'desktop',
+            randomizeOrder: true,
+        });
+
+        // Build browser scrape config
+        const browserConfig: BrowserScrapeConfig = {
+            url: request.url,
+            proxy: proxy ? {
+                host: proxy.host,
+                port: proxy.port,
+                protocol: proxy.protocol,
+                username: proxy.username,
+                password: proxy.password,
+            } : undefined,
+            userAgent,
+            headers,
+            cookies,
+            timeout: 60000, // 60 seconds for browser
+            followRedirects: true,
+            stealthMode: strategy === ScrapingStrategy.STEALTH_BROWSER,
+            viewport: {
+                width: 1920,
+                height: 1080,
+                deviceScaleFactor: 1,
+                isMobile: false,
+            },
+        };
+
+        // Execute browser scrape
+        const response: BrowserScrapeResponse = await this.browserScraper.scrape(browserConfig);
+
+        // Store cookies from browser context
+        // Note: Browser cookies are handled by Playwright context
+
+        // Analyze response
+        return this.analyzeResponse(request, siteConfig, response, proxy?.id, response.screenshot);
+    }
+
+    /**
+     * Analyze scrape response and extract price data
+     * 
+     * @param _request - Scrape request (unused for now)
+     * @param siteConfig - Site configuration
+     * @param response - Scrape response
+     * @param proxyId - Proxy ID used (if any)
+     * @param screenshot - Screenshot buffer (if any)
+     * @returns Attempt result
+     */
+    private analyzeResponse(
+        _request: ScrapeRequest,
+        siteConfig: SiteConfiguration,
+        response: ScrapeResponse | BrowserScrapeResponse,
+        proxyId?: string,
+        screenshot?: Buffer
+    ): AttemptResult {
+        // Convert response to HttpResponse for detection
+        const httpResponse: HttpResponse = {
+            statusCode: response.statusCode,
+            headers: response.headers,
+            body: response.body,
+            redirectUrl: response.redirectUrl,
+            responseTime: response.responseTime,
+            finalUrl: response.finalUrl,
+        };
+
+        // Detect bot protection
+        const detection = this.detectionEngine.analyzeResponse(httpResponse);
+
+        // If protection detected, return failure
+        if (detection.protectionDetected) {
+            return {
+                success: false,
+                protectionDetected: true,
+                protectionType: detection.protectionType,
+                proxyId,
+                screenshot,
+                errorMessage: detection.reasoning,
+            };
+        }
+
+        // Try to extract price
+        const extraction: ExtractionResult = this.dataExtractor.extractPrice(
+            response.body,
+            siteConfig.customSelectors
+        );
+
+        // Check if extraction successful
+        if (extraction.success && extraction.price) {
+            return {
+                success: true,
+                price: extraction.price,
+                currency: extraction.currency,
+                protectionDetected: false,
+                proxyId,
+                screenshot,
+            };
+        }
+
+        // Extraction failed
+        return {
+            success: false,
+            protectionDetected: false,
+            proxyId,
+            screenshot,
+            errorMessage: 'Failed to extract price from response',
+        };
+    }
+
+    /**
+     * Check if strategy should use proxy
+     * 
+     * @param strategy - Scraping strategy
+     * @returns True if proxy should be used
+     */
+    private shouldUseProxy(strategy: ScrapingStrategy): boolean {
+        return (
+            strategy === ScrapingStrategy.HTTP_WITH_PROXY ||
+            strategy === ScrapingStrategy.HEADLESS_WITH_PROXY
+        );
+    }
+
+    /**
+     * Check if strategy is HTTP-based
+     * 
+     * @param strategy - Scraping strategy
+     * @returns True if HTTP-based
+     */
+    private isHttpStrategy(strategy: ScrapingStrategy): boolean {
+        return (
+            strategy === ScrapingStrategy.HTTP_CLIENT ||
+            strategy === ScrapingStrategy.HTTP_WITH_PROXY
+        );
+    }
+
+    /**
+     * Load site configuration from database
+     * 
+     * @param _competitorWebsiteId - Competitor website ID (unused for now)
+     * @returns Site configuration
+     */
+    private async loadSiteConfiguration(_competitorWebsiteId: string): Promise<SiteConfiguration> {
+        // TODO: Load from database
+        // For now, return default configuration
+        return {
+            preferredStrategy: ScrapingStrategy.HTTP_CLIENT,
+            requiresJavaScript: false,
+            rateLimit: {
+                baseDelay: 2000,
+                maxDelay: 300000,
+                backoffMultiplier: 2.0,
+                jitterRange: 20,
+            },
+            proxyRequired: false,
+            customSelectors: {
+                priceSelectors: ['.price', '[itemprop="price"]', '.product-price'],
+            },
+            maxRetries: 3,
+        };
+    }
+
+    /**
+     * Load recent scrape history for a competitor website
+     * 
+     * @param _competitorWebsiteId - Competitor website ID (unused for now)
+     * @returns Recent scrape attempts
+     */
+    private async loadRecentHistory(_competitorWebsiteId: string): Promise<ScrapeAttempt[]> {
+        // TODO: Load from database
+        // For now, return empty array
+        return [];
+    }
+
+    /**
+     * Log scrape attempt to database
+     * 
+     * @param result - Attempt result
+     * @param strategy - Strategy used
+     * @param attemptNumber - Attempt number
+     */
+    private async logScrapeAttempt(
+        result: AttemptResult,
+        strategy: ScrapingStrategy,
+        attemptNumber: number
+    ): Promise<void> {
+        // TODO: Log to database
+        logger.debug('[ScrapeOrchestrator] Logging scrape attempt', {
+            strategy,
+            attemptNumber,
+            success: result.success,
+            protectionDetected: result.protectionDetected,
+        });
+    }
+
+    /**
+     * Cleanup resources
+     */
+    async cleanup(): Promise<void> {
+        await this.browserScraper.close();
+    }
+}
+
+/**
+ * Internal attempt result interface
+ */
+interface AttemptResult {
+    success: boolean;
+    price?: number;
+    currency?: string;
+    protectionDetected: boolean;
+    protectionType?: ProtectionType;
+    proxyId?: string;
+    screenshot?: Buffer;
+    errorMessage?: string;
+}

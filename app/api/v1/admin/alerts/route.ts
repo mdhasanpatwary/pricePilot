@@ -1,70 +1,97 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { alertRepository } from "@/lib/services/alert-repository";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+/**
+ * Admin Alerts API - Get unacknowledged alert count
+ * 
+ * GET /api/v1/admin/alerts?acknowledged=false
+ * 
+ * Returns the count of unacknowledged alerts for the admin sidebar badge
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 /**
  * GET /api/v1/admin/alerts
- * Get system alerts with optional filtering
  * 
- * Query params:
- * - acknowledged: boolean (optional) - filter by acknowledgment status
- * - severity: string (optional) - filter by severity (critical, warning, info)
- * - limit: number (optional) - limit number of results (default: 50)
- * 
- * Requirements: 11.2
+ * Get unacknowledged alert count
  */
-async function handleGET(request: NextRequest) {
+export async function GET(request: NextRequest) {
     try {
+        // Authenticate user
         const session = await getServerSession(authOptions);
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const user = session.user as any;
-        const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
-
-        if (!isAdmin) {
+        if (!session?.user?.id) {
             return NextResponse.json(
-                { error: "Unauthorized - Admin access required" },
+                {
+                    success: false,
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'Authentication required',
+                    },
+                },
                 { status: 401 }
             );
         }
 
-        const searchParams = request.nextUrl.searchParams;
-        const acknowledgedParam = searchParams.get("acknowledged");
-        const severity = searchParams.get("severity") as any;
-        const limit = parseInt(searchParams.get("limit") || "50");
+        // Get user's tenant
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { tenantId: true },
+        });
 
-        let alerts;
-
-        if (acknowledgedParam === "false") {
-            // Get unacknowledged alerts
-            alerts = await alertRepository.getUnacknowledgedAlerts(severity);
-        } else {
-            // Get recent alerts
-            const acknowledged = acknowledgedParam === "true" ? true : undefined;
-            alerts = await alertRepository.getRecentAlerts(limit, acknowledged);
+        if (!user?.tenantId) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'FORBIDDEN',
+                        message: 'User not associated with a tenant',
+                    },
+                },
+                { status: 403 }
+            );
         }
+
+        // Check if filtering for unacknowledged
+        const acknowledged = request.nextUrl.searchParams.get('acknowledged');
+
+        if (acknowledged === 'false') {
+            // Count unacknowledged alerts
+            const count = await prisma.scrapingAlert.count({
+                where: {
+                    tenantId: user.tenantId,
+                    acknowledged: false,
+                },
+            });
+
+            return NextResponse.json({
+                success: true,
+                unacknowledgedCount: count,
+            });
+        }
+
+        // Default: return all alerts count
+        const count = await prisma.scrapingAlert.count({
+            where: {
+                tenantId: user.tenantId,
+            },
+        });
 
         return NextResponse.json({
             success: true,
-            data: alerts,
+            totalCount: count,
         });
     } catch (error) {
-        console.error("[Alerts API] Error:", error);
+        console.error('Failed to fetch alert count:', error);
         return NextResponse.json(
             {
                 success: false,
-                error: "Failed to fetch alerts",
-                details: error instanceof Error ? error.message : "Unknown error",
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to fetch alert count',
+                },
             },
             { status: 500 }
         );
     }
-}
-
-export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/components/providers/auth-provider";
+import { AlertNotificationProvider } from "@/components/providers/alert-notification-provider";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "sonner";
@@ -32,7 +33,11 @@ export default async function RootLayout({
           disableTransitionOnChange
           nonce={nonce}
         >
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <AlertNotificationProvider>
+              {children}
+            </AlertNotificationProvider>
+          </AuthProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>

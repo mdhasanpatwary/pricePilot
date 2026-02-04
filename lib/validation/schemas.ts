@@ -771,3 +771,113 @@ export type BackupConfigInput = z.infer<typeof backupConfigSchema>;
 export type AlertRuleCreateInput = z.infer<typeof alertRuleCreateSchema>;
 export type AlertRuleUpdateInput = z.infer<typeof alertRuleUpdateSchema>;
 export type NotificationSettingsInput = z.infer<typeof notificationSettingsSchema>;
+
+// ============================================================================
+// SCRAPING CONFIGURATION SCHEMAS
+// ============================================================================
+
+/**
+ * Valid scraping strategies
+ */
+const scrapingStrategyEnum = z.enum([
+  "http_client",
+  "http_with_proxy",
+  "headless_browser",
+  "headless_with_proxy",
+  "stealth_browser",
+]);
+
+/**
+ * CSS selector validation - basic syntax check
+ */
+const cssSelectorSchema = z
+  .string()
+  .trim()
+  .min(1, "CSS selector cannot be empty")
+  .max(500, "CSS selector is too long")
+  .refine(
+    (selector) => {
+      // Basic validation - check for common CSS selector patterns
+      // This is not exhaustive but catches obvious errors
+      const invalidPatterns = [
+        /<script/i,
+        /javascript:/i,
+        /on\w+=/i,
+      ];
+      return !invalidPatterns.some((pattern) => pattern.test(selector));
+    },
+    { message: "CSS selector contains invalid characters" }
+  );
+
+/**
+ * Scraping configuration update schema
+ */
+export const updateScrapingConfigSchema = z.object({
+  preferredStrategy: scrapingStrategyEnum.optional(),
+  requiresJavascript: z.boolean().optional(),
+  proxyRequired: z.boolean().optional(),
+  baseDelayMs: z
+    .number()
+    .int("Base delay must be an integer")
+    .min(100, "Base delay must be at least 100ms")
+    .max(60000, "Base delay cannot exceed 60 seconds")
+    .optional(),
+  maxDelayMs: z
+    .number()
+    .int("Max delay must be an integer")
+    .min(1000, "Max delay must be at least 1 second")
+    .max(600000, "Max delay cannot exceed 10 minutes")
+    .optional(),
+  backoffMultiplier: z
+    .number()
+    .min(1.0, "Backoff multiplier must be at least 1.0")
+    .max(5.0, "Backoff multiplier cannot exceed 5.0")
+    .optional(),
+  maxRetries: z
+    .number()
+    .int("Max retries must be an integer")
+    .min(0, "Max retries cannot be negative")
+    .max(10, "Max retries cannot exceed 10")
+    .optional(),
+  timeoutMs: z
+    .number()
+    .int("Timeout must be an integer")
+    .min(5000, "Timeout must be at least 5 seconds")
+    .max(120000, "Timeout cannot exceed 2 minutes")
+    .optional(),
+  priceSelectors: z
+    .array(cssSelectorSchema)
+    .min(1, "At least one price selector is required")
+    .max(10, "Cannot have more than 10 price selectors")
+    .optional(),
+  currencySelector: cssSelectorSchema.optional().nullable(),
+  fallbackRegex: z
+    .string()
+    .trim()
+    .max(500, "Fallback regex is too long")
+    .optional()
+    .nullable(),
+}).refine(
+  (data) => {
+    // If both delays are provided, ensure baseDelay <= maxDelay
+    if (data.baseDelayMs !== undefined && data.maxDelayMs !== undefined) {
+      return data.baseDelayMs <= data.maxDelayMs;
+    }
+    return true;
+  },
+  {
+    message: "Base delay must be less than or equal to max delay",
+    path: ["baseDelayMs"],
+  }
+);
+
+/**
+ * Test scraping configuration schema
+ */
+export const testScrapingConfigSchema = z.object({
+  testUrl: urlSchema.optional(),
+  config: updateScrapingConfigSchema.optional(),
+});
+
+export type UpdateScrapingConfigInput = z.infer<typeof updateScrapingConfigSchema>;
+export type TestScrapingConfigInput = z.infer<typeof testScrapingConfigSchema>;

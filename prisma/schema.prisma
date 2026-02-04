@@ -166,6 +166,12 @@ model Site {
   tenant              Tenant        @relation(fields: [tenantId], references: [id])
   syncLogs            SyncLog[]
   scrapeRetries       ScrapeRetry[]
+  proxySiteHealth     ProxySiteHealth[]
+  scrapingConfigs     ScrapingConfig[]
+  scrapingCookieJars  ScrapingCookieJar[]
+  scrapeAttempts      ScrapeAttempt[]
+  scrapingMetrics     ScrapingMetric[]
+  scrapingAlerts      ScrapingAlert[]
 }
 
 model SyncLog {
@@ -218,6 +224,7 @@ model Product {
   matchesAsUser       ProductMatch[]       @relation("UserProduct")
   scrapeRetries       ScrapeRetry[]
   pendingPriceChanges PendingPriceChange[]
+  scrapeAttempts      ScrapeAttempt[]
 
   @@index([sku])
   @@index([tenantId])
@@ -1210,4 +1217,178 @@ enum FeedbackCategory {
   NOTIFICATIONS
   SECURITY
   RELIABILITY
+}
+
+// Bot Protection Handling Models
+
+model Proxy {
+  id                   String            @id @default(uuid())
+  provider             String
+  host                 String
+  port                 Int
+  protocol             String // 'http', 'https', 'socks5'
+  username             String?
+  passwordEncrypted    String?
+  region               String?
+  status               String            @default("active") // 'active', 'disabled'
+  globalSuccessCount   Int               @default(0)
+  globalFailureCount   Int               @default(0)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  
+  siteHealth           ProxySiteHealth[]
+  scrapeAttempts       ScrapeAttempt[]
+
+  @@unique([host, port])
+  @@index([status])
+}
+
+model ProxySiteHealth {
+  id                   String   @id @default(uuid())
+  proxyId              String
+  competitorWebsiteId  String
+  successCount         Int      @default(0)
+  failureCount         Int      @default(0)
+  lastSuccessAt        DateTime?
+  lastFailureAt        DateTime?
+  cooldownUntil        DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  proxy                Proxy    @relation(fields: [proxyId], references: [id], onDelete: Cascade)
+  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@unique([proxyId, competitorWebsiteId])
+  @@index([proxyId])
+  @@index([competitorWebsiteId])
+  @@index([cooldownUntil])
+}
+
+model ScrapingConfig {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  competitorWebsiteId  String   @unique
+  preferredStrategy    String   @default("http_client") // 'http_client', 'http_with_proxy', 'headless_browser', etc.
+  requiresJavascript   Boolean  @default(false)
+  proxyRequired        Boolean  @default(false)
+  baseDelayMs          Int      @default(2000)
+  maxDelayMs           Int      @default(300000)
+  backoffMultiplier    Decimal  @db.Decimal(3, 2) @default(2.0)
+  maxRetries           Int      @default(3)
+  timeoutMs            Int      @default(30000)
+  priceSelectors       Json // Array of CSS selectors
+  currencySelector     String?
+  fallbackRegex        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([competitorWebsiteId])
+}
+
+model ScrapingCookieJar {
+  id                   String   @id @default(uuid())
+  competitorWebsiteId  String   @unique
+  cookies              Json
+  expiresAt            DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([competitorWebsiteId])
+  @@index([expiresAt])
+}
+
+model ScrapeAttempt {
+  id                   String              @id @default(uuid())
+  tenantId             String
+  competitorProductId  String
+  competitorWebsiteId  String
+  url                  String              @db.Text
+  strategy             String // 'http_client', 'headless_browser', etc.
+  proxyId              String?
+  userAgent            String              @db.Text
+  success              Boolean
+  protectionDetected   Boolean             @default(false)
+  protectionType       String?
+  statusCode           Int?
+  responseTimeMs       Int?
+  responseSizeBytes    Int?
+  responseSample       String?             @db.Text // First 1KB
+  screenshotUrl        String?
+  errorMessage         String?             @db.Text
+  attemptNumber        Int
+  createdAt            DateTime            @default(now())
+
+  proxy                Proxy?              @relation(fields: [proxyId], references: [id], onDelete: SetNull)
+  competitorProduct    Product             @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+  competitorWebsite    Site                @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  detections           ProtectionDetection[]
+
+  @@index([tenantId])
+  @@index([competitorProductId])
+  @@index([competitorWebsiteId])
+  @@index([createdAt])
+  @@index([success])
+  @@index([protectionDetected, protectionType])
+}
+
+model ProtectionDetection {
+  id               String        @id @default(uuid())
+  scrapeAttemptId  String
+  protectionType   String // 'ip_block', 'captcha', 'fake_data', etc.
+  confidence       Decimal       @db.Decimal(5, 2)
+  indicators       Json // Array of indicator strings
+  reasoning        String?       @db.Text
+  createdAt        DateTime      @default(now())
+
+  scrapeAttempt    ScrapeAttempt @relation(fields: [scrapeAttemptId], references: [id], onDelete: Cascade)
+
+  @@index([scrapeAttemptId])
+  @@index([protectionType])
+}
+
+model ScrapingMetric {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  competitorWebsiteId  String
+  hourTimestamp        DateTime
+  totalAttempts        Int      @default(0)
+  successfulAttempts   Int      @default(0)
+  failedAttempts       Int      @default(0)
+  avgResponseTimeMs    Int?
+  protectionTypeCounts Json? // {ip_block: 5, captcha: 2, ...}
+  strategyCounts       Json? // {http_client: 10, headless_browser: 5, ...}
+  createdAt            DateTime @default(now())
+
+  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, competitorWebsiteId, hourTimestamp])
+  @@index([tenantId, hourTimestamp])
+  @@index([competitorWebsiteId, hourTimestamp])
+}
+
+model ScrapingAlert {
+  id                   String    @id @default(uuid())
+  tenantId             String
+  competitorWebsiteId  String?
+  severity             String // 'info', 'warning', 'critical'
+  type                 String // 'success_rate_drop', 'captcha_detected', etc.
+  title                String
+  message              String    @db.Text
+  metadata             Json?
+  acknowledged         Boolean   @default(false)
+  acknowledgedAt       DateTime?
+  acknowledgedBy       String?
+  createdAt            DateTime  @default(now())
+
+  competitorWebsite    Site?     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([competitorWebsiteId])
+  @@index([acknowledged])
+  @@index([createdAt])
 }

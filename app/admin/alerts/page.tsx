@@ -1,19 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import {
-    AlertTriangle,
-    AlertCircle,
-    Info,
-    CheckCircle,
-    RefreshCw,
-    Clock,
-    Server,
-    Filter,
-    XCircle,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, CheckCircle, Info, XCircle, Clock, Filter, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -22,434 +14,424 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
+/**
+ * Alert severity levels
+ */
+type AlertSeverity = 'info' | 'warning' | 'critical';
+
+/**
+ * Alert types for different scraping issues
+ */
+type AlertType =
+    | 'success_rate_drop'
+    | 'captcha_detected'
+    | 'all_proxies_blocked'
+    | 'site_blocked'
+    | 'high_failure_rate'
+    | 'scraping_recovered';
+
+/**
+ * Alert interface
+ */
 interface Alert {
     id: string;
-    severity: "critical" | "warning" | "info";
-    type: string;
+    tenantId: string;
+    severity: AlertSeverity;
+    type: AlertType;
+    title: string;
     message: string;
-    site: string | null;
-    proxyUrl: string | null;
+    competitorWebsiteId?: string;
+    competitorSiteName?: string;
+    metadata: Record<string, any>;
+    timestamp: Date;
     acknowledged: boolean;
-    acknowledgedAt: string | null;
-    createdAt: string;
 }
 
-interface AlertsResponse {
-    alerts: Alert[];
-    unacknowledgedCount: number;
+/**
+ * Get icon for alert severity
+ */
+function getSeverityIcon(severity: AlertSeverity) {
+    switch (severity) {
+        case 'critical':
+            return XCircle;
+        case 'warning':
+            return AlertTriangle;
+        case 'info':
+            return Info;
+        default:
+            return Info;
+    }
 }
 
+/**
+ * Get color classes for alert severity
+ */
+function getSeverityColors(severity: AlertSeverity) {
+    switch (severity) {
+        case 'critical':
+            return {
+                bg: 'bg-red-50 dark:bg-red-950/20',
+                border: 'border-red-200 dark:border-red-900',
+                icon: 'text-red-600 dark:text-red-400',
+                badge: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+            };
+        case 'warning':
+            return {
+                bg: 'bg-amber-50 dark:bg-amber-950/20',
+                border: 'border-amber-200 dark:border-amber-900',
+                icon: 'text-amber-600 dark:text-amber-400',
+                badge: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+            };
+        case 'info':
+            return {
+                bg: 'bg-blue-50 dark:bg-blue-950/20',
+                border: 'border-blue-200 dark:border-blue-900',
+                icon: 'text-blue-600 dark:text-blue-400',
+                badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+            };
+        default:
+            return {
+                bg: 'bg-gray-50 dark:bg-gray-950/20',
+                border: 'border-gray-200 dark:border-gray-900',
+                icon: 'text-gray-600 dark:text-gray-400',
+                badge: 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300',
+            };
+    }
+}
+
+/**
+ * Format timestamp as relative time
+ */
+function formatRelativeTime(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - new Date(date).getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return new Date(date).toLocaleDateString();
+}
+
+/**
+ * Admin Alerts Page
+ * 
+ * Displays all scraping alerts with filtering and management capabilities.
+ * 
+ * Requirements: 11.5, 12.1
+ */
 export default function AlertsPage() {
-    const [data, setData] = useState<AlertsResponse | null>(null);
+    const router = useRouter();
+    const [alerts, setAlerts] = useState<Alert[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [severityFilter, setSeverityFilter] = useState<string>('all');
+    const [acknowledgedFilter, setAcknowledgedFilter] = useState<string>('all');
     const [refreshing, setRefreshing] = useState(false);
-    const [severityFilter, setSeverityFilter] = useState<string>("all");
-    const [acknowledgedFilter, setAcknowledgedFilter] = useState<string>("all");
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [acknowledgingIds, setAcknowledgingIds] = useState<Set<string>>(
-        new Set()
-    );
 
-    const fetchAlerts = useCallback(async (showRefreshing = false) => {
-        if (showRefreshing) {
-            setRefreshing(true);
-        } else {
-            setLoading(true);
-        }
+    useEffect(() => {
+        fetchAlerts();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [severityFilter, acknowledgedFilter]);
 
+    const fetchAlerts = async () => {
         try {
+            setRefreshing(true);
             const params = new URLSearchParams();
-            if (severityFilter !== "all") {
-                params.append("severity", severityFilter);
-            }
-            if (acknowledgedFilter !== "all") {
-                params.append(
-                    "acknowledged",
-                    acknowledgedFilter === "acknowledged" ? "true" : "false"
-                );
-            }
+            if (severityFilter !== 'all') params.append('severity', severityFilter);
+            if (acknowledgedFilter !== 'all') params.append('acknowledged', acknowledgedFilter);
 
-            const res = await fetch(`/api/v1/admin/alerts?${params.toString()}`);
-            if (res.ok) {
-                const json: AlertsResponse = await res.json();
-                setData(json);
-                setLastUpdated(new Date());
-            } else {
-                console.error("Failed to fetch alerts");
+            const res = await fetch(`/api/v1/scraping/alerts?${params.toString()}`);
+            if (!res.ok) {
+                throw new Error('Failed to fetch alerts');
             }
-        } catch (error) {
-            console.error("Error fetching alerts:", error);
+            const data = await res.json();
+            setAlerts(data.data.alerts || []);
+            setError(null);
+        } catch (err) {
+            console.error('Failed to fetch alerts:', err);
+            setError('Failed to load alerts');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [severityFilter, acknowledgedFilter]);
-
-    useEffect(() => {
-        fetchAlerts();
-    }, [fetchAlerts]);
-
-    const handleRefresh = () => {
-        fetchAlerts(true);
     };
 
     const handleAcknowledge = async (alertId: string) => {
-        setAcknowledgingIds((prev) => new Set(prev).add(alertId));
-
         try {
-            const res = await fetch(`/api/v1/admin/alerts/${alertId}/acknowledge`, {
-                method: "POST",
+            const res = await fetch(`/api/v1/scraping/alerts/${alertId}/acknowledge`, {
+                method: 'POST',
             });
-
-            if (res.ok) {
-                // Update the alert in the local state
-                setData((prevData) => {
-                    if (!prevData) return prevData;
-                    return {
-                        ...prevData,
-                        alerts: prevData.alerts.map((alert) =>
-                            alert.id === alertId
-                                ? {
-                                    ...alert,
-                                    acknowledged: true,
-                                    acknowledgedAt: new Date().toISOString(),
-                                }
-                                : alert
-                        ),
-                        unacknowledgedCount: Math.max(
-                            0,
-                            prevData.unacknowledgedCount - 1
-                        ),
-                    };
-                });
-            } else {
-                console.error("Failed to acknowledge alert");
+            if (!res.ok) {
+                throw new Error('Failed to acknowledge alert');
             }
-        } catch (error) {
-            console.error("Error acknowledging alert:", error);
-        } finally {
-            setAcknowledgingIds((prev) => {
-                const newSet = new Set(prev);
-                newSet.delete(alertId);
-                return newSet;
+            // Refresh alerts
+            await fetchAlerts();
+        } catch (err) {
+            console.error('Failed to acknowledge alert:', err);
+        }
+    };
+
+    const handleDismiss = async (alertId: string) => {
+        try {
+            const res = await fetch(`/api/v1/scraping/alerts/${alertId}`, {
+                method: 'DELETE',
             });
+            if (!res.ok) {
+                throw new Error('Failed to dismiss alert');
+            }
+            // Refresh alerts
+            await fetchAlerts();
+        } catch (err) {
+            console.error('Failed to dismiss alert:', err);
         }
     };
 
-    const getSeverityIcon = (severity: string) => {
-        switch (severity) {
-            case "critical":
-                return <XCircle className="w-4 h-4" />;
-            case "warning":
-                return <AlertTriangle className="w-4 h-4" />;
-            case "info":
-                return <Info className="w-4 h-4" />;
-            default:
-                return <AlertCircle className="w-4 h-4" />;
+    const handleViewLogs = (alert: Alert) => {
+        if (alert.competitorWebsiteId) {
+            router.push(`/admin/scraping-monitor/${alert.competitorWebsiteId}`);
         }
     };
 
-    const getSeverityColor = (severity: string) => {
-        switch (severity) {
-            case "critical":
-                return "text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-950/20";
-            case "warning":
-                return "text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20";
-            case "info":
-                return "text-blue-600 dark:text-blue-500 bg-blue-50 dark:bg-blue-950/20";
-            default:
-                return "text-muted-foreground bg-muted";
-        }
-    };
+    const unacknowledgedCount = alerts.filter((a) => !a.acknowledged).length;
+    const criticalCount = alerts.filter((a) => a.severity === 'critical' && !a.acknowledged).length;
 
-    const getSeverityBadgeVariant = (
-        severity: string
-    ): "destructive" | "warning" | "default" => {
-        switch (severity) {
-            case "critical":
-                return "destructive";
-            case "warning":
-                return "warning";
-            default:
-                return "default";
-        }
-    };
-
-    if (loading && !data) {
+    if (loading) {
         return (
-            <div className="flex h-[50vh] w-full items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-                    <p className="text-sm text-muted-foreground font-medium">
-                        Loading alerts...
-                    </p>
-                </div>
+            <div className="flex items-center justify-center h-64">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
         );
     }
 
-    const alerts = data?.alerts || [];
-    const unacknowledgedCount = data?.unacknowledgedCount || 0;
-
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">
-                        System Alerts
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Monitor and manage critical system alerts and notifications
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    {lastUpdated && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Updated: {lastUpdated.toLocaleTimeString()}</span>
-                        </div>
-                    )}
-                    <Button
-                        onClick={handleRefresh}
-                        disabled={refreshing}
-                        variant="outline"
-                        size="sm"
-                        aria-label="Refresh alerts"
-                    >
-                        <RefreshCw
-                            className={cn("w-4 h-4", refreshing && "animate-spin")}
-                            aria-hidden="true"
-                        />
-                        Refresh
-                    </Button>
-                </div>
+            <div>
+                <h1 className="text-2xl font-semibold text-foreground mb-2">Scraping Alerts</h1>
+                <p className="text-sm text-muted-foreground">
+                    Monitor and manage scraping alerts across all competitor sites
+                </p>
             </div>
 
-            {/* Stats Card */}
-            <Card className="p-5" role="status" aria-live="polite" aria-atomic="true">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                            Unacknowledged Alerts
-                        </p>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-bold text-foreground">
-                                {unacknowledgedCount}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                                require attention
-                            </span>
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-muted-foreground mb-1">Total Alerts</p>
+                            <p className="text-2xl font-semibold text-foreground">{alerts.length}</p>
                         </div>
+                        <AlertTriangle className="w-8 h-8 text-muted-foreground/30" />
                     </div>
-                    <div className="p-3 bg-red-50 dark:bg-red-950/20 rounded-lg">
-                        <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-500" />
+                </Card>
+
+                <Card className="p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-muted-foreground mb-1">Active Alerts</p>
+                            <p className="text-2xl font-semibold text-foreground">{unacknowledgedCount}</p>
+                        </div>
+                        <XCircle className="w-8 h-8 text-amber-500/30" />
                     </div>
-                </div>
-            </Card>
+                </Card>
+
+                <Card className="p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-muted-foreground mb-1">Critical Alerts</p>
+                            <p className="text-2xl font-semibold text-red-600 dark:text-red-400">{criticalCount}</p>
+                        </div>
+                        <XCircle className="w-8 h-8 text-red-500/30" />
+                    </div>
+                </Card>
+            </div>
 
             {/* Filters */}
             <Card className="p-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">Filters:</span>
+                <div className="flex items-center gap-4">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex items-center gap-2 flex-1">
+                        <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Severity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Severities</SelectItem>
+                                <SelectItem value="critical">Critical</SelectItem>
+                                <SelectItem value="warning">Warning</SelectItem>
+                                <SelectItem value="info">Info</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={acknowledgedFilter} onValueChange={setAcknowledgedFilter}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Alerts</SelectItem>
+                                <SelectItem value="false">Active Only</SelectItem>
+                                <SelectItem value="true">Acknowledged Only</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs text-muted-foreground">
-                                Severity:
-                            </label>
-                            <Select
-                                value={severityFilter}
-                                onValueChange={setSeverityFilter}
-                            >
-                                <SelectTrigger className="w-[140px] h-8">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Severities</SelectItem>
-                                    <SelectItem value="critical">Critical</SelectItem>
-                                    <SelectItem value="warning">Warning</SelectItem>
-                                    <SelectItem value="info">Info</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs text-muted-foreground">
-                                Status:
-                            </label>
-                            <Select
-                                value={acknowledgedFilter}
-                                onValueChange={setAcknowledgedFilter}
-                            >
-                                <SelectTrigger className="w-[140px] h-8">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Alerts</SelectItem>
-                                    <SelectItem value="unacknowledged">
-                                        Unacknowledged
-                                    </SelectItem>
-                                    <SelectItem value="acknowledged">
-                                        Acknowledged
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
+
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchAlerts}
+                        disabled={refreshing}
+                    >
+                        <RefreshCw className={cn("w-4 h-4 mr-2", refreshing && "animate-spin")} />
+                        Refresh
+                    </Button>
                 </div>
             </Card>
 
             {/* Alerts List */}
-            <div className="space-y-3">
-                {alerts.length === 0 ? (
-                    <Card className="p-12">
-                        <div className="flex flex-col items-center gap-3 text-center">
-                            <div className="p-3 bg-muted rounded-full">
-                                <CheckCircle className="w-8 h-8 text-muted-foreground" />
-                            </div>
-                            <div>
-                                <p className="font-semibold text-foreground mb-1">
-                                    No alerts found
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                    {severityFilter !== "all" ||
-                                        acknowledgedFilter !== "all"
-                                        ? "Try adjusting your filters to see more alerts"
-                                        : "All systems are operating normally"}
-                                </p>
-                            </div>
-                        </div>
-                    </Card>
-                ) : (
-                    alerts.map((alert) => (
-                        <Card
-                            key={alert.id}
-                            className={cn(
-                                "p-5 transition-all focus-within:ring-2 focus-within:ring-primary",
-                                !alert.acknowledged &&
-                                "border-l-4",
-                                alert.severity === "critical" &&
-                                !alert.acknowledged &&
-                                "border-l-red-500",
-                                alert.severity === "warning" &&
-                                !alert.acknowledged &&
-                                "border-l-amber-500",
-                                alert.severity === "info" &&
-                                !alert.acknowledged &&
-                                "border-l-blue-500"
-                            )}
-                            role="article"
-                            aria-label={`${alert.severity} alert: ${alert.message}`}
-                        >
-                            <div className="flex items-start gap-4">
-                                {/* Severity Icon */}
-                                <div
-                                    className={cn(
-                                        "p-2 rounded-lg shrink-0",
-                                        getSeverityColor(alert.severity)
-                                    )}
-                                >
-                                    {getSeverityIcon(alert.severity)}
-                                </div>
+            {error ? (
+                <Card className="p-6">
+                    <div className="flex items-center justify-center h-32 text-muted-foreground">
+                        <p className="text-sm">{error}</p>
+                    </div>
+                </Card>
+            ) : alerts.length === 0 ? (
+                <Card className="p-6">
+                    <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                        <CheckCircle className="w-8 h-8 mb-2 text-green-500" />
+                        <p className="text-sm font-medium">No Alerts Found</p>
+                        <p className="text-xs mt-1">All systems operating normally</p>
+                    </div>
+                </Card>
+            ) : (
+                <div className="space-y-3">
+                    {alerts.map((alert) => {
+                        const Icon = getSeverityIcon(alert.severity);
+                        const colors = getSeverityColors(alert.severity);
 
-                                {/* Alert Content */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-4 mb-2">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <Badge
-                                                variant={getSeverityBadgeVariant(
-                                                    alert.severity
+                        return (
+                            <Card key={alert.id} className={cn("p-5", colors.bg, colors.border)}>
+                                <div className="flex items-start gap-4">
+                                    <Icon className={cn("w-6 h-6 mt-0.5 shrink-0", colors.icon)} />
+
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <div>
+                                                <h3 className="text-base font-semibold text-foreground mb-1">
+                                                    {alert.title}
+                                                </h3>
+                                                <Badge className={cn("text-[10px] px-2 py-0.5", colors.badge)}>
+                                                    {alert.severity.toUpperCase()}
+                                                </Badge>
+                                            </div>
+                                            {alert.acknowledged && (
+                                                <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                                    <CheckCircle className="w-4 h-4" />
+                                                    <span>Acknowledged</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <p className="text-sm text-muted-foreground mb-3">
+                                            {alert.message}
+                                        </p>
+
+                                        {/* Metadata */}
+                                        {alert.metadata && Object.keys(alert.metadata).length > 0 && (
+                                            <div className="mb-3 p-3 bg-background/50 rounded-md">
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                                    {alert.metadata.successRate !== undefined && (
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground">Success Rate</p>
+                                                            <p className="text-sm font-medium text-foreground">
+                                                                {alert.metadata.successRate.toFixed(1)}%
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {alert.metadata.recentAttempts !== undefined && (
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground">Recent Attempts</p>
+                                                            <p className="text-sm font-medium text-foreground">
+                                                                {alert.metadata.recentAttempts}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {alert.metadata.blockedProxies !== undefined && (
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground">Blocked Proxies</p>
+                                                            <p className="text-sm font-medium text-foreground">
+                                                                {alert.metadata.blockedProxies} / {alert.metadata.totalProxies}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {alert.metadata.recentCaptchas !== undefined && (
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground">CAPTCHA Detections</p>
+                                                            <p className="text-sm font-medium text-foreground">
+                                                                {alert.metadata.recentCaptchas}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Footer */}
+                                        <div className="flex items-center justify-between gap-4 pt-3 border-t border-border/50">
+                                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                                <div className="flex items-center gap-1">
+                                                    <Clock className="w-3 h-3" />
+                                                    <span>{formatRelativeTime(alert.timestamp)}</span>
+                                                </div>
+                                                {alert.competitorSiteName && (
+                                                    <>
+                                                        <span className="text-muted-foreground/60">•</span>
+                                                        <span className="truncate max-w-[300px]">
+                                                            {alert.competitorSiteName}
+                                                        </span>
+                                                    </>
                                                 )}
-                                                className="uppercase text-[10px]"
-                                                role="status"
-                                                aria-label={`Severity: ${alert.severity}`}
-                                            >
-                                                {alert.severity}
-                                            </Badge>
-                                            <span className="text-xs text-muted-foreground">
-                                                {alert.type.replace(/_/g, " ")}
-                                            </span>
-                                        </div>
-                                        {alert.acknowledged && (
-                                            <Badge
-                                                variant="outline"
-                                                className="text-[10px] gap-1"
-                                            >
-                                                <CheckCircle className="w-3 h-3" />
-                                                Acknowledged
-                                            </Badge>
-                                        )}
-                                    </div>
-
-                                    <p className="text-sm font-medium text-foreground mb-3">
-                                        {alert.message}
-                                    </p>
-
-                                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                                        {alert.site && (
-                                            <div className="flex items-center gap-1.5">
-                                                <Server className="w-3.5 h-3.5" />
-                                                <span>Site: {alert.site}</span>
                                             </div>
-                                        )}
-                                        {alert.proxyUrl && (
-                                            <div className="flex items-center gap-1.5">
-                                                <Server className="w-3.5 h-3.5" />
-                                                <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">
-                                                    {alert.proxyUrl}
-                                                </code>
+
+                                            <div className="flex items-center gap-2">
+                                                {alert.competitorWebsiteId && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleViewLogs(alert)}
+                                                    >
+                                                        View Logs
+                                                    </Button>
+                                                )}
+                                                {!alert.acknowledged && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleAcknowledge(alert.id)}
+                                                    >
+                                                        Acknowledge
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDismiss(alert.id)}
+                                                >
+                                                    Dismiss
+                                                </Button>
                                             </div>
-                                        )}
-                                        <div className="flex items-center gap-1.5">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            <span>
-                                                {new Date(alert.createdAt).toLocaleString()}
-                                            </span>
                                         </div>
                                     </div>
-
-                                    {alert.acknowledgedAt && (
-                                        <div className="mt-2 text-xs text-muted-foreground">
-                                            Acknowledged at{" "}
-                                            {new Date(
-                                                alert.acknowledgedAt
-                                            ).toLocaleString()}
-                                        </div>
-                                    )}
                                 </div>
-
-                                {/* Action Button */}
-                                {!alert.acknowledged && (
-                                    <Button
-                                        onClick={() => handleAcknowledge(alert.id)}
-                                        disabled={acknowledgingIds.has(alert.id)}
-                                        size="sm"
-                                        variant="outline"
-                                        className="shrink-0"
-                                        aria-label={`Acknowledge ${alert.severity} alert: ${alert.message}`}
-                                    >
-                                        {acknowledgingIds.has(alert.id) ? (
-                                            <>
-                                                <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" aria-hidden="true" />
-                                                Acknowledging...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <CheckCircle className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
-                                                Acknowledge
-                                            </>
-                                        )}
-                                    </Button>
-                                )}
-                            </div>
-                        </Card>
-                    ))
-                )}
-            </div>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }
