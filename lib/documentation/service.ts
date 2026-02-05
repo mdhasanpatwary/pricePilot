@@ -13,6 +13,7 @@ import { DocumentationType } from '@prisma/client';
 import { parseMarkdown } from './parser';
 import { diffLines, Change } from 'diff';
 import { validateDocumentContent } from './validation';
+import { documentationMonitor } from './monitoring';
 
 // ============================================================================
 // Types and Interfaces
@@ -316,6 +317,19 @@ export class DocumentationService {
             },
         });
 
+        // Log document creation
+        await documentationMonitor.logDocumentModification(
+            doc.id,
+            'CREATE',
+            data.metadata?.author || 'system',
+            {
+                type,
+                slug: data.slug,
+                title: data.title,
+                category: data.category,
+            }
+        );
+
         return this.mapDocumentToInterface(doc);
     }
 
@@ -378,6 +392,18 @@ export class DocumentationService {
                 updatedAt: new Date(),
             },
         });
+
+        // Log document update
+        await documentationMonitor.logDocumentModification(
+            documentId,
+            'UPDATE',
+            userId,
+            {
+                changeDescription,
+                previousVersion: currentDoc.content.substring(0, 100) + '...',
+                newVersion: content.substring(0, 100) + '...',
+            }
+        );
 
         return this.mapDocumentToInterface(updatedDoc);
     }

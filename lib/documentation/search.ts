@@ -8,6 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { DocumentationType } from '@prisma/client';
 import { SearchError } from './errors';
+import { searchCache } from './search-cache';
 
 export interface SearchOptions {
     category?: string;
@@ -114,17 +115,28 @@ export class SearchService {
     /**
      * Execute a full-text search query
      * Ranks results by relevance: title matches > heading matches > content matches
-     * Includes retry logic with exponential backoff
+     * Includes retry logic with exponential backoff and caching
      */
     async search(
         query: string,
         type: DocumentationType,
         options: SearchOptions = {}
     ): Promise<SearchResults> {
+        // Check cache first
+        const cachedResults = await searchCache.get(query, type, options);
+        if (cachedResults) {
+            return cachedResults;
+        }
+
         try {
-            return await this.withRetry(async () => {
+            const results = await this.withRetry(async () => {
                 return await this.executeSearch(query, type, options);
             });
+
+            // Cache successful results
+            await searchCache.set(query, type, options, results);
+
+            return results;
         } catch (error) {
             console.error('Search failed after retries:', error);
 
@@ -164,9 +176,26 @@ export class SearchService {
         // Build the tsquery for PostgreSQL full-text search
         const tsquery = sanitizedQuery.split(/\s+/).filter(Boolean).join(' & ');
 
-        // Execute search with ranking
-        // ts_rank_cd gives higher weight to title matches
-        const results = await prisma.$queryRaw<Array<{
+        // Build WHERE clause conditions
+        const whereConditions = [`type = $1::"DocumentationType"`];
+        const params: any[] = [type];
+        let paramIndex = 2;
+
+        whereConditions.push(`to_tsvector('english', title || ' ' || content) @@ to_tsquery('english', $${paramIndex})`);
+        params.push(tsquery);
+        paramIndex++;
+
+        if (category) {
+            whereConditions.push(`category = $${paramIndex}`);
+            params.push(category);
+            paramIndex++;
+        }
+
+        const whereClause = whereConditions.join(' AND ');
+
+        // Execute optimized search with ranking
+        // Use ts_rank_cd with weights: title gets 3x weight, content gets 1x weight
+        const results = await prisma.$queryRawUnsafe<Array<{
             id: string;
             type: DocumentationType;
             slug: string;
@@ -176,43 +205,46 @@ export class SearchService {
             subcategory: string | null;
             metadata: any;
             rank: number;
-        }>>`
-      SELECT 
-        id,
-        type,
-        slug,
-        title,
-        content,
-        category,
-        subcategory,
-        metadata,
-        ts_rank_cd(
-          to_tsvector('english', title || ' ' || title || ' ' || content),
-          to_tsquery('english', ${tsquery})
-        ) as rank
-      FROM "DocumentationDocument"
-      WHERE 
-        type = ${type}::"DocumentationType"
-        AND to_tsvector('english', title || ' ' || content) @@ to_tsquery('english', ${tsquery})
-        ${category ? prisma.$queryRawUnsafe(`AND category = '${category}'`) : prisma.$queryRawUnsafe('')}
-      ORDER BY rank DESC, "updatedAt" DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `;
+        }>>(
+            `
+            SELECT 
+                id,
+                type,
+                slug,
+                title,
+                LEFT(content, 500) as content,
+                category,
+                subcategory,
+                metadata,
+                ts_rank_cd(
+                    to_tsvector('english', title || ' ' || title || ' ' || content),
+                    to_tsquery('english', $${params.length - (category ? 1 : 0)}),
+                    32
+                ) as rank
+            FROM "DocumentationDocument"
+            WHERE ${whereClause}
+            ORDER BY rank DESC, "updatedAt" DESC
+            LIMIT $${paramIndex}
+            OFFSET $${paramIndex + 1}
+            `,
+            ...params,
+            limit,
+            offset
+        );
 
-        // Get total count for pagination
-        const countResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*) as count
-      FROM "DocumentationDocument"
-      WHERE 
-        type = ${type}::"DocumentationType"
-        AND to_tsvector('english', title || ' ' || content) @@ to_tsquery('english', ${tsquery})
-        ${category ? prisma.$queryRawUnsafe(`AND category = '${category}'`) : prisma.$queryRawUnsafe('')}
-    `;
+        // Get total count for pagination (optimized with covering index)
+        const countResult = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+            `
+            SELECT COUNT(*) as count
+            FROM "DocumentationDocument"
+            WHERE ${whereClause}
+            `,
+            ...params.slice(0, params.length)
+        );
 
         const total = Number(countResult[0]?.count || 0);
 
-        // Filter by tags if provided
+        // Filter by tags if provided (in-memory filtering for flexibility)
         let filteredResults = results;
         if (tags && tags.length > 0) {
             filteredResults = results.filter(doc => {
@@ -222,26 +254,26 @@ export class SearchService {
         }
 
         // Transform results
-        const searchResults: SearchResult[] = await Promise.all(
-            filteredResults.map(async (doc) => {
-                const excerpt = this.generateExcerpt(doc.content, sanitizedQuery);
-                const breadcrumbs = this.generateBreadcrumbs(doc);
-                const matchedTerms = this.extractMatchedTerms(doc.title + ' ' + doc.content, sanitizedQuery);
+        const searchResults: SearchResult[] = filteredResults.map((doc) => {
+            const excerpt = this.generateExcerpt(doc.content, sanitizedQuery);
+            const breadcrumbs = this.generateBreadcrumbs(doc);
+            const matchedTerms = this.extractMatchedTerms(doc.title + ' ' + doc.content, sanitizedQuery);
 
-                return {
-                    documentId: doc.id,
-                    title: doc.title,
-                    slug: doc.slug,
-                    excerpt,
-                    breadcrumbs,
-                    relevanceScore: doc.rank,
-                    matchedTerms
-                };
-            })
+            return {
+                documentId: doc.id,
+                title: doc.title,
+                slug: doc.slug,
+                excerpt,
+                breadcrumbs,
+                relevanceScore: doc.rank,
+                matchedTerms
+            };
+        });
+
+        // Record the search for analytics (async, don't wait)
+        this.recordSearch(query, type, searchResults.length).catch(err =>
+            console.error('Failed to record search:', err)
         );
-
-        // Record the search for analytics
-        await this.recordSearch(query, type, searchResults.length);
 
         // If no results, provide suggestions
         const suggestions = searchResults.length === 0
@@ -401,6 +433,31 @@ export class SearchService {
         });
 
         return popularDocs.map((doc: { title: string }) => doc.title);
+    }
+
+    /**
+     * Invalidate search cache when documents are updated
+     */
+    async invalidateCache(type: DocumentationType, category?: string): Promise<void> {
+        if (category) {
+            await searchCache.invalidateCategory(type, category);
+        } else {
+            await searchCache.invalidateType(type);
+        }
+    }
+
+    /**
+     * Clear all search cache
+     */
+    async clearCache(): Promise<void> {
+        await searchCache.clear();
+    }
+
+    /**
+     * Get cache statistics
+     */
+    getCacheStats() {
+        return searchCache.getStats();
     }
 }
 

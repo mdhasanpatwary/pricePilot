@@ -12,6 +12,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { DocumentationType, DocumentationSuggestionStatus } from '@prisma/client';
+import { documentationMonitor } from './monitoring';
 
 // ============================================================================
 // Types and Interfaces
@@ -585,6 +586,19 @@ export class DocumentationHook {
                 taskId: data.taskId,
             },
         });
+
+        // Log suggestion generation
+        await documentationMonitor.logSuggestionGeneration(
+            suggestion.id,
+            data.documentId || null,
+            docType,
+            data.taskId,
+            {
+                category: data.category,
+                hasTitle: !!data.suggestedTitle,
+                contentLength: data.suggestedContent.length,
+            }
+        );
 
         return {
             id: suggestion.id,
