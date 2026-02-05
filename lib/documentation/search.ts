@@ -7,6 +7,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { DocumentationType } from '@prisma/client';
+import { SearchError } from './errors';
 
 export interface SearchOptions {
     category?: string;
@@ -38,6 +39,28 @@ export interface SearchResults {
 }
 
 export class SearchService {
+    private readonly MAX_RETRIES = 3;
+    private readonly RETRY_DELAY_MS = 1000;
+
+    /**
+     * Execute operation with retry logic
+     */
+    private async withRetry<T>(
+        operation: () => Promise<T>,
+        retries: number = this.MAX_RETRIES
+    ): Promise<T> {
+        try {
+            return await operation();
+        } catch (error) {
+            if (retries > 0) {
+                // Exponential backoff
+                const delay = this.RETRY_DELAY_MS * (this.MAX_RETRIES - retries + 1);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.withRetry(operation, retries - 1);
+            }
+            throw error;
+        }
+    }
     /**
      * Index a document for full-text search
      * Uses PostgreSQL's tsvector for efficient full-text search
@@ -91,8 +114,36 @@ export class SearchService {
     /**
      * Execute a full-text search query
      * Ranks results by relevance: title matches > heading matches > content matches
+     * Includes retry logic with exponential backoff
      */
     async search(
+        query: string,
+        type: DocumentationType,
+        options: SearchOptions = {}
+    ): Promise<SearchResults> {
+        try {
+            return await this.withRetry(async () => {
+                return await this.executeSearch(query, type, options);
+            });
+        } catch (error) {
+            console.error('Search failed after retries:', error);
+
+            // Return graceful degradation with popular pages
+            const popularPages = await this.getPopularPages(type, 5);
+
+            throw new SearchError('Search is temporarily unavailable', {
+                query,
+                type,
+                suggestions: popularPages,
+                retryAfter: 5000,
+            });
+        }
+    }
+
+    /**
+     * Internal search execution method
+     */
+    private async executeSearch(
         query: string,
         type: DocumentationType,
         options: SearchOptions = {}

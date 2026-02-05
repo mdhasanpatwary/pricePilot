@@ -19,13 +19,6 @@ interface SearchResult {
     matchedTerms: string[];
 }
 
-interface SearchResponse {
-    query: string;
-    results: SearchResult[];
-    total: number;
-    suggestions?: string[];
-}
-
 export default function SearchPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -35,6 +28,8 @@ export default function SearchPage() {
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [popularPages, setPopularPages] = useState<string[]>([]);
 
     const performSearch = useCallback(async (searchQuery: string) => {
         if (!searchQuery.trim()) {
@@ -42,25 +37,37 @@ export default function SearchPage() {
             setTotal(0);
             setSuggestions([]);
             setHasSearched(false);
+            setError(null);
             return;
         }
 
         setIsLoading(true);
         setHasSearched(true);
+        setError(null);
 
         try {
             const response = await fetch(
                 `/api/v1/documentation/search?q=${encodeURIComponent(searchQuery)}&type=tenant`
             );
 
+            const data = await response.json();
+
             if (response.ok) {
-                const data: SearchResponse = await response.json();
-                setResults(data.results || []);
-                setTotal(data.total || 0);
-                setSuggestions(data.suggestions || []);
+                setResults(data.data?.results || []);
+                setTotal(data.data?.total || 0);
+                setSuggestions(data.data?.suggestions || []);
+            } else {
+                // Handle error response
+                setError(data.error?.userMessage || 'Search failed. Please try again.');
+
+                // If search is unavailable, show popular pages
+                if (data.data?.popularPages) {
+                    setPopularPages(data.data.popularPages);
+                }
             }
         } catch (error) {
             console.error('Search failed:', error);
+            setError('Search is temporarily unavailable. Please try again in a few moments.');
         } finally {
             setIsLoading(false);
         }
@@ -118,8 +125,64 @@ export default function SearchPage() {
                 </div>
             )}
 
+            {/* Error state */}
+            {!isLoading && error && (
+                <div className="py-12">
+                    <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20 p-6">
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0">
+                                <svg
+                                    className="h-6 w-6 text-yellow-600 dark:text-yellow-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                    />
+                                </svg>
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
+                                    Search Unavailable
+                                </h3>
+                                <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+                                    {error}
+                                </p>
+                                {popularPages.length > 0 && (
+                                    <div>
+                                        <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-2">
+                                            Popular pages you might find helpful:
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {popularPages.map((page, index) => (
+                                                <Badge key={index} variant="secondary">
+                                                    {page}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="mt-4">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => performSearch(query)}
+                                    >
+                                        Try Again
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
             {/* Results */}
-            {!isLoading && hasSearched && (
+            {!isLoading && !error && hasSearched && (
                 <>
                     {results.length > 0 ? (
                         <>

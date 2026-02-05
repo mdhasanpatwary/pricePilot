@@ -97,10 +97,10 @@ export function DocumentationPage({
     return (
         <div className="mx-auto max-w-5xl">
             {/* Breadcrumbs */}
-            <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+            <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 {breadcrumbs.map((crumb, index) => (
                     <div key={crumb.slug} className="flex items-center gap-2">
-                        {index > 0 && <ChevronRight className="h-4 w-4" />}
+                        {index > 0 && <ChevronRight className="h-4 w-4 flex-shrink-0" />}
                         {index === breadcrumbs.length - 1 ? (
                             <span className="font-medium text-foreground">{crumb.title}</span>
                         ) : (
@@ -120,17 +120,17 @@ export function DocumentationPage({
                 <div className="min-w-0">
                     {/* Header */}
                     <div className="mb-8">
-                        <h1 className="mb-4 text-4xl font-bold tracking-tight">{document.title}</h1>
+                        <h1 className="mb-4 text-3xl sm:text-4xl font-bold tracking-tight break-words">{document.title}</h1>
 
                         {document.metadata.description && (
-                            <p className="text-lg text-muted-foreground">{document.metadata.description}</p>
+                            <p className="text-base sm:text-lg text-muted-foreground">{document.metadata.description}</p>
                         )}
 
                         {/* Metadata */}
-                        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                        <div className="mt-4 flex flex-wrap items-center gap-3 sm:gap-4 text-sm text-muted-foreground">
                             {document.updatedAt && (
                                 <div className="flex items-center gap-1">
-                                    <Clock className="h-4 w-4" />
+                                    <Clock className="h-4 w-4 flex-shrink-0" />
                                     <span>
                                         Updated {new Date(document.updatedAt).toLocaleDateString()}
                                     </span>
@@ -138,7 +138,7 @@ export function DocumentationPage({
                             )}
                             {document.metadata.author && (
                                 <div className="flex items-center gap-1">
-                                    <FileText className="h-4 w-4" />
+                                    <FileText className="h-4 w-4 flex-shrink-0" />
                                     <span>By {document.metadata.author}</span>
                                 </div>
                             )}
@@ -147,7 +147,7 @@ export function DocumentationPage({
                         {/* Tags */}
                         {document.metadata.tags && document.metadata.tags.length > 0 && (
                             <div className="mt-4 flex flex-wrap items-center gap-2">
-                                <Tag className="h-4 w-4 text-muted-foreground" />
+                                <Tag className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 {document.metadata.tags.map((tag) => (
                                     <Badge key={tag} variant="secondary">
                                         {tag}
@@ -174,14 +174,14 @@ export function DocumentationPage({
                     {/* Related documents */}
                     {relatedDocs.length > 0 && (
                         <div className="mt-12">
-                            <h2 className="mb-4 text-2xl font-bold">Related Documentation</h2>
+                            <h2 className="mb-4 text-xl sm:text-2xl font-bold">Related Documentation</h2>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 {relatedDocs.map((relatedDoc) => {
                                     if (!relatedDoc) return null;
                                     return (
                                         <Card key={relatedDoc.id} className="p-4 hover:border-primary transition-colors">
                                             <Link href={`${baseUrl}/${relatedDoc.slug}`}>
-                                                <h3 className="font-semibold mb-2">{relatedDoc.title}</h3>
+                                                <h3 className="font-semibold mb-2 break-words">{relatedDoc.title}</h3>
                                                 {relatedDoc.metadata.description && (
                                                     <p className="text-sm text-muted-foreground line-clamp-2">
                                                         {relatedDoc.metadata.description}

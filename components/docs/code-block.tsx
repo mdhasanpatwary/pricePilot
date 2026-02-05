@@ -29,10 +29,10 @@ export function CodeBlock({ code, language, filename, className }: CodeBlockProp
     <div className={cn('group relative', className)}>
       {/* Header with filename and copy button */}
       {(filename || language) && (
-        <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-muted px-4 py-2">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-muted px-3 sm:px-4 py-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {filename && (
-              <span className="text-sm font-medium text-foreground">{filename}</span>
+              <span className="text-xs sm:text-sm font-medium text-foreground truncate">{filename}</span>
             )}
             {language && !filename && (
               <span className="text-xs text-muted-foreground uppercase">{language}</span>
@@ -42,17 +42,17 @@ export function CodeBlock({ code, language, filename, className }: CodeBlockProp
             variant="ghost"
             size="sm"
             onClick={handleCopy}
-            className="h-8 px-2 opacity-0 transition-opacity group-hover:opacity-100"
+            className="h-8 px-2 opacity-100 sm:opacity-0 transition-opacity group-hover:opacity-100 flex-shrink-0"
           >
             {copied ? (
               <>
-                <Check className="h-4 w-4 mr-1" />
-                <span className="text-xs">Copied!</span>
+                <Check className="h-4 w-4 sm:mr-1" />
+                <span className="text-xs hidden sm:inline">Copied!</span>
               </>
             ) : (
               <>
-                <Copy className="h-4 w-4 mr-1" />
-                <span className="text-xs">Copy</span>
+                <Copy className="h-4 w-4 sm:mr-1" />
+                <span className="text-xs hidden sm:inline">Copy</span>
               </>
             )}
           </Button>
@@ -62,10 +62,10 @@ export function CodeBlock({ code, language, filename, className }: CodeBlockProp
       {/* Code content */}
       <div className="relative">
         <pre className={cn(
-          'overflow-x-auto rounded-lg border border-border bg-muted p-4',
+          'overflow-x-auto rounded-lg border border-border bg-muted p-3 sm:p-4 text-xs sm:text-sm',
           (filename || language) && 'rounded-t-none border-t-0'
         )}>
-          <code className={cn('text-sm', language && `language-${language}`)}>
+          <code className={cn('text-xs sm:text-sm', language && `language-${language}`)}>
             {code}
           </code>
         </pre>
@@ -76,7 +76,7 @@ export function CodeBlock({ code, language, filename, className }: CodeBlockProp
             variant="ghost"
             size="sm"
             onClick={handleCopy}
-            className="absolute right-2 top-2 h-8 px-2 opacity-0 transition-opacity group-hover:opacity-100"
+            className="absolute right-2 top-2 h-8 px-2 opacity-100 sm:opacity-0 transition-opacity group-hover:opacity-100"
           >
             {copied ? (
               <Check className="h-4 w-4" />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { documentationService } from '@/lib/documentation/service';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { rateLimitTenantDocs, rateLimitAdminDocs, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
 
 /**
  * GET /api/v1/documentation/:type
@@ -28,7 +29,8 @@ export async function GET(
             );
         }
 
-        // Check authentication for admin docs
+        // Rate limiting and authentication for admin docs
+        let rateLimitResult;
         if (type === 'admin') {
             const session = await getServerSession(authOptions);
             if (!session) {
@@ -56,6 +58,20 @@ export async function GET(
                     { status: 403 }
                 );
             }
+
+            // Rate limit admin docs (1000 req/hour per user)
+            const rateLimitCheck = await rateLimitAdminDocs(request, session.user.id);
+            if ('status' in rateLimitCheck) {
+                return rateLimitCheck;
+            }
+            rateLimitResult = rateLimitCheck.result;
+        } else {
+            // Rate limit tenant docs (100 req/minute per IP)
+            const rateLimitCheck = await rateLimitTenantDocs(request);
+            if ('status' in rateLimitCheck) {
+                return rateLimitCheck;
+            }
+            rateLimitResult = rateLimitCheck.result;
         }
 
         // Get query parameters
@@ -65,7 +81,7 @@ export async function GET(
         // List documents
         const documents = await documentationService.listDocuments(type, category);
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             data: {
                 documents,
@@ -76,6 +92,14 @@ export async function GET(
                 timestamp: new Date().toISOString(),
             },
         });
+
+        // Add rate limit headers
+        return addRateLimitHeaders(
+            response,
+            rateLimitResult.limit,
+            rateLimitResult.remaining,
+            rateLimitResult.reset
+        );
     } catch (error) {
         console.error('Error listing documents:', error);
         return NextResponse.json(

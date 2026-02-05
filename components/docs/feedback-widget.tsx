@@ -84,19 +84,19 @@ export function FeedbackWidget({ documentId }: FeedbackWidgetProps) {
                 </div>
 
                 {/* Rating buttons */}
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                     <Button
                         variant={rating === 5 ? 'default' : 'outline'}
                         size="lg"
                         onClick={() => handleRating(5)}
                         disabled={isSubmitting}
                         className={cn(
-                            'flex-1',
+                            'flex-1 min-h-[3rem]',
                             rating === 5 && 'bg-success hover:bg-success/90'
                         )}
                     >
-                        <ThumbsUp className="h-5 w-5 mr-2" />
-                        Yes, helpful
+                        <ThumbsUp className="h-5 w-5 mr-2 flex-shrink-0" />
+                        <span className="text-sm sm:text-base">Yes, helpful</span>
                     </Button>
                     <Button
                         variant={rating === 1 ? 'default' : 'outline'}
@@ -104,12 +104,12 @@ export function FeedbackWidget({ documentId }: FeedbackWidgetProps) {
                         onClick={() => handleRating(1)}
                         disabled={isSubmitting}
                         className={cn(
-                            'flex-1',
+                            'flex-1 min-h-[3rem]',
                             rating === 1 && 'bg-destructive hover:bg-destructive/90'
                         )}
                     >
-                        <ThumbsDown className="h-5 w-5 mr-2" />
-                        Needs work
+                        <ThumbsDown className="h-5 w-5 mr-2 flex-shrink-0" />
+                        <span className="text-sm sm:text-base">Needs work</span>
                     </Button>
                 </div>
 

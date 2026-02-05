@@ -18,6 +18,7 @@ import rehypeShiki from 'rehype-shiki';
 import { createHighlighter } from 'shiki';
 import { visit } from 'unist-util-visit';
 import type { Element } from 'hast';
+import { sanitizeHtmlContent } from './security';
 
 /**
  * Frontmatter metadata structure
@@ -210,7 +211,10 @@ export async function parseMarkdown(
             .use(rehypeStringify); // Serialize HTML AST to string
 
         const result = await processor.process(content);
-        const html = String(result);
+        const rawHtml = String(result);
+
+        // Sanitize HTML to prevent XSS
+        const html = sanitizeHtmlContent(rawHtml);
 
         return {
             frontmatter: data as DocumentFrontmatter,

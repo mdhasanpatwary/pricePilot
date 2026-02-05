@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { DocumentationType } from '@prisma/client';
 import { parseMarkdown } from './parser';
 import { diffLines, Change } from 'diff';
+import { validateDocumentContent } from './validation';
 
 // ============================================================================
 // Types and Interfaces
@@ -274,12 +275,20 @@ export class DocumentationService {
      * @param type - Document type (tenant or admin)
      * @param data - Document creation data
      * @returns Created document
+     * @throws {Error} If content validation fails
      */
     async createDocument(
         type: 'tenant' | 'admin',
         data: CreateDocumentInput
     ): Promise<Document> {
         const docType = type === 'tenant' ? DocumentationType.TENANT : DocumentationType.ADMIN;
+
+        // Validate content before creating
+        const validation = await validateDocumentContent(data.content, type);
+        if (!validation.isValid) {
+            const errorMessages = validation.errors.map(e => e.message).join('; ');
+            throw new Error(`Content validation failed: ${errorMessages}`);
+        }
 
         // Parse markdown to HTML
         const parsed = await parseMarkdown(data.content);
@@ -319,6 +328,7 @@ export class DocumentationService {
      * @param userId - User making the update
      * @param changeDescription - Optional description of changes
      * @returns Updated document
+     * @throws {Error} If document not found or content validation fails
      */
     async updateDocument(
         documentId: string,
@@ -333,6 +343,16 @@ export class DocumentationService {
 
         if (!currentDoc) {
             throw new Error(`Document not found: ${documentId}`);
+        }
+
+        // Determine document type for validation
+        const type = currentDoc.type === DocumentationType.TENANT ? 'tenant' : 'admin';
+
+        // Validate content before updating
+        const validation = await validateDocumentContent(content, type);
+        if (!validation.isValid) {
+            const errorMessages = validation.errors.map(e => e.message).join('; ');
+            throw new Error(`Content validation failed: ${errorMessages}`);
         }
 
         // Store previous version

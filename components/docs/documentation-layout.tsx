@@ -98,15 +98,15 @@ export function DocumentationLayout({ type, children }: DocumentationLayoutProps
                     </div>
 
                     {/* Search bar */}
-                    <div className="flex flex-1 items-center justify-center px-4">
+                    <div className="flex flex-1 items-center justify-center px-2 sm:px-4">
                         <div className="w-full max-w-md">
                             <Link href={`${baseUrl}/search`}>
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                     <Input
                                         type="text"
-                                        placeholder="Search documentation..."
-                                        className="w-full pl-10 pr-4"
+                                        placeholder="Search docs..."
+                                        className="w-full pl-10 pr-4 text-sm"
                                         readOnly
                                     />
                                 </div>
@@ -115,9 +115,9 @@ export function DocumentationLayout({ type, children }: DocumentationLayoutProps
                     </div>
 
                     {/* Right side actions */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
                         <ThemeToggle />
-                        <Button variant="ghost" size="sm" asChild>
+                        <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
                             <Link href="/">Home</Link>
                         </Button>
                     </div>
