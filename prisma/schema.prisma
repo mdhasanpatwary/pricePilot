@@ -38,7 +38,7 @@ model Tenant {
   autoApprovalRules         AutoApprovalRule[]
   autoApprovalMetrics       AutoApprovalMetric[]
   approvalDelegations       ApprovalDelegation[]
-  monitoringAlertRules      MonitoringAlertRule[]     @relation("MonitoringAlertRules")
+  monitoringAlertRules      MonitoringAlertRule[]      @relation("MonitoringAlertRules")
 }
 
 model Category {
@@ -144,26 +144,26 @@ model PasswordHistory {
 }
 
 model Site {
-  id                  String        @id @default(uuid())
+  id                  String              @id @default(uuid())
   tenantId            String
   type                SiteType
-  platform            PlatformType  @default(GENERIC)
+  platform            PlatformType        @default(GENERIC)
   baseUrl             String
   apiToken            String?
   lastSyncAt          DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  isSyncing           Boolean       @default(false)
-  syncProcessed       Int           @default(0)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  isSyncing           Boolean             @default(false)
+  syncProcessed       Int                 @default(0)
   syncStartedAt       DateTime?
-  syncTotal           Int           @default(0)
+  syncTotal           Int                 @default(0)
   syncLastAction      String?
-  isAdvancedProtected Boolean       @default(false)
+  isAdvancedProtected Boolean             @default(false)
   lastSecurityBlockAt DateTime?
-  currency            String        @default("USD")
+  currency            String              @default("USD")
   searchQueryPattern  String?
   products            Product[]
-  tenant              Tenant        @relation(fields: [tenantId], references: [id])
+  tenant              Tenant              @relation(fields: [tenantId], references: [id])
   syncLogs            SyncLog[]
   scrapeRetries       ScrapeRetry[]
   proxySiteHealth     ProxySiteHealth[]
@@ -210,23 +210,23 @@ model Product {
   updatedAt      DateTime  @updatedAt
   imageUrl       String?
   specifications Json?
-  
+
   // Manual price entry fields
-  manualPrice         Decimal?  @db.Decimal(10, 2)
+  manualPrice          Decimal?  @db.Decimal(10, 2)
   manualPriceEnteredBy String?
   manualPriceEnteredAt DateTime?
-  isManualPrice       Boolean   @default(false)
+  isManualPrice        Boolean   @default(false)
 
   // Last known good price fields
-  lastKnownGoodPrice     Decimal?  @db.Decimal(10, 2)
-  lastKnownGoodPriceAt   DateTime?
-  lastKnownGoodCurrency  String?
+  lastKnownGoodPrice    Decimal?  @db.Decimal(10, 2)
+  lastKnownGoodPriceAt  DateTime?
+  lastKnownGoodCurrency String?
 
   priceHistory PriceHistory[]
   updateLogs   PriceUpdateLog[]
   retryQueue   PriceUpdateRetryQueue[]
-  site         Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  site         Site                    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id])
 
   normBrand    Brand?    @relation(fields: [brandId], references: [id])
   normCategory Category? @relation(fields: [categoryId], references: [id])
@@ -919,7 +919,7 @@ model MonitoringAlertRule {
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
 
-  tenant       Tenant?                    @relation("MonitoringAlertRules", fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant?                  @relation("MonitoringAlertRules", fields: [tenantId], references: [id], onDelete: Cascade)
   alertHistory MonitoringAlertHistory[]
 
   @@index([tenantId])
@@ -928,32 +928,32 @@ model MonitoringAlertRule {
 }
 
 model MonitoringNotificationChannel {
-  id        String                      @id @default(uuid())
+  id        String                @id @default(uuid())
   type      MonitoringChannelType
   name      String
-  enabled   Boolean                     @default(true)
+  enabled   Boolean               @default(true)
   config    Json // Channel-specific configuration (email recipients, Slack webhook, etc.)
-  createdAt DateTime                    @default(now())
-  updatedAt DateTime                    @updatedAt
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
 
   @@index([type])
   @@index([enabled])
 }
 
 model MonitoringAlertHistory {
-  id                 String                  @id @default(uuid())
-  ruleId             String
-  ruleName           String
-  severity           MonitoringAlertSeverity
-  triggeredAt        DateTime                @default(now())
-  resolvedAt         DateTime?
-  metricValue        Decimal                 @db.Decimal(10, 2)
-  threshold          Decimal                 @db.Decimal(10, 2)
-  tenantId           String?
-  context            Json? // Additional context data
-  notificationsSent  Json? // Array of notification delivery results
-  acknowledgedAt     DateTime?
-  acknowledgedBy     String?
+  id                String                  @id @default(uuid())
+  ruleId            String
+  ruleName          String
+  severity          MonitoringAlertSeverity
+  triggeredAt       DateTime                @default(now())
+  resolvedAt        DateTime?
+  metricValue       Decimal                 @db.Decimal(10, 2)
+  threshold         Decimal                 @db.Decimal(10, 2)
+  tenantId          String?
+  context           Json? // Additional context data
+  notificationsSent Json? // Array of notification delivery results
+  acknowledgedAt    DateTime?
+  acknowledgedBy    String?
 
   rule MonitoringAlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 
@@ -984,11 +984,11 @@ enum MonitoringAlertSeverity {
 }
 
 enum MonitoringConditionOp {
-  GT  // Greater than
+  GT // Greater than
   GTE // Greater than or equal
-  LT  // Less than
+  LT // Less than
   LTE // Less than or equal
-  EQ  // Equal
+  EQ // Equal
 }
 
 enum MonitoringAggregationType {
@@ -1131,21 +1131,21 @@ model DowntimeIncident {
 // User Satisfaction Tracking Models
 
 model UserFeedback {
-  id               String       @id @default(uuid())
-  tenantId         String
-  userId           String
-  rating           Int // 1-5 stars
-  category         FeedbackCategory
-  feature          String? // Specific feature being rated
-  comment          String?      @db.Text
-  sentiment        String? // 'positive', 'neutral', 'negative'
-  context          Json? // Additional context (page, action, etc.)
-  resolved         Boolean      @default(false)
-  resolvedAt       DateTime?
-  resolvedBy       String?
-  resolutionNotes  String?      @db.Text
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id              String           @id @default(uuid())
+  tenantId        String
+  userId          String
+  rating          Int // 1-5 stars
+  category        FeedbackCategory
+  feature         String? // Specific feature being rated
+  comment         String?          @db.Text
+  sentiment       String? // 'positive', 'neutral', 'negative'
+  context         Json? // Additional context (page, action, etc.)
+  resolved        Boolean          @default(false)
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolutionNotes String?          @db.Text
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([tenantId])
   @@index([userId])
@@ -1156,24 +1156,24 @@ model UserFeedback {
 }
 
 model SatisfactionMetric {
-  id                  String   @id @default(uuid())
-  tenantId            String?
-  date                DateTime @db.Date
-  totalResponses      Int      @default(0)
-  averageRating       Decimal  @db.Decimal(3, 2)
-  rating1Count        Int      @default(0)
-  rating2Count        Int      @default(0)
-  rating3Count        Int      @default(0)
-  rating4Count        Int      @default(0)
-  rating5Count        Int      @default(0)
-  nps                 Decimal? @db.Decimal(5, 2) // Net Promoter Score
-  promoters           Int      @default(0) // 9-10 ratings
-  passives            Int      @default(0) // 7-8 ratings
-  detractors          Int      @default(0) // 0-6 ratings
-  categoryBreakdown   Json? // Breakdown by category
-  featureBreakdown    Json? // Breakdown by feature
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String   @id @default(uuid())
+  tenantId          String?
+  date              DateTime @db.Date
+  totalResponses    Int      @default(0)
+  averageRating     Decimal  @db.Decimal(3, 2)
+  rating1Count      Int      @default(0)
+  rating2Count      Int      @default(0)
+  rating3Count      Int      @default(0)
+  rating4Count      Int      @default(0)
+  rating5Count      Int      @default(0)
+  nps               Decimal? @db.Decimal(5, 2) // Net Promoter Score
+  promoters         Int      @default(0) // 9-10 ratings
+  passives          Int      @default(0) // 7-8 ratings
+  detractors        Int      @default(0) // 0-6 ratings
+  categoryBreakdown Json? // Breakdown by category
+  featureBreakdown  Json? // Breakdown by feature
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([tenantId, date])
   @@index([date(sort: Desc)])
@@ -1181,16 +1181,16 @@ model SatisfactionMetric {
 }
 
 model FeedbackPrompt {
-  id               String   @id @default(uuid())
-  tenantId         String?
-  trigger          String // 'after_price_update', 'after_sync', 'periodic', 'feature_use'
-  feature          String? // Specific feature to prompt about
-  enabled          Boolean  @default(true)
-  promptText       String   @db.Text
-  promptFrequency  Int      @default(7) // Days between prompts
-  minActionsCount  Int      @default(5) // Minimum actions before prompting
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenantId        String?
+  trigger         String // 'after_price_update', 'after_sync', 'periodic', 'feature_use'
+  feature         String? // Specific feature to prompt about
+  enabled         Boolean  @default(true)
+  promptText      String   @db.Text
+  promptFrequency Int      @default(7) // Days between prompts
+  minActionsCount Int      @default(5) // Minimum actions before prompting
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([tenantId])
   @@index([enabled])
@@ -1198,16 +1198,16 @@ model FeedbackPrompt {
 }
 
 model UserFeedbackHistory {
-  id               String   @id @default(uuid())
-  userId           String
-  tenantId         String
-  lastPromptedAt   DateTime?
-  promptCount      Int      @default(0)
-  responseCount    Int      @default(0)
-  lastResponseAt   DateTime?
-  averageRating    Decimal? @db.Decimal(3, 2)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String    @id @default(uuid())
+  userId         String
+  tenantId       String
+  lastPromptedAt DateTime?
+  promptCount    Int       @default(0)
+  responseCount  Int       @default(0)
+  lastResponseAt DateTime?
+  averageRating  Decimal?  @db.Decimal(3, 2)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@unique([userId, tenantId])
   @@index([userId])
@@ -1234,41 +1234,41 @@ enum FeedbackCategory {
 // Bot Protection Handling Models
 
 model Proxy {
-  id                   String            @id @default(uuid())
-  provider             String
-  host                 String
-  port                 Int
-  protocol             String // 'http', 'https', 'socks5'
-  username             String?
-  passwordEncrypted    String?
-  region               String?
-  status               String            @default("active") // 'active', 'disabled'
-  globalSuccessCount   Int               @default(0)
-  globalFailureCount   Int               @default(0)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  
-  siteHealth           ProxySiteHealth[]
-  scrapeAttempts       ScrapeAttempt[]
+  id                 String   @id @default(uuid())
+  provider           String
+  host               String
+  port               Int
+  protocol           String // 'http', 'https', 'socks5'
+  username           String?
+  passwordEncrypted  String?
+  region             String?
+  status             String   @default("active") // 'active', 'disabled'
+  globalSuccessCount Int      @default(0)
+  globalFailureCount Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  siteHealth     ProxySiteHealth[]
+  scrapeAttempts ScrapeAttempt[]
 
   @@unique([host, port])
   @@index([status])
 }
 
 model ProxySiteHealth {
-  id                   String   @id @default(uuid())
-  proxyId              String
-  competitorWebsiteId  String
-  successCount         Int      @default(0)
-  failureCount         Int      @default(0)
-  lastSuccessAt        DateTime?
-  lastFailureAt        DateTime?
-  cooldownUntil        DateTime?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  proxyId             String
+  competitorWebsiteId String
+  successCount        Int       @default(0)
+  failureCount        Int       @default(0)
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  cooldownUntil       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  proxy                Proxy    @relation(fields: [proxyId], references: [id], onDelete: Cascade)
-  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  proxy             Proxy @relation(fields: [proxyId], references: [id], onDelete: Cascade)
+  competitorWebsite Site  @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@unique([proxyId, competitorWebsiteId])
   @@index([proxyId])
@@ -1277,68 +1277,68 @@ model ProxySiteHealth {
 }
 
 model ScrapingConfig {
-  id                   String   @id @default(uuid())
-  tenantId             String
-  competitorWebsiteId  String   @unique
-  preferredStrategy    String   @default("http_client") // 'http_client', 'http_with_proxy', 'headless_browser', etc.
-  requiresJavascript   Boolean  @default(false)
-  proxyRequired        Boolean  @default(false)
-  baseDelayMs          Int      @default(2000)
-  maxDelayMs           Int      @default(300000)
-  backoffMultiplier    Decimal  @db.Decimal(3, 2) @default(2.0)
-  maxRetries           Int      @default(3)
-  timeoutMs            Int      @default(30000)
-  priceSelectors       Json // Array of CSS selectors
-  currencySelector     String?
-  fallbackRegex        String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenantId            String
+  competitorWebsiteId String   @unique
+  preferredStrategy   String   @default("http_client") // 'http_client', 'http_with_proxy', 'headless_browser', etc.
+  requiresJavascript  Boolean  @default(false)
+  proxyRequired       Boolean  @default(false)
+  baseDelayMs         Int      @default(2000)
+  maxDelayMs          Int      @default(300000)
+  backoffMultiplier   Decimal  @default(2.0) @db.Decimal(3, 2)
+  maxRetries          Int      @default(3)
+  timeoutMs           Int      @default(30000)
+  priceSelectors      Json // Array of CSS selectors
+  currencySelector    String?
+  fallbackRegex       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  competitorWebsite Site @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([competitorWebsiteId])
 }
 
 model ScrapingCookieJar {
-  id                   String   @id @default(uuid())
-  competitorWebsiteId  String   @unique
-  cookies              Json
-  expiresAt            DateTime
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  competitorWebsiteId String   @unique
+  cookies             Json
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  competitorWebsite Site @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([competitorWebsiteId])
   @@index([expiresAt])
 }
 
 model ScrapeAttempt {
-  id                   String              @id @default(uuid())
-  tenantId             String
-  competitorProductId  String
-  competitorWebsiteId  String
-  url                  String              @db.Text
-  strategy             String // 'http_client', 'headless_browser', etc.
-  proxyId              String?
-  userAgent            String              @db.Text
-  success              Boolean
-  protectionDetected   Boolean             @default(false)
-  protectionType       String?
-  statusCode           Int?
-  responseTimeMs       Int?
-  responseSizeBytes    Int?
-  responseSample       String?             @db.Text // First 1KB
-  screenshotUrl        String?
-  errorMessage         String?             @db.Text
-  attemptNumber        Int
-  createdAt            DateTime            @default(now())
+  id                  String   @id @default(uuid())
+  tenantId            String
+  competitorProductId String
+  competitorWebsiteId String
+  url                 String   @db.Text
+  strategy            String // 'http_client', 'headless_browser', etc.
+  proxyId             String?
+  userAgent           String   @db.Text
+  success             Boolean
+  protectionDetected  Boolean  @default(false)
+  protectionType      String?
+  statusCode          Int?
+  responseTimeMs      Int?
+  responseSizeBytes   Int?
+  responseSample      String?  @db.Text // First 1KB
+  screenshotUrl       String?
+  errorMessage        String?  @db.Text
+  attemptNumber       Int
+  createdAt           DateTime @default(now())
 
-  proxy                Proxy?              @relation(fields: [proxyId], references: [id], onDelete: SetNull)
-  competitorProduct    Product             @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
-  competitorWebsite    Site                @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
-  detections           ProtectionDetection[]
+  proxy             Proxy?                @relation(fields: [proxyId], references: [id], onDelete: SetNull)
+  competitorProduct Product               @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+  competitorWebsite Site                  @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  detections        ProtectionDetection[]
 
   @@index([tenantId])
   @@index([competitorProductId])
@@ -1349,15 +1349,15 @@ model ScrapeAttempt {
 }
 
 model ProtectionDetection {
-  id               String        @id @default(uuid())
-  scrapeAttemptId  String
-  protectionType   String // 'ip_block', 'captcha', 'fake_data', etc.
-  confidence       Decimal       @db.Decimal(5, 2)
-  indicators       Json // Array of indicator strings
-  reasoning        String?       @db.Text
-  createdAt        DateTime      @default(now())
+  id              String   @id @default(uuid())
+  scrapeAttemptId String
+  protectionType  String // 'ip_block', 'captcha', 'fake_data', etc.
+  confidence      Decimal  @db.Decimal(5, 2)
+  indicators      Json // Array of indicator strings
+  reasoning       String?  @db.Text
+  createdAt       DateTime @default(now())
 
-  scrapeAttempt    ScrapeAttempt @relation(fields: [scrapeAttemptId], references: [id], onDelete: Cascade)
+  scrapeAttempt ScrapeAttempt @relation(fields: [scrapeAttemptId], references: [id], onDelete: Cascade)
 
   @@index([scrapeAttemptId])
   @@index([protectionType])
@@ -1376,7 +1376,7 @@ model ScrapingMetric {
   strategyCounts       Json? // {http_client: 10, headless_browser: 5, ...}
   createdAt            DateTime @default(now())
 
-  competitorWebsite    Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  competitorWebsite Site @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, competitorWebsiteId, hourTimestamp])
   @@index([tenantId, hourTimestamp])
@@ -1384,23 +1384,143 @@ model ScrapingMetric {
 }
 
 model ScrapingAlert {
-  id                   String    @id @default(uuid())
-  tenantId             String
-  competitorWebsiteId  String?
-  severity             String // 'info', 'warning', 'critical'
-  type                 String // 'success_rate_drop', 'captcha_detected', etc.
-  title                String
-  message              String    @db.Text
-  metadata             Json?
-  acknowledged         Boolean   @default(false)
-  acknowledgedAt       DateTime?
-  acknowledgedBy       String?
-  createdAt            DateTime  @default(now())
+  id                  String    @id @default(uuid())
+  tenantId            String
+  competitorWebsiteId String?
+  severity            String // 'info', 'warning', 'critical'
+  type                String // 'success_rate_drop', 'captcha_detected', etc.
+  title               String
+  message             String    @db.Text
+  metadata            Json?
+  acknowledged        Boolean   @default(false)
+  acknowledgedAt      DateTime?
+  acknowledgedBy      String?
+  createdAt           DateTime  @default(now())
 
-  competitorWebsite    Site?     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  competitorWebsite Site? @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([competitorWebsiteId])
   @@index([acknowledged])
   @@index([createdAt])
+}
+
+// Documentation System Models
+
+model DocumentationDocument {
+  id          String            @id @default(uuid())
+  type        DocumentationType
+  slug        String
+  title       String            @db.VarChar(500)
+  content     String            @db.Text
+  htmlContent String            @db.Text
+  category    String            @db.VarChar(100)
+  subcategory String?           @db.VarChar(100)
+  metadata    Json              @default("{}")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  updatedBy   String?
+
+  versions    DocumentationVersion[]
+  pageViews   DocumentationPageView[]
+  feedback    DocumentationFeedback[]
+  suggestions DocumentationSuggestion[]
+
+  @@unique([type, slug])
+  @@index([type, category])
+  @@index([slug])
+  @@index([updatedAt(sort: Desc)])
+}
+
+model DocumentationVersion {
+  id                String   @id @default(uuid())
+  documentId        String
+  content           String   @db.Text
+  changeDescription String?  @db.Text
+  createdBy         String
+  createdAt         DateTime @default(now())
+
+  document DocumentationDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt(sort: Desc)])
+}
+
+model DocumentationSuggestion {
+  id               String                        @id @default(uuid())
+  documentId       String?
+  suggestedTitle   String?                       @db.VarChar(500)
+  suggestedContent String                        @db.Text
+  targetType       DocumentationType
+  category         String                        @db.VarChar(100)
+  status           DocumentationSuggestionStatus @default(PENDING)
+  taskId           String?                       @db.VarChar(255)
+  createdAt        DateTime                      @default(now())
+  reviewedBy       String?
+  reviewedAt       DateTime?
+
+  document DocumentationDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([documentId])
+}
+
+model DocumentationPageView {
+  id         String            @id @default(uuid())
+  documentId String
+  type       DocumentationType
+  userId     String?
+  sessionId  String?           @db.VarChar(255)
+  viewedAt   DateTime          @default(now())
+  timeOnPage Int? // seconds
+
+  document DocumentationDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, viewedAt(sort: Desc)])
+  @@index([type, viewedAt(sort: Desc)])
+}
+
+model DocumentationSearch {
+  id              String            @id @default(uuid())
+  query           String            @db.Text
+  type            DocumentationType
+  resultsCount    Int
+  clickedResultId String?
+  searchedAt      DateTime          @default(now())
+
+  @@index([type, searchedAt(sort: Desc)])
+  @@index([query])
+}
+
+model DocumentationFeedback {
+  id         String   @id @default(uuid())
+  documentId String
+  rating     Int // 1-5
+  comment    String?  @db.Text
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  document DocumentationDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt(sort: Desc)])
+  @@index([rating])
+}
+
+model DocumentationRedirect {
+  id        String   @id @default(uuid())
+  oldPath   String   @unique @db.VarChar(500)
+  newPath   String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  @@index([oldPath])
+}
+
+enum DocumentationType {
+  TENANT
+  ADMIN
+}
+
+enum DocumentationSuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

@@ -1,72 +1,90 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useState } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-export interface CodeBlockProps extends React.HTMLAttributes<HTMLDivElement> {
+interface CodeBlockProps {
   code: string;
   language?: string;
   filename?: string;
+  className?: string;
 }
 
-/**
- * CodeBlock component extending shadcn/ui Button for copy functionality
- * Uses Badge for language/filename display and follows shadcn/ui styling patterns
- */
-export default function CodeBlock({
-  code,
-  language,
-  filename,
-  className,
-  ...props
-}: CodeBlockProps) {
+export function CodeBlock({ code, language, filename, className }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy code:', error);
+    }
   };
 
   return (
-    <div className={cn(
-      "group relative my-8 rounded-md border border-border bg-muted/20 overflow-hidden",
-      className
-    )} {...props}>
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-muted/40">
-        <div className="flex items-center gap-2">
-          {filename ? (
-            <Badge variant="outline" className="text-[11px] font-bold">
-              {filename}
-            </Badge>
-          ) : (
-            <Badge variant="secondary" className="text-[11px] font-bold uppercase tracking-widest">
-              {language || "code"}
-            </Badge>
-          )}
+    <div className={cn('group relative', className)}>
+      {/* Header with filename and copy button */}
+      {(filename || language) && (
+        <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-muted px-4 py-2">
+          <div className="flex items-center gap-2">
+            {filename && (
+              <span className="text-sm font-medium text-foreground">{filename}</span>
+            )}
+            {language && !filename && (
+              <span className="text-xs text-muted-foreground uppercase">{language}</span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+            className="h-8 px-2 opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            {copied ? (
+              <>
+                <Check className="h-4 w-4 mr-1" />
+                <span className="text-xs">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4 mr-1" />
+                <span className="text-xs">Copy</span>
+              </>
+            )}
+          </Button>
         </div>
+      )}
 
-        <Button
-          onClick={copyToClipboard}
-          variant="ghost"
-          size="sm"
-          className={cn(
-            "p-1 rounded-md transition-all hover:bg-muted-foreground/10",
-            copied ? "text-success" : "text-muted-foreground/60"
-          )}
-          title="Copy to clipboard"
-        >
-          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-        </Button>
-      </div>
-
+      {/* Code content */}
       <div className="relative">
-        <pre className="p-5 overflow-x-auto text-[13px] font-mono leading-relaxed text-foreground/80 selection:bg-primary/20">
-          <code>{code}</code>
+        <pre className={cn(
+          'overflow-x-auto rounded-lg border border-border bg-muted p-4',
+          (filename || language) && 'rounded-t-none border-t-0'
+        )}>
+          <code className={cn('text-sm', language && `language-${language}`)}>
+            {code}
+          </code>
         </pre>
+
+        {/* Copy button for blocks without header */}
+        {!filename && !language && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+            className="absolute right-2 top-2 h-8 px-2 opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            {copied ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );
