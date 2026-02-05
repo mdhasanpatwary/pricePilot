@@ -79,7 +79,7 @@ You should see your products appear in the list.
    - **Category**: Select relevant category
 4. Click **Save**
 
-PricePilot will start scraping competitor prices immediately.
+PricePilot will start scraping competitor prices immediately. After the initial scrape, prices are automatically updated every 24 hours.
 
 **Tip:** Start with just one competitor to see results quickly.
 
@@ -122,6 +122,11 @@ Now that you have basic tracking set up:
 3. **Add More Competitors** - Get better insights
    - Add 2-3 more competitor websites
    - More data = better pricing decisions
+
+4. **Understand Scraping Schedule** - Know when data refreshes
+   - Competitor prices are scraped every 24 hours
+   - You can view the last scrape time in the Competitors section
+   - Manual scrapes are available if you need immediate updates
 
 ### Learn More
 

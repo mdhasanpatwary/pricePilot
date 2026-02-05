@@ -38,7 +38,7 @@ Competitors are other online stores selling similar products. You can add compet
 
 **Competitor Tracking:**
 - Add competitor URLs
-- Automatic price scraping
+- Automatic price scraping every 24 hours
 - Historical price data
 - Price change alerts
 
@@ -87,6 +87,8 @@ Add competitor websites you want to track:
 2. Click "Add Competitor"
 3. Enter the competitor's website URL
 4. Configure scraping settings
+
+Competitor prices are automatically scraped every 24 hours to keep your data fresh.
 
 See [Adding Competitors](/docs/competitors/adding-competitors) for more details.
 

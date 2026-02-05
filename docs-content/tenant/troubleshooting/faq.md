@@ -5,7 +5,7 @@ category: "troubleshooting"
 subcategory: null
 tags: ["faq", "help", "questions"]
 author: "PricePilot Team"
-lastReviewed: "2024-01-15"
+lastReviewed: "2024-02-05"
 relatedDocs: ["common-issues", "quick-start"]
 ---
 
@@ -22,10 +22,51 @@ PricePilot is a SaaS platform that helps e-commerce businesses monitor competito
 ### Which platforms does PricePilot support?
 
 Currently, PricePilot supports:
-- OpenCart (all versions)
-- Laravel-based e-commerce stores
 
-Support for Shopify, WooCommerce, and Magento is coming soon.
+**OpenCart** (Fully Supported)
+- All OpenCart 3.x versions
+- All OpenCart 4.x versions
+- Easy installation via .ocmod.zip module
+- Automatic product sync
+- Real-time price updates
+- See our [OpenCart Integration Guide](../integrations/opencart-setup) for setup instructions
+
+**Laravel** (Fully Supported)
+- Laravel 8.x, 9.x, 10.x, 11.x
+- Composer package installation
+- Service provider integration
+- API-based product sync
+- See our [Laravel Integration Guide](../integrations/laravel-setup) for setup instructions
+
+**Coming Soon:**
+- Shopify
+- WooCommerce
+- Magento 2
+- Custom API integration for any platform
+
+### How do I integrate PricePilot with OpenCart?
+
+Integration is straightforward:
+
+1. **Download** the PricePilot OpenCart module (.ocmod.zip) from your dashboard
+2. **Install** the module through OpenCart's Extension Installer
+3. **Generate** an API token in your PricePilot dashboard
+4. **Configure** the module with your API token in OpenCart admin
+5. **Sync** your products - initial sync happens automatically
+
+The entire process takes 15-30 minutes. See our [OpenCart Integration Guide](../integrations/opencart-setup) for detailed step-by-step instructions.
+
+### How do I integrate PricePilot with Laravel?
+
+Integration uses Composer:
+
+1. **Install** the package: `composer require pricepilot/laravel-integration`
+2. **Publish** configuration: `php artisan vendor:publish --provider="PricePilot\ServiceProvider"`
+3. **Configure** your API token in `.env` file
+4. **Register** routes and middleware
+5. **Sync** products via API endpoints
+
+The process takes 20-40 minutes. See our [Laravel Integration Guide](../integrations/laravel-setup) for complete documentation.
 
 ### How does PricePilot access my store?
 
@@ -127,6 +168,73 @@ Yes! You can:
 - Create rules based on categories or brands
 - Use bulk update with different strategies
 
+## Price Approval Workflows
+
+### What is the price approval workflow?
+
+The price approval workflow is a manual review process that allows you to review and approve price changes before they're applied to your store. When enabled:
+
+1. PricePilot calculates suggested price changes based on competitor data
+2. Changes are marked as "Pending Approval"
+3. You review each change and see the reasoning behind it
+4. You approve or reject individual changes or in bulk
+5. Approved changes are applied to your store
+
+This gives you full control over pricing decisions while still benefiting from automated competitor monitoring.
+
+### Should I use manual or automatic approval?
+
+**Manual Approval** is recommended if you:
+- Want full control over every price change
+- Have specific pricing strategies or constraints
+- Sell high-value or specialized products
+- Need to review competitive positioning before changes
+- Are new to automated pricing
+
+**Automatic Approval** (via Auto-Approval Rules) is recommended if you:
+- Have a large product catalog
+- Trust the system to make routine pricing decisions
+- Want to respond quickly to competitor changes
+- Have clear, rule-based pricing strategies
+- Are comfortable with safety constraints (min price, max discount)
+
+Many users start with manual approval and gradually transition to automatic approval with rules as they gain confidence.
+
+### How long do pending price changes last?
+
+Pending price changes expire after **7 days** if not approved or rejected. This ensures:
+- Your approval queue doesn't become cluttered with outdated changes
+- Price suggestions remain relevant to current market conditions
+- You're prompted to make timely pricing decisions
+
+You'll receive notifications before changes expire, giving you time to review them.
+
+### Can I approve multiple price changes at once?
+
+Yes! The bulk approval feature allows you to:
+- **Approve All**: Accept all pending changes with one click
+- **Reject All**: Decline all pending changes
+- **Selective Approval**: Filter by product, category, or price range, then approve/reject the filtered set
+- **Sort and Filter**: Organize pending changes by priority, discount amount, or competitor
+
+This makes managing large numbers of price changes efficient and practical.
+
+### What are auto-approval rules?
+
+Auto-approval rules automatically approve price changes that meet specific criteria you define. For example:
+
+- "Auto-approve if competitor price is lower by less than 10%"
+- "Auto-approve price decreases only"
+- "Auto-approve for products in the 'Electronics' category"
+- "Auto-approve if new price stays above $50"
+
+Rules include safety constraints:
+- **Minimum Price Floor**: Never go below a certain price
+- **Maximum Discount Limit**: Never discount more than a certain percentage
+- **Category/Brand Filters**: Apply rules only to specific products
+
+This combines automation with control, letting you automate routine decisions while maintaining guardrails.
+
 ## Competitor Tracking
 
 ### How many competitors can I track?
@@ -138,21 +246,34 @@ This depends on your plan:
 
 ### How often are competitor prices updated?
 
-You can configure scraping frequency:
-- Every 6 hours (recommended for high-priority)
-- Every 12 hours (recommended for medium-priority)
-- Every 24 hours (recommended for low-priority)
-- Custom schedules available on Enterprise plans
+Competitor prices are scraped every **24 hours**. This schedule ensures:
+- Reliable data collection without triggering bot protection
+- Consistent monitoring across all competitors
+- Optimal balance between freshness and system resources
+
+The 24-hour scraping cycle runs continuously, so your competitor data is always up-to-date within a day.
 
 ### What if a competitor blocks scraping?
 
-PricePilot includes advanced features to handle bot protection:
-- Automatic CAPTCHA solving (Enterprise plans)
-- Proxy rotation
-- User-agent rotation
-- Cloudflare bypass
+PricePilot includes advanced bot protection mitigation strategies:
+- **CAPTCHA Detection & Resolution**: Automatic detection and handling of CAPTCHA challenges
+- **Proxy Rotation**: Distributed IP addresses to avoid rate limiting
+- **Smart Rate Limiting**: Respects competitor site limits to avoid detection
+- **User-Agent Rotation**: Mimics real browser behavior
+- **Retry Logic**: Automatic retry with exponential backoff for failed requests
 
-Contact support if you're experiencing blocking issues.
+If you're experiencing persistent blocking issues, contact support for site-specific configuration.
+
+### How does PricePilot handle CAPTCHAs?
+
+PricePilot uses multiple strategies to handle CAPTCHA challenges:
+
+1. **Detection**: Automatically identifies when a CAPTCHA is present
+2. **Resolution**: Uses advanced solving techniques to bypass CAPTCHAs
+3. **Fallback**: If automatic resolution fails, the scraping job is queued for retry
+4. **Notification**: You're notified if manual intervention is needed
+
+Most CAPTCHAs are resolved automatically without any action required from you.
 
 ### Can I track international competitors?
 
@@ -267,6 +388,76 @@ Yes! PricePilot supports:
 2. Verify update strategy is configured
 3. Review price update logs
 4. Test with a single product first
+
+### Competitor scraping is failing
+
+Common causes and solutions:
+
+**CAPTCHA Challenges:**
+- PricePilot automatically handles most CAPTCHAs
+- Check scraping logs for CAPTCHA detection
+- Contact support if persistent issues occur
+
+**IP Blocking:**
+- Proxy rotation is automatic
+- Check if competitor site has aggressive bot protection
+- Try adjusting scraping frequency in site profile settings
+
+**Rate Limiting:**
+- PricePilot respects rate limits automatically
+- Failed requests are retried with exponential backoff
+- Check scraping logs for rate limit errors
+
+**Site Structure Changes:**
+- Competitor websites sometimes change their HTML structure
+- PricePilot adapts automatically in most cases
+- Contact support if scraping stops working for a specific site
+
+### How do I know if scraping is working?
+
+Check these indicators:
+
+1. **Dashboard**: View "Last Scraped" timestamp for each competitor
+2. **Scraping Logs**: Review detailed logs in Settings > Scraping Logs
+3. **Price History**: Check if competitor prices are updating
+4. **Notifications**: Enable alerts for scraping failures
+
+If "Last Scraped" is more than 24 hours old, check the scraping logs for errors.
+
+### Why are some products not being matched?
+
+Common reasons and solutions:
+
+**Missing Product Data:**
+- Ensure your products have SKUs, brands, and models filled in
+- Add more detailed product descriptions
+- Use consistent naming conventions
+
+**Different SKU Formats:**
+- Competitor may use different SKU format
+- Use manual matching for these products
+- Consider adding SKU aliases
+
+**Product Not Found on Competitor Site:**
+- Verify the product exists on competitor website
+- Check if competitor uses different product name
+- Try searching competitor site manually
+
+**Low Confidence Score:**
+- Fuzzy matching may have low confidence
+- Review suggested matches and approve manually
+- Improve product data quality for better automatic matching
+
+### What do the different match confidence scores mean?
+
+Match confidence scores indicate how certain PricePilot is about a product match:
+
+- **90-100%**: Exact SKU match - very reliable
+- **70-89%**: Brand + Model match - highly reliable
+- **50-69%**: Fuzzy title match - review recommended
+- **Below 50%**: Low confidence - manual review required
+
+You can set a minimum confidence threshold in Settings to auto-accept only high-confidence matches.
 
 ### I need more help
 

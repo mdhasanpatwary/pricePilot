@@ -25,7 +25,7 @@ PricePilot is a multi-tenant SaaS platform that helps e-commerce businesses stay
 ## Key Features
 
 ### Automated Competitor Tracking
-Monitor competitor prices in real-time with our intelligent scraping system that respects rate limits and handles various website structures.
+Monitor competitor prices with our intelligent scraping system that automatically checks prices every 24 hours. The system respects rate limits and handles various website structures.
 
 ### Smart Product Matching
 Our matching engine uses multiple strategies to identify the same products across different websites:

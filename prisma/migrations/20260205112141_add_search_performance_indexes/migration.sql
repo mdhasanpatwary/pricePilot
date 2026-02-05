@@ -39,10 +39,9 @@ CREATE INDEX IF NOT EXISTS "idx_versions_doc_created" ON "DocumentationVersion" 
 );
 
 -- Optimize PostgreSQL full-text search configuration
--- Set default text search configuration to English
-ALTER DATABASE current_database ()
-SET
-    default_text_search_config = 'pg_catalog.english';
+-- Set default text search configuration to English for current session
+-- Note: Database-level config requires explicit database name, so we set it at session level
+SET default_text_search_config = 'pg_catalog.english';
 
 -- Create statistics for query planner optimization
 CREATE STATISTICS IF NOT EXISTS "docs_type_category_stats" ON type, category FROM "DocumentationDocument";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,11 +58,7 @@ export function ScrapingConfigHistory({
     const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
     const [reverting, setReverting] = useState(false);
 
-    useEffect(() => {
-        fetchHistory();
-    }, [competitorWebsiteId]);
-
-    const fetchHistory = async () => {
+    const fetchHistory = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -82,7 +78,11 @@ export function ScrapingConfigHistory({
         } finally {
             setLoading(false);
         }
-    };
+    }, [competitorWebsiteId]);
+
+    useEffect(() => {
+        fetchHistory();
+    }, [fetchHistory]);
 
     const toggleRow = (id: string) => {
         const newExpanded = new Set(expandedRows);
