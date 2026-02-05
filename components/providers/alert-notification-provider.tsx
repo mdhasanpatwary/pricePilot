@@ -44,20 +44,6 @@ export function useAlertNotifications() {
 }
 
 /**
- * Get icon for alert severity
- */
-function getSeverityIcon(severity: AlertSeverity) {
-    switch (severity) {
-        case 'critical':
-            return XCircle;
-        case 'warning':
-            return AlertTriangle;
-        default:
-            return AlertTriangle;
-    }
-}
-
-/**
  * Get color classes for alert severity
  */
 function getSeverityColors(severity: AlertSeverity) {
@@ -94,7 +80,6 @@ function ToastNotification({
     onDismiss: () => void;
 }) {
     const colors = getSeverityColors(notification.severity);
-    const Icon = getSeverityIcon(notification.severity);
 
     // Auto-dismiss after 10 seconds for non-critical alerts
     useEffect(() => {
@@ -115,7 +100,11 @@ function ToastNotification({
             )}
         >
             <div className="flex items-start gap-3">
-                <Icon className={cn("w-5 h-5 mt-0.5 shrink-0", colors.icon)} />
+                {notification.severity === 'critical' ? (
+                    <XCircle className={cn("w-5 h-5 mt-0.5 shrink-0", colors.icon)} />
+                ) : (
+                    <AlertTriangle className={cn("w-5 h-5 mt-0.5 shrink-0", colors.icon)} />
+                )}
 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">

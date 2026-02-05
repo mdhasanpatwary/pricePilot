@@ -452,84 +452,84 @@ This implementation plan breaks down the bot protection handling feature into di
     - Check Lint & Build Errors
     - _Requirements: 10.4_
 
-- [ ] 23. Manual price entry feature
-  - [ ] 23.1 Implement manual price entry API
+- [x] 23. Manual price entry feature
+  - [x] 23.1 Implement manual price entry API
     - POST /api/v1/competitor-products/:id/manual-price
     - Validate price input
     - Store user and timestamp
     - Mark price as manual
     - _Requirements: 13.1, 13.2, 13.3, 13.4_
 
-  - [ ] 23.2 Implement manual price entry UI
+  - [x] 23.2 Implement manual price entry UI
     - Add manual entry button on failed products
     - Create price entry modal
     - Display validation errors
     - Show confirmation on success
     - _Requirements: 13.1_
 
-  - [ ] 23.3 Implement manual price indicators
+  - [x] 23.3 Implement manual price indicators
     - Display distinct indicator for manual prices
     - Show who entered the price
     - Show when it was entered
     - _Requirements: 13.3, 13.4_
 
-  - [ ] 23.4 Implement automated override logic
+  - [x] 23.4 Implement automated override logic
     - Check for manual prices during scraping
     - Replace manual price with scraped price on success
     - Maintain history of both types
     - Check Lint & Build Errors
     - _Requirements: 13.5, 13.6_
 
-- [ ] 24. Last known good price feature
-  - [ ] 24.1 Implement last known good storage
+- [x] 24. Last known good price feature
+  - [x] 24.1 Implement last known good storage
     - Store last successful price with timestamp
     - Update on each successful scrape
     - Maintain in competitor_products table
     - _Requirements: 14.1_
 
-  - [ ] 24.2 Implement fallback display logic
+  - [x] 24.2 Implement fallback display logic
     - Display last known good when current scrape fails
     - Calculate and display age
     - Show age indicator in UI
     - _Requirements: 14.2_
 
-  - [ ] 24.3 Implement staleness detection
+  - [x] 24.3 Implement staleness detection
     - Compare age against configured threshold
     - Mark as stale when threshold exceeded
     - Display stale indicator in UI
     - Allow configuration of staleness threshold
     - _Requirements: 14.3, 14.4, 14.5_
 
-  - [ ] 24.4 Implement price history maintenance
+  - [x] 24.4 Implement price history maintenance
     - Continue storing price history during failures
     - Display historical trends
     - Show gaps in data collection
     - Check Lint & Build Errors
     - _Requirements: 14.6_
 
-- [ ] 25. Configuration UI
-  - [ ] 25.1 Create scraping configuration page
+- [x] 25. Configuration UI
+  - [x] 25.1 Create scraping configuration page
     - Display current configuration per site
     - Show preferred strategy
     - Show rate limits and timeouts
     - Show custom selectors
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
 
-  - [ ] 25.2 Implement configuration editing
+  - [x] 25.2 Implement configuration editing
     - Create edit form for each site
     - Validate inputs before submission
     - Display validation errors
     - Show success confirmation
     - _Requirements: 15.6_
 
-  - [ ] 25.3 Implement configuration testing
+  - [x] 25.3 Implement configuration testing
     - Add "Test Configuration" button
     - Run test scrape with new configuration
     - Display test results
     - Allow saving only if test succeeds
     - _Requirements: 15.1_
 
-  - [ ] 25.4 Implement configuration history
+  - [x] 25.4 Implement configuration history
     - Display configuration change history
     - Show who made changes and when
     - Show old and new values
@@ -537,56 +537,56 @@ This implementation plan breaks down the bot protection handling feature into di
     - Check Lint & Build Errors
     - _Requirements: 15.7_
 
-- [ ] 26. Background jobs and scheduling
-  - [ ] 26.1 Implement scraping scheduler
+- [x] 26. Background jobs and scheduling
+  - [x] 26.1 Implement scraping scheduler
     - Create cron job for scheduled scraping
     - Queue scrape requests for all competitor products
     - Respect rate limits and distribute over time
     - _Requirements: 4.5_
 
-  - [ ] 26.2 Implement metric aggregation job
+  - [x] 26.2 Implement metric aggregation job
     - Create hourly rollup job
     - Aggregate scrape attempts into metrics
     - Calculate success rates and averages
     - Store in scraping_metrics table
     - _Requirements: 9.2_
 
-  - [ ] 26.3 Implement log cleanup job
+  - [x] 26.3 Implement log cleanup job
     - Create daily cleanup job
     - Delete logs older than retention period
     - Delete old screenshots
     - Maintain different retention for different log types
     - _Requirements: 8.6_
 
-  - [ ] 26.4 Implement alert monitoring job
+  - [x] 26.4 Implement alert monitoring job
     - Create periodic threshold check job
     - Check success rates against thresholds
     - Trigger alerts when thresholds breached
     - Send recovery notifications
     - _Requirements: 9.4, 12.1, 12.7_
 
-  - [ ] 26.5 Implement cookie cleanup job
+  - [x] 26.5 Implement cookie cleanup job
     - Create periodic session cleanup job
     - Remove expired cookies
     - Clean up stale sessions
     - Check Lint & Build Errors
     - _Requirements: 5.4_
 
-- [ ] 27. Integration with existing scraping system
-  - [ ] 27.1 Update existing scraper to use new orchestrator
+- [x] 27. Integration with existing scraping system
+  - [x] 27.1 Update existing scraper to use new orchestrator
     - Replace direct scraping calls with ScrapeOrchestrator
     - Pass competitor product info to orchestrator
     - Handle ScrapeResult responses
     - Update database with results
     - _Requirements: 1.7, 8.1_
 
-  - [ ] 27.2 Implement strategy adaptation
+  - [x] 27.2 Implement strategy adaptation
     - Track scraping success patterns
     - Update site configuration based on patterns
     - Automatically switch to headless browser when needed
     - _Requirements: 6.6_
 
-  - [ ] 27.3 Update competitor product display
+  - [x] 27.3 Update competitor product display
     - Show protection status
     - Display error messages
     - Show last known good prices
@@ -594,37 +594,38 @@ This implementation plan breaks down the bot protection handling feature into di
     - Check Lint & Build Errors
     - _Requirements: 10.1, 10.4, 13.1, 14.2_
 
-- [ ] 28. Final checkpoint - Complete system integration
+- [x] 28. Final checkpoint - Complete system integration
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 29. Documentation
-  - [ ] 29.1 Create API documentation
+- [x] 29. Documentation
+  - [x] 29.1 Create API documentation
     - Document all new endpoints with OpenAPI/Swagger
     - Include request/response examples
     - Document error codes
     - Document rate limits
     - _Requirements: All API endpoints_
 
-  - [ ] 29.2 Create configuration guide
+  - [x] 29.2 Create configuration guide
     - Document per-site configuration options
     - Explain strategy selection
     - Document selector customization
     - Provide proxy setup instructions
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
 
-  - [ ] 29.3 Create troubleshooting guide
+  - [x] 29.3 Create troubleshooting guide
     - Document common scraping failures
     - Explain protection type meanings
     - Provide resolution steps
     - Document log analysis
     - _Requirements: 10.1, 10.2_
 
-  - [ ] 29.4 Create user guide
+  - [x] 29.4 Create user guide
     - Explain site status indicators
     - Document manual price entry
     - Explain last known good prices
     - Document monitoring dashboard
     - Check Lint & Build Errors
+    - make short commit & push
     - _Requirements: 10.6, 13.1, 14.2, 11.1_
 
 ## Notes

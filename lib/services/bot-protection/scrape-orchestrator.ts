@@ -9,6 +9,7 @@
  */
 
 import { logger } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 import { DetectionEngine, ProtectionType, HttpResponse } from './detection-engine';
 import { ProxyManager, Proxy } from './proxy-manager';
 import { RateLimiter } from './rate-limiter';
@@ -30,6 +31,7 @@ import {
 } from './strategy-selector';
 import { generateHeaders } from './header-generator';
 import { UserAgentPool } from './user-agent-pool';
+import { recordPriceHistoryGap } from './price-history-maintenance';
 
 /**
  * Scrape request interface
@@ -260,6 +262,24 @@ export class ScrapeOrchestrator {
                         );
                     }
 
+                    // Update last known good price
+                    if (attemptResult.price) {
+                        await this.updateLastKnownGoodPrice(
+                            request.competitorProductId,
+                            attemptResult.price,
+                            attemptResult.currency || 'USD'
+                        );
+                    }
+
+                    // Handle manual price override if applicable
+                    if (attemptResult.price) {
+                        await this.handleManualPriceOverride(
+                            request.competitorProductId,
+                            attemptResult.price,
+                            attemptResult.currency || 'USD'
+                        );
+                    }
+
                     logger.info('[ScrapeOrchestrator] Scrape successful', {
                         attemptNumber,
                         strategy: currentStrategy,
@@ -362,6 +382,12 @@ export class ScrapeOrchestrator {
             lastProtectionType,
             lastErrorMessage,
         });
+
+        // Record price history gap to maintain continuity
+        await recordPriceHistoryGap(
+            request.competitorProductId,
+            lastProtectionType || 'scraping_failed'
+        );
 
         return {
             success: false,
@@ -684,6 +710,136 @@ export class ScrapeOrchestrator {
             success: result.success,
             protectionDetected: result.protectionDetected,
         });
+    }
+
+    /**
+     * Update last known good price on successful scrape
+     * 
+     * Stores the last successfully scraped price with timestamp.
+     * This allows the system to display the last known good price
+     * when current scraping fails.
+     * 
+     * Requirements: 14.1
+     * 
+     * @param competitorProductId - ID of the competitor product
+     * @param price - Successfully scraped price
+     * @param currency - Price currency
+     */
+    async updateLastKnownGoodPrice(
+        competitorProductId: string,
+        price: number,
+        currency: string
+    ): Promise<void> {
+        try {
+            logger.info('[ScrapeOrchestrator] Updating last known good price', {
+                competitorProductId,
+                price,
+                currency,
+            });
+
+            await prisma.product.update({
+                where: { id: competitorProductId },
+                data: {
+                    lastKnownGoodPrice: price,
+                    lastKnownGoodPriceAt: new Date(),
+                    lastKnownGoodCurrency: currency,
+                },
+            });
+
+            logger.info('[ScrapeOrchestrator] Last known good price updated successfully', {
+                competitorProductId,
+                price,
+            });
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Error updating last known good price', {
+                competitorProductId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            // Don't throw - this is a non-critical operation
+        }
+    }
+
+    /**
+     * Check for manual prices and replace with scraped price on success
+     * 
+     * When automated scraping successfully retrieves a price for a product
+     * that has a manually entered price, this method replaces the manual
+     * price with the scraped price and maintains history.
+     * 
+     * Requirements: 13.5, 13.6
+     * 
+     * @param competitorProductId - ID of the competitor product
+     * @param scrapedPrice - Successfully scraped price
+     * @param currency - Price currency
+     */
+    async handleManualPriceOverride(
+        competitorProductId: string,
+        scrapedPrice: number,
+        currency: string
+    ): Promise<void> {
+        try {
+            // Check if product has a manual price
+            const product = await prisma.product.findUnique({
+                where: { id: competitorProductId },
+                select: {
+                    id: true,
+                    isManualPrice: true,
+                    manualPrice: true,
+                    currentPrice: true,
+                    title: true,
+                },
+            });
+
+            if (!product) {
+                logger.warn('[ScrapeOrchestrator] Product not found for manual price override', {
+                    competitorProductId,
+                });
+                return;
+            }
+
+            // If product has a manual price, replace it with scraped price
+            if (product.isManualPrice && product.manualPrice) {
+                logger.info('[ScrapeOrchestrator] Replacing manual price with scraped price', {
+                    competitorProductId,
+                    manualPrice: product.manualPrice.toString(),
+                    scrapedPrice,
+                    productTitle: product.title,
+                });
+
+                // Update product to use scraped price
+                await prisma.product.update({
+                    where: { id: competitorProductId },
+                    data: {
+                        currentPrice: scrapedPrice,
+                        currency: currency,
+                        isManualPrice: false,
+                        // Keep manual price fields for history
+                        // manualPrice, manualPriceEnteredBy, manualPriceEnteredAt remain unchanged
+                        updatedAt: new Date(),
+                    },
+                });
+
+                // Create price history entry for the scraped price
+                await prisma.priceHistory.create({
+                    data: {
+                        productId: competitorProductId,
+                        price: scrapedPrice,
+                        recordedAt: new Date(),
+                    },
+                });
+
+                logger.info('[ScrapeOrchestrator] Manual price successfully replaced', {
+                    competitorProductId,
+                    newPrice: scrapedPrice,
+                });
+            }
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Error handling manual price override', {
+                competitorProductId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            // Don't throw - this is a non-critical operation
+        }
     }
 
     /**

@@ -26,6 +26,13 @@ import { cacheMonitoringService } from '@/lib/services/cache-monitoring';
 import { cacheAlertingService } from '@/lib/services/cache-alerting';
 import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 
+// Bot Protection Jobs
+import { runScheduledScraping } from '@/lib/services/bot-protection/scraping-scheduler';
+import { runHourlyAggregation } from '@/lib/services/bot-protection/metric-aggregation-job';
+import { runLogRetentionCleanup } from '@/lib/services/bot-protection/log-retention-job';
+import { runAlertMonitoring } from '@/lib/services/bot-protection/alert-monitoring-job';
+import { runCookieCleanup } from '@/lib/services/bot-protection/cookie-cleanup-job';
+
 const prisma = new PrismaClient();
 const pool = getConnectionPoolManager().getPool();
 
@@ -63,9 +70,9 @@ async function executeJob(
 
         // Log error to console (database logging disabled due to schema mismatch)
         console.error('Job error detail:', {
-             jobName,
-             error: error instanceof Error ? error.message : String(error),
-             duration,
+            jobName,
+            error: error instanceof Error ? error.message : String(error),
+            duration,
         });
     }
 }
@@ -215,6 +222,71 @@ function getSchedulerStatus() {
     };
 }
 
+/**
+ * Bot Protection: Scheduled scraping - Scrapes all competitor products
+ * Runs every hour
+ * Requirements: 4.5
+ */
+cron.schedule('0 * * * *', async () => {
+    await executeJob('scheduled-scraping', async () => {
+        await runScheduledScraping();
+    });
+}, {
+    timezone: 'UTC'
+});
+
+/**
+ * Bot Protection: Metric aggregation - Aggregates scrape attempts into hourly metrics
+ * Runs every hour at 5 minutes past
+ * Requirements: 9.2
+ */
+cron.schedule('5 * * * *', async () => {
+    await executeJob('metric-aggregation', async () => {
+        await runHourlyAggregation();
+    });
+}, {
+    timezone: 'UTC'
+});
+
+/**
+ * Bot Protection: Log retention cleanup - Cleans up old logs and screenshots
+ * Runs daily at 3 AM UTC
+ * Requirements: 8.6
+ */
+cron.schedule('0 3 * * *', async () => {
+    await executeJob('log-retention-cleanup', async () => {
+        await runLogRetentionCleanup();
+    });
+}, {
+    timezone: 'UTC'
+});
+
+/**
+ * Bot Protection: Alert monitoring - Checks success rates and triggers alerts
+ * Runs every 5 minutes
+ * Requirements: 9.4, 12.1, 12.7
+ */
+cron.schedule('*/5 * * * *', async () => {
+    await executeJob('alert-monitoring', async () => {
+        await runAlertMonitoring();
+    });
+}, {
+    timezone: 'UTC'
+});
+
+/**
+ * Bot Protection: Cookie cleanup - Removes expired cookies and stale sessions
+ * Runs every 6 hours
+ * Requirements: 5.4
+ */
+cron.schedule('0 */6 * * *', async () => {
+    await executeJob('cookie-cleanup', async () => {
+        await runCookieCleanup();
+    });
+}, {
+    timezone: 'UTC'
+});
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('[Scheduler] Received SIGTERM, shutting down gracefully...');
@@ -243,6 +315,11 @@ console.log('  - Cache Warming: 2:00 AM UTC');
 console.log('  - Statistics Collection: 4:00 AM UTC');
 console.log('  - Cache Statistics Logging: Every 5 minutes');
 console.log('  - Cache Health Alerting: Every 5 minutes');
+console.log('  - Scheduled Scraping: Every hour');
+console.log('  - Metric Aggregation: Every hour at :05');
+console.log('  - Log Retention Cleanup: Daily at 3:00 AM UTC');
+console.log('  - Alert Monitoring: Every 5 minutes');
+console.log('  - Cookie Cleanup: Every 6 hours');
 console.log();
 console.log('Scheduler is running. Press Ctrl+C to stop.');
 console.log('='.repeat(80));

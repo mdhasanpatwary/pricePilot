@@ -11,19 +11,29 @@
 
 import { AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { ErrorMessageGenerator, ProtectionType } from '@/lib/services/bot-protection/error-message-generator';
+import { ManualPriceEntryButton } from './manual-price-entry-button';
 
 interface ProtectionErrorMessageProps {
     protectionType: ProtectionType;
     competitorSiteName: string;
     lastSuccessfulScrape?: Date;
     className?: string;
+    // Optional props for manual price entry
+    productId?: string;
+    productTitle?: string;
+    currency?: string;
+    onManualPriceSuccess?: () => void;
 }
 
 export function ProtectionErrorMessage({
     protectionType,
     competitorSiteName,
     lastSuccessfulScrape,
-    className = ''
+    className = '',
+    productId,
+    productTitle,
+    currency = 'USD',
+    onManualPriceSuccess,
 }: ProtectionErrorMessageProps) {
     const errorMessage = ErrorMessageGenerator.generateMessage(
         protectionType,
@@ -93,10 +103,25 @@ export function ProtectionErrorMessage({
 
                     {errorMessage.requiresManualIntervention && (
                         <div className={`text-xs font-medium ${textColorClasses[errorMessage.severity]} pt-2 border-t ${errorMessage.severity === 'error'
-                                ? 'border-red-200 dark:border-red-800'
-                                : 'border-yellow-200 dark:border-yellow-800'
+                            ? 'border-red-200 dark:border-red-800'
+                            : 'border-yellow-200 dark:border-yellow-800'
                             }`}>
                             ⚠️ Manual action may be required
+                        </div>
+                    )}
+
+                    {/* Manual Price Entry Button */}
+                    {productId && productTitle && (
+                        <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <ManualPriceEntryButton
+                                productId={productId}
+                                productTitle={productTitle}
+                                competitorSiteName={competitorSiteName}
+                                currency={currency}
+                                onSuccess={onManualPriceSuccess}
+                                variant="outline"
+                                size="sm"
+                            />
                         </div>
                     )}
                 </div>

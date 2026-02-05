@@ -210,6 +210,17 @@ model Product {
   updatedAt      DateTime  @updatedAt
   imageUrl       String?
   specifications Json?
+  
+  // Manual price entry fields
+  manualPrice         Decimal?  @db.Decimal(10, 2)
+  manualPriceEnteredBy String?
+  manualPriceEnteredAt DateTime?
+  isManualPrice       Boolean   @default(false)
+
+  // Last known good price fields
+  lastKnownGoodPrice     Decimal?  @db.Decimal(10, 2)
+  lastKnownGoodPriceAt   DateTime?
+  lastKnownGoodCurrency  String?
 
   priceHistory PriceHistory[]
   updateLogs   PriceUpdateLog[]
@@ -233,6 +244,7 @@ model Product {
   @@index([tenantId, brand])
   @@index([brandId])
   @@index([categoryId])
+  @@index([lastKnownGoodPriceAt])
 }
 
 model ProductMatch {
