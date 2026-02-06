@@ -13,9 +13,8 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkRehype from 'remark-rehype';
 import rehypeRaw from 'rehype-raw';
+import rehypeSlug from 'rehype-slug';
 import rehypeStringify from 'rehype-stringify';
-import rehypeShiki from 'rehype-shiki';
-import { createHighlighter } from 'shiki';
 import { visit } from 'unist-util-visit';
 import type { Element } from 'hast';
 import { sanitizeHtmlContent } from './security';
@@ -176,38 +175,14 @@ export async function parseMarkdown(
         // Validate frontmatter
         validateFrontmatter(data);
 
-        // Initialize Shiki highlighter
-        const highlighter = await createHighlighter({
-            themes: ['nord'],
-            langs: [
-                'javascript',
-                'typescript',
-                'python',
-                'java',
-                'php',
-                'sql',
-                'bash',
-                'json',
-                'yaml',
-                'markdown',
-                'html',
-                'css',
-                'tsx',
-                'jsx',
-            ],
-        });
-
         // Process Markdown to HTML using unified/remark/rehype
         const processor = unified()
             .use(remarkParse) // Parse Markdown to AST
             .use(remarkGfm) // Support GitHub Flavored Markdown (tables, strikethrough, etc.)
             .use(remarkRehype, { allowDangerousHtml: true }) // Convert Markdown AST to HTML AST
             .use(rehypeRaw) // Parse raw HTML in Markdown
-            .use(rehypeMermaidPlugin) // Mark Mermaid diagrams for client-side rendering (before Shiki)
-            .use(rehypeShiki, {
-                highlighter,
-                theme: 'nord',
-            }) // Add syntax highlighting
+            .use(rehypeSlug) // Add IDs to headings
+            .use(rehypeMermaidPlugin) // Mark Mermaid diagrams for client-side rendering
             .use(rehypeStringify); // Serialize HTML AST to string
 
         const result = await processor.process(content);

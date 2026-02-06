@@ -38,7 +38,10 @@ export function DocumentationLayout({ type, children }: DocumentationLayoutProps
                 const response = await fetch(`/api/v1/documentation/${type}/toc`);
                 if (response.ok) {
                     const data = await response.json();
-                    setToc(data.toc || []);
+                    console.log('TOC fetched:', data.data?.toc?.length || 0, 'categories');
+                    setToc(data.data?.toc || []);
+                } else {
+                    console.error('Failed to fetch TOC:', response.status);
                 }
             } catch (error) {
                 console.error('Failed to fetch table of contents:', error);
@@ -134,6 +137,10 @@ export function DocumentationLayout({ type, children }: DocumentationLayoutProps
                                     <div className="h-8 w-full animate-pulse rounded bg-muted" />
                                     <div className="h-8 w-full animate-pulse rounded bg-muted" />
                                     <div className="h-8 w-full animate-pulse rounded bg-muted" />
+                                </div>
+                            ) : toc.length === 0 ? (
+                                <div className="text-sm text-muted-foreground">
+                                    No documentation found
                                 </div>
                             ) : (
                                 <NavigationTree

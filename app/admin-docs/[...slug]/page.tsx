@@ -31,9 +31,21 @@ export default async function AdminDocsPage({ params }: PageProps) {
     const slugString = slug.join('/');
 
     // Fetch document
-    const document = await documentationService.getDocument('admin', slugString);
+    let document = await documentationService.getDocument('admin', slugString);
 
+    // If document not found, check if this is a category and redirect to first document
     if (!document) {
+        // Try to get table of contents to find if this is a category
+        const toc = await documentationService.getTableOfContents('admin');
+        const category = toc.find(cat => cat.slug === slugString);
+        
+        if (category && category.children && category.children.length > 0) {
+            // Redirect to first document in category
+            const firstDoc = category.children[0];
+            const { redirect } = await import('next/navigation');
+            redirect(`/admin-docs/${firstDoc.slug}`);
+        }
+        
         notFound();
     }
 

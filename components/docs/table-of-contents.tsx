@@ -66,9 +66,9 @@ export function TableOfContents({ headings }: TableOfContentsProps) {
 
     const tocContent = (
         <nav className="space-y-1">
-            {headings.map((heading) => (
+            {headings.map((heading, index) => (
                 <button
-                    key={heading.id}
+                    key={heading.id || `heading-${index}`}
                     onClick={() => handleClick(heading.id)}
                     className={cn(
                         'block w-full text-left text-sm transition-colors hover:text-foreground',
@@ -79,6 +79,7 @@ export function TableOfContents({ headings }: TableOfContentsProps) {
                             ? 'font-medium text-primary'
                             : 'text-muted-foreground'
                     )}
+                    disabled={!heading.id}
                 >
                     {heading.text}
                 </button>

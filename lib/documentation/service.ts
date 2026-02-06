@@ -125,6 +125,24 @@ export class DocumentationService {
             return null;
         }
 
+        // Generate HTML on-demand if it's empty (for documents seeded without HTML)
+        if (!doc.htmlContent || doc.htmlContent.trim() === '') {
+            try {
+                const parsed = await parseMarkdown(doc.content);
+                
+                // Update the document with generated HTML
+                await prisma.documentationDocument.update({
+                    where: { id: doc.id },
+                    data: { htmlContent: parsed.html },
+                });
+                
+                doc.htmlContent = parsed.html;
+            } catch (error) {
+                console.error(`Failed to generate HTML for document ${doc.id}:`, error);
+                // Return document with empty HTML rather than failing
+            }
+        }
+
         return this.mapDocumentToInterface(doc);
     }
 
