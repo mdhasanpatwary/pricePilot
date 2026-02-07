@@ -104,10 +104,12 @@ function DashboardContent() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setChartData(data);
+        // API returns { chartData: [...], pagination: {...} }
+        setChartData(Array.isArray(data.chartData) ? data.chartData : []);
       }
     } catch (e) {
       console.error(e);
+      setChartData([]); // Ensure it's always an array on error
     }
   }, [impersonateId]);
 

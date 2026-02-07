@@ -1,9 +1,9 @@
 /**
  * Proxy Manager for Bot Protection Handling
- * 
+ *
  * Manages proxy rotation, health tracking, and selection for scraping operations.
  * Implements cooldown logic, site-specific success rate tracking, and alert triggering.
- * 
+ *
  * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7
  */
 
@@ -39,19 +39,19 @@ export interface ProxyHealth {
 
 /**
  * ProxyManager class
- * 
+ *
  * Manages proxy selection, health tracking, and cooldown logic for bot protection handling.
  */
 export class ProxyManager {
   /**
    * Get a proxy for scraping a specific competitor website
-   * 
+   *
    * Implements the proxy selection algorithm:
    * 1. Filter out proxies in cooldown period for this site
    * 2. Filter out globally unavailable proxies (success rate < 10%)
    * 3. Sort by site-specific success rate (descending)
    * 4. Select top proxy with randomization to avoid overuse
-   * 
+   *
    * Requirements: 2.1, 2.6
    */
   async getProxy(competitorWebsiteId: string): Promise<Proxy | null> {
@@ -59,7 +59,7 @@ export class ProxyManager {
       const now = new Date();
       const proxies = await prisma.proxy.findMany({
         where: { status: 'active' },
-        include: { siteHealth: { where: { competitorWebsiteId } } },
+        include: { ProxySiteHealth: { where: { competitorWebsiteId } } },
       });
 
       if (proxies.length === 0) {
@@ -73,7 +73,7 @@ export class ProxyManager {
           const globalSuccessRate = globalTotal > 0 ? proxyRecord.globalSuccessCount / globalTotal : 0;
           if (globalTotal >= 10 && globalSuccessRate < 0.1) return null;
 
-          const siteHealth = proxyRecord.siteHealth[0];
+          const siteHealth = proxyRecord.ProxySiteHealth[0];
           if (siteHealth?.cooldownUntil && siteHealth.cooldownUntil > now) return null;
 
           const siteTotal = (siteHealth?.successCount || 0) + (siteHealth?.failureCount || 0);
@@ -186,7 +186,7 @@ export class ProxyManager {
     try {
       const proxyRecord = await prisma.proxy.findUnique({
         where: { id: proxyId },
-        include: { siteHealth: true },
+        include: { ProxySiteHealth: true },
       });
 
       if (!proxyRecord) throw new Error(`Proxy \${proxyId} not found`);
@@ -195,7 +195,7 @@ export class ProxyManager {
       const globalSuccessRate = globalTotal > 0 ? proxyRecord.globalSuccessCount / globalTotal : 0;
 
       const siteSpecificRates = new Map<string, number>();
-      for (const health of proxyRecord.siteHealth) {
+      for (const health of proxyRecord.ProxySiteHealth) {
         const siteTotal = health.successCount + health.failureCount;
         const siteRate = siteTotal > 0 ? health.successCount / siteTotal : 0;
         siteSpecificRates.set(health.competitorWebsiteId, siteRate);
@@ -204,17 +204,17 @@ export class ProxyManager {
       const isBlocked = globalTotal >= 10 && globalSuccessRate < 0.1;
       const now = new Date();
 
-      const lastSuccess = proxyRecord.siteHealth
+      const lastSuccess = proxyRecord.ProxySiteHealth
         .map((h) => h.lastSuccessAt)
         .filter((d): d is Date => d !== null)
         .sort((a, b) => b.getTime() - a.getTime())[0] || null;
 
-      const lastFailure = proxyRecord.siteHealth
+      const lastFailure = proxyRecord.ProxySiteHealth
         .map((h) => h.lastFailureAt)
         .filter((d): d is Date => d !== null)
         .sort((a, b) => b.getTime() - a.getTime())[0] || null;
 
-      const cooldownUntil = proxyRecord.siteHealth
+      const cooldownUntil = proxyRecord.ProxySiteHealth
         .map((h) => h.cooldownUntil)
         .filter((d): d is Date => d !== null && d > now)
         .sort((a, b) => b.getTime() - a.getTime())[0] || null;
@@ -243,7 +243,7 @@ export class ProxyManager {
       const now = new Date();
       const activeProxies = await prisma.proxy.findMany({
         where: { status: 'active' },
-        include: { siteHealth: { where: { competitorWebsiteId } } },
+        include: { ProxySiteHealth: { where: { competitorWebsiteId } } },
       });
 
       if (activeProxies.length === 0) return;
@@ -253,7 +253,7 @@ export class ProxyManager {
         const globalSuccessRate = globalTotal > 0 ? proxyRecord.globalSuccessCount / globalTotal : 1;
         if (globalTotal >= 10 && globalSuccessRate < 0.1) return true;
 
-        const siteHealth = proxyRecord.siteHealth[0];
+        const siteHealth = proxyRecord.ProxySiteHealth[0];
         if (siteHealth?.cooldownUntil && siteHealth.cooldownUntil > now) return true;
 
         return false;

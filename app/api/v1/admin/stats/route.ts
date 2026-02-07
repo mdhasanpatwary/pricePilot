@@ -35,18 +35,18 @@ async function handleGET(_req: NextRequest) {
       take: 5,
       orderBy: { createdAt: "desc" },
       include: {
-        users: { take: 1 },
-        _count: { select: { products: true } },
+        User: { take: 1 },
+        _count: { select: { Product: true } },
       },
     });
 
     const formattedTenants = recentTenants.map((t) => ({
       name: t.companyName,
-      email: t.users[0]?.email || "No Admin",
+      email: t.User[0]?.email || "No Admin",
       plan: t.planType,
       status: "ACTIVE", // Placeholder
       joined: t.createdAt.toLocaleDateString(),
-      products: t._count.products,
+      products: t._count.Product,
     }));
 
     return NextResponse.json({

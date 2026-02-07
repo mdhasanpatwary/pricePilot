@@ -44,7 +44,7 @@ async function handleGET(_req: NextRequest) {
         currency = (userSite as any).currency;
       } else {
         const anyUserProduct = await prisma.product.findFirst({
-          where: { tenantId, site: { type: "USER" } },
+          where: { tenantId, Site: { type: "USER" } },
           select: { currency: true },
           orderBy: { createdAt: "desc" },
         });
@@ -64,7 +64,7 @@ async function handleGET(_req: NextRequest) {
     const totalProducts = await prisma.product.count({
       where: {
         tenantId,
-        site: { type: "USER" },
+        Site: { type: "USER" },
       },
     });
 

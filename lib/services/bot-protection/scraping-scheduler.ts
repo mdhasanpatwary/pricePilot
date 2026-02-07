@@ -1,9 +1,9 @@
 /**
  * Scraping Scheduler
- * 
+ *
  * Schedules and queues scrape requests for all competitor products.
  * Respects rate limits and distributes requests over time.
- * 
+ *
  * Requirements: 4.5
  */
 
@@ -184,7 +184,7 @@ export class ScrapingScheduler {
         const products = await prisma.product.findMany({
             where: {
                 tenantId,
-                site: {
+                Site: {
                     type: 'COMPETITOR',
                 },
             },
@@ -340,7 +340,7 @@ export interface SchedulerStats {
 
 /**
  * Run scheduled scraping (for cron execution)
- * 
+ *
  * Example cron schedule: 0 * * * * (every hour)
  */
 export async function runScheduledScraping(): Promise<ScheduleResult> {

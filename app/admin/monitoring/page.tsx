@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Bug, HeartPulse, Eye, Settings } from "lucide-react";
 import RealTimeMonitor from "@/components/admin/real-time-monitor";
@@ -15,23 +15,22 @@ import { DiagnosticsContent } from "./diagnostics-content";
 
 export default function MonitoringHubPage() {
     const searchParams = useSearchParams();
-    const tabParam = searchParams.get("tab");
-    const [activeTab, setActiveTab] = useState(tabParam || "live");
+    const router = useRouter();
+    const tabParam = searchParams.get("tab") || "live";
     const [sessions, setSessions] = useState<ScrapingSessionData[]>([]);
     const [loadingSessions, setLoadingSessions] = useState(false);
 
-    useEffect(() => {
-        if (tabParam) {
-            setActiveTab(tabParam);
-        }
-    }, [tabParam]);
+    // Update URL when tab changes
+    const handleTabChange = (value: string) => {
+        router.push(`/admin/monitoring?tab=${value}`, { scroll: false });
+    };
 
     // Fetch sessions when control tab is active
     useEffect(() => {
-        if (activeTab === "control") {
+        if (tabParam === "control") {
             fetchSessions();
         }
-    }, [activeTab]);
+    }, [tabParam]);
 
     const fetchSessions = async () => {
         setLoadingSessions(true);
@@ -57,7 +56,7 @@ export default function MonitoringHubPage() {
                 </p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <Tabs value={tabParam} onValueChange={handleTabChange} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 lg:w-auto lg:inline-grid">
                     <TabsTrigger value="live" className="flex items-center gap-2">
                         <Eye className="w-4 h-4" />

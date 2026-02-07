@@ -22,14 +22,14 @@ async function handleGET(_req: NextRequest) {
     const products = await prisma.product.findMany({
       where: {
         tenantId,
-        site: { type: "USER" },
+        Site: { type: "USER" },
       },
       include: {
         matchesAsUser: {
           include: {
             competitorProduct: {
               include: {
-                site: true,
+                Site: true,
               },
             },
           },

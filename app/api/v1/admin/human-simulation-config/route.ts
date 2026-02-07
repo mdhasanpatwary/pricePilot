@@ -60,7 +60,7 @@ async function handleGET() {
         // Check if user is super admin or regular admin
         const user = session.user as any;
         const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
-        
+
         if (!isAdmin) {
             return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
         }
@@ -146,7 +146,7 @@ async function handlePOST(request: NextRequest) {
         // Check if user is super admin or regular admin
         const user = session.user as any;
         const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
-        
+
         if (!isAdmin) {
             return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
         }
@@ -271,6 +271,7 @@ async function handlePOST(request: NextRequest) {
             // Create new configuration
             updatedConfig = await prisma.humanSimulationConfig.create({
                 data: {
+                    id: "default",
                     typingMinDelay: config.typing.minDelay,
                     typingMaxDelay: config.typing.maxDelay,
                     actionPauseMin: config.actionPause.minDelay,
@@ -278,7 +279,8 @@ async function handlePOST(request: NextRequest) {
                     mouseMovementEnabled: config.mouseMovement.enabled,
                     naturalCurvesEnabled: config.mouseMovement.naturalCurves,
                     pauseBetweenFields: config.formInteraction.pauseBetweenFields,
-                    simulateCorrections: config.formInteraction.simulateCorrections
+                    simulateCorrections: config.formInteraction.simulateCorrections,
+                    updatedAt: new Date()
                 }
             });
         }

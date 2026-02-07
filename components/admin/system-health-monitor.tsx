@@ -85,7 +85,19 @@ export function SystemHealthMonitor({
     const fetchHealth = useCallback(async () => {
         try {
             const response = await fetch("/api/v1/admin/health");
-            if (!response.ok) throw new Error("Failed to fetch health");
+
+            // Handle authentication errors gracefully
+            if (response.status === 401) {
+                console.warn("Health check: Authentication required");
+                setLoading(false);
+                return;
+            }
+
+            if (!response.ok) {
+                console.error("Health check failed:", response.status, response.statusText);
+                setLoading(false);
+                return;
+            }
 
             const data = await response.json();
             if (data.success && data.data) {
@@ -105,9 +117,14 @@ export function SystemHealthMonitor({
     // Fetch alerts
     const fetchAlerts = useCallback(async () => {
         try {
-            // For now, we'll create a simple endpoint or use the alert repository
-            // This is a placeholder - you may need to create an API endpoint
             const response = await fetch("/api/v1/admin/alerts?acknowledged=false");
+
+            // Handle authentication errors gracefully
+            if (response.status === 401) {
+                console.warn("Alerts check: Authentication required");
+                return;
+            }
+
             if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.data) {
@@ -175,7 +192,31 @@ export function SystemHealthMonitor({
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
+                <div className="text-center">
+                    <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground mx-auto mb-4" />
+                    <p className="text-sm text-muted-foreground">Loading system health...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Show message if not authenticated or no health data
+    if (!health) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                        Unable to Load System Health
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Please ensure you are logged in and have admin access.
+                    </p>
+                    <Button onClick={fetchHealth} variant="outline" size="sm">
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Retry
+                    </Button>
+                </div>
             </div>
         );
     }

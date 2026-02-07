@@ -48,10 +48,11 @@ export class SystemHealthService {
                 details: { responseTime },
             };
         } catch (error) {
+            logger.error("[SystemHealth] Database connection failed", { error });
             return {
                 status: "unhealthy",
                 message: `Database connection failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-                details: { error },
+                details: { error: error instanceof Error ? error.message : "Unknown error" },
             };
         }
     }
@@ -80,10 +81,11 @@ export class SystemHealthService {
                 details: { responseTime },
             };
         } catch (error) {
+            logger.error("[SystemHealth] Redis connection failed", { error });
             return {
                 status: "unhealthy",
                 message: `Redis connection failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-                details: { error },
+                details: { error: error instanceof Error ? error.message : "Unknown error" },
             };
         }
     }
@@ -110,10 +112,11 @@ export class SystemHealthService {
                 details: stats,
             };
         } catch (error) {
+            logger.warn("[SystemHealth] Browser pool check failed", { error });
             return {
-                status: "unhealthy",
-                message: `Browser pool error: ${error instanceof Error ? error.message : "Unknown error"}`,
-                details: { error },
+                status: "degraded",
+                message: `Browser pool unavailable: ${error instanceof Error ? error.message : "Unknown error"}`,
+                details: { error: error instanceof Error ? error.message : "Unknown error" },
             };
         }
     }
@@ -154,10 +157,11 @@ export class SystemHealthService {
                 details: { total: breakerStats.length },
             };
         } catch (error) {
+            logger.warn("[SystemHealth] Circuit breaker check failed", { error });
             return {
-                status: "unhealthy",
-                message: `Circuit breaker check failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-                details: { error },
+                status: "degraded",
+                message: `Circuit breaker check unavailable: ${error instanceof Error ? error.message : "Unknown error"}`,
+                details: { error: error instanceof Error ? error.message : "Unknown error" },
             };
         }
     }
@@ -166,43 +170,72 @@ export class SystemHealthService {
      * Perform comprehensive system health check
      */
     static async checkSystemHealth(): Promise<SystemHealth> {
-        const [database, redis, browserPool, circuitBreakers] = await Promise.all([
-            this.checkDatabase(),
-            this.checkRedis(),
-            this.checkBrowserPool(),
-            this.checkCircuitBreakers(),
-        ]);
+        try {
+            const [database, redis, browserPool, circuitBreakers] = await Promise.all([
+                this.checkDatabase(),
+                this.checkRedis(),
+                this.checkBrowserPool(),
+                this.checkCircuitBreakers(),
+            ]);
 
-        const components = [database, redis, browserPool, circuitBreakers];
-        const unhealthyCount = components.filter(c => c.status === "unhealthy").length;
-        const degradedCount = components.filter(c => c.status === "degraded").length;
+            const components = [database, redis, browserPool, circuitBreakers];
+            const unhealthyCount = components.filter(c => c.status === "unhealthy").length;
+            const degradedCount = components.filter(c => c.status === "degraded").length;
 
-        let overall: HealthStatus;
-        if (unhealthyCount > 0) {
-            overall = {
-                status: "unhealthy",
-                message: `${unhealthyCount} critical components are unhealthy`,
+            let overall: HealthStatus;
+            if (unhealthyCount > 0) {
+                overall = {
+                    status: "unhealthy",
+                    message: `${unhealthyCount} critical components are unhealthy`,
+                };
+            } else if (degradedCount > 0) {
+                overall = {
+                    status: "degraded",
+                    message: `${degradedCount} components are degraded`,
+                };
+            } else {
+                overall = {
+                    status: "healthy",
+                    message: "All systems operational",
+                };
+            }
+
+            return {
+                overall,
+                database,
+                redis,
+                browserPool,
+                circuitBreakers,
+                timestamp: new Date(),
             };
-        } else if (degradedCount > 0) {
-            overall = {
-                status: "degraded",
-                message: `${degradedCount} components are degraded`,
-            };
-        } else {
-            overall = {
-                status: "healthy",
-                message: "All systems operational",
+        } catch (error) {
+            logger.error("[SystemHealth] Health check failed", { error });
+
+            // Return a degraded status if the health check itself fails
+            return {
+                overall: {
+                    status: "degraded",
+                    message: "Health check partially failed",
+                },
+                database: {
+                    status: "degraded",
+                    message: "Unable to check database health",
+                },
+                redis: {
+                    status: "degraded",
+                    message: "Unable to check Redis health",
+                },
+                browserPool: {
+                    status: "degraded",
+                    message: "Unable to check browser pool health",
+                },
+                circuitBreakers: {
+                    status: "degraded",
+                    message: "Unable to check circuit breakers",
+                },
+                timestamp: new Date(),
             };
         }
-
-        return {
-            overall,
-            database,
-            redis,
-            browserPool,
-            circuitBreakers,
-            timestamp: new Date(),
-        };
     }
 
     /**

@@ -1,6 +1,6 @@
 /**
  * Password Change API Endpoint
- * 
+ *
  * Handles password changes with session invalidation
  * Requirements: 2.7.7
  */
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       select: {
         id: true,
         passwordHash: true,
-        passwordHistory: {
+        PasswordHistory: {
           orderBy: { createdAt: 'desc' },
           take: 5, // Check last 5 passwords
         },
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if new password was used recently
-    for (const oldPassword of user.passwordHistory) {
+    for (const oldPassword of user.PasswordHistory) {
       const isReused = await bcrypt.compare(newPassword, oldPassword.passwordHash);
       if (isReused) {
         return NextResponse.json(

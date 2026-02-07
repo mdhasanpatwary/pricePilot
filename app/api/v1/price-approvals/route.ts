@@ -42,7 +42,7 @@ async function handleGET(req: NextRequest) {
                         title: true,
                         sku: true,
                         imageUrl: true,
-                        site: {
+                        Site: {
                             select: {
                                 baseUrl: true,
                                 type: true,

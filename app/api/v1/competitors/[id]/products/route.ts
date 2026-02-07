@@ -1,6 +1,6 @@
 /**
  * Competitor Products API Endpoint
- * 
+ *
  * Provides competitor product data with caching
  * Requirements: 8.3 - Cache GET requests for competitor products (TTL: 10 minutes)
  */
@@ -51,14 +51,14 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
                 siteId: competitorId,
                 tenantId,
             },
-            include: {
-                site: true,
-                matchesAsCompetitor: {
-                    include: {
-                        userProduct: true,
+                include: {
+                    Site: true,
+                    matchesAsCompetitor: {
+                        include: {
+                            userProduct: true,
+                        },
                     },
                 },
-            },
             orderBy: {
                 updatedAt: "desc",
             },

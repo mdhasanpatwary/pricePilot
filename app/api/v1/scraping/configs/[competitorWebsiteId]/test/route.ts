@@ -16,9 +16,9 @@ import {
 
 /**
  * POST /api/v1/scraping/configs/:competitorWebsiteId/test
- * 
+ *
  * Test scraping configuration by performing a test scrape
- * 
+ *
  * Requirements: 15.1
  */
 async function handlePOST(
@@ -51,7 +51,7 @@ async function handlePOST(
             type: "COMPETITOR",
         },
         include: {
-            scrapingConfigs: true,
+            ScrapingConfig: true,
         },
     });
 
@@ -60,7 +60,7 @@ async function handlePOST(
     }
 
     // Get existing configuration or use defaults
-    const existingConfig = competitorWebsite.scrapingConfigs[0];
+    const existingConfig = competitorWebsite.ScrapingConfig;
 
     // Merge existing config with test config
     const testConfig = {

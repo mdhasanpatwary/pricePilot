@@ -32,7 +32,7 @@ async function handleGET(req: NextRequest) {
   let currency = "USD";
   try {
     const anyUserProduct = await prisma.product.findFirst({
-      where: { tenantId, site: { type: "USER" } },
+      where: { tenantId, Site: { type: "USER" } },
       select: { currency: true },
       orderBy: { createdAt: "desc" },
     });
@@ -58,7 +58,7 @@ async function handleGET(req: NextRequest) {
 
   const where: any = {
     tenantId,
-    site: { type: "USER" },
+    Site: { type: "USER" },
   };
 
   // 1. Text Search
@@ -102,12 +102,12 @@ async function handleGET(req: NextRequest) {
       sortOrder: paginationParams.sortOrder || 'desc'
     },
     {
-      site: true,
+      Site: true,
       matchesAsUser: {
         include: {
           competitorProduct: {
             include: {
-              site: true,
+              Site: true,
             },
           },
         },
@@ -131,7 +131,7 @@ async function handleGET(req: NextRequest) {
     const allMatches = product.matchesAsUser.map((m: any) => {
       let siteName = "Unknown";
       try {
-        const urlObj = new URL(m.competitorProduct.site.baseUrl);
+        const urlObj = new URL(m.competitorProduct.Site.baseUrl);
         siteName = urlObj.hostname.replace("www.", "");
       } catch (e) {
         // Ignore URL parsing errors
@@ -140,7 +140,7 @@ async function handleGET(req: NextRequest) {
       return {
         id: m.id,
         siteName,
-        url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+        url: m.competitorProduct.url || m.competitorProduct.Site.baseUrl,
         price: parseFloat(m.competitorProduct.currentPrice.toString()),
         image: m.competitorProduct.imageUrl || null,
         inStock:
@@ -190,15 +190,15 @@ async function handleGET(req: NextRequest) {
       compPrice,
       diff,
       status,
-      match: bestMatch?.competitorProduct.site?.baseUrl || null,
+      match: bestMatch?.competitorProduct.Site?.baseUrl || null,
       stock: product.inStock ? product.stockLevel || 0 : 0,
       inStock: product.inStock,
       compInStock,
       category: product.category || "Uncategorized",
       brand: product.brand || "Generic",
       model: product.model || "N/A",
-      siteName: product.site?.baseUrl
-        ? new URL(product.site.baseUrl).hostname.replace("www.", "")
+      siteName: product.Site?.baseUrl
+        ? new URL(product.Site.baseUrl).hostname.replace("www.", "")
         : "Unknown",
       allMatches,
       specifications: product.specifications || {},

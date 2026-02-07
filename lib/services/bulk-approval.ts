@@ -99,7 +99,7 @@ export class BulkApprovalService {
                     status: "PENDING",
                 },
                 include: {
-                    product: true,
+                    Product: true,
                 },
             });
 
@@ -218,7 +218,7 @@ export class BulkApprovalService {
                     status: "PENDING",
                 },
                 include: {
-                    product: true,
+                    Product: true,
                 },
             });
 
@@ -257,9 +257,9 @@ export class BulkApprovalService {
                                 action: "REJECT_PRICE",
                                 entityId: change.id,
                                 details: JSON.stringify({
-                                    productId: change.product.id,
-                                    productTitle: change.product.title,
-                                    productSku: change.product.sku,
+                                    productId: change.Product.id,
+                                    productTitle: change.Product.title,
+                                    productSku: change.Product.sku,
                                     currentPrice: change.currentPrice.toString(),
                                     recommendedPrice: change.recommendedPrice.toString(),
                                     reason: change.reason,
@@ -330,7 +330,7 @@ export class BulkApprovalService {
      * Requirements: 2.10.4 (Use transactions for consistency), 2.10.5 (Audit logging)
      */
     private static async processBatch(
-        batch: Array<PendingPriceChange & { product: Product }>,
+        batch: Array<PendingPriceChange & { Product: Product }>,
         reviewedBy: string
     ): Promise<void> {
         const now = new Date();
@@ -377,9 +377,9 @@ export class BulkApprovalService {
                     action: "APPROVE_PRICE",
                     entityId: change.id,
                     details: JSON.stringify({
-                        productId: change.product.id,
-                        productTitle: change.product.title,
-                        productSku: change.product.sku,
+                        productId: change.Product.id,
+                        productTitle: change.Product.title,
+                        productSku: change.Product.sku,
                         oldPrice: change.currentPrice.toString(),
                         newPrice: change.recommendedPrice.toString(),
                         reason: change.reason,
@@ -401,7 +401,7 @@ export class BulkApprovalService {
      * Requirements: 2.10.5 (Audit logging)
      */
     private static async processBatchIndividually(
-        batch: Array<PendingPriceChange & { product: Product }>,
+        batch: Array<PendingPriceChange & { Product: Product }>,
         reviewedBy: string
     ): Promise<{
         successful: number;
@@ -451,9 +451,9 @@ export class BulkApprovalService {
                             action: "APPROVE_PRICE",
                             entityId: change.id,
                             details: JSON.stringify({
-                                productId: change.product.id,
-                                productTitle: change.product.title,
-                                productSku: change.product.sku,
+                                productId: change.Product.id,
+                                productTitle: change.Product.title,
+                                productSku: change.Product.sku,
                                 oldPrice: change.currentPrice.toString(),
                                 newPrice: change.recommendedPrice.toString(),
                                 reason: change.reason,
@@ -485,7 +485,7 @@ export class BulkApprovalService {
      * Requirements: 2.10.4 (Optimize notification sending)
      */
     private static async sendBatchNotifications(
-        changes: Array<PendingPriceChange & { product: Product }>
+        changes: Array<PendingPriceChange & { Product: Product }>
     ): Promise<void> {
         try {
             // Group changes by tenant for efficient notification
@@ -505,7 +505,7 @@ export class BulkApprovalService {
                         tenantId,
                         tenantChanges.length,
                         tenantChanges.map(c => ({
-                            productTitle: c.product.title,
+                            productTitle: c.Product.title,
                             oldPrice: parseFloat(c.currentPrice.toString()),
                             newPrice: parseFloat(c.recommendedPrice.toString()),
                         }))
@@ -536,7 +536,7 @@ export class BulkApprovalService {
      * Requirements: 2.10.4 (Optimize notification sending)
      */
     private static async dispatchBatchWebhooks(
-        changes: Array<PendingPriceChange & { product: Product }>
+        changes: Array<PendingPriceChange & { Product: Product }>
     ): Promise<void> {
         try {
             // Group changes by tenant
@@ -555,9 +555,9 @@ export class BulkApprovalService {
                     await WebhookService.dispatch(tenantId, "prices.bulk_updated", {
                         count: tenantChanges.length,
                         products: tenantChanges.map(change => ({
-                            productId: change.product.id,
-                            sku: change.product.sku,
-                            title: change.product.title,
+                            productId: change.Product.id,
+                            sku: change.Product.sku,
+                            title: change.Product.title,
                             oldPrice: change.currentPrice.toString(),
                             newPrice: change.recommendedPrice.toString(),
                             reason: change.reason,

@@ -30,32 +30,32 @@ async function handleGET(req: NextRequest) {
         where: { level: { in: ["ERROR", "WARN"] }, createdAt: { gte: cutoff } },
         orderBy: { createdAt: "desc" },
         take: limit,
-        include: { site: { select: { baseUrl: true, tenant: { select: { companyName: true } } } } }
+        include: { Site: { select: { baseUrl: true, Tenant: { select: { companyName: true } } } } }
       }),
       // Price Update Logs
       prisma.priceUpdateLog.findMany({
         where: { status: "FAILED", executedAt: { gte: cutoff } },
         orderBy: { executedAt: "desc" },
         take: limit,
-        include: { product: { select: { title: true, tenant: { select: { companyName: true } } } } }
+        include: { Product: { select: { title: true, Tenant: { select: { companyName: true } } } } }
       }),
       // Scrape Retries / Hard Failures
       prisma.scrapeRetry.findMany({
         where: { status: "FAILED", updatedAt: { gte: cutoff } },
         orderBy: { updatedAt: "desc" },
         take: limit,
-        include: { 
-            site: { select: { baseUrl: true } },
-            userProduct: { select: { title: true } },
-            tenant: { select: { companyName: true } }
+        include: {
+          Site: { select: { baseUrl: true } },
+          Product: { select: { title: true } },
+          Tenant: { select: { companyName: true } }
         }
       }),
       // Significant Audit Logs (e.g. system configs, massive deletions)
       prisma.tenantAuditLog.findMany({
-          where: { createdAt: { gte: cutoff } },
-          orderBy: { createdAt: "desc" },
-          take: limit,
-          include: { tenant: { select: { companyName: true } } }
+        where: { createdAt: { gte: cutoff } },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        include: { Tenant: { select: { companyName: true } } }
       })
     ]);
 
@@ -64,52 +64,52 @@ async function handleGET(req: NextRequest) {
 
     // Check for products with 0 price (if they are active/in stock)
     const zeroPriceProducts = await prisma.product.count({
-        where: { currentPrice: 0, inStock: true }
+      where: { currentPrice: 0, inStock: true }
     });
     if (zeroPriceProducts > 0) {
-        inconsistencies.push({
-            type: "PRICING_ANOMALY",
-            severity: "MAJOR",
-            message: `${zeroPriceProducts} active products have a price of ৳0`,
-            impact: "Revenue loss / Display error"
-        });
+      inconsistencies.push({
+        type: "PRICING_ANOMALY",
+        severity: "MAJOR",
+        message: `${zeroPriceProducts} active products have a price of ৳0`,
+        impact: "Revenue loss / Display error"
+      });
     }
 
     // Check for user products without SKU (critical for matching)
     const missingSkus = await prisma.product.count({
-        where: { site: { type: "USER" }, sku: null }
+      where: { Site: { type: "USER" }, sku: null }
     });
     if (missingSkus > 0) {
-        inconsistencies.push({
-            type: "DATA_GAP",
-            severity: "WARN",
-            message: `${missingSkus} user products are missing SKUs`,
-            impact: "Matching accuracy degraded"
-        });
+      inconsistencies.push({
+        type: "DATA_GAP",
+        severity: "WARN",
+        message: `${missingSkus} user products are missing SKUs`,
+        impact: "Matching accuracy degraded"
+      });
     }
 
     // Check for sites that haven't synced in 48h
     const stalledSites = await prisma.site.findMany({
-        where: { 
-            lastSyncAt: { lt: new Date(Date.now() - 48 * 3600 * 1000) },
-            type: "COMPETITOR"
-        },
-        select: { baseUrl: true, tenant: { select: { companyName: true } } }
+      where: {
+        lastSyncAt: { lt: new Date(Date.now() - 48 * 3600 * 1000) },
+        type: "COMPETITOR"
+      },
+      select: { baseUrl: true, Tenant: { select: { companyName: true } } }
     });
     if (stalledSites.length > 0) {
-        inconsistencies.push({
-            type: "STALE_SOURCE",
-            severity: "CRITICAL",
-            message: `${stalledSites.length} competitor trackers haven't updated in 48h+`,
-            impact: "Stale pricing intelligence",
-            details: stalledSites.map(s => `${s.tenant.companyName}: ${s.baseUrl}`).join(", ")
-        });
+      inconsistencies.push({
+        type: "STALE_SOURCE",
+        severity: "CRITICAL",
+        message: `${stalledSites.length} competitor trackers haven't updated in 48h+`,
+        impact: "Stale pricing intelligence",
+        details: stalledSites.map(s => `${s.Tenant.companyName}: ${s.baseUrl}`).join(", ")
+      });
     }
 
     return NextResponse.json({
       summary: {
-          errorCount: syncErrors.length + updateErrors.length + scrapeFailures.length,
-          inconsistencyCount: inconsistencies.length
+        errorCount: syncErrors.length + updateErrors.length + scrapeFailures.length,
+        inconsistencyCount: inconsistencies.length
       },
       logs: {
         sync: syncErrors,

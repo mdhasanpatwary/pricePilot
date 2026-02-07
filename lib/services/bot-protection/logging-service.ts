@@ -1,9 +1,9 @@
 /**
  * Logging Service for Bot Protection Handling
- * 
+ *
  * Provides structured logging with retention policies and query capabilities
  * for scraping attempts and bot protection detections.
- * 
+ *
  * Requirements: 8.1, 8.2, 8.4, 8.7
  */
 
@@ -94,7 +94,7 @@ export interface DetectionQuery {
 
 /**
  * Logging Service
- * 
+ *
  * Handles all logging operations for scraping attempts and bot protection detections.
  * Implements retention policies and provides query capabilities.
  */
@@ -103,9 +103,9 @@ export class LoggingService {
 
     /**
      * Log a scrape attempt
-     * 
+     *
      * Stores complete log in database with response sample truncated to size limit.
-     * 
+     *
      * @param log - Scrape attempt log entry
      * @returns Created log entry with ID
      */
@@ -147,9 +147,9 @@ export class LoggingService {
 
     /**
      * Log a bot protection detection
-     * 
+     *
      * Stores detection result with confidence score and reasoning.
-     * 
+     *
      * @param log - Detection log entry
      * @returns Created log entry with ID
      */
@@ -173,7 +173,7 @@ export class LoggingService {
 
     /**
      * Query scrape attempt logs with enhanced filtering and pagination
-     * 
+     *
      * Supports filtering by:
      * - Competitor site
      * - Competitor product
@@ -182,9 +182,9 @@ export class LoggingService {
      * - Strategy
      * - Success status
      * - Protection detection status
-     * 
+     *
      * Implements pagination with total count and hasMore indicator.
-     * 
+     *
      * @param query - Query parameters
      * @returns Query result with logs and pagination metadata
      */
@@ -281,9 +281,9 @@ export class LoggingService {
 
     /**
      * Query detection logs
-     * 
+     *
      * Supports filtering by protection type, confidence, and date range.
-     * 
+     *
      * @param query - Detection query parameters
      * @returns Array of detection logs
      */
@@ -313,12 +313,12 @@ export class LoggingService {
 
         // Filter by tenant or website if provided
         if (query.tenantId || query.competitorWebsiteId) {
-            where.scrapeAttempt = {};
+            where.ScrapeAttempt = {};
             if (query.tenantId) {
-                where.scrapeAttempt.tenantId = query.tenantId;
+                (where.ScrapeAttempt as any).tenantId = query.tenantId;
             }
             if (query.competitorWebsiteId) {
-                where.scrapeAttempt.competitorWebsiteId = query.competitorWebsiteId;
+                (where.ScrapeAttempt as any).competitorWebsiteId = query.competitorWebsiteId;
             }
         }
 
@@ -344,13 +344,13 @@ export class LoggingService {
 
     /**
      * Clean up old logs based on retention policy
-     * 
+     *
      * Retention policy:
      * - Successful attempts: 7 days
      * - Failed attempts: 30 days
      * - Detection logs: 90 days (handled via cascade delete)
      * - Screenshots: 7 days (URL cleanup only, actual file deletion handled separately)
-     * 
+     *
      * @returns Number of logs deleted
      */
     async cleanupOldLogs(): Promise<{ scrapeAttempts: number; detections: number }> {
@@ -400,7 +400,7 @@ export class LoggingService {
 
     /**
      * Truncate response sample to maximum size
-     * 
+     *
      * @param sample - Response sample to truncate
      * @returns Truncated sample with indicator if truncated
      */
@@ -414,7 +414,7 @@ export class LoggingService {
 
     /**
      * Get scrape attempt by ID
-     * 
+     *
      * @param id - Scrape attempt ID
      * @returns Scrape attempt log or null if not found
      */
@@ -452,7 +452,7 @@ export class LoggingService {
 
     /**
      * Get detection logs for a scrape attempt
-     * 
+     *
      * @param scrapeAttemptId - Scrape attempt ID
      * @returns Array of detection logs
      */
@@ -479,7 +479,7 @@ export class LoggingService {
 
     /**
      * Get recent scrape attempts for a competitor website
-     * 
+     *
      * @param competitorWebsiteId - Competitor website ID
      * @param limit - Maximum number of logs to return
      * @returns Array of recent scrape attempt logs
@@ -523,7 +523,7 @@ export class LoggingService {
 
     /**
      * Get protection type statistics for a competitor website
-     * 
+     *
      * @param competitorWebsiteId - Competitor website ID
      * @param startDate - Start date for statistics
      * @param endDate - End date for statistics

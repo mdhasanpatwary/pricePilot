@@ -56,7 +56,7 @@ async function handleGET(_req: NextRequest) {
     const brandPerformance = brands.map(brand => {
       const brandMatches = matches.filter(m => m.userProduct.brand === brand);
       const total = brandMatches.length;
-      
+
       const atRisk = brandMatches.filter(m => {
         const up = parseFloat(m.userProduct.currentPrice.toString());
         const cp = parseFloat(m.competitorProduct.currentPrice.toString());
@@ -95,7 +95,7 @@ async function handleGET(_req: NextRequest) {
             const total = varMatches.length;
             const avgPrice = varMatches.reduce((sum, m) => sum + parseFloat(m.userProduct.currentPrice.toString()), 0) / total;
             const competitorAvg = varMatches.reduce((sum, m) => sum + parseFloat(m.competitorProduct.currentPrice.toString()), 0) / total;
-            
+
             return {
                 value: v,
                 total,

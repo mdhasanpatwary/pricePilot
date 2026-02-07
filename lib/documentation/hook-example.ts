@@ -1,6 +1,6 @@
 /**
  * Documentation Hook Usage Examples
- * 
+ *
  * This file demonstrates how to use the documentation hook system
  * to automatically generate documentation suggestions when tasks are completed.
  */
@@ -121,7 +121,7 @@ export async function exampleRetrieveSuggestions() {
             createdAt: 'desc',
         },
         include: {
-            document: {
+            DocumentationDocument: {
                 select: {
                     title: true,
                     slug: true,
@@ -139,8 +139,8 @@ export async function exampleRetrieveSuggestions() {
         console.log(`Category: ${suggestion.category}`);
         console.log(`Task ID: ${suggestion.taskId}`);
 
-        if (suggestion.document) {
-            console.log(`Affects Document: ${suggestion.document.title} (${suggestion.document.slug})`);
+        if (suggestion.DocumentationDocument) {
+            console.log(`Affects Document: ${suggestion.DocumentationDocument.title} (${suggestion.DocumentationDocument.slug})`);
         } else {
             console.log(`Suggests New Document: ${suggestion.suggestedTitle}`);
         }
@@ -198,7 +198,7 @@ export async function exampleRejectSuggestion(suggestionId: string, reviewerId: 
 
 /**
  * Example 9: Integration with task management system
- * 
+ *
  * This shows how you would integrate the documentation hook
  * with your existing task management system.
  */
@@ -206,7 +206,7 @@ export async function integrateWithTaskSystem() {
     // Pseudo-code for integration
 
     // In your task management system, when a task is marked as complete:
-    // 
+    //
     // taskManager.on('taskCompleted', async (task) => {
     //     await documentationHook.onTaskCompleted({
     //         id: task.id,

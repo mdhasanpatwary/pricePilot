@@ -79,7 +79,8 @@ function AnalyticsContent() {
         const elasticData = await elasticRes.json();
 
         setStats(summaryData);
-        setHistory(historyData);
+        // API returns { chartData: [...], pagination: {...} }
+        setHistory(Array.isArray(historyData.chartData) ? historyData.chartData : []);
         setTechStats(techData);
         setCompetitorStats(compData);
         setElasticityData(elasticData);
@@ -89,6 +90,7 @@ function AnalyticsContent() {
       }
     } catch (error) {
       toast.error("Connection error");
+      setHistory([]); // Ensure it's always an array on error
     } finally {
       setIsLoading(false);
     }

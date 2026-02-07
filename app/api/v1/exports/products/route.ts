@@ -30,13 +30,13 @@ async function handleGET(_req: NextRequest) {
     const products = await prisma.product.findMany({
       where: {
         tenantId,
-        site: { type: "USER" },
+        Site: { type: "USER" },
       },
       include: {
         matchesAsUser: {
           include: {
             competitorProduct: {
-              include: { site: true },
+              include: { Site: true },
             },
           },
         },
@@ -63,7 +63,7 @@ async function handleGET(_req: NextRequest) {
     const rows = products.map((p) => {
       const bestMatch = p.matchesAsUser[0];
       const specs = (p.specifications as any) || {};
-      
+
       const userPrice = parseFloat(p.currentPrice.toString());
       const compPrice = bestMatch ? parseFloat(bestMatch.competitorProduct.currentPrice.toString()) : null;
       const gap = compPrice ? (compPrice - userPrice).toFixed(2) : "";
@@ -80,7 +80,7 @@ async function handleGET(_req: NextRequest) {
         formatCSVValue(specs.storage),
         p.inStock ? "Yes" : "No",
         compPrice || "",
-        formatCSVValue(bestMatch?.competitorProduct.site?.baseUrl),
+        formatCSVValue(bestMatch?.competitorProduct.Site?.baseUrl),
         gap
       ];
     });

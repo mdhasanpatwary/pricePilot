@@ -106,6 +106,51 @@ function AdminSidebar({
 }) {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
+  const [currentTab, setCurrentTab] = useState<string | null>(null);
+
+  // Get current tab from URL on mount and when URL changes
+  useEffect(() => {
+    const updateTab = () => {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        setCurrentTab(tab);
+      }
+    };
+
+    // Initial update
+    updateTab();
+
+    // Poll for URL changes every 100ms (lightweight check)
+    const interval = setInterval(updateTab, 100);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [pathname]); // Keep pathname as dependency for consistency
+
+  // Helper function to check if a path is active
+  const isPathActive = (href: string, currentPath: string): boolean => {
+    // Extract base path and query params
+    const [basePath, queryString] = href.split('?');
+
+    // If no query params in href, just check exact path match
+    if (!queryString) {
+      return currentPath === basePath;
+    }
+
+    // If href has query params, check both path and tab param
+    if (currentPath !== basePath) {
+      return false;
+    }
+
+    // Extract tab value from href query string
+    const hrefParams = new URLSearchParams(queryString);
+    const hrefTab = hrefParams.get('tab');
+
+    // Compare with current tab
+    return hrefTab === currentTab;
+  };
 
   // Auto-expand menus that contain the active path
   useEffect(() => {
@@ -114,7 +159,11 @@ function AdminSidebar({
       const toAdd: string[] = [];
       adminMenuItems.forEach((item) => {
         if (
-          item.children?.some((child) => pathname === child.href) &&
+          item.children?.some((child) => {
+            // Extract base path without query params
+            const childBasePath = child.href.split('?')[0];
+            return pathname === childBasePath || pathname.startsWith(childBasePath + '/');
+          }) &&
           !prev.includes(item.label)
         ) {
           toAdd.push(item.label);
@@ -174,7 +223,7 @@ function AdminSidebar({
           const hasChildren = item.children && item.children.length > 0;
           const isChildActive =
             hasChildren &&
-            item.children!.some((child) => pathname === child.href);
+            item.children!.some((child) => isPathActive(child.href, pathname));
           const isExpanded = expandedMenus.includes(item.label);
 
           return (
@@ -217,21 +266,24 @@ function AdminSidebar({
                         : "max-h-0 opacity-0",
                     )}
                   >
-                    {item.children!.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={onClose}
-                        className={cn(
-                          "block px-3 py-1.5 rounded-md transition-colors text-xs",
-                          pathname === child.href
-                            ? "bg-primary/10 text-primary font-bold"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
-                        )}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
+                    {item.children!.map((child) => {
+                      const isActive = isPathActive(child.href, pathname);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={onClose}
+                          className={cn(
+                            "block px-3 py-1.5 rounded-md transition-colors text-xs",
+                            isActive
+                              ? "bg-primary/10 text-primary font-bold"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
                   </div>
                 </>
               ) : (

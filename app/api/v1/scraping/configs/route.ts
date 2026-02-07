@@ -8,9 +8,9 @@ import { UnauthorizedError } from "@/lib/utils/error-handler";
 
 /**
  * GET /api/v1/scraping/configs
- * 
+ *
  * Get all scraping configurations for the tenant's competitor websites
- * 
+ *
  * Requirements: 15.1
  */
 async function handleGET() {
@@ -31,13 +31,13 @@ async function handleGET() {
         select: {
             id: true,
             baseUrl: true,
-            scrapingConfigs: true,
+            ScrapingConfig: true,
         },
     });
 
     // Format the response
     const configs = competitorWebsites.map((site) => {
-        const config = site.scrapingConfigs[0]; // One-to-one relationship
+        const config = site.ScrapingConfig; // One-to-one relationship
 
         return {
             competitorWebsiteId: site.id,

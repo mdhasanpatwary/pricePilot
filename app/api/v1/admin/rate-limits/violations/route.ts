@@ -189,7 +189,7 @@ async function handleGET(req: NextRequest) {
         const rawViolations = await prisma.rateLimitMetric.findMany({
             where,
             include: {
-                tenant: {
+                Tenant: {
                     select: {
                         companyName: true,
                     },
@@ -205,7 +205,7 @@ async function handleGET(req: NextRequest) {
         const violations = rawViolations.map((violation: any) => ({
             id: violation.id,
             tenantId: violation.tenantId,
-            tenantName: violation.tenant.companyName,
+            tenantName: violation.Tenant.companyName,
             limiterType: violation.limiterType,
             endpoint: violation.endpoint,
             identifier: violation.identifier,

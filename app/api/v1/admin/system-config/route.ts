@@ -150,7 +150,13 @@ async function handleGET(_req: NextRequest) {
         where: { key: def.key },
       });
       if (!existing) {
-        await prisma.systemConfig.create({ data: def });
+        await prisma.systemConfig.create({
+          data: {
+            ...def,
+            id: `config-${def.key}`,
+            updatedAt: new Date()
+          }
+        });
       }
     }
 
@@ -186,7 +192,12 @@ async function handlePOST(req: NextRequest) {
     const config = await prisma.systemConfig.upsert({
       where: { key },
       update: { value: String(value) },
-      create: { key, value: String(value) },
+      create: {
+        key,
+        value: String(value),
+        id: `config-${key}`,
+        updatedAt: new Date()
+      },
     });
 
     await recordAuditLog({

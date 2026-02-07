@@ -9,9 +9,9 @@ async function handleGET() {
     const session = await getServerSession(authOptions);
 
     if (!session?.user) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "Not logged in",
-        session: null 
+        session: null
       });
     }
 
@@ -23,16 +23,16 @@ async function handleGET() {
     });
 
     const userProducts = await prisma.product.count({
-      where: { 
+      where: {
         tenantId,
-        site: { type: "USER" }
+        Site: { type: "USER" }
       }
     });
 
     const competitorProducts = await prisma.product.count({
-      where: { 
+      where: {
         tenantId,
-        site: { type: "COMPETITOR" }
+        Site: { type: "COMPETITOR" }
       }
     });
 
@@ -43,7 +43,7 @@ async function handleGET() {
         baseUrl: true,
         type: true,
         _count: {
-          select: { products: true }
+          select: { Product: true }
         }
       }
     });
@@ -61,9 +61,9 @@ async function handleGET() {
       }
     });
   } catch (error: any) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: error.message,
-      stack: error.stack 
+      stack: error.stack
     }, { status: 500 });
   }
 }

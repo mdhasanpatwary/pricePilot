@@ -5,9 +5,9 @@ async function checkSync() {
     where: { type: "USER" },
     include: {
       _count: {
-        select: { products: true }
+        select: { Product: true }
       },
-      syncLogs: {
+      SyncLog: {
         orderBy: { createdAt: "desc" },
         take: 5
       }
@@ -20,9 +20,9 @@ async function checkSync() {
     console.log(`  Platform: ${s.platform}`);
     console.log(`  isSyncing: ${s.isSyncing}`);
     console.log(`  Processed: ${s.syncProcessed} / ${s.syncTotal}`);
-    console.log(`  Products: ${s._count.products}`);
+    console.log(`  Products: ${s._count.Product}`);
     console.log(`  Logs:`);
-    s.syncLogs.forEach(l => console.log(`    [${l.level}] ${l.createdAt.toISOString()}: ${l.message}`));
+    s.SyncLog.forEach(l => console.log(`    [${l.level}] ${l.createdAt.toISOString()}: ${l.message}`));
   });
 }
 

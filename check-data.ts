@@ -16,10 +16,10 @@ async function checkData() {
   sites.forEach(s => console.log(`  - ${s.baseUrl} (${s.type}) - tenant: ${s.tenantId}`));
 
   const products = await prisma.product.findMany({
-    include: { site: true }
+    include: { Site: true }
   });
   console.log(`\nProducts: ${products.length}`);
-  products.forEach(p => console.log(`  - ${p.title} (${p.sku}) - site: ${p.site.baseUrl} (${p.site.type})`));
+  products.forEach(p => console.log(`  - ${p.title} (${p.sku}) - site: ${p.Site.baseUrl} (${p.Site.type})`));
 
   await prisma.$disconnect();
 }
