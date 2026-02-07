@@ -1,0 +1,35 @@
+
+> price-pilot@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.2.0) to ./node_modules/@prisma/client in 201ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 22.3s
+  Running TypeScript ...
+Failed to compile.
+
+./create-admin.ts:66:15
+Type error: 'user' is declared but its value is never read.
+
+[0m [90m 64 |[39m         [90m// Create admin user[39m
+ [90m 65 |[39m         console[33m.[39mlog([32m'👤 Creating admin user...'[39m)[33m;[39m
+[31m[1m>[22m[39m[90m 66 |[39m         [36mconst[39m user [33m=[39m [36mawait[39m prisma[33m.[39muser[33m.[39mcreate({
+ [90m    |[39m               [31m[1m^[22m[39m
+ [90m 67 |[39m             data[33m:[39m {
+ [90m 68 |[39m                 id[33m:[39m randomUUID()[33m,[39m
+ [90m 69 |[39m                 email[33m,[39m[0m
+Next.js build worker exited with code: 1 and signal: null

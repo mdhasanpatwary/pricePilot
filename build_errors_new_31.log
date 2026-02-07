@@ -1,0 +1,35 @@
+
+> price-pilot@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.2.0) to ./node_modules/@prisma/client in 211ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 14.3s
+  Running TypeScript ...
+Failed to compile.
+
+./lib/services/matching.ts:145:11
+Type error: Object literal may only specify known properties, but 'site' does not exist in type 'ProductWhereInput'. Did you mean to write 'Site'?
+
+[0m [90m 143 |[39m         where[33m:[39m {
+ [90m 144 |[39m           tenantId[33m,[39m
+[31m[1m>[22m[39m[90m 145 |[39m           site[33m:[39m { type[33m:[39m [32m"USER"[39m }[33m,[39m
+ [90m     |[39m           [31m[1m^[22m[39m
+ [90m 146 |[39m           matchesAsUser[33m:[39m { none[33m:[39m {} }[33m,[39m
+ [90m 147 |[39m         }[33m,[39m
+ [90m 148 |[39m       })[33m;[39m[0m
+Next.js build worker exited with code: 1 and signal: null

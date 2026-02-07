@@ -1,6 +1,6 @@
 /**
  * GDPR Compliance Service
- * 
+ *
  * Implements GDPR requirements:
  * - Article 15: Right to Access
  * - Article 16: Right to Rectification
@@ -84,8 +84,8 @@ export class GDPRService {
             const user = await prisma.user.findUnique({
                 where: { id: userId },
                 include: {
-                    tenant: true,
-                    apiKeys: {
+                    Tenant: true,
+                    ApiKey: {
                         select: {
                             name: true,
                             prefix: true,
@@ -208,10 +208,10 @@ export class GDPRService {
                     emailNotifications: user.emailNotifications,
                 },
                 tenant: {
-                    id: user.tenant.id,
-                    companyName: user.tenant.companyName,
-                    planType: user.tenant.planType,
-                    createdAt: user.tenant.createdAt,
+                    id: (user as any).Tenant.id,
+                    companyName: (user as any).Tenant.companyName,
+                    planType: (user as any).Tenant.planType,
+                    createdAt: (user as any).Tenant.createdAt,
                 },
                 sites: sites.map((site) => ({
                     ...site,
@@ -228,7 +228,7 @@ export class GDPRService {
                 })),
                 auditLogs,
                 notifications,
-                apiKeys: user.apiKeys,
+                apiKeys: (user as any).ApiKey,
             };
         } catch (error) {
             logger.error('GDPR data export failed', { error, userId });
@@ -256,7 +256,7 @@ export class GDPRService {
                 `
           <h2>Your Data Export is Ready</h2>
           <p>As requested, we have prepared an export of all your personal data stored in PricePilot.</p>
-          
+
           <h3>Export Summary</h3>
           <ul>
             <li><strong>User Account:</strong> ${exportData.user.email}</li>
@@ -311,7 +311,7 @@ export class GDPRService {
     /**
      * Delete user account and all associated data (GDPR Article 17)
      * Right to Erasure (Right to be Forgotten)
-     * 
+     *
      * Implements soft delete with 30-day recovery period
      */
     static async requestAccountDeletion(
@@ -323,7 +323,7 @@ export class GDPRService {
 
             const user = await prisma.user.findUnique({
                 where: { id: userId },
-                include: { tenant: true },
+                include: { Tenant: true },
             });
 
             if (!user) {
@@ -420,7 +420,7 @@ export class GDPRService {
 
             const user = await prisma.user.findUnique({
                 where: { id: userId },
-                include: { tenant: true },
+                include: { Tenant: true },
             });
 
             if (!user) {

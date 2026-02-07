@@ -1,0 +1,35 @@
+
+> price-pilot@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.2.0) to ./node_modules/@prisma/client in 255ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 21.2s
+  Running TypeScript ...
+Failed to compile.
+
+./lib/documentation/hook-example.ts:124:13
+Type error: Object literal may only specify known properties, and 'document' does not exist in type 'DocumentationSuggestionInclude<DefaultArgs>'.
+
+[0m [90m 122 |[39m         }[33m,[39m
+ [90m 123 |[39m         include[33m:[39m {
+[31m[1m>[22m[39m[90m 124 |[39m             document[33m:[39m {
+ [90m     |[39m             [31m[1m^[22m[39m
+ [90m 125 |[39m                 select[33m:[39m {
+ [90m 126 |[39m                     title[33m:[39m [36mtrue[39m[33m,[39m
+ [90m 127 |[39m                     slug[33m:[39m [36mtrue[39m[33m,[39m[0m
+Next.js build worker exited with code: 1 and signal: null

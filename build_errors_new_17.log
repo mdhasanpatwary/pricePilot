@@ -1,0 +1,35 @@
+
+> price-pilot@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.2.0) to ./node_modules/@prisma/client in 204ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 19.8s
+  Running TypeScript ...
+Failed to compile.
+
+./lib/documentation/search.ts:428:17
+Type error: Object literal may only specify known properties, and 'pageViews' does not exist in type 'DocumentationDocumentOrderByWithRelationInput | DocumentationDocumentOrderByWithRelationInput[]'.
+
+[0m [90m 426 |[39m             select[33m:[39m { title[33m:[39m [36mtrue[39m }[33m,[39m
+ [90m 427 |[39m             orderBy[33m:[39m {
+[31m[1m>[22m[39m[90m 428 |[39m                 pageViews[33m:[39m {
+ [90m     |[39m                 [31m[1m^[22m[39m
+ [90m 429 |[39m                     _count[33m:[39m [32m'desc'[39m
+ [90m 430 |[39m                 }
+ [90m 431 |[39m             }[33m,[39m[0m
+Next.js build worker exited with code: 1 and signal: null
