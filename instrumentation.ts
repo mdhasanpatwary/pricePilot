@@ -41,10 +41,8 @@ function validateEnvironment(): void {
         errors.forEach(error => console.error(`  - ${error}`));
         console.error('\nApplication cannot start with invalid configuration.');
 
-        // process.exit is only available in Node.js
-        if (typeof process !== 'undefined' && typeof process.exit === 'function') {
-            process.exit(1);
-        }
+        // process.exit is only available in Node.js and not supported in Edge Runtime checks
+        throw new Error('Application cannot start with invalid configuration.');
     }
 
     console.log('✓ Environment validation completed successfully');
@@ -69,9 +67,7 @@ export async function register() {
             console.log('✓ Encryption key validated successfully');
         } catch (error) {
             console.error('❌ Encryption key validation failed:', error instanceof Error ? error.message : String(error));
-            if (typeof process !== 'undefined' && typeof process.exit === 'function') {
-                process.exit(1);
-            }
+            throw new Error('Encryption key validation failed');
         }
 
         validateEnvironment();

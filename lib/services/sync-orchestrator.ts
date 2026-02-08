@@ -1,6 +1,5 @@
 import { ScraperService, ScrapeBlockError } from "./scraper";
 import { RulesEngine } from "./rules-engine";
-import { MatchingService } from "./matching";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
 import { NotificationService } from "./notification";
@@ -9,7 +8,6 @@ import { SystemConfigService } from "@/lib/config";
 import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
-import { circuitBreakerRegistry } from "@/lib/utils/circuit-breaker";
 import { CacheInvalidationService } from "./cache-invalidation";
 import { AutoApprovalService } from "./auto-approval";
 
@@ -198,176 +196,6 @@ export class SyncOrchestrator {
 
       return { success: true, dispatched: competitorSites.length };
 
-      // 1. Run Matching Discovery
-      await MatchingService.runMatching(tenantId);
-
-      const matches = (await (prisma.productMatch as any).findMany({
-        where: {
-          userProduct: { tenantId },
-          status: { in: ["PENDING", "APPROVED"] } as any,
-        },
-        include: {
-          competitorProduct: { include: { site: true } },
-        },
-      })) as any[];
-
-      if (matches.length === 0) {
-        return { success: true, updated: 0, scrapped: 0 };
-      }
-
-      // 2. Scrape competitor prices
-      const scraper = new ScraperService();
-      await scraper.init();
-
-      let scrappedCount = 0;
-      const scrapedProductsMap = new Map<string, unknown>();
-
-      for (const match of matches) {
-        const cp = match.competitorProduct;
-        if (!cp.url || scrapedProductsMap.has(cp.id)) continue;
-
-        // Check if this specific site should still be syncing
-        // (Since FULL sync locks all sites at once, we should check individual flags if user wants to stop one)
-        const siteStatus = await prisma.site.findUnique({
-          where: { id: cp.siteId },
-          select: { isSyncing: true }
-        });
-        if (siteStatus?.isSyncing === false) continue;
-
-        // 20-HOUR FRESHNESS CHECK: Skip if already fetched within the last 20 hours
-        const REFRESH_WINDOW_MS = 20 * 60 * 60 * 1000;
-        const isFresh = cp.lastCrawledAt && (Date.now() - cp.lastCrawledAt.getTime() < REFRESH_WINDOW_MS);
-
-        if (isFresh || (cp.lastCrawledAt && cp.lastCrawledAt.getTime() >= syncSessionStart.getTime())) {
-          scrappedCount++;
-          continue;
-        }
-
-        // Skip if this product's site is currently being synced by another independent session
-        // This prevents double-scraping and progress indicators jumping around.
-        // Golden Rule: Skip advanced protected sites if it's a cron and not off-peak
-        if (cp.site.isAdvancedProtected && isCron && !this.isOffPeak()) {
-          continue;
-        }
-
-        try {
-          // Golden Rule: Add delay if advanced protected
-          if (cp.site.isAdvancedProtected) {
-            const delay = 8000 + Math.random() * 7000; // 8-15s
-            await new Promise(r => setTimeout(r, delay));
-          }
-
-          // Use circuit breaker for site-specific failures
-          const siteBreaker = circuitBreakerRegistry.getBreaker(`scraper-${cp.siteId}`, {
-            failureThreshold: 3,
-            recoveryTimeout: 300000, // 5 minutes
-          });
-
-          const result = await siteBreaker.execute(
-            () => scraper.scrapeProductPage(cp.url),
-            async () => {
-              logger.warn(`[SyncOrchestrator] Circuit breaker OPEN for site ${cp.siteId}, skipping scrape`);
-              return null;
-            }
-          );
-
-          if (result?.price) {
-            const res = result!;
-            // ... (rest of the update logic)
-            await prisma.$transaction(async (tx) => {
-              await tx.product.update({
-                where: { id: cp.id },
-                data: {
-                  currentPrice: res.price,
-                  inStock: res.inStock,
-                  imageUrl: res.imageUrl || (cp as any).imageUrl,
-                  specifications: res.specifications || (cp as any).specifications, // Save Specs
-                  lastCrawledAt: new Date(),
-                } as any,
-              });
-
-              await tx.priceHistory.create({
-                data: {
-                  productId: cp.id,
-                  price: res.price,
-                  recordedAt: new Date(),
-                },
-              });
-            });
-
-            if (res.imageUrl) {
-              logger.info(
-                `[Sync] Saved image for ${cp.title}: ${res.imageUrl!.substring(0, 50)}...`,
-              );
-            } else {
-              logger.info(`[Sync] No image found for ${cp.title}`);
-            }
-
-            scrapedProductsMap.set(cp.id, res);
-            scrappedCount++;
-          }
-        } catch (error) {
-          if (error instanceof ScrapeBlockError && (error as ScrapeBlockError).isAdvanced) {
-            await this.handleSecurityBlock(cp.siteId, tenantId, cp.site.baseUrl, matches.length - scrappedCount);
-          }
-          logger.error(`[SyncOrchestrator] Error scraping ${cp.url}:`, { error });
-        }
-      }
-
-      await scraper.close();
-
-      // 3. Evaluate Pricing Rules
-      const recommendations = await RulesEngine.evaluateAllRules(tenantId);
-      if (recommendations.length === 0) {
-        return { success: true, updated: 0, scrapped: scrappedCount };
-      }
-
-      // 4. Queue Price Changes for Approval (instead of auto-applying)
-      const result = await RulesEngine.executePriceChanges(recommendations);
-
-      // 5. Process Auto-Approvals (Requirement 2.10.1)
-      // After price changes are queued, evaluate them against auto-approval rules
-      let autoApprovedCount = 0;
-      try {
-        autoApprovedCount = await AutoApprovalService.processAutoApprovals(tenantId);
-
-        // Log auto-approval statistics
-        if (autoApprovedCount > 0) {
-          logger.info(`[SyncOrchestrator] Auto-approved ${autoApprovedCount} price changes for tenant ${tenantId}`);
-
-          // SyncLog requires a Site reference. To avoid creating orphaned global logs,
-          // record as a standard application info log instead of inserting into DB.
-          logger.info(`✅ Auto-approved ${autoApprovedCount} price changes based on configured rules`);
-        }
-      } catch (err: any) {
-        // Log error but don't fail the sync
-        logger.error(`[SyncOrchestrator] Error processing auto-approvals for tenant ${tenantId}:`, { error: err });
-
-        // SyncLog requires a Site reference. Record as a warning log instead of DB insert.
-        let autoApprovalErrorMessage: string;
-        if (err instanceof Error) {
-          autoApprovalErrorMessage = err.message;
-        } else {
-          autoApprovalErrorMessage = String(err);
-        }
-
-        logger.warn(`⚠️ Auto-approval processing failed: ${autoApprovalErrorMessage}`);
-      }
-
-      const finalResult = {
-        success: true,
-        scrapped: scrappedCount,
-        queued: result.queued,
-        failed: result.failed,
-        autoApproved: autoApprovedCount,
-      };
-
-      await NotificationService.sendSyncSuccess(
-        tenantId,
-        `Sync complete! Scrapped ${scrappedCount} products, queued ${result.queued} price changes for review, and auto-approved ${autoApprovedCount} changes.`,
-      );
-
-      return finalResult;
     } catch (error) {
       logger.error("[SyncOrchestrator] Sync failed fatally:", { error });
       await NotificationService.sendSyncError(
@@ -412,8 +240,8 @@ export class SyncOrchestrator {
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },
-      include: { tenant: true },
-    });
+      include: { Tenant: true },
+    }) as any;
     if (!site) throw new Error("Site not found");
 
     // ATOMIC LOCK ACQUISITION / RESUME CHECK
@@ -559,7 +387,7 @@ export class SyncOrchestrator {
       }
 
       // Golden Rule Settings
-      let isGoldenRule = (site as any).isAdvancedProtected;
+      let isGoldenRule = site.isAdvancedProtected;
       if (isGoldenRule && isCron && !this.isOffPeak()) {
         await prisma.syncLog.create({
           data: {
@@ -893,7 +721,7 @@ export class SyncOrchestrator {
   static async syncProduct(productId: string) {
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      include: { site: true },
+      include: { Site: true },
     });
 
     if (!product || !product.url) throw new Error("Product or URL not found");
@@ -936,11 +764,11 @@ export class SyncOrchestrator {
       });
     }
 
-    await RulesEngine.evaluateAllRules(product.site.tenantId);
+    await RulesEngine.evaluateAllRules((product as any).Site.tenantId);
 
     // Process Auto-Approvals after rules evaluation (Requirement 2.10.1)
     try {
-      const autoApprovedCount = await AutoApprovalService.processAutoApprovals(product.site.tenantId);
+      const autoApprovedCount = await AutoApprovalService.processAutoApprovals((product as any).Site.tenantId);
 
       if (autoApprovedCount > 0) {
         logger.info(`[SyncOrchestrator] Auto-approved ${autoApprovedCount} price changes for product ${productId}`);
