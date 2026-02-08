@@ -8,3 +8,4 @@ export { APIDetector } from './api-detector';
 export { NetworkInterceptor } from './network-interceptor';
 export { APIPatternAnalyzer } from './api-pattern-analyzer';
 export { APICache, apiCache } from './api-cache';
+export { APIExtractor } from './api-extractor';
