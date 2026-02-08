@@ -36,18 +36,26 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 | Feature | Status | Notes |
 | :--- | :--- | :--- |
 | **Scheduled Reports** | ⏸️ Ignored | PDF/CSV email dumps - not needed for now. |
+| **Shopify Integration** | 🏗️ Pending | Backend connector and price update API missing. |
+| **WooCommerce Integration** | 🏗️ Pending | Backend connector and price update API missing. |
+| **Magento Integration** | 🏗️ Pending | Backend connector and price update API missing. |
+| **Monitoring Alerts** | 🏗️ Incomplete | Email/Slack notifications logic in `cache-alerting` is placeholder. |
+| **Screenshot Storage** | 🏗️ Incomplete | S3 integration logic in `screenshot-storage` is placeholder. |
 
 ---
 
-## 🐛 Issues
+## �️ Technical Debt & Core Infrastructure (Backend)
 
-### ✅ RESOLVED: System Health Monitor & Login (2026-02-07)
-- **Issue**: "Failed to fetch health" error, login concerns, database clearing concerns
-- **Resolution**: No actual issues - error is expected when not logged in (security feature)
-- **Details**: See `FINAL_SOLUTION_BANGLA.md` and `SYSTEM_HEALTH_MONITOR_FIX.md`
-- **Action**: Login at http://localhost:3000/auth/login with credentials below
+*   [x] **Bot Protection Persistence**: Loaded scraping configurations, history, and rate limit states from the database. Added persistence for consecutive failures and next available time.
+*   [ ] **Email Verification**: Re-enable email verification requirement in `lib/auth.ts` before production.
+*   [ ] **Debug API Cleanup**: Secure or remove `/api/v1/debug/*` endpoints before public deployment.
+*   [ ] **Cache Metrics Enhancement**: Implement actual response time tracking in `cache-enhanced.ts`.
+*   [ ] **Code Cleanup**: Remove any remaining redundant placeholder comments (e.g., `// ...`) identifying truncated edits.
 
-**Current Issues**: None - System working as designed
+---
+
+## �🐛 Issues
+*   (None currently blocking build - System is stable)
 
 ## 📝 Tasks
 * list the uncompleted features and anything which in uncompleted.

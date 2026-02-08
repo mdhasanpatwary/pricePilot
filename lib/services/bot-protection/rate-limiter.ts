@@ -1,10 +1,10 @@
 /**
  * Rate Limiter for Bot Protection Handling
- * 
+ *
  * Implements rate limiting with exponential backoff for scraping operations.
  * Tracks per-site rate limits, consecutive failures, and enforces delays.
  * Supports configurable rate limits per site from database.
- * 
+ *
  * Requirements: 4.1, 4.4, 4.5
  */
 
@@ -59,10 +59,10 @@ export enum ProtectionType {
 
 /**
  * RateLimiter class
- * 
+ *
  * Manages rate limiting for scraping operations with exponential backoff.
  * Supports per-site rate limiting with configurable delays from database.
- * 
+ *
  * Requirements: 4.1, 4.4, 4.5
  */
 export class RateLimiter {
@@ -73,82 +73,87 @@ export class RateLimiter {
 
     /**
      * Load rate limit configuration for a competitor website from database
-     * 
+     *
      * Loads configuration from scraping_configs table if available,
      * otherwise uses default configuration.
      * Implements caching to reduce database queries.
-     * 
+     *
      * Requirements: 4.1, 4.4, 4.5
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @returns Rate limit configuration
      */
-    private async loadSiteConfig(competitorWebsiteId: string): Promise<RateLimitConfig> {
-        // Check cache first
-        const cached = this.configCache.get(competitorWebsiteId);
+    private async loadSiteConfigAndState(competitorWebsiteId: string): Promise<{
+        config: RateLimitConfig;
+        state: Partial<SiteRateLimitState>;
+    }> {
+        // Check cache for config
+        const cachedConfig = this.configCache.get(competitorWebsiteId);
         const cacheTimestamp = this.configCacheTimestamps.get(competitorWebsiteId);
 
-        if (cached && cacheTimestamp && Date.now() - cacheTimestamp < this.configCacheTTL) {
-            logger.debug(`Using cached rate limit config for site ${competitorWebsiteId}`);
-            return cached;
-        }
+        let config: RateLimitConfig = cachedConfig && cacheTimestamp && Date.now() - cacheTimestamp < this.configCacheTTL
+            ? cachedConfig
+            : DEFAULT_CONFIG;
+
+        let siteState: Partial<SiteRateLimitState> = {
+            consecutiveFailures: 0,
+            lastRequestTime: null,
+            nextAvailableTime: new Date(),
+        };
 
         try {
-            // Load from database
+            // Always load from database for fresh state and config (if not cached)
             const scrapingConfig = await prisma.scrapingConfig.findUnique({
                 where: { competitorWebsiteId },
                 select: {
                     baseDelayMs: true,
                     maxDelayMs: true,
                     backoffMultiplier: true,
+                    consecutiveFailures: true,
+                    lastRequestAt: true,
+                    nextAvailableAt: true,
                 },
             });
 
             if (scrapingConfig) {
-                const config: RateLimitConfig = {
+                config = {
                     baseDelay: scrapingConfig.baseDelayMs,
                     maxDelay: scrapingConfig.maxDelayMs,
                     backoffMultiplier: Number(scrapingConfig.backoffMultiplier),
-                    jitterRange: 20, // Default jitter
+                    jitterRange: 20,
                 };
 
-                // Update cache
+                siteState = {
+                    consecutiveFailures: scrapingConfig.consecutiveFailures,
+                    lastRequestTime: scrapingConfig.lastRequestAt,
+                    nextAvailableTime: scrapingConfig.nextAvailableAt || new Date(),
+                };
+
+                // Update config cache
                 this.configCache.set(competitorWebsiteId, config);
                 this.configCacheTimestamps.set(competitorWebsiteId, Date.now());
 
-                logger.debug(
-                    `Loaded rate limit config from database for site ${competitorWebsiteId}`,
-                    { config }
-                );
-
-                return config;
+                return { config, state: siteState };
             }
         } catch (error) {
-            logger.error(
-                `Failed to load rate limit config for site ${competitorWebsiteId}`,
-                { error }
-            );
+            logger.error(`Failed to load rate limit config/state for site ${competitorWebsiteId}`, { error });
         }
 
-        // Use default config if not found or error occurred
-        logger.debug(
-            `Using default rate limit config for site ${competitorWebsiteId}`
-        );
-        return DEFAULT_CONFIG;
+        return { config, state: siteState };
     }
 
     /**
      * Acquire permission to make a request to a competitor website
-     * 
+     *
      * Enforces delay based on:
      * - Minimum delay between requests (per-site configuration)
      * - Exponential backoff for consecutive failures
      * - Jitter randomization
-     * 
+     *
      * Loads per-site configuration from database if available.
-     * 
+     *
      * Requirements: 4.1, 4.4, 4.5
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @param config - Optional rate limit configuration (uses site config or default if not provided)
      * @returns Promise that resolves when permission is granted
@@ -157,16 +162,20 @@ export class RateLimiter {
         competitorWebsiteId: string,
         config?: RateLimitConfig
     ): Promise<void> {
-        // Load site-specific config if not provided
-        if (!config) {
-            config = await this.loadSiteConfig(competitorWebsiteId);
-        }
+        // Load site-specific config and state
+        const { config: siteConfig, state: siteState } = await this.loadSiteConfigAndState(competitorWebsiteId);
+        const finalConfig = config || siteConfig;
 
-        const state = this.getOrCreateState(competitorWebsiteId, config);
+        // Ensure in-memory state is synced with DB
+        const state = this.getOrCreateState(competitorWebsiteId, finalConfig);
+        state.consecutiveFailures = siteState.consecutiveFailures ?? state.consecutiveFailures;
+        state.lastRequestTime = siteState.lastRequestTime ?? state.lastRequestTime;
+        state.nextAvailableTime = siteState.nextAvailableTime ?? state.nextAvailableTime;
+
         const now = new Date();
 
         // Calculate required delay based on consecutive failures
-        const delay = this.calculateDelay(state.consecutiveFailures, config);
+        const delay = this.calculateDelay(state.consecutiveFailures, finalConfig);
 
         // Calculate next available time based on last request time
         const nextAvailable = new Date(
@@ -184,31 +193,44 @@ export class RateLimiter {
                 {
                     consecutiveFailures: state.consecutiveFailures,
                     delay,
-                    baseDelay: config.baseDelay,
-                    maxDelay: config.maxDelay,
+                    baseDelay: finalConfig.baseDelay,
+                    maxDelay: finalConfig.maxDelay,
                 }
             );
             await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
 
-        // Update last request time
+        // Update last request time in memory
         state.lastRequestTime = new Date();
+
+        // Persist update to database
+        try {
+            await prisma.scrapingConfig.update({
+                where: { competitorWebsiteId },
+                data: {
+                    lastRequestAt: state.lastRequestTime,
+                    nextAvailableAt: state.nextAvailableTime
+                }
+            });
+        } catch (error) {
+            logger.error(`Failed to update rate limit state in DB for site ${competitorWebsiteId}`, { error });
+        }
 
         logger.debug(`Permit acquired for site ${competitorWebsiteId}`, {
             consecutiveFailures: state.consecutiveFailures,
             delay,
-            config,
+            config: finalConfig,
         });
     }
 
     /**
      * Record a failure for a competitor website
-     * 
+     *
      * Increments consecutive failure count, which increases backoff delay.
      * Increases delay more aggressively for rate limit failures.
-     * 
+     *
      * Requirements: 4.1, 4.4, 4.5
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @param protectionType - Optional protection type detected (increases delay for rate limits)
      */
@@ -216,9 +238,12 @@ export class RateLimiter {
         competitorWebsiteId: string,
         protectionType?: ProtectionType
     ): Promise<void> {
-        // Load site-specific config
-        const config = await this.loadSiteConfig(competitorWebsiteId);
+        // Load site-specific config and current state
+        const { config, state: siteState } = await this.loadSiteConfigAndState(competitorWebsiteId);
         const state = this.getOrCreateState(competitorWebsiteId, config);
+
+        // Sync with DB state
+        state.consecutiveFailures = siteState.consecutiveFailures ?? state.consecutiveFailures;
 
         // Increment failure count
         state.consecutiveFailures += 1;
@@ -227,54 +252,79 @@ export class RateLimiter {
         if (protectionType === ProtectionType.RATE_LIMIT) {
             // Add extra penalty for rate limit failures
             state.consecutiveFailures += 1;
+        }
+
+        // Persist to database
+        try {
+            // Note: We also calculate the next available time here to prevent immediate retries
+            const delay = this.calculateDelay(state.consecutiveFailures, config);
+            const nextAvailable = new Date(Date.now() + delay);
+            state.nextAvailableTime = nextAvailable;
+
+            await prisma.scrapingConfig.update({
+                where: { competitorWebsiteId },
+                data: {
+                    consecutiveFailures: state.consecutiveFailures,
+                    nextAvailableAt: nextAvailable
+                }
+            });
 
             logger.info(
-                `Recorded rate limit failure for site ${competitorWebsiteId}`,
-                {
-                    consecutiveFailures: state.consecutiveFailures,
-                    protectionType,
-                }
-            );
-        } else {
-            logger.info(
-                `Recorded failure for site ${competitorWebsiteId}`,
+                `Recorded failure for site ${competitorWebsiteId} in database`,
                 {
                     consecutiveFailures: state.consecutiveFailures,
                     protectionType: protectionType || 'unknown',
+                    nextAvailable: nextAvailable.toISOString()
                 }
             );
+        } catch (error) {
+            logger.error(`Failed to record failure in DB for site ${competitorWebsiteId}`, { error });
         }
     }
 
     /**
      * Record a success for a competitor website
-     * 
+     *
      * Resets consecutive failure count, reducing backoff delay.
-     * 
+     *
      * Requirements: 4.1, 4.4
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      */
     async recordSuccess(competitorWebsiteId: string): Promise<void> {
         // Load site-specific config
-        const config = await this.loadSiteConfig(competitorWebsiteId);
+        const { config, state: siteState } = await this.loadSiteConfigAndState(competitorWebsiteId);
         const state = this.getOrCreateState(competitorWebsiteId, config);
-        const previousFailures = state.consecutiveFailures;
+
+        const previousFailures = siteState.consecutiveFailures ?? state.consecutiveFailures;
         state.consecutiveFailures = 0;
 
-        if (previousFailures > 0) {
-            logger.info(
-                `Recorded success for site ${competitorWebsiteId}, reset failure count`,
-                { previousFailures }
-            );
+        // Persist to database
+        try {
+            await prisma.scrapingConfig.update({
+                where: { competitorWebsiteId },
+                data: {
+                    consecutiveFailures: 0,
+                    // Optionally reset nextAvailableAt or let it be
+                }
+            });
+
+            if (previousFailures > 0) {
+                logger.info(
+                    `Recorded success for site ${competitorWebsiteId} in database, reset failure count`,
+                    { previousFailures }
+                );
+            }
+        } catch (error) {
+            logger.error(`Failed to record success in DB for site ${competitorWebsiteId}`, { error });
         }
     }
 
     /**
      * Get the next available time for a request to a competitor website
-     * 
+     *
      * Requirements: 4.1, 4.4
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @returns The next available time for a request
      */
@@ -291,11 +341,11 @@ export class RateLimiter {
 
     /**
      * Calculate delay based on consecutive failures and configuration
-     * 
+     *
      * Uses the backoff calculator to implement exponential backoff with jitter.
-     * 
+     *
      * Requirements: 4.2, 4.3, 4.6
-     * 
+     *
      * @param consecutiveFailures - Number of consecutive failures
      * @param config - Rate limit configuration
      * @returns Calculated delay in milliseconds
@@ -309,7 +359,7 @@ export class RateLimiter {
 
     /**
      * Get or create rate limit state for a competitor website
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @param config - Rate limit configuration
      * @returns Site rate limit state
@@ -338,9 +388,9 @@ export class RateLimiter {
 
     /**
      * Reset rate limit state for a specific competitor website
-     * 
+     *
      * Clears both state and cached configuration.
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      */
     reset(competitorWebsiteId: string): void {
@@ -362,12 +412,12 @@ export class RateLimiter {
 
     /**
      * Clear cached configuration for a specific competitor website
-     * 
+     *
      * Forces reload of configuration from database on next request.
      * Useful when configuration is updated.
-     * 
+     *
      * Requirements: 4.5
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      */
     clearConfigCache(competitorWebsiteId: string): void {
@@ -378,7 +428,7 @@ export class RateLimiter {
 
     /**
      * Clear all cached configurations
-     * 
+     *
      * Forces reload of all configurations from database on next requests.
      */
     clearAllConfigCache(): void {
@@ -389,7 +439,7 @@ export class RateLimiter {
 
     /**
      * Get current consecutive failure count for a competitor website
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @returns Consecutive failure count
      */

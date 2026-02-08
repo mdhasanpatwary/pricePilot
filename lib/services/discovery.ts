@@ -134,7 +134,7 @@ export class DiscoveryService {
           const result = await scraper.searchAndScrape(site.baseUrl, cleanTitle, siteId);
 
           if (result) {
-            // ... (successful scrape logic)
+
             if (result.price === 0) {
               await prisma.syncLog.create({
                 data: {

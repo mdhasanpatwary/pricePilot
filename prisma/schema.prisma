@@ -75,6 +75,24 @@ model ApiKey {
   @@index([userId])
 }
 
+model ApiPattern {
+  id                  String    @id @default(cuid())
+  tenantId            String
+  competitorWebsiteId String    @unique
+  pattern             Json
+  confidenceScore     Int
+  successCount        Int       @default(0)
+  failureCount        Int       @default(0)
+  lastUsedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  Site                Site      @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  Tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([competitorWebsiteId])
+  @@index([tenantId])
+}
+
 model ApprovalDelegation {
   id                                       String   @id @default(cuid())
   tenantId                                 String
@@ -1002,6 +1020,9 @@ model ScrapingConfig {
   priceSelectors      Json
   currencySelector    String?
   fallbackRegex       String?
+  consecutiveFailures Int      @default(0)
+  lastRequestAt       DateTime?
+  nextAvailableAt     DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
@@ -1129,6 +1150,7 @@ model Site {
   isAdvancedProtected Boolean            @default(false)
   lastSecurityBlockAt DateTime?
   searchQueryPattern  String?
+  ApiPattern          ApiPattern?
   Product             Product[]
   ProxySiteHealth     ProxySiteHealth[]
   ScrapeAttempt       ScrapeAttempt[]
@@ -1236,6 +1258,7 @@ model Tenant {
   slackWebhookUrl           String?
   AlertRule                 AlertRule[]
   ApiKey                    ApiKey[]
+  ApiPattern                ApiPattern[]
   ApprovalDelegation        ApprovalDelegation[]
   AutoApprovalMetric        AutoApprovalMetric[]
   AutoApprovalRule          AutoApprovalRule[]

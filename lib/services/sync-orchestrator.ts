@@ -324,7 +324,7 @@ export class SyncOrchestrator {
         return { success: true, message: "Resumed session already halted" };
       }
     }
-    // ... (logs) ...
+
 
     try {
       let matchedProducts = await prisma.product.findMany({
@@ -383,7 +383,7 @@ export class SyncOrchestrator {
         logger.info(
           `[SyncOrchestrator] All products already synced for site ${siteId}`,
         );
-        // ... cleanup ...
+
       }
 
       // Golden Rule Settings

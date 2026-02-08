@@ -1,10 +1,10 @@
 /**
  * Scrape Orchestrator for Bot Protection Handling
- * 
+ *
  * Coordinates the entire scraping workflow from request to result storage.
  * Integrates detection engine, proxy manager, rate limiter, session manager,
  * and scraping strategies to handle bot protection mechanisms.
- * 
+ *
  * Requirements: 7.1, 7.2, 7.6
  */
 
@@ -63,7 +63,7 @@ export interface ScrapeResult {
 
 /**
  * ScrapeOrchestrator class
- * 
+ *
  * Orchestrates the complete scraping workflow, coordinating all components
  * to handle bot protection and extract price data.
  */
@@ -92,7 +92,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute a scrape request
-     * 
+     *
      * Coordinates all components to:
      * 1. Load site configuration
      * 2. Select scraping strategy
@@ -101,9 +101,9 @@ export class ScrapeOrchestrator {
      * 5. Analyze response for bot protection
      * 6. Extract price data if successful
      * 7. Handle failures with retry logic
-     * 
+     *
      * Requirements: 7.1, 7.2, 7.6
-     * 
+     *
      * @param request - Scrape request
      * @returns Promise resolving to scrape result
      */
@@ -183,11 +183,11 @@ export class ScrapeOrchestrator {
 
     /**
      * Retry a failed scrape request
-     * 
+     *
      * Used for manual retry or scheduled retry of previously failed scrapes.
-     * 
+     *
      * Requirements: 7.2, 7.6
-     * 
+     *
      * @param request - Scrape request
      * @returns Promise resolving to scrape result
      */
@@ -203,11 +203,11 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute scrape with retry logic
-     * 
+     *
      * Implements retry logic with strategy adaptation based on failures.
-     * 
+     *
      * Requirements: 7.2, 7.6
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param initialStrategy - Initial scraping strategy
@@ -247,7 +247,7 @@ export class ScrapeOrchestrator {
                 );
 
                 // Log attempt
-                await this.logScrapeAttempt(attemptResult, currentStrategy, attemptNumber);
+                await this.logScrapeAttempt(request, attemptResult, currentStrategy, attemptNumber);
 
                 // Check if successful
                 if (attemptResult.success) {
@@ -404,7 +404,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute a single scrape attempt with the specified strategy
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param strategy - Scraping strategy to use
@@ -436,7 +436,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute HTTP-based scrape
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param proxy - Proxy to use (if any)
@@ -494,12 +494,12 @@ export class ScrapeOrchestrator {
         }
 
         // Analyze response
-        return this.analyzeResponse(request, siteConfig, response, proxy?.id);
+        return this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id);
     }
 
     /**
      * Execute browser-based scrape
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param strategy - Scraping strategy
@@ -554,12 +554,12 @@ export class ScrapeOrchestrator {
         // Note: Browser cookies are handled by Playwright context
 
         // Analyze response
-        return this.analyzeResponse(request, siteConfig, response, proxy?.id, response.screenshot);
+        return this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id, response.screenshot);
     }
 
     /**
      * Analyze scrape response and extract price data
-     * 
+     *
      * @param _request - Scrape request (unused for now)
      * @param siteConfig - Site configuration
      * @param response - Scrape response
@@ -571,6 +571,7 @@ export class ScrapeOrchestrator {
         _request: ScrapeRequest,
         siteConfig: SiteConfiguration,
         response: ScrapeResponse | BrowserScrapeResponse,
+        userAgent: string,
         proxyId?: string,
         screenshot?: Buffer
     ): AttemptResult {
@@ -596,6 +597,10 @@ export class ScrapeOrchestrator {
                 proxyId,
                 screenshot,
                 errorMessage: detection.reasoning,
+                statusCode: response.statusCode,
+                responseTimeMs: response.responseTime,
+                userAgent,
+                responseSizeBytes: response.body.length,
             };
         }
 
@@ -614,6 +619,10 @@ export class ScrapeOrchestrator {
                 protectionDetected: false,
                 proxyId,
                 screenshot,
+                statusCode: response.statusCode,
+                responseTimeMs: response.responseTime,
+                userAgent,
+                responseSizeBytes: response.body.length,
             };
         }
 
@@ -624,12 +633,16 @@ export class ScrapeOrchestrator {
             proxyId,
             screenshot,
             errorMessage: 'Failed to extract price from response',
+            statusCode: response.statusCode,
+            responseTimeMs: response.responseTime,
+            userAgent,
+            responseSizeBytes: response.body.length,
         };
     }
 
     /**
      * Check if strategy should use proxy
-     * 
+     *
      * @param strategy - Scraping strategy
      * @returns True if proxy should be used
      */
@@ -642,7 +655,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Check if strategy is HTTP-based
-     * 
+     *
      * @param strategy - Scraping strategy
      * @returns True if HTTP-based
      */
@@ -655,13 +668,40 @@ export class ScrapeOrchestrator {
 
     /**
      * Load site configuration from database
-     * 
+     *
      * @param _competitorWebsiteId - Competitor website ID (unused for now)
      * @returns Site configuration
      */
-    private async loadSiteConfiguration(_competitorWebsiteId: string): Promise<SiteConfiguration> {
-        // TODO: Load from database
-        // For now, return default configuration
+    private async loadSiteConfiguration(competitorWebsiteId: string): Promise<SiteConfiguration> {
+        try {
+            const config = await prisma.scrapingConfig.findUnique({
+                where: { competitorWebsiteId },
+            });
+
+            if (config) {
+                return {
+                    preferredStrategy: config.preferredStrategy as ScrapingStrategy,
+                    requiresJavaScript: config.requiresJavascript,
+                    rateLimit: {
+                        baseDelay: config.baseDelayMs,
+                        maxDelay: config.maxDelayMs,
+                        backoffMultiplier: Number(config.backoffMultiplier),
+                        jitterRange: 20, // Default jitter
+                    },
+                    proxyRequired: config.proxyRequired,
+                    customSelectors: {
+                        priceSelectors: (config.priceSelectors as string[]) || ['.price', '[itemprop="price"]', '.product-price'],
+                        currencySelector: config.currencySelector || undefined,
+                        fallbackRegex: config.fallbackRegex || undefined,
+                    },
+                    maxRetries: config.maxRetries,
+                };
+            }
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Failed to load site configuration', { competitorWebsiteId, error });
+        }
+
+        // Default configuration if not found
         return {
             preferredStrategy: ScrapingStrategy.HTTP_CLIENT,
             requiresJavaScript: false,
@@ -681,46 +721,97 @@ export class ScrapeOrchestrator {
 
     /**
      * Load recent scrape history for a competitor website
-     * 
+     *
      * @param _competitorWebsiteId - Competitor website ID (unused for now)
      * @returns Recent scrape attempts
      */
-    private async loadRecentHistory(_competitorWebsiteId: string): Promise<ScrapeAttempt[]> {
-        // TODO: Load from database
-        // For now, return empty array
-        return [];
+    private async loadRecentHistory(competitorWebsiteId: string): Promise<ScrapeAttempt[]> {
+        try {
+            const history = await prisma.scrapeAttempt.findMany({
+                where: { competitorWebsiteId },
+                orderBy: { createdAt: 'desc' },
+                take: 5,
+            });
+
+            return history.map(h => ({
+                id: h.id,
+                strategy: h.strategy as ScrapingStrategy,
+                success: h.success,
+                protectionDetected: h.protectionDetected,
+                protectionType: h.protectionType as ProtectionType,
+                timestamp: h.createdAt,
+            }));
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Failed to load recent history', { competitorWebsiteId, error });
+            return [];
+        }
     }
 
     /**
      * Log scrape attempt to database
-     * 
+     *
      * @param result - Attempt result
      * @param strategy - Strategy used
      * @param attemptNumber - Attempt number
      */
     private async logScrapeAttempt(
+        request: ScrapeRequest,
         result: AttemptResult,
         strategy: ScrapingStrategy,
         attemptNumber: number
     ): Promise<void> {
-        // TODO: Log to database
-        logger.debug('[ScrapeOrchestrator] Logging scrape attempt', {
-            strategy,
-            attemptNumber,
-            success: result.success,
-            protectionDetected: result.protectionDetected,
-        });
+        try {
+            const scrapeAttempt = await prisma.scrapeAttempt.create({
+                data: {
+                    tenantId: request.tenantId,
+                    competitorProductId: request.competitorProductId,
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    url: request.url,
+                    strategy: strategy,
+                    proxyId: result.proxyId,
+                    userAgent: result.userAgent,
+                    success: result.success,
+                    protectionDetected: result.protectionDetected,
+                    protectionType: result.protectionType,
+                    statusCode: result.statusCode,
+                    responseTimeMs: result.responseTimeMs,
+                    responseSizeBytes: result.responseSizeBytes,
+                    errorMessage: result.errorMessage,
+                    attemptNumber: attemptNumber,
+                },
+            });
+
+            if (result.protectionDetected && result.protectionType) {
+                await prisma.protectionDetection.create({
+                    data: {
+                        scrapeAttemptId: scrapeAttempt.id,
+                        protectionType: result.protectionType,
+                        confidence: 100, // Hardcoded for now, detection engine could provide this
+                        indicators: {}, // Hardcoded for now
+                        reasoning: result.errorMessage,
+                    },
+                });
+            }
+
+            logger.debug('[ScrapeOrchestrator] Logged scrape attempt to database', {
+                id: scrapeAttempt.id,
+                strategy,
+                success: result.success,
+            });
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Failed to log scrape attempt', { error });
+        }
     }
 
     /**
      * Update last known good price on successful scrape
-     * 
+     *
      * Stores the last successfully scraped price with timestamp.
      * This allows the system to display the last known good price
      * when current scraping fails.
-     * 
+     *
      * Requirements: 14.1
-     * 
+     *
      * @param competitorProductId - ID of the competitor product
      * @param price - Successfully scraped price
      * @param currency - Price currency
@@ -761,13 +852,13 @@ export class ScrapeOrchestrator {
 
     /**
      * Check for manual prices and replace with scraped price on success
-     * 
+     *
      * When automated scraping successfully retrieves a price for a product
      * that has a manually entered price, this method replaces the manual
      * price with the scraped price and maintains history.
-     * 
+     *
      * Requirements: 13.5, 13.6
-     * 
+     *
      * @param competitorProductId - ID of the competitor product
      * @param scrapedPrice - Successfully scraped price
      * @param currency - Price currency
@@ -862,4 +953,8 @@ interface AttemptResult {
     proxyId?: string;
     screenshot?: Buffer;
     errorMessage?: string;
+    statusCode: number;
+    responseTimeMs: number;
+    userAgent: string;
+    responseSizeBytes: number;
 }
