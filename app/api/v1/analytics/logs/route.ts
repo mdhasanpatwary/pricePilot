@@ -34,12 +34,12 @@ async function handleGET(_req: NextRequest) {
   try {
     const logs = await prisma.priceUpdateLog.findMany({
       where: {
-        product: {
+        Product: {
           tenantId,
         },
       },
       include: {
-        product: true,
+        Product: true,
       },
       orderBy: {
         executedAt: "desc",
@@ -48,8 +48,8 @@ async function handleGET(_req: NextRequest) {
     });
 
     const formattedLogs = logs.map((log) => ({
-      name: log.product.title,
-      sku: log.product.sku || "N/A",
+      name: log.Product.title,
+      sku: log.Product.sku || "N/A",
       action: log.logicType === "FIXED" ? "Price Fix" : "Dynamic Adj",
       value: `${log.newPrice > log.oldPrice ? "+" : ""}$${(parseFloat(log.newPrice.toString()) - parseFloat(log.oldPrice.toString())).toFixed(2)}`,
       time: formatDistanceToNow(new Date(log.executedAt), {

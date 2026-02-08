@@ -36,10 +36,15 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 | Feature | Status | Notes |
 | :--- | :--- | :--- |
 | **Scheduled Reports** | ⏸️ Ignored | PDF/CSV email dumps - not needed for now. |
+| **Shopify Integration** | 🏗️ Pending | Backend connector and price update API missing. |
+| **WooCommerce Integration** | 🏗️ Pending | Backend connector and price update API missing. |
+| **Magento Integration** | 🏗️ Pending | Backend connector and price update API missing. |
+| **Monitoring Alerts** | 🏗️ Incomplete | Email/Slack notifications logic in `cache-alerting` is placeholder. |
+| **Screenshot Storage** | 🏗️ Incomplete | S3 integration logic in `screenshot-storage` is placeholder. |
 
 ---
 
-## 🐛 Issues
+## �🐛 Issues
 
 ## 📝 Tasks
 * list the uncompleted features and anything which in uncompleted.
@@ -47,11 +52,13 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 
 
 ## Questions
-* what's wrong things exist, in this project?
-* amake menually korte hove amon ki ki kaj remaining ache?
+
 
 ## 💡 Feature Requests
-* should care lint error warnings, test errors & build errors in code writing time
-* add "If you're unsure, say you're unsure. Don't guess" in agent rule
+
 
 ---
+
+http://localhost:3000/auth/login
+Email: admin@pricepilot.com
+Password: admin123

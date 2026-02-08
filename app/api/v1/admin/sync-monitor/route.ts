@@ -26,12 +26,12 @@ async function handleGET() {
         syncLastAction: true,
         syncStartedAt: true,
         lastSyncAt: true,
-        tenant: {
+        Tenant: {
           select: {
             companyName: true,
           },
         },
-        syncLogs: {
+        SyncLog: {
           orderBy: { createdAt: "desc" },
           take: 50, // Get last 50 logs
           select: {

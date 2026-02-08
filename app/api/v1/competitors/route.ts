@@ -31,7 +31,7 @@ async function handleGET(req: NextRequest) {
   const totalUserProducts = await prisma.product.count({
     where: {
       tenantId,
-      site: { type: "USER" }
+      Site: { type: "USER" }
     }
   });
 
@@ -49,9 +49,9 @@ async function handleGET(req: NextRequest) {
     },
     {
       _count: {
-        select: { products: true },
+        select: { Product: true },
       },
-      syncLogs: {
+      SyncLog: {
         orderBy: { createdAt: "desc" },
         take: 50,
       },
@@ -85,15 +85,15 @@ async function handleGET(req: NextRequest) {
           id: site.id,
           name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
           url: site.baseUrl,
-          products: site._count.products,
+          products: site._count.Product,
           status: site.isSyncing
             ? "SYNCING"
-            : site._count.products > 0
+            : site._count.Product > 0
               ? "ACTIVE"
               : site.lastSyncAt
                 ? "NO MATCHES"
                 : "PENDING",
-          health: site._count.products > 0 ? 100 : 0,
+          health: site._count.Product > 0 ? 100 : 0,
           isSyncing: site.isSyncing,
           syncTotal: site.syncTotal,
           syncProcessed: site.syncProcessed,
@@ -102,7 +102,7 @@ async function handleGET(req: NextRequest) {
           totalUserProducts: totalUserProducts || 0,
           isAdvancedProtected: site.isAdvancedProtected || false, // Use the real DB value
           searchQueryPattern: site.searchQueryPattern,
-          logs: site.syncLogs || [],
+          logs: site.SyncLog || [],
         };
       } catch (e) {
         console.error(`Error formatting site ${site.id}:`, e);

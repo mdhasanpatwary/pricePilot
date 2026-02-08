@@ -1,0 +1,35 @@
+
+> price-pilot@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.2.0) to ./node_modules/@prisma/client in 246ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 18.5s
+  Running TypeScript ...
+Failed to compile.
+
+./lib/services/bot-protection/alert-service.ts:543:17
+Type error: Object literal may only specify known properties, but 'users' does not exist in type 'TenantSelect<DefaultArgs>'. Did you mean to write 'User'?
+
+[0m [90m 541 |[39m                 id[33m:[39m [36mtrue[39m[33m,[39m
+ [90m 542 |[39m                 companyName[33m:[39m [36mtrue[39m[33m,[39m
+[31m[1m>[22m[39m[90m 543 |[39m                 users[33m:[39m {
+ [90m     |[39m                 [31m[1m^[22m[39m
+ [90m 544 |[39m                     where[33m:[39m {
+ [90m 545 |[39m                         emailNotifications[33m:[39m [36mtrue[39m[33m,[39m
+ [90m 546 |[39m                     }[33m,[39m[0m
+Next.js build worker exited with code: 1 and signal: null

@@ -6,17 +6,17 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Cache Warming Service
- * 
+ *
  * Proactively loads frequently accessed data into cache to improve
  * user experience and reduce database load.
- * 
+ *
  * Features:
  * - Warm active products on tenant login
  * - Warm dashboard analytics data
  * - Warm recent comparisons
  * - Scheduled warming for off-peak hours
  * - Error handling to prevent blocking user requests
- * 
+ *
  * Requirements: 3.1, 3.2, 3.3, 3.5
  */
 
@@ -167,18 +167,18 @@ export class CacheWarmingService {
             const activeProducts = await this.db.product.findMany({
                 where: {
                     tenantId,
-                    site: { type: 'USER' },
+                    Site: { type: 'USER' },
                     inStock: true
                 },
                 take: limit,
                 orderBy: { updatedAt: 'desc' },
                 include: {
-                    site: true,
+                    Site: true,
                     matchesAsUser: {
                         include: {
                             competitorProduct: {
                                 include: {
-                                    site: true
+                                    Site: true
                                 }
                             }
                         }
@@ -227,17 +227,17 @@ export class CacheWarmingService {
             const recentProducts = await this.db.product.findMany({
                 where: {
                     tenantId,
-                    site: { type: 'USER' }
+                    Site: { type: 'USER' }
                 },
                 take: limit,
                 orderBy: { updatedAt: 'desc' },
                 include: {
-                    site: true,
+                    Site: true,
                     matchesAsUser: {
                         include: {
                             competitorProduct: {
                                 include: {
-                                    site: true
+                                    Site: true
                                 }
                             }
                         }
@@ -344,7 +344,7 @@ export class CacheWarmingService {
                         where: {
                             tenantId,
                             siteId: siteId,
-                            site: { type: 'COMPETITOR' }
+                            Site: { type: 'COMPETITOR' }
                         },
                         take: 50,
                         orderBy: { updatedAt: 'desc' }
@@ -420,14 +420,14 @@ export class CacheWarmingService {
             const totalProducts = await this.db.product.count({
                 where: {
                     tenantId,
-                    site: { type: 'USER' }
+                    Site: { type: 'USER' }
                 }
             });
 
             const activeProducts = await this.db.product.count({
                 where: {
                     tenantId,
-                    site: { type: 'USER' },
+                    Site: { type: 'USER' },
                     inStock: true
                 }
             });
@@ -503,7 +503,7 @@ export class CacheWarmingService {
             const avgUserPrice = await this.db.product.aggregate({
                 where: {
                     tenantId,
-                    site: { type: 'USER' },
+                    Site: { type: 'USER' },
                     inStock: true
                 },
                 _avg: {
@@ -514,7 +514,7 @@ export class CacheWarmingService {
             const avgCompetitorPrice = await this.db.product.aggregate({
                 where: {
                     tenantId,
-                    site: { type: 'COMPETITOR' },
+                    Site: { type: 'COMPETITOR' },
                     inStock: true
                 },
                 _avg: {
@@ -523,8 +523,8 @@ export class CacheWarmingService {
             });
 
             return {
-                avgUserPrice: avgUserPrice._avg.currentPrice || 0,
-                avgCompetitorPrice: avgCompetitorPrice._avg.currentPrice || 0,
+                avgUserPrice: avgUserPrice?._avg?.currentPrice ? Number(avgUserPrice._avg.currentPrice) : 0,
+                avgCompetitorPrice: avgCompetitorPrice?._avg?.currentPrice ? Number(avgCompetitorPrice._avg.currentPrice) : 0,
                 timestamp: new Date().toISOString()
             };
         } catch (error) {
@@ -576,7 +576,7 @@ export class CacheWarmingService {
             // Get tenants with recent activity (products updated in last 7 days)
             const activeTenants = await this.db.tenant.findMany({
                 where: {
-                    products: {
+                    Product: {
                         some: {
                             updatedAt: {
                                 gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)

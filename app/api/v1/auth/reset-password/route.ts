@@ -33,7 +33,7 @@ async function handleResetPassword(req: NextRequest) {
       },
     },
     include: {
-      passwordHistory: {
+      PasswordHistory: {
         orderBy: { createdAt: "desc" },
         take: PASSWORD_HISTORY_LIMIT,
       },
@@ -48,7 +48,7 @@ async function handleResetPassword(req: NextRequest) {
   }
 
   // 3. Check against password history
-  for (const history of user.passwordHistory) {
+  for (const history of user.PasswordHistory) {
     const isReused = await bcrypt.compare(password, history.passwordHash);
     if (isReused) {
       return NextResponse.json(

@@ -40,16 +40,16 @@ async function handleGET(req: NextRequest) {
             { competitorProduct: { title: { contains: q, mode: "insensitive" } } },
             { competitorProduct: { sku: { contains: q, mode: "insensitive" } } },
             // Search by competitor site name (through relation)
-            { competitorProduct: { site: { baseUrl: { contains: q, mode: "insensitive" } } } },
+            { competitorProduct: { Site: { baseUrl: { contains: q, mode: "insensitive" } } } },
           ]
           : undefined,
       },
       include: {
         userProduct: {
-          include: { site: true },
+          include: { Site: true },
         },
         competitorProduct: {
-          include: { site: true },
+          include: { Site: true },
         },
       },
       orderBy: {
@@ -61,8 +61,8 @@ async function handleGET(req: NextRequest) {
     const formattedMatches = matches.map((m) => {
       let siteName = "Unknown";
       try {
-        siteName = m.competitorProduct.site.baseUrl
-          ? new URL(m.competitorProduct.site.baseUrl).hostname.replace(
+        siteName = m.competitorProduct.Site.baseUrl
+          ? new URL(m.competitorProduct.Site.baseUrl).hostname.replace(
             "www.",
             "",
           )
@@ -81,16 +81,16 @@ async function handleGET(req: NextRequest) {
           price: parseFloat(m.userProduct.currentPrice.toString()),
           url: m.userProduct.url,
           image: (m.userProduct as any).imageUrl,
-          site: m.userProduct.site.baseUrl,
+          site: m.userProduct.Site.baseUrl,
         },
         competitor: {
           id: m.competitorProduct.id,
           title: m.competitorProduct.title,
           sku: m.competitorProduct.sku,
           price: parseFloat(m.competitorProduct.currentPrice.toString()),
-          url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+          url: m.competitorProduct.url || m.competitorProduct.Site.baseUrl,
           image: (m.competitorProduct as any).imageUrl,
-          site: m.competitorProduct.site.baseUrl,
+          site: m.competitorProduct.Site.baseUrl,
           siteName,
         },
       };

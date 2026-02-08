@@ -1,8 +1,8 @@
 /**
  * Proxy Management API Endpoints
- * 
+ *
  * Provides CRUD operations for proxy management in the bot protection system.
- * 
+ *
  * Requirements: 2.1, 2.4
  */
 
@@ -28,7 +28,7 @@ const createProxySchema = z.object({
 
 /**
  * GET /api/v1/scraping/proxies
- * 
+ *
  * List all proxies with optional filtering
  */
 export async function GET(request: NextRequest) {
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
         const proxies = await prisma.proxy.findMany({
             where,
             include: {
-                siteHealth: {
+                ProxySiteHealth: {
                     select: {
                         competitorWebsiteId: true,
                         successCount: true,
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
             const globalTotal = proxy.globalSuccessCount + proxy.globalFailureCount;
             const globalSuccessRate = globalTotal > 0 ? (proxy.globalSuccessCount / globalTotal) * 100 : 0;
 
-            const siteHealthSummary = proxy.siteHealth.map((health) => {
+            const siteHealthSummary = proxy.ProxySiteHealth.map((health) => {
                 const siteTotal = health.successCount + health.failureCount;
                 const siteSuccessRate = siteTotal > 0 ? (health.successCount / siteTotal) * 100 : 0;
                 return {
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/v1/scraping/proxies
- * 
+ *
  * Create a new proxy
  */
 export async function POST(request: NextRequest) {

@@ -4,14 +4,14 @@ import { logger } from "@/lib/logger";
 
 /**
  * Comparison Service with Caching
- * 
+ *
  * Handles product comparison queries with intelligent caching:
  * - Comparison reports with filtering and pagination
  * - Individual product comparisons
  * - Graceful degradation on cache failures
  * - 5-minute TTL for comparison data
  * - Cache warming for related competitor products
- * 
+ *
  * Requirements: 1.2, 1.6, 3.2
  */
 
@@ -185,7 +185,7 @@ export class ComparisonService {
         let currency = "USD";
         try {
             const anyUserProduct = await prisma.product.findFirst({
-                where: { tenantId, site: { type: "USER" } },
+                where: { tenantId, Site: { type: "USER" } },
                 select: { currency: true },
                 orderBy: { createdAt: "desc" },
             });
@@ -212,7 +212,7 @@ export class ComparisonService {
         // Build where clause from filters
         const where: any = {
             tenantId,
-            site: { type: "USER" },
+            Site: { type: "USER" },
         };
 
         // Apply filters
@@ -224,12 +224,12 @@ export class ComparisonService {
         const products = await prisma.product.findMany({
             where,
             include: {
-                site: true,
+                Site: true,
                 matchesAsUser: {
                     include: {
                         competitorProduct: {
                             include: {
-                                site: true,
+                                Site: true,
                             },
                         },
                     },
@@ -256,16 +256,16 @@ export class ComparisonService {
             const allMatches: CompetitorMatch[] = product.matchesAsUser.map((m) => {
                 let siteName = "Unknown";
                 try {
-                    const urlObj = new URL(m.competitorProduct.site.baseUrl);
+                    const urlObj = new URL(m.competitorProduct.Site.baseUrl);
                     siteName = urlObj.hostname.replace("www.", "");
                 } catch (e) {
-                    logger.warn('[ComparisonService] Invalid competitor URL', { url: m.competitorProduct.site.baseUrl });
+                    logger.warn('[ComparisonService] Invalid competitor URL', { url: m.competitorProduct.Site.baseUrl });
                 }
 
                 return {
                     id: m.id,
                     siteName,
-                    url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+                    url: m.competitorProduct.url || m.competitorProduct.Site.baseUrl,
                     price: parseFloat(m.competitorProduct.currentPrice.toString()),
                     image: m.competitorProduct.imageUrl || null,
                     inStock:
@@ -315,15 +315,15 @@ export class ComparisonService {
                 compPrice,
                 diff,
                 status,
-                match: bestMatch?.competitorProduct.site?.baseUrl || null,
+                match: bestMatch?.competitorProduct.Site?.baseUrl || null,
                 stock: product.inStock ? product.stockLevel || 0 : 0,
                 inStock: product.inStock,
                 compInStock,
                 category: product.category || "Uncategorized",
                 brand: product.brand || "Generic",
                 model: product.model || "N/A",
-                siteName: product.site?.baseUrl
-                    ? new URL(product.site.baseUrl).hostname.replace("www.", "")
+                siteName: product.Site?.baseUrl
+                    ? new URL(product.Site.baseUrl).hostname.replace("www.", "")
                     : "Unknown",
                 allMatches,
                 specifications: product.specifications || {},
@@ -359,17 +359,17 @@ export class ComparisonService {
                 tenantId,
             },
             include: {
-                site: true,
+                Site: true,
                 matchesAsUser: {
                     include: {
                         competitorProduct: {
                             include: {
-                                site: true,
+                                Site: true,
                             },
                         },
                     },
                 },
-                priceHistory: {
+                PriceHistory: {
                     orderBy: { recordedAt: "desc" },
                     take: 30, // Last 30 price points
                 },
@@ -384,16 +384,16 @@ export class ComparisonService {
         const competitors: CompetitorMatch[] = product.matchesAsUser.map((m) => {
             let siteName = "Unknown";
             try {
-                const urlObj = new URL(m.competitorProduct.site.baseUrl);
+                const urlObj = new URL(m.competitorProduct.Site.baseUrl);
                 siteName = urlObj.hostname.replace("www.", "");
             } catch (e) {
-                logger.warn('[ComparisonService] Invalid competitor URL', { url: m.competitorProduct.site.baseUrl });
+                logger.warn('[ComparisonService] Invalid competitor URL', { url: m.competitorProduct.Site.baseUrl });
             }
 
             return {
                 id: m.id,
                 siteName,
-                url: m.competitorProduct.url || m.competitorProduct.site.baseUrl,
+                url: m.competitorProduct.url || m.competitorProduct.Site.baseUrl,
                 price: parseFloat(m.competitorProduct.currentPrice.toString()),
                 image: m.competitorProduct.imageUrl || null,
                 inStock:
@@ -438,15 +438,15 @@ export class ComparisonService {
             compPrice,
             diff,
             status,
-            match: bestMatch?.competitorProduct.site?.baseUrl || null,
+            match: bestMatch?.competitorProduct.Site?.baseUrl || null,
             stock: product.inStock ? product.stockLevel || 0 : 0,
             inStock: product.inStock,
             compInStock,
             category: product.category || "Uncategorized",
             brand: product.brand || "Generic",
             model: product.model || "N/A",
-            siteName: product.site?.baseUrl
-                ? new URL(product.site.baseUrl).hostname.replace("www.", "")
+            siteName: product.Site?.baseUrl
+                ? new URL(product.Site.baseUrl).hostname.replace("www.", "")
                 : "Unknown",
             allMatches: competitors,
             specifications: product.specifications || {},
@@ -454,7 +454,7 @@ export class ComparisonService {
         };
 
         // Format price history
-        const priceHistory: PriceHistoryEntry[] = product.priceHistory.map((h) => ({
+        const priceHistory: PriceHistoryEntry[] = (product as any).PriceHistory.map((h: any) => ({
             date: h.recordedAt,
             price: parseFloat(h.price.toString()),
             productType: "user" as const,
@@ -515,7 +515,7 @@ export class ComparisonService {
                         where: {
                             tenantId,
                             siteId: site.id,
-                            site: { type: 'COMPETITOR' }
+                            Site: { type: 'COMPETITOR' }
                         },
                         take: 50, // Limit to top 50 products per site
                         orderBy: { updatedAt: 'desc' }

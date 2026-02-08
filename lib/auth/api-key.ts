@@ -16,8 +16,8 @@ export async function validateApiKey(token: string) {
     const apiKey = await (prisma as any).apiKey.findUnique({
       where: { key: hashedKey },
       include: {
-        user: true,
-        tenant: true,
+        User: true,
+        Tenant: true,
       },
     });
 
@@ -41,8 +41,8 @@ export async function validateApiKey(token: string) {
     });
 
     return {
-      user: apiKey.user,
-      tenant: apiKey.tenant,
+      user: apiKey.User,
+      tenant: apiKey.Tenant,
     };
   } catch (error) {
     console.error("API Key validation error:", error);

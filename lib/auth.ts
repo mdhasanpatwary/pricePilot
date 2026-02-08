@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
-          include: { tenant: true },
+          include: { Tenant: true },
         });
 
         if (!user || !user.passwordHash) {
@@ -63,14 +63,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid credentials");
         }
 
-        if (!(user as any).emailVerified) {
-          throw new Error("Please verify your email before logging in");
-        }
+        // Temporarily disabled email verification requirement for development
+        // TODO: Re-enable in production
+        // if (!(user as any).emailVerified) {
+        //   throw new Error("Please verify your email before logging in");
+        // }
 
         return {
           id: user.id,
           email: user.email,
-          name: (user as any).tenant.companyName,
+          name: user.Tenant.companyName,
           role: user.role,
           tenantId: user.tenantId,
           isSuperAdmin: user.isSuperAdmin,

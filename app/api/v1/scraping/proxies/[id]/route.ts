@@ -1,8 +1,8 @@
 /**
  * Individual Proxy Management API Endpoints
- * 
+ *
  * Provides operations for individual proxy management.
- * 
+ *
  * Requirements: 2.1, 2.4
  */
 
@@ -29,7 +29,7 @@ const updateProxySchema = z.object({
 
 /**
  * GET /api/v1/scraping/proxies/:id
- * 
+ *
  * Get a specific proxy by ID
  */
 export async function GET(
@@ -59,7 +59,7 @@ export async function GET(
         const proxy = await prisma.proxy.findUnique({
             where: { id },
             include: {
-                siteHealth: {
+                ProxySiteHealth: {
                     select: {
                         competitorWebsiteId: true,
                         successCount: true,
@@ -86,7 +86,7 @@ export async function GET(
         const globalTotal = proxy.globalSuccessCount + proxy.globalFailureCount;
         const globalSuccessRate = globalTotal > 0 ? (proxy.globalSuccessCount / globalTotal) * 100 : 0;
 
-        const siteHealthSummary = proxy.siteHealth.map((health) => {
+        const siteHealthSummary = proxy.ProxySiteHealth.map((health) => {
             const siteTotal = health.successCount + health.failureCount;
             const siteSuccessRate = siteTotal > 0 ? (health.successCount / siteTotal) * 100 : 0;
             return {
@@ -136,7 +136,7 @@ export async function GET(
 
 /**
  * PUT /api/v1/scraping/proxies/:id
- * 
+ *
  * Update a proxy
  */
 export async function PUT(
@@ -275,7 +275,7 @@ export async function PUT(
 
 /**
  * DELETE /api/v1/scraping/proxies/:id
- * 
+ *
  * Delete a proxy
  */
 export async function DELETE(

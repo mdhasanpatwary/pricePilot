@@ -3,17 +3,22 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { applyEncryptionMiddleware } from "./database/prisma-encryption-middleware";
 
-const connectionString = `${process.env.DATABASE_URL}`;
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is not set');
+}
 
 const pool = new pg.Pool({
   connectionString,
-  max: 20, // Reduced for Neon pooler limits
-  min: 2, // Lower minimum for serverless
-  idleTimeoutMillis: 60000, // Keep connections alive longer
-  connectionTimeoutMillis: 30000, // Increased timeout for Neon cold starts
-  allowExitOnIdle: true, // Allow pool to close when idle
-  statement_timeout: 20000, // 20s query timeout
+  max: 20,
+  min: 2,
+  idleTimeoutMillis: 60000,
+  connectionTimeoutMillis: 30000,
+  allowExitOnIdle: true,
+  statement_timeout: 20000,
 });
+
 const adapter = new PrismaPg(pool);
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };

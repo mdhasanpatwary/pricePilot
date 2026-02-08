@@ -1,9 +1,9 @@
 /**
  * Last Known Good Price Service
- * 
+ *
  * Service for retrieving and formatting competitor product data with
  * last known good price fallback logic.
- * 
+ *
  * Requirements: 14.2
  */
 
@@ -33,12 +33,12 @@ export interface CompetitorProductWithDisplayPrice {
 
 /**
  * Get competitor products with display price logic
- * 
+ *
  * Retrieves competitor products and applies last known good price fallback.
  * When current scraping fails, displays the last successfully scraped price.
- * 
+ *
  * Requirements: 14.2
- * 
+ *
  * @param tenantId - Tenant ID
  * @param filters - Optional filters
  * @returns Array of competitor products with display prices
@@ -53,7 +53,7 @@ export async function getCompetitorProductsWithDisplayPrice(
     // Build where clause
     const where: any = {
         tenantId,
-        site: {
+        Site: {
             type: 'COMPETITOR',
         },
     };
@@ -84,7 +84,7 @@ export async function getCompetitorProductsWithDisplayPrice(
             inStock: true,
             lastCrawledAt: true,
             siteId: true,
-            site: {
+            Site: {
                 select: {
                     baseUrl: true,
                 },
@@ -122,16 +122,16 @@ export async function getCompetitorProductsWithDisplayPrice(
             inStock: product.inStock,
             lastCrawledAt: product.lastCrawledAt,
             siteId: product.siteId,
-            siteName: product.site.baseUrl,
+            siteName: product.Site.baseUrl,
         };
     });
 }
 
 /**
  * Get single competitor product with display price
- * 
+ *
  * Requirements: 14.2
- * 
+ *
  * @param productId - Product ID
  * @param tenantId - Tenant ID
  * @returns Competitor product with display price or null
@@ -149,9 +149,9 @@ export async function getCompetitorProductWithDisplayPrice(
 
 /**
  * Get competitor products for a specific site with display prices
- * 
+ *
  * Requirements: 14.2
- * 
+ *
  * @param siteId - Competitor site ID
  * @param tenantId - Tenant ID
  * @returns Array of competitor products with display prices

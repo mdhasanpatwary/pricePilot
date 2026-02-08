@@ -1,9 +1,9 @@
 /**
  * Scraping Scheduler
- * 
+ *
  * Schedules and queues scrape requests for all competitor products.
  * Respects rate limits and distributes requests over time.
- * 
+ *
  * Requirements: 4.5
  */
 
@@ -130,6 +130,15 @@ export class ScrapingScheduler {
         // Group products by competitor website for rate limiting
         const productsByWebsite = this.groupByWebsite(products);
 
+        // Fetch all scraping configs for these websites upfront
+        const websiteIds = Array.from(productsByWebsite.keys());
+        const scrapingConfigs = await prisma.scrapingConfig.findMany({
+            where: {
+                competitorWebsiteId: { in: websiteIds },
+            },
+        });
+        const configMap = new Map(scrapingConfigs.map(c => [c.competitorWebsiteId, c]));
+
         // Initialize active scrapes set for this tenant
         if (!this.activeScrapes.has(tenantId)) {
             this.activeScrapes.set(tenantId, new Set());
@@ -137,7 +146,8 @@ export class ScrapingScheduler {
 
         // Queue scrapes with delays between sites
         for (const [websiteId, websiteProducts] of productsByWebsite.entries()) {
-            const delay = this.calculateDelayForWebsite(websiteId);
+            const siteConfig = configMap.get(websiteId);
+            const delay = siteConfig?.baseDelayMs || this.config.minDelayPerSite;
 
             for (const product of websiteProducts) {
                 // Skip if already being scraped
@@ -184,7 +194,7 @@ export class ScrapingScheduler {
         const products = await prisma.product.findMany({
             where: {
                 tenantId,
-                site: {
+                Site: {
                     type: 'COMPETITOR',
                 },
             },
@@ -233,14 +243,6 @@ export class ScrapingScheduler {
         return grouped;
     }
 
-    /**
-     * Calculate delay for a specific website based on rate limit config
-     */
-    private calculateDelayForWebsite(_websiteId: string): number {
-        // TODO: Load site-specific rate limit config from database
-        // For now, use default minimum delay
-        return this.config.minDelayPerSite;
-    }
 
     /**
      * Execute a single scrape
@@ -340,7 +342,7 @@ export interface SchedulerStats {
 
 /**
  * Run scheduled scraping (for cron execution)
- * 
+ *
  * Example cron schedule: 0 * * * * (every hour)
  */
 export async function runScheduledScraping(): Promise<ScheduleResult> {

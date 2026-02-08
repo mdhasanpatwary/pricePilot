@@ -43,7 +43,7 @@ async function handleGET(request: NextRequest) {
         // Check if user is super admin or regular admin
         const user = session.user as any;
         const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
-        
+
         if (!isAdmin) {
             return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
         }
@@ -127,7 +127,7 @@ async function handleGET(request: NextRequest) {
         const sites = await prisma.site.findMany({
             select: {
                 baseUrl: true,
-                tenant: {
+                Tenant: {
                     select: {
                         companyName: true
                     }
@@ -138,7 +138,7 @@ async function handleGET(request: NextRequest) {
         // Create a map of site URL to tenant name
         const siteToTenantMap = new Map<string, string>();
         for (const site of sites) {
-            siteToTenantMap.set(site.baseUrl, site.tenant.companyName);
+            siteToTenantMap.set(site.baseUrl, site.Tenant.companyName);
         }
 
         // Format site metrics

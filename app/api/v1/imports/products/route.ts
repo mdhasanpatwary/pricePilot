@@ -119,7 +119,7 @@ async function handleImport(req: NextRequest) {
         if (storageIdx !== -1 && values[storageIdx]) specs.storage = values[storageIdx];
 
         const existingProduct = await prisma.product.findFirst({
-          where: { tenantId, sku, site: { type: "USER" } },
+          where: { tenantId, sku, Site: { type: "USER" } },
           select: { id: true }
         });
 

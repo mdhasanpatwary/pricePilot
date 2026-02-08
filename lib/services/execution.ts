@@ -20,7 +20,7 @@ export class UpdateExecutionService {
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       include: {
-        site: true,
+        Site: true,
         matchesAsUser: {
           include: { competitorProduct: true },
           take: 1,
@@ -60,9 +60,9 @@ export class UpdateExecutionService {
           async () => {
             await prisma.$transaction(async (tx) => {
               // 3. Call External API (Mocked - but we keep it inside transaction context)
-              // In production: await fetch(`${product.site.baseUrl}/update_price`, { ... })
+              // In production: await fetch(`${product.Site.baseUrl}/update_price`, { ... })
               console.log(
-                `[SAFE-EXEC] Updating ${product.sku} on ${product.site.baseUrl}: ${oldPrice} -> ${newPrice}`,
+                `[SAFE-EXEC] Updating ${product.sku} on ${product.Site.baseUrl}: ${oldPrice} -> ${newPrice}`,
               );
 
               // 4. Update local DB

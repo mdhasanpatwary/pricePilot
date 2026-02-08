@@ -1,10 +1,10 @@
 /**
  * Scraping Alerts API - Acknowledge alert
- * 
+ *
  * POST /api/v1/scraping/alerts/:id/acknowledge
- * 
+ *
  * Marks an alert as acknowledged by the current user
- * 
+ *
  * Requirements: 12.1
  */
 
@@ -16,9 +16,9 @@ import { alertService } from '@/lib/services/bot-protection/alert-service';
 
 /**
  * POST /api/v1/scraping/alerts/:id/acknowledge
- * 
+ *
  * Acknowledge an alert
- * 
+ *
  * Requirements: 12.1
  */
 export async function POST(
@@ -121,7 +121,7 @@ export async function POST(
         const updatedAlert = await prisma.scrapingAlert.findUnique({
             where: { id: alertId },
             include: {
-                competitorWebsite: {
+                Site: {
                     select: {
                         id: true,
                         baseUrl: true,
@@ -139,9 +139,9 @@ export async function POST(
                     type: updatedAlert!.type,
                     title: updatedAlert!.title,
                     message: updatedAlert!.message,
-                    competitorWebsite: updatedAlert!.competitorWebsite ? {
-                        id: updatedAlert!.competitorWebsite.id,
-                        baseUrl: updatedAlert!.competitorWebsite.baseUrl,
+                    competitorWebsite: updatedAlert!.Site ? {
+                        id: updatedAlert!.Site.id,
+                        baseUrl: updatedAlert!.Site.baseUrl,
                     } : null,
                     metadata: updatedAlert!.metadata,
                     acknowledged: updatedAlert!.acknowledged,

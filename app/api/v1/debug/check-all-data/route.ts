@@ -18,12 +18,12 @@ async function handleGET() {
     });
 
     const allSites = await prisma.site.findMany({
-      select: { 
-        id: true, 
-        baseUrl: true, 
-        type: true, 
+      select: {
+        id: true,
+        baseUrl: true,
+        type: true,
         tenantId: true,
-        _count: { select: { products: true } }
+        _count: { select: { Product: true } }
       }
     });
 
@@ -34,7 +34,7 @@ async function handleGET() {
         sku: true,
         tenantId: true,
         siteId: true,
-        site: {
+        Site: {
           select: { baseUrl: true, type: true }
         }
       },
@@ -68,9 +68,9 @@ async function handleGET() {
       sitesByTenant
     });
   } catch (error: any) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: error.message,
-      stack: error.stack 
+      stack: error.stack
     }, { status: 500 });
   }
 }

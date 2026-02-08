@@ -21,7 +21,7 @@ async function handleGET(_req: NextRequest) {
       },
       include: {
         _count: {
-          select: { products: true },
+          select: { Product: true },
         },
       },
     });
@@ -40,7 +40,7 @@ async function handleGET(_req: NextRequest) {
       s.id,
       s.baseUrl,
       s.platform,
-      s._count.products,
+      s._count.Product,
       s.lastSyncAt?.toISOString() || "Never",
       s.createdAt.toISOString(),
     ]);

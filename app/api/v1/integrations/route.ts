@@ -33,9 +33,9 @@ async function handleGET(_req: NextRequest) {
       },
       include: {
         _count: {
-          select: { products: true },
+          select: { Product: true },
         },
-        syncLogs: {
+        SyncLog: {
           orderBy: { createdAt: "desc" },
           take: 10,
         },
@@ -51,14 +51,14 @@ async function handleGET(_req: NextRequest) {
       type: site.type,
       name: new URL(site.baseUrl).hostname,
       url: site.baseUrl,
-      products: site._count.products,
+      products: site._count.Product,
       status: site.lastSyncAt ? "CONNECTED" : "PENDING",
       isSyncing: site.isSyncing,
       syncProcessed: site.syncProcessed,
       syncTotal: site.syncTotal,
       syncLastAction: site.syncLastAction,
       lastSync: site.lastSyncAt?.toISOString() || null,
-      logs: site.syncLogs.map(log => ({
+      logs: site.SyncLog.map(log => ({
         id: log.id,
         level: log.level,
         message: log.message,

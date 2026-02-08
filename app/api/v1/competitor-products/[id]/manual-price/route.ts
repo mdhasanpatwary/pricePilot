@@ -6,10 +6,10 @@ import { z } from 'zod';
 
 /**
  * Manual Price Entry API
- * 
+ *
  * Allows users to manually enter competitor prices when automated scraping fails.
  * Validates price input, stores user and timestamp, and marks price as manual.
- * 
+ *
  * Requirements: 13.1, 13.2, 13.3, 13.4
  */
 
@@ -77,7 +77,7 @@ export async function POST(
                 tenantId: tenantId,
             },
             include: {
-                site: true,
+                Site: true,
             },
         });
 
@@ -95,7 +95,7 @@ export async function POST(
         }
 
         // Verify this is a competitor product
-        if (product.site.type !== 'COMPETITOR') {
+        if (product.Site.type !== 'COMPETITOR') {
             return NextResponse.json(
                 {
                     success: false,

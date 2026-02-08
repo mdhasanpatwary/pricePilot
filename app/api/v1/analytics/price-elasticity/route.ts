@@ -36,12 +36,12 @@ async function handleGET(_req: NextRequest) {
       include: {
         userProduct: {
             include: {
-                priceHistory: { orderBy: { recordedAt: 'desc' }, take: 10 }
+                PriceHistory: { orderBy: { recordedAt: 'desc' }, take: 10 }
             }
         },
         competitorProduct: {
             include: {
-                priceHistory: { orderBy: { recordedAt: 'desc' }, take: 10 }
+                PriceHistory: { orderBy: { recordedAt: 'desc' }, take: 10 }
             }
         }
       }
@@ -50,7 +50,7 @@ async function handleGET(_req: NextRequest) {
     // 2. RAM/Storage Premium Analysis (Spec Elasticity)
     // We group products by 'model' (base name) and compare prices across different RAM/Storage
     const userProducts = await prisma.product.findMany({
-        where: { tenantId, site: { type: 'USER' } },
+        where: { tenantId, Site: { type: 'USER' } },
         select: { model: true, specifications: true, currentPrice: true, title: true }
     });
 
@@ -61,8 +61,8 @@ async function handleGET(_req: NextRequest) {
         const variants = userProducts.filter(p => p.model === model);
         if (variants.length > 1) {
             // Check for RAM differences
-            const ramVariants = variants.map(v => ({ 
-                ram: (v.specifications as any)?.ram, 
+            const ramVariants = variants.map(v => ({
+                ram: (v.specifications as any)?.ram,
                 price: parseFloat(v.currentPrice.toString()),
                 title: v.title
             })).filter(v => v.ram);
@@ -82,9 +82,9 @@ async function handleGET(_req: NextRequest) {
     let responsiveProducts = 0;
 
     matches.forEach(m => {
-        const userHist = m.userProduct.priceHistory;
-        const compHist = m.competitorProduct.priceHistory;
-        
+        const userHist = m.userProduct.PriceHistory;
+        const compHist = m.competitorProduct.PriceHistory;
+
         if (userHist.length > 1 && compHist.length > 1) {
             responsiveProducts++;
         }

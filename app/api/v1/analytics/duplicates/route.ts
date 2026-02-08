@@ -40,7 +40,7 @@ async function handleGET(_req: NextRequest) {
     // 1. Fetch all products for the tenant
     const products = await prisma.product.findMany({
       where: { tenantId },
-      include: { site: true },
+      include: { Site: true },
     });
 
     const potentialDuplicates: any[] = [];

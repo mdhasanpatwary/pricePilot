@@ -113,6 +113,7 @@ function DashboardContent() {
       }
     } catch (e) {
       console.error(e);
+      setChartData([]); // Ensure it's always an array on error
     }
   }, [impersonateId]);
 

@@ -9,10 +9,10 @@ import { mailService } from "@/lib/mail";
 
 /**
  * Auto-Approval Service
- * 
+ *
  * This service evaluates pending price changes against auto-approval rules
  * and automatically approves changes that meet all configured conditions.
- * 
+ *
  * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.2, 3.3, 3.5, 8.1, 8.2, 8.5
  */
 
@@ -48,14 +48,14 @@ interface MetricsTracker {
 export class AutoApprovalService {
     /**
      * Process all pending price changes for auto-approval
-     * 
+     *
      * This method loads all PENDING price changes for a tenant, evaluates them
      * against auto-approval rules, and executes auto-approval transactions for
      * matching changes.
-     * 
+     *
      * @param tenantId - The tenant ID to process
      * @returns Number of changes auto-approved
-     * 
+     *
      * Requirements: 5.3, 5.4, 7.1, 7.4, 8.1, 8.2, 8.5
      */
     static async processAutoApprovals(tenantId: string): Promise<number> {
@@ -80,7 +80,7 @@ export class AutoApprovalService {
                     status: "PENDING",
                 },
                 include: {
-                    product: {
+                    Product: {
                         include: {
                             matchesAsUser: {
                                 include: {
@@ -185,25 +185,25 @@ export class AutoApprovalService {
 
     /**
      * Execute auto-approval transaction
-     * 
+     *
      * This method performs an atomic transaction to:
      * 1. Update PendingPriceChange status to APPROVED
      * 2. Record the rule that triggered approval
      * 3. Execute price update to store via RulesEngine
      * 4. Create price history record
      * 5. Create audit log entry
-     * 
+     *
      * If any step fails, the entire transaction is rolled back.
-     * 
+     *
      * @param change - The pending price change to approve
      * @param ruleId - The ID of the rule that triggered approval
      * @param ruleName - The name of the rule that triggered approval
-     * 
+     *
      * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
      */
     private static async executeAutoApprovalTransaction(
         change: PendingPriceChange & {
-            product: Product & {
+            Product: Product & {
                 matchesAsUser: Array<{
                     confidenceScore: any;
                     competitorProduct: Product;
@@ -261,8 +261,8 @@ export class AutoApprovalService {
                             ruleId,
                             ruleName,
                             productId: change.productId,
-                            productTitle: change.product.title,
-                            productSku: change.product.sku,
+                            productTitle: change.Product.title,
+                            productSku: change.Product.sku,
                             oldPrice: change.currentPrice.toString(),
                             newPrice: change.recommendedPrice.toString(),
                             reason: `Auto-approved by rule: ${ruleName}`,
@@ -306,10 +306,10 @@ export class AutoApprovalService {
 
     /**
      * Validate rule conditions using Zod schema
-     * 
+     *
      * @param conditions - The rule conditions to validate
      * @throws ValidationError if conditions are invalid
-     * 
+     *
      * Requirements: 2.7, 9.1, 9.2, 9.3, 9.4, 9.5
      */
     static validateRuleConditions(conditions: unknown): void {
@@ -335,13 +335,13 @@ export class AutoApprovalService {
 
     /**
      * Record metrics to database
-     * 
+     *
      * This method stores auto-approval metrics for tracking and reporting.
      * Metrics are stored per-tenant and per-rule on a daily basis.
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param metricsTracker - The metrics tracker with collected data
-     * 
+     *
      * Requirements: 8.1, 8.2, 8.5
      */
     private static async recordMetrics(
@@ -423,15 +423,15 @@ export class AutoApprovalService {
 
     /**
      * Get auto-approval metrics for a tenant
-     * 
+     *
      * This method retrieves metrics for a given date range and calculates
      * the auto-approval percentage.
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param startDate - Start date for metrics (optional, defaults to 30 days ago)
      * @param endDate - End date for metrics (optional, defaults to today)
      * @returns Metrics summary with per-rule counts and auto-approval percentage
-     * 
+     *
      * Requirements: 8.1, 8.2, 8.5
      */
     static async getMetrics(
@@ -536,14 +536,14 @@ export class AutoApprovalService {
 
     /**
      * Evaluate if a pending price change should be auto-approved
-     * 
+     *
      * This method loads all enabled rules for the tenant, evaluates them in
      * priority order, and returns the first matching rule (short-circuit).
-     * 
+     *
      * @param change - The pending price change to evaluate
      * @param tenantId - The tenant ID for rule lookup
      * @returns Object with approval decision and reason
-     * 
+     *
      * Requirements: 3.1, 3.2, 3.3, 3.5
      */
     static async shouldAutoApprove(
@@ -670,14 +670,14 @@ export class AutoApprovalService {
 
     /**
      * Evaluate a single rule against a pending change
-     * 
+     *
      * All conditions in the rule must be satisfied (AND logic) for the rule to match.
-     * 
+     *
      * @param rule - The auto-approval rule
      * @param change - The pending price change
      * @param product - The product with match data
      * @returns True if all conditions are satisfied
-     * 
+     *
      * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.8
      */
     private static async evaluateRule(

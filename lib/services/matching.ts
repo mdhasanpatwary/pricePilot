@@ -142,7 +142,7 @@ export class MatchingService {
       const userProducts = await prisma.product.findMany({
         where: {
           tenantId,
-          site: { type: "USER" },
+          Site: { type: "USER" },
           matchesAsUser: { none: {} },
         },
       });
@@ -151,7 +151,7 @@ export class MatchingService {
       const competitorProducts = await prisma.product.findMany({
         where: {
           tenantId,
-          site: { type: "COMPETITOR" },
+          Site: { type: "COMPETITOR" },
         },
       });
 
@@ -722,7 +722,7 @@ export class MatchingService {
         const competitorProducts = await prisma.product.findMany({
           where: {
             tenantId,
-            site: { type: "COMPETITOR" },
+            Site: { type: "COMPETITOR" },
           },
         });
 

@@ -17,9 +17,9 @@ import {
 
 /**
  * GET /api/v1/scraping/configs/:competitorWebsiteId
- * 
+ *
  * Get scraping configuration for a specific competitor website
- * 
+ *
  * Requirements: 15.1, 15.2
  */
 async function handleGET(
@@ -43,7 +43,7 @@ async function handleGET(
             type: "COMPETITOR",
         },
         include: {
-            scrapingConfigs: true,
+            ScrapingConfig: true,
         },
     });
 
@@ -51,7 +51,7 @@ async function handleGET(
         throw new NotFoundError("Competitor website", competitorWebsiteId);
     }
 
-    const config = competitorWebsite.scrapingConfigs[0];
+    const config = competitorWebsite.ScrapingConfig;
 
     if (!config) {
         // Return default configuration if none exists
@@ -104,9 +104,9 @@ async function handleGET(
 
 /**
  * PUT /api/v1/scraping/configs/:competitorWebsiteId
- * 
+ *
  * Update scraping configuration for a specific competitor website
- * 
+ *
  * Requirements: 15.1, 15.3, 15.4, 15.5, 15.6, 15.7
  */
 async function handlePUT(
@@ -139,7 +139,7 @@ async function handlePUT(
             type: "COMPETITOR",
         },
         include: {
-            scrapingConfigs: true,
+            ScrapingConfig: true,
         },
     });
 
@@ -148,7 +148,7 @@ async function handlePUT(
     }
 
     // Get existing configuration for audit trail
-    const existingConfig = competitorWebsite.scrapingConfigs[0];
+    const existingConfig = competitorWebsite.ScrapingConfig;
 
     // Prepare update data
     const updateData: any = {};

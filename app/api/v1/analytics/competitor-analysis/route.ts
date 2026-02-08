@@ -40,37 +40,37 @@ async function handleGET(_req: NextRequest) {
     const competitorProducts = await prisma.product.findMany({
       where: {
         tenantId,
-        site: { type: "COMPETITOR" }
+        Site: { type: "COMPETITOR" }
       },
       select: {
-          id: true,
-          siteId: true,
-          category: true,
-          currentPrice: true
+        id: true,
+        siteId: true,
+        category: true,
+        currentPrice: true
       }
     });
 
     // 3. Get all matched products to see where they overlap
     const matches = await prisma.productMatch.findMany({
-        where: { userProduct: { tenantId } },
-        include: { 
-            userProduct: { select: { category: true } },
-            competitorProduct: { select: { siteId: true, category: true } } 
-        }
+      where: { userProduct: { tenantId } },
+      include: {
+        userProduct: { select: { category: true } },
+        competitorProduct: { select: { siteId: true, category: true } }
+      }
     });
 
     // 4. Transform sites to include derived names (consistent with competitor route)
     const competitors = competitorSites.map(site => {
-        let name = "Unknown";
-        try {
-            const urlObj = new URL(site.baseUrl.startsWith("http") ? site.baseUrl : `https://${site.baseUrl}`);
-            const hostname = urlObj.hostname;
-            const cleanHostname = hostname.replace(/^www\./, "");
-            const parts = cleanHostname.split(".");
-            const rawName = parts.length > 1 ? parts[0] : cleanHostname;
-            name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-        } catch (e) { /* ignore */ }
-        return { ...site, name };
+      let name = "Unknown";
+      try {
+        const urlObj = new URL(site.baseUrl.startsWith("http") ? site.baseUrl : `https://${site.baseUrl}`);
+        const hostname = urlObj.hostname;
+        const cleanHostname = hostname.replace(/^www\./, "");
+        const parts = cleanHostname.split(".");
+        const rawName = parts.length > 1 ? parts[0] : cleanHostname;
+        name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+      } catch (e) { /* ignore */ }
+      return { ...site, name };
     });
 
     // 5. Extract unique categories
@@ -80,23 +80,23 @@ async function handleGET(_req: NextRequest) {
 
     // 6. Aggregate metrics
     const analysis = categories.map(cat => {
-        const catData: any = { category: cat };
-        
-        competitors.forEach(site => {
-            const siteProducts = competitorProducts.filter(p => p.siteId === site.id && p.category === cat);
-            const total = siteProducts.length;
-            
-            if (total > 0) {
-                const avgPrice = siteProducts.reduce((sum, p) => sum + parseFloat(p.currentPrice.toString()), 0) / total;
-                catData[site.name] = Math.round(avgPrice);
-                catData[`${site.name}_count`] = total;
-            } else {
-                catData[site.name] = null;
-                catData[`${site.name}_count`] = 0;
-            }
-        });
+      const catData: any = { category: cat };
 
-        return catData;
+      competitors.forEach(site => {
+        const siteProducts = competitorProducts.filter(p => p.siteId === site.id && p.category === cat);
+        const total = siteProducts.length;
+
+        if (total > 0) {
+          const avgPrice = siteProducts.reduce((sum, p) => sum + parseFloat(p.currentPrice.toString()), 0) / total;
+          catData[site.name] = Math.round(avgPrice);
+          catData[`${site.name}_count`] = total;
+        } else {
+          catData[site.name] = null;
+          catData[`${site.name}_count`] = 0;
+        }
+      });
+
+      return catData;
     });
 
     return NextResponse.json({

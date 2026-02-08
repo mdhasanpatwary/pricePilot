@@ -298,7 +298,11 @@ async function handlePOST(request: NextRequest) {
             profile = await prisma.siteProfile.upsert({
                 where: { domain: profileData.domain },
                 update: profileData,
-                create: profileData
+                create: {
+                    ...profileData,
+                    id: `site-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    updatedAt: new Date()
+                }
             });
 
             logger.info('[API] Site profile created/updated', {

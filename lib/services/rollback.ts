@@ -52,9 +52,9 @@ export class RollbackService {
             const updateLog = await prisma.priceUpdateLog.findUnique({
                 where: { id: updateLogId },
                 include: {
-                    product: {
+                    Product: {
                         include: {
-                            site: true,
+                            Site: true,
                         },
                     },
                 },
@@ -86,7 +86,7 @@ export class RollbackService {
                 );
             }
 
-            const product = updateLog.product;
+            const product = updateLog.Product;
             const oldPrice = updateLog.oldPrice;
             const currentPrice = updateLog.newPrice;
             const tenantId = product.tenantId;
@@ -473,7 +473,7 @@ export class RollbackService {
             const updateLog = await prisma.priceUpdateLog.findUnique({
                 where: { id: updateLogId },
                 include: {
-                    product: true,
+                    Product: true,
                 },
             });
 

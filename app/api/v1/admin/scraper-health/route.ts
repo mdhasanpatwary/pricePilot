@@ -14,10 +14,10 @@ async function handleGET() {
         baseUrl: true,
         lastSyncAt: true,
         isSyncing: true,
-        tenant: {
+        Tenant: {
           select: { companyName: true },
         },
-        syncLogs: {
+        SyncLog: {
           select: {
             level: true,
             message: true,
@@ -29,12 +29,12 @@ async function handleGET() {
     });
 
     const healthData = sites.map((site) => {
-      const logs = site.syncLogs;
+      const logs = site.SyncLog;
       if (logs.length === 0) {
         return {
           id: site.id,
           baseUrl: site.baseUrl,
-          tenant: site.tenant.companyName,
+          tenant: site.Tenant.companyName,
           status: "unknown",
           successRate: 0,
           total: 0,
@@ -108,7 +108,7 @@ async function handleGET() {
       } else if (
         site.lastSyncAt &&
         Date.now() - new Date(site.lastSyncAt).getTime() >
-          7 * 24 * 60 * 60 * 1000
+        7 * 24 * 60 * 60 * 1000
       ) {
         status = "stale"; // No sync in 7 days
       }
@@ -122,7 +122,7 @@ async function handleGET() {
       return {
         id: site.id,
         baseUrl: site.baseUrl,
-        tenant: site.tenant.companyName,
+        tenant: site.Tenant.companyName,
         status,
         successRate,
         total: effectiveTotal,

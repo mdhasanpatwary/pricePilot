@@ -47,7 +47,7 @@ async function handleGET(_req: NextRequest) {
         type: true,
         lastSyncAt: true,
         isSyncing: true,
-        tenant: {
+        Tenant: {
           select: { companyName: true },
         },
       },
@@ -70,7 +70,7 @@ async function handleGET(_req: NextRequest) {
         searchQueryPattern: s.searchQueryPattern,
         domain: new URL(s.baseUrl).hostname,
         type: s.type,
-        tenant: s.tenant.companyName,
+        tenant: s.Tenant.companyName,
         lastRun: s.lastSyncAt,
         status: s.isSyncing ? "RUNNING" : "IDLE",
       })),

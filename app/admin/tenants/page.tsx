@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "sonner";
 
 export default function TenantsPage() {
   const [activeTab, setActiveTab] = useState("ALL");
@@ -85,7 +86,8 @@ export default function TenantsPage() {
       const res = await fetch("/api/v1/admin/tenants");
       if (res.ok) {
         const data = await res.json();
-        setTenants(data);
+        // API returns { success: true, data: [...] }
+        setTenants(Array.isArray(data.data) ? data.data : []);
       } else if (res.status === 401) {
         setAuthError(true);
         setTenants([]);
@@ -128,16 +130,32 @@ export default function TenantsPage() {
   const handleDeleteTenant = async () => {
     if (!tenantToDelete) return;
     setIsDeleting(true);
+    const toastId = toast.loading(`Deleting tenant "${tenantToDelete.companyName}"...`);
+
     try {
       const res = await fetch(`/api/v1/admin/tenants?id=${tenantToDelete.id}`, {
         method: "DELETE",
+        credentials: "include", // Ensure cookies are sent
       });
+
+      const data = await res.json();
+
       if (res.ok) {
         setTenants(tenants.filter((t) => t.id !== tenantToDelete.id));
         setTenantToDelete(null);
+        toast.success("Tenant deleted successfully", { id: toastId });
+      } else {
+        toast.error(data.error?.message || "Failed to delete tenant", {
+          id: toastId,
+          description: data.error?.details || "Please try again"
+        });
       }
     } catch (err) {
-      console.error("Failed to delete tenant");
+      console.error("Failed to delete tenant", err);
+      toast.error("Failed to delete tenant", {
+        id: toastId,
+        description: "Network error. Please check your connection."
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -146,18 +164,33 @@ export default function TenantsPage() {
   const handleResetTenant = async () => {
     if (!tenantToReset) return;
     setIsResetting(true);
+    const toastId = toast.loading(`Resetting tenant "${tenantToReset.companyName}"...`);
+
     try {
       const res = await fetch("/api/v1/admin/tenants", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: tenantToReset.id, reset: true }),
       });
+
+      const data = await res.json();
+
       if (res.ok) {
         await fetchTenants(true);
         setTenantToReset(null);
+        toast.success("Tenant reset successfully", { id: toastId });
+      } else {
+        toast.error(data.error?.message || "Failed to reset tenant", {
+          id: toastId,
+          description: data.error?.details || "Please try again"
+        });
       }
     } catch (err) {
-      console.error("Failed to reset tenant");
+      console.error("Failed to reset tenant", err);
+      toast.error("Failed to reset tenant", {
+        id: toastId,
+        description: "Network error. Please check your connection."
+      });
     } finally {
       setIsResetting(false);
     }

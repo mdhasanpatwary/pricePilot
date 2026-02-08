@@ -8,16 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { LoadingSpinner } from "@/components/ui/loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import Image from "next/image";
-
-// Toast notification hook
-const useToast = () => {
-    return {
-        toast: ({ title, description, variant }: { title: string; description: string; variant?: "default" | "destructive" }) => {
-            // Simple console log for now - can be replaced with a proper toast implementation
-            console.log(`[${variant || "default"}] ${title}: ${description}`);
-        }
-    };
-};
+import { toast } from "sonner";
 
 interface PendingChange {
     id: string;
@@ -47,7 +38,6 @@ export default function PriceApprovalsPage() {
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [autoApprovalRules, setAutoApprovalRules] = useState<Record<string, string>>({});
-    const { toast } = useToast();
 
     const fetchChanges = useCallback(async () => {
         try {
@@ -59,17 +49,11 @@ export default function PriceApprovalsPage() {
                 console.error("API Error:", res.status, errorData);
 
                 if (res.status === 401) {
-                    toast({
-                        title: "Authentication Required",
+                    toast.error("Authentication Required", {
                         description: "Please log in to view price approvals",
-                        variant: "destructive",
                     });
                 } else {
-                    toast({
-                        title: "Error",
-                        description: errorData.error || "Failed to load pending price changes",
-                        variant: "destructive",
-                    });
+                    toast.error(errorData.error || "Failed to load pending price changes");
                 }
                 setChanges([]);
                 return;
@@ -96,16 +80,12 @@ export default function PriceApprovalsPage() {
             }
         } catch (error) {
             console.error("Fetch error:", error);
-            toast({
-                title: "Error",
-                description: "Failed to load pending price changes",
-                variant: "destructive",
-            });
+            toast.error("Failed to load pending price changes");
             setChanges([]);
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, []); // Remove toast dependency
 
     useEffect(() => {
         fetchChanges();
@@ -131,11 +111,7 @@ export default function PriceApprovalsPage() {
 
     const handleAction = async (action: "approve" | "reject") => {
         if (selectedIds.size === 0) {
-            toast({
-                title: "No Selection",
-                description: "Please select at least one price change",
-                variant: "destructive",
-            });
+            toast.error("Please select at least one price change");
             return;
         }
 
@@ -153,19 +129,12 @@ export default function PriceApprovalsPage() {
             if (!res.ok) throw new Error("Failed to process");
 
             const data = await res.json();
-            toast({
-                title: "Success",
-                description: data.message,
-            });
+            toast.success(data.message);
 
             setSelectedIds(new Set());
             await fetchChanges();
         } catch (error) {
-            toast({
-                title: "Error",
-                description: `Failed to ${action} price changes`,
-                variant: "destructive",
-            });
+            toast.error(`Failed to ${action} price changes`);
         } finally {
             setProcessing(false);
         }

@@ -93,6 +93,7 @@ function AnalyticsContent() {
       }
     } catch (error) {
       toast.error("Connection error");
+      setHistory([]); // Ensure it's always an array on error
     } finally {
       setIsLoading(false);
     }

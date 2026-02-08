@@ -23,11 +23,11 @@ async function handleGET(req: NextRequest) {
         ],
       },
       include: {
-        site: {
+        Site: {
           select: {
             baseUrl: true,
             type: true,
-            tenant: { select: { companyName: true } },
+            Tenant: { select: { companyName: true } },
           },
         },
       },
@@ -77,8 +77,8 @@ async function handleGET(req: NextRequest) {
           title: product.title,
           sku: product.sku,
           price: product.currentPrice,
-          site: product.site.baseUrl,
-          tenant: product.site.tenant.companyName,
+          site: product.Site.baseUrl,
+          tenant: product.Site.Tenant.companyName,
         },
         logs: {
           priceUpdates: updates,

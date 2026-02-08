@@ -4,10 +4,10 @@ import { logger } from "@/lib/logger";
 
 /**
  * Price Update Monitor Service
- * 
+ *
  * Monitors and tracks price update success rates to ensure >99% reliability.
  * Provides real-time metrics, failure analysis, and automatic retry mechanisms.
- * 
+ *
  * **Key Features:**
  * - Real-time success rate tracking
  * - Failure pattern analysis
@@ -15,11 +15,11 @@ import { logger } from "@/lib/logger";
  * - Health check validation
  * - Circuit breaker pattern
  * - Detailed failure logging
- * 
+ *
  * **Success Rate Calculation:**
  * Success Rate = (Successful Updates / Total Attempts) * 100
  * Target: >99%
- * 
+ *
  * @module lib/services/price-update-monitor
  */
 
@@ -64,7 +64,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Record a price update attempt
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param result - Update result details
      */
@@ -111,7 +111,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Record bulk price update operation
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param results - Array of update results
      */
@@ -151,7 +151,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Get price update statistics for a tenant
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param timeWindow - Time window in seconds (default: 24 hours)
      * @returns Price update statistics
@@ -166,12 +166,12 @@ export class PriceUpdateMonitor {
             const logs = await prisma.priceUpdateLog.findMany({
                 where: {
                     executedAt: { gte: startTime },
-                    product: { tenantId },
+                    Product: { tenantId },
                 },
                 include: {
-                    product: {
+                    Product: {
                         include: {
-                            site: true,
+                            Site: true,
                         },
                     },
                 },
@@ -190,7 +190,7 @@ export class PriceUpdateMonitor {
                 const reason = log.errorDetails || 'Unknown';
                 failuresByReason[reason] = (failuresByReason[reason] || 0) + 1;
 
-                const siteName = log.product.site.baseUrl;
+                const siteName = (log as any).Product.Site.baseUrl;
                 failuresBySite[siteName] = (failuresBySite[siteName] || 0) + 1;
             }
 
@@ -223,7 +223,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Perform health check on a site's API
-     * 
+     *
      * @param siteId - Site ID to check
      * @returns Health check result
      */
@@ -275,7 +275,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Add failed update to retry queue
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param result - Failed update result
      */
@@ -308,7 +308,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Calculate next retry time with exponential backoff
-     * 
+     *
      * @param retryCount - Current retry count
      * @returns Next retry timestamp
      */
@@ -321,7 +321,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Process retry queue
-     * 
+     *
      * @param tenantId - Tenant ID
      * @returns Number of retries processed
      */
@@ -335,9 +335,9 @@ export class PriceUpdateMonitor {
                     retryCount: { lt: 3 },
                 },
                 include: {
-                    product: {
+                    Product: {
                         include: {
-                            site: true,
+                            Site: true,
                         },
                     },
                 },
@@ -361,7 +361,7 @@ export class PriceUpdateMonitor {
                     const { SyncService } = await import('./sync');
 
                     // Attempt to update the price
-                    const success = await SyncService.syncProductsToStore(retry.product.siteId);
+                    const success = await SyncService.syncProductsToStore((retry as any).Product.siteId);
 
                     if (success.updated > 0) {
                         // Success - remove from queue
@@ -411,7 +411,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Get current success rate for a tenant
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param timeWindow - Time window in seconds (default: 1 hour)
      * @returns Success rate percentage
@@ -423,7 +423,7 @@ export class PriceUpdateMonitor {
 
     /**
      * Check if success rate is below threshold
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param threshold - Threshold percentage (default: 99)
      * @returns True if below threshold

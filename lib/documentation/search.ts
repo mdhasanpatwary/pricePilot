@@ -1,6 +1,6 @@
 /**
  * Documentation Search Service
- * 
+ *
  * Provides full-text search functionality for documentation using PostgreSQL's
  * built-in full-text search capabilities with tsvector.
  */
@@ -207,7 +207,7 @@ export class SearchService {
             rank: number;
         }>>(
             `
-            SELECT 
+            SELECT
                 id,
                 type,
                 slug,
@@ -425,7 +425,7 @@ export class SearchService {
             where: { type },
             select: { title: true },
             orderBy: {
-                pageViews: {
+                DocumentationPageView: {
                     _count: 'desc'
                 }
             },

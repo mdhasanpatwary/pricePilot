@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Database, Shield, TrendingUp, Server, BarChart3 } from "lucide-react";
 import MetricsDashboard from "@/components/admin/metrics-dashboard";
@@ -14,8 +13,13 @@ import { ScrapingMetricsContent } from "./scraping-metrics-content";
 
 export default function AnalyticsHubPage() {
     const searchParams = useSearchParams();
-    const tabParam = searchParams.get("tab");
-    const [activeTab, setActiveTab] = useState(tabParam || "dashboard");
+    const router = useRouter();
+    const tabParam = searchParams.get("tab") || "dashboard";
+
+    // Update URL when tab changes
+    const handleTabChange = (value: string) => {
+        router.push(`/admin/analytics?tab=${value}`, { scroll: false });
+    };
 
     return (
         <div className="space-y-6">
@@ -26,7 +30,7 @@ export default function AnalyticsHubPage() {
                 </p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <Tabs value={tabParam} onValueChange={handleTabChange} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 lg:w-auto lg:inline-grid">
                     <TabsTrigger value="dashboard" className="flex items-center gap-2">
                         <BarChart3 className="w-4 h-4" />

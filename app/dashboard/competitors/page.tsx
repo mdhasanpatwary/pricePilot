@@ -367,7 +367,7 @@ export default function CompetitorsPage() {
 
   // fetchLimits is memoized above
 
-  // ... fetchCompetitors ...
+
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

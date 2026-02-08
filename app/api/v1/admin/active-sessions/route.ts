@@ -40,7 +40,7 @@ async function handleGET() {
         // Check if user is super admin or regular admin
         const user = session.user as any;
         const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
-        
+
         if (!isAdmin) {
             return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
         }
@@ -51,7 +51,7 @@ async function handleGET() {
                 isSyncing: true
             },
             include: {
-                tenant: {
+                Tenant: {
                     select: {
                         companyName: true
                     }
@@ -144,7 +144,7 @@ async function handleGET() {
             return {
                 id: site.id,
                 site: site.baseUrl,
-                tenant: site.tenant.companyName,
+                tenant: site.Tenant.companyName,
                 startTime: site.syncStartedAt || site.updatedAt,
                 requestsCompleted: site.syncProcessed,
                 requestsTotal: site.syncTotal,

@@ -80,7 +80,7 @@ async function handleGET(req: NextRequest) {
         where: { tenantId },
         select: {
           id: true,
-          site: {
+          Site: {
             select: {
               type: true,
             },
@@ -89,10 +89,10 @@ async function handleGET(req: NextRequest) {
       });
 
       const userProductIds = allProducts
-        .filter((p) => p.site.type === "USER")
+        .filter((p) => p.Site.type === "USER")
         .map((p) => p.id);
       const rivalProductIds = allProducts
-        .filter((p) => p.site.type === "COMPETITOR")
+        .filter((p) => p.Site.type === "COMPETITOR")
         .map((p) => p.id);
 
       const paginatedResult = await paginate(

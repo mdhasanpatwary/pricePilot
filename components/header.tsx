@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn, formatTimeAgo } from "@/lib/utils";
 
 interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
@@ -37,9 +37,14 @@ interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
 export default function Header({ onMenuClick }: HeaderProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const router = useRouter();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   const markAsRead = async (id?: string) => {
     try {
@@ -82,6 +87,45 @@ export default function Header({ onMenuClick }: HeaderProps) {
     const interval = setInterval(fetchNotifications, 60000); // Polling every min
     return () => clearInterval(interval);
   }, []);
+
+  // Search functionality
+  useEffect(() => {
+    const searchProducts = async () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([]);
+        setShowSearchResults(false);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const res = await fetch(`/api/v1/products?q=${encodeURIComponent(searchQuery)}&limit=5`);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.products || []);
+          setShowSearchResults(true);
+        }
+      } catch (e) {
+        console.error("Search failed", e);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounce = setTimeout(searchProducts, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && searchQuery.trim()) {
+      router.push(`/dashboard/products?q=${encodeURIComponent(searchQuery)}`);
+      setShowSearchResults(false);
+      setSearchQuery("");
+    }
+    if (e.key === "Escape") {
+      setShowSearchResults(false);
+    }
+  };
 
   const getPageTitle = () => {
     if (pathname === "/dashboard") return "Dashboard";
@@ -137,13 +181,85 @@ export default function Header({ onMenuClick }: HeaderProps) {
               {getPageTitle()}
             </h1>
           </div>
-          <div className="hidden md:flex items-center gap-2 bg-muted/50 border border-border px-3 py-1.5 rounded-md focus-within:ring-1 focus-within:ring-primary/20 transition-all ml-4">
+          <div className="relative hidden md:flex items-center gap-2 bg-muted/50 border border-border px-3 py-1.5 rounded-md focus-within:ring-1 focus-within:ring-primary/20 transition-all ml-4">
             <Search className="w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search..."
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => searchQuery && setShowSearchResults(true)}
               className="bg-transparent border-none outline-none text-sm w-48 font-medium placeholder:text-muted-foreground/50"
             />
+
+            {/* Search Results Dropdown */}
+            {showSearchResults && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowSearchResults(false)}
+                />
+                <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-xl z-20 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden max-w-md">
+                  {isSearching ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      Searching...
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    <>
+                      <div className="max-h-80 overflow-y-auto">
+                        {searchResults.map((product) => (
+                          <Link
+                            key={product.id}
+                            href={`/dashboard/products?highlight=${product.id}`}
+                            onClick={() => {
+                              setShowSearchResults(false);
+                              setSearchQuery("");
+                            }}
+                            className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors border-b border-border last:border-0"
+                          >
+                            {product.imageUrl && (
+                              <Image
+                                src={product.imageUrl}
+                                alt={product.title}
+                                width={40}
+                                height={40}
+                                className="w-10 h-10 object-cover rounded"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{product.title}</p>
+                              {product.sku && (
+                                <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
+                              )}
+                            </div>
+                            {product.price && (
+                              <span className="text-sm font-bold">${product.price}</span>
+                            )}
+                          </Link>
+                        ))}
+                      </div>
+                      <div className="p-2 bg-muted/20 text-center border-t border-border">
+                        <button
+                          onClick={() => {
+                            router.push(`/dashboard/products?q=${encodeURIComponent(searchQuery)}`);
+                            setShowSearchResults(false);
+                            setSearchQuery("");
+                          }}
+                          className="text-xs font-bold text-primary hover:underline"
+                        >
+                          View all results
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No products found for &quot;{searchQuery}&quot;
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 

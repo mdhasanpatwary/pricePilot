@@ -166,7 +166,7 @@ async function handleGET(req: NextRequest) {
         const rawMetrics = await prisma.rateLimitMetric.findMany({
             where,
             include: {
-                tenant: {
+                Tenant: {
                     select: {
                         companyName: true,
                     },
@@ -186,7 +186,7 @@ async function handleGET(req: NextRequest) {
             if (!aggregatedMap.has(key)) {
                 aggregatedMap.set(key, {
                     tenantId: metric.tenantId,
-                    tenantName: metric.tenant.companyName,
+                    tenantName: metric.Tenant.companyName,
                     limiterType: metric.limiterType,
                     totalHits: 0,
                     totalViolations: 0,

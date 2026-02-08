@@ -1,10 +1,10 @@
 /**
  * Admin Rate Limit Management Service
- * 
+ *
  * Provides administrative functions for managing rate limits across tenants,
  * including temporary bypasses, custom multipliers, and status monitoring.
  * All admin actions are audited for security and compliance.
- * 
+ *
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
  */
 
@@ -12,12 +12,12 @@ import { prisma } from "@/lib/prisma";
 import { PlanType } from "@prisma/client";
 import { recordAuditLog } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { 
-  getPlanMultiplier, 
-  getEffectiveLimit, 
+import {
+  getPlanMultiplier,
+  getEffectiveLimit,
   isValidMultiplier,
   RateLimiterType,
-  ENDPOINT_LIMITS 
+  ENDPOINT_LIMITS
 } from "./rate-limit-config";
 import { getTenantMetrics, getRecentViolations } from "./rate-limit-metrics";
 
@@ -70,20 +70,20 @@ export interface DetailedTenantStatus extends TenantRateLimitStatus {
 
 /**
  * Set a temporary bypass for a tenant
- * 
+ *
  * Allows a tenant to bypass rate limiting for a specified duration.
  * This is useful for special circumstances like data migrations, bulk operations,
  * or resolving customer issues. All bypasses are audited.
- * 
+ *
  * @param tenantId - The tenant to bypass rate limits for
  * @param adminUserId - The admin user setting the bypass
  * @param durationMinutes - How long the bypass should last (in minutes)
  * @param reason - Explanation for why the bypass is needed
  * @param ipAddress - Optional IP address of the admin for audit trail
  * @returns The created bypass record
- * 
+ *
  * Requirements: 4.3, 4.5
- * 
+ *
  * @example
  * ```typescript
  * await setBypass(
@@ -191,20 +191,20 @@ export async function setBypass(
 
 /**
  * Set a custom multiplier for a tenant
- * 
+ *
  * Allows overriding the plan-based multiplier with a custom value.
  * This is useful for special pricing arrangements or temporary adjustments.
  * Custom multipliers must be between 0.1 and 100.
- * 
+ *
  * @param tenantId - The tenant to set custom multiplier for
  * @param adminUserId - The admin user setting the multiplier
  * @param multiplier - The custom multiplier value (0.1 to 100)
  * @param reason - Explanation for the custom multiplier
  * @param ipAddress - Optional IP address of the admin for audit trail
  * @returns The created or updated custom multiplier record
- * 
+ *
  * Requirements: 4.4, 4.5
- * 
+ *
  * @example
  * ```typescript
  * await setCustomMultiplier(
@@ -317,14 +317,14 @@ export async function setCustomMultiplier(
 
 /**
  * Remove a custom multiplier for a tenant
- * 
+ *
  * Removes the custom multiplier, reverting to plan-based multiplier.
- * 
+ *
  * @param tenantId - The tenant to remove custom multiplier from
  * @param adminUserId - The admin user removing the multiplier
  * @param reason - Explanation for removing the custom multiplier
  * @param ipAddress - Optional IP address of the admin for audit trail
- * 
+ *
  * Requirements: 4.4, 4.5
  */
 export async function removeCustomMultiplier(
@@ -401,15 +401,15 @@ export async function removeCustomMultiplier(
 
 /**
  * Check if a tenant has an active bypass
- * 
+ *
  * This function checks if a tenant currently has an active rate limit bypass.
  * It automatically deactivates expired bypasses.
- * 
+ *
  * @param tenantId - The tenant to check
  * @returns True if the tenant has an active bypass, false otherwise
- * 
+ *
  * Requirements: 4.3, 4.6
- * 
+ *
  * @example
  * ```typescript
  * const hasBypass = await checkBypass('tenant-123');
@@ -460,15 +460,15 @@ export async function checkBypass(tenantId: string): Promise<boolean> {
 
 /**
  * Get custom multiplier for a tenant
- * 
+ *
  * Retrieves the custom multiplier if one is set for the tenant.
  * Returns null if no custom multiplier exists.
- * 
+ *
  * @param tenantId - The tenant to get custom multiplier for
  * @returns The custom multiplier value, or null if not set
- * 
+ *
  * Requirements: 4.4
- * 
+ *
  * @example
  * ```typescript
  * const customMultiplier = await getCustomMultiplier('tenant-123');
@@ -496,14 +496,14 @@ export async function getCustomMultiplier(
 
 /**
  * Get rate limit status for all tenants
- * 
+ *
  * Returns a summary of rate limit status for all tenants in the system.
  * This is used for the admin dashboard overview.
- * 
+ *
  * @returns Array of tenant rate limit statuses
- * 
+ *
  * Requirements: 4.1
- * 
+ *
  * @example
  * ```typescript
  * const allStatuses = await getAllTenantsStatus();
@@ -518,7 +518,7 @@ export async function getAllTenantsStatus(): Promise<TenantRateLimitStatus[]> {
         id: true,
         companyName: true,
         planType: true,
-        rateLimitBypasses: {
+        RateLimitBypass: {
           where: {
             isActive: true,
             expiresAt: {
@@ -530,7 +530,7 @@ export async function getAllTenantsStatus(): Promise<TenantRateLimitStatus[]> {
           },
           take: 1,
         },
-        rateLimitCustomMultiplier: true,
+        RateLimitCustomMultiplier: true,
       },
       orderBy: {
         companyName: "asc",
@@ -560,15 +560,15 @@ export async function getAllTenantsStatus(): Promise<TenantRateLimitStatus[]> {
 
     // Build status for each tenant
     const statuses: TenantRateLimitStatus[] = tenants.map((tenant) => {
-      const bypass = tenant.rateLimitBypasses[0];
-      const customMultiplier = tenant.rateLimitCustomMultiplier;
-      
-      const effectiveMultiplier = customMultiplier?.multiplier 
+      const bypass = tenant.RateLimitBypass[0];
+      const customMultiplier = tenant.RateLimitCustomMultiplier;
+
+      const effectiveMultiplier = customMultiplier?.multiplier
         ?? getPlanMultiplier(tenant.planType);
 
       // Calculate current usage limits
       const currentUsage: TenantRateLimitStatus["currentUsage"] = {};
-      
+
       for (const [limiterType, config] of Object.entries(ENDPOINT_LIMITS)) {
         currentUsage[limiterType] = {
           limit: getEffectiveLimit(
@@ -606,15 +606,15 @@ export async function getAllTenantsStatus(): Promise<TenantRateLimitStatus[]> {
 
 /**
  * Get detailed rate limit status for a specific tenant
- * 
+ *
  * Returns comprehensive rate limit information for a single tenant,
  * including metrics, violation history, and current configuration.
- * 
+ *
  * @param tenantId - The tenant to get detailed status for
  * @returns Detailed tenant status with metrics and violation history
- * 
+ *
  * Requirements: 4.2
- * 
+ *
  * @example
  * ```typescript
  * const status = await getTenantStatus('tenant-123');
@@ -632,7 +632,7 @@ export async function getTenantStatus(
         id: true,
         companyName: true,
         planType: true,
-        rateLimitBypasses: {
+        RateLimitBypass: {
           where: {
             isActive: true,
             expiresAt: {
@@ -644,7 +644,7 @@ export async function getTenantStatus(
           },
           take: 1,
         },
-        rateLimitCustomMultiplier: true,
+        RateLimitCustomMultiplier: true,
       },
     });
 
@@ -652,15 +652,15 @@ export async function getTenantStatus(
       throw new Error(`Tenant ${tenantId} not found`);
     }
 
-    const bypass = tenant.rateLimitBypasses[0];
-    const customMultiplier = tenant.rateLimitCustomMultiplier;
-    
-    const effectiveMultiplier = customMultiplier?.multiplier 
+    const bypass = tenant.RateLimitBypass[0];
+    const customMultiplier = tenant.RateLimitCustomMultiplier;
+
+    const effectiveMultiplier = customMultiplier?.multiplier
       ?? getPlanMultiplier(tenant.planType);
 
     // Calculate current usage limits
     const currentUsage: TenantRateLimitStatus["currentUsage"] = {};
-    
+
     for (const [limiterType, config] of Object.entries(ENDPOINT_LIMITS)) {
       currentUsage[limiterType] = {
         limit: getEffectiveLimit(
@@ -686,13 +686,13 @@ export async function getTenantStatus(
 
     // Calculate violation rates
     const total24h = metrics24h.totalHits + metrics24h.totalViolations;
-    const violationRate24h = total24h > 0 
-      ? (metrics24h.totalViolations / total24h) * 100 
+    const violationRate24h = total24h > 0
+      ? (metrics24h.totalViolations / total24h) * 100
       : 0;
 
     const total7d = metrics7d.totalHits + metrics7d.totalViolations;
-    const violationRate7d = total7d > 0 
-      ? (metrics7d.totalViolations / total7d) * 100 
+    const violationRate7d = total7d > 0
+      ? (metrics7d.totalViolations / total7d) * 100
       : 0;
 
     return {

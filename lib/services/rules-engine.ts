@@ -49,7 +49,7 @@ export class RulesEngine {
         const products = await prisma.product.findMany({
           where: {
             tenantId,
-            site: { type: "USER" },
+            Site: { type: "USER" },
           },
           include: {
             matchesAsUser: {

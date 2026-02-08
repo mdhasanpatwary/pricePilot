@@ -1,10 +1,10 @@
 /**
  * Scrape Orchestrator for Bot Protection Handling
- * 
+ *
  * Coordinates the entire scraping workflow from request to result storage.
  * Integrates detection engine, proxy manager, rate limiter, session manager,
  * and scraping strategies to handle bot protection mechanisms.
- * 
+ *
  * Requirements: 7.1, 7.2, 7.6
  */
 
@@ -32,6 +32,10 @@ import {
 import { generateHeaders } from './header-generator';
 import { UserAgentPool } from './user-agent-pool';
 import { recordPriceHistoryGap } from './price-history-maintenance';
+import { APIDetector } from '../api-detection/api-detector';
+import { APICache, apiCache } from '../api-detection/api-cache';
+import { APIExtractor } from '../api-detection/api-extractor';
+import type { APIPattern, Product as APIProduct } from '@/lib/types/api-detection';
 
 /**
  * Scrape request interface
@@ -42,6 +46,7 @@ export interface ScrapeRequest {
     url: string;
     tenantId: string;
     priority: 'high' | 'normal' | 'low';
+    forceDetection?: boolean; // Force API detection even if cached pattern exists
 }
 
 /**
@@ -59,11 +64,14 @@ export interface ScrapeResult {
     timestamp: Date;
     errorMessage?: string;
     screenshot?: Buffer;
+    method?: 'api' | 'html'; // Extraction method used
+    apiPattern?: Partial<APIPattern>; // API pattern used (if any)
+    detectionTime?: number; // Time spent on API detection
 }
 
 /**
  * ScrapeOrchestrator class
- * 
+ *
  * Orchestrates the complete scraping workflow, coordinating all components
  * to handle bot protection and extract price data.
  */
@@ -77,6 +85,9 @@ export class ScrapeOrchestrator {
     private dataExtractor: DataExtractor;
     private strategySelector: StrategySelector;
     private userAgentPool: UserAgentPool;
+    private apiDetector: APIDetector;
+    private apiCache: APICache;
+    private apiExtractor: APIExtractor;
 
     constructor() {
         this.detectionEngine = new DetectionEngine();
@@ -88,22 +99,29 @@ export class ScrapeOrchestrator {
         this.dataExtractor = new DataExtractor();
         this.strategySelector = new StrategySelector();
         this.userAgentPool = new UserAgentPool();
+        this.apiDetector = new APIDetector();
+        this.apiCache = apiCache;
+        this.apiExtractor = new APIExtractor();
     }
 
     /**
      * Execute a scrape request
-     * 
+     *
      * Coordinates all components to:
-     * 1. Load site configuration
-     * 2. Select scraping strategy
-     * 3. Acquire rate limit permit
-     * 4. Execute scrape with selected strategy
-     * 5. Analyze response for bot protection
-     * 6. Extract price data if successful
-     * 7. Handle failures with retry logic
-     * 
-     * Requirements: 7.1, 7.2, 7.6
-     * 
+     * 1. Check for cached API pattern
+     * 2. Run API detection if no cached pattern exists
+     * 3. Use API extraction when pattern is available
+     * 4. Fallback to HTML scraping when API fails or not found
+     * 5. Load site configuration
+     * 6. Select scraping strategy
+     * 7. Acquire rate limit permit
+     * 8. Execute scrape with selected strategy
+     * 9. Analyze response for bot protection
+     * 10. Extract price data if successful
+     * 11. Handle failures with retry logic
+     *
+     * Requirements: 3.1, 4.1, 4.2, 5.2, 6.3, 6.4, 7.1, 7.2, 7.6
+     *
      * @param request - Scrape request
      * @returns Promise resolving to scrape result
      */
@@ -118,6 +136,185 @@ export class ScrapeOrchestrator {
         });
 
         try {
+            // Step 1: Check cache for API pattern (unless forced detection)
+            // Requirements: 5.2, 6.3, 6.4
+            let apiPattern: APIPattern | null = null;
+            let detectionTime = 0;
+
+            if (!request.forceDetection) {
+                apiPattern = await this.apiCache.getPattern(request.competitorWebsiteId);
+
+                if (apiPattern) {
+                    logger.info('[ScrapeOrchestrator] Found cached API pattern', {
+                        competitorWebsiteId: request.competitorWebsiteId,
+                        confidenceScore: apiPattern.confidenceScore,
+                    });
+                }
+            }
+
+            // Step 2: Run API detection if no cached pattern
+            // Requirements: 3.1, 4.1
+            if (!apiPattern) {
+                logger.info('[ScrapeOrchestrator] No cached API pattern, running detection', {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                });
+
+                const detectionStart = Date.now();
+
+                try {
+                    // Get base URL for detection (use product listing page if available)
+                    const baseUrl = await this.getBaseUrlForDetection(request.competitorWebsiteId, request.url);
+
+                    const patterns = await this.apiDetector.detectAPIs(baseUrl, {
+                        timeout: 30000,
+                        maxPages: 3,
+                        minConfidence: 70,
+                    });
+
+                    detectionTime = Date.now() - detectionStart;
+
+                    if (patterns.length > 0) {
+                        // Use highest ranked pattern
+                        const bestPattern = patterns[0];
+
+                        logger.info('[ScrapeOrchestrator] API detection successful', {
+                            competitorWebsiteId: request.competitorWebsiteId,
+                            patternsFound: patterns.length,
+                            confidenceScore: bestPattern.confidenceScore,
+                            detectionTime,
+                        });
+
+                        // Store pattern in cache
+                        // Requirement: 6.3
+                        await this.apiCache.storePattern(request.competitorWebsiteId, {
+                            tenantId: request.tenantId,
+                            competitorWebsiteId: request.competitorWebsiteId,
+                            url: bestPattern.url!,
+                            method: bestPattern.method!,
+                            headers: bestPattern.headers!,
+                            queryParams: bestPattern.queryParams!,
+                            bodyTemplate: bestPattern.bodyTemplate,
+                            responseFormat: bestPattern.responseFormat!,
+                            dataPath: bestPattern.dataPath!,
+                            fieldMappings: bestPattern.fieldMappings!,
+                            confidenceScore: bestPattern.confidenceScore!,
+                            paginationPattern: bestPattern.paginationPattern,
+                            successCount: 0,
+                            failureCount: 0,
+                            lastUsedAt: new Date(),
+                        });
+
+                        apiPattern = await this.apiCache.getPattern(request.competitorWebsiteId);
+                    } else {
+                        logger.info('[ScrapeOrchestrator] No API patterns discovered', {
+                            competitorWebsiteId: request.competitorWebsiteId,
+                            detectionTime,
+                        });
+
+                        // No need to mark website - absence of ApiPattern record indicates no API available
+                        // Requirement: 4.5
+                    }
+                } catch (error) {
+                    detectionTime = Date.now() - detectionStart;
+                    logger.error('[ScrapeOrchestrator] API detection failed', {
+                        competitorWebsiteId: request.competitorWebsiteId,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                        detectionTime,
+                    });
+
+                    // No need to mark website - absence of ApiPattern record indicates no API available
+                    // Requirements: 4.1, 4.5
+
+                    // Continue to HTML scraping fallback
+                }
+            }
+
+            // Step 3: Try API extraction if pattern available
+            // Requirements: 3.1, 4.2
+            if (apiPattern) {
+                logger.info('[ScrapeOrchestrator] Attempting API extraction', {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    apiUrl: apiPattern.url,
+                });
+
+                try {
+                    const products = await this.apiExtractor.extractProducts(apiPattern, {
+                        maxProducts: 100,
+                        timeout: 60000,
+                    });
+
+                    // Find product matching the request URL
+                    const matchedProduct = this.findMatchingProduct(products, request.url);
+
+                    if (matchedProduct && matchedProduct.price > 0) {
+                        // API extraction successful
+                        logger.info('[ScrapeOrchestrator] API extraction successful', {
+                            competitorProductId: request.competitorProductId,
+                            price: matchedProduct.price,
+                            currency: matchedProduct.currency,
+                        });
+
+                        // Update cache metrics
+                        await this.apiCache.updateMetrics(request.competitorWebsiteId, true);
+
+                        // Update last known good price
+                        await this.updateLastKnownGoodPrice(
+                            request.competitorProductId,
+                            matchedProduct.price,
+                            matchedProduct.currency || 'USD'
+                        );
+
+                        // Handle manual price override
+                        await this.handleManualPriceOverride(
+                            request.competitorProductId,
+                            matchedProduct.price,
+                            matchedProduct.currency || 'USD'
+                        );
+
+                        const responseTime = Date.now() - startTime;
+
+                        return {
+                            success: true,
+                            price: matchedProduct.price,
+                            currency: matchedProduct.currency,
+                            protectionDetected: false,
+                            attempts: 1,
+                            finalStrategy: ScrapingStrategy.HTTP_CLIENT,
+                            responseTime,
+                            timestamp,
+                            method: 'api',
+                            apiPattern,
+                            detectionTime: detectionTime > 0 ? detectionTime : undefined,
+                        };
+                    } else {
+                        logger.warn('[ScrapeOrchestrator] No matching product found in API response', {
+                            competitorProductId: request.competitorProductId,
+                            productsFound: products.length,
+                        });
+
+                        // Update cache metrics as failure
+                        await this.apiCache.updateMetrics(request.competitorWebsiteId, false);
+                    }
+                } catch (error) {
+                    logger.error('[ScrapeOrchestrator] API extraction failed', {
+                        competitorProductId: request.competitorProductId,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                    });
+
+                    // Update cache metrics as failure
+                    await this.apiCache.updateMetrics(request.competitorWebsiteId, false);
+
+                    // Continue to HTML scraping fallback
+                }
+            }
+
+            // Step 4: Fallback to HTML scraping
+            // Requirements: 4.1, 4.2
+            logger.info('[ScrapeOrchestrator] Falling back to HTML scraping', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                reason: apiPattern ? 'API extraction failed' : 'No API pattern available',
+            });
+
             // Load site configuration
             const siteConfig = await this.loadSiteConfiguration(request.competitorWebsiteId);
 
@@ -152,12 +349,15 @@ export class ScrapeOrchestrator {
                 attempts: result.attempts,
                 finalStrategy: result.finalStrategy,
                 responseTime,
+                method: 'html',
             });
 
             return {
                 ...result,
                 responseTime,
                 timestamp,
+                method: 'html',
+                detectionTime: detectionTime > 0 ? detectionTime : undefined,
             };
         } catch (error) {
             const responseTime = Date.now() - startTime;
@@ -177,17 +377,18 @@ export class ScrapeOrchestrator {
                 responseTime,
                 timestamp,
                 errorMessage,
+                method: 'html',
             };
         }
     }
 
     /**
      * Retry a failed scrape request
-     * 
+     *
      * Used for manual retry or scheduled retry of previously failed scrapes.
-     * 
+     *
      * Requirements: 7.2, 7.6
-     * 
+     *
      * @param request - Scrape request
      * @returns Promise resolving to scrape result
      */
@@ -203,11 +404,11 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute scrape with retry logic
-     * 
+     *
      * Implements retry logic with strategy adaptation based on failures.
-     * 
+     *
      * Requirements: 7.2, 7.6
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param initialStrategy - Initial scraping strategy
@@ -247,7 +448,7 @@ export class ScrapeOrchestrator {
                 );
 
                 // Log attempt
-                await this.logScrapeAttempt(attemptResult, currentStrategy, attemptNumber);
+                await this.logScrapeAttempt(request, attemptResult, currentStrategy, attemptNumber);
 
                 // Check if successful
                 if (attemptResult.success) {
@@ -404,7 +605,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute a single scrape attempt with the specified strategy
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param strategy - Scraping strategy to use
@@ -436,7 +637,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Execute HTTP-based scrape
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param proxy - Proxy to use (if any)
@@ -494,12 +695,12 @@ export class ScrapeOrchestrator {
         }
 
         // Analyze response
-        return this.analyzeResponse(request, siteConfig, response, proxy?.id);
+        return this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id);
     }
 
     /**
      * Execute browser-based scrape
-     * 
+     *
      * @param request - Scrape request
      * @param siteConfig - Site configuration
      * @param strategy - Scraping strategy
@@ -554,12 +755,12 @@ export class ScrapeOrchestrator {
         // Note: Browser cookies are handled by Playwright context
 
         // Analyze response
-        return this.analyzeResponse(request, siteConfig, response, proxy?.id, response.screenshot);
+        return this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id, response.screenshot);
     }
 
     /**
      * Analyze scrape response and extract price data
-     * 
+     *
      * @param _request - Scrape request (unused for now)
      * @param siteConfig - Site configuration
      * @param response - Scrape response
@@ -571,6 +772,7 @@ export class ScrapeOrchestrator {
         _request: ScrapeRequest,
         siteConfig: SiteConfiguration,
         response: ScrapeResponse | BrowserScrapeResponse,
+        userAgent: string,
         proxyId?: string,
         screenshot?: Buffer
     ): AttemptResult {
@@ -596,6 +798,10 @@ export class ScrapeOrchestrator {
                 proxyId,
                 screenshot,
                 errorMessage: detection.reasoning,
+                statusCode: response.statusCode,
+                responseTimeMs: response.responseTime,
+                userAgent,
+                responseSizeBytes: response.body.length,
             };
         }
 
@@ -614,6 +820,10 @@ export class ScrapeOrchestrator {
                 protectionDetected: false,
                 proxyId,
                 screenshot,
+                statusCode: response.statusCode,
+                responseTimeMs: response.responseTime,
+                userAgent,
+                responseSizeBytes: response.body.length,
             };
         }
 
@@ -624,12 +834,16 @@ export class ScrapeOrchestrator {
             proxyId,
             screenshot,
             errorMessage: 'Failed to extract price from response',
+            statusCode: response.statusCode,
+            responseTimeMs: response.responseTime,
+            userAgent,
+            responseSizeBytes: response.body.length,
         };
     }
 
     /**
      * Check if strategy should use proxy
-     * 
+     *
      * @param strategy - Scraping strategy
      * @returns True if proxy should be used
      */
@@ -642,7 +856,7 @@ export class ScrapeOrchestrator {
 
     /**
      * Check if strategy is HTTP-based
-     * 
+     *
      * @param strategy - Scraping strategy
      * @returns True if HTTP-based
      */
@@ -655,13 +869,40 @@ export class ScrapeOrchestrator {
 
     /**
      * Load site configuration from database
-     * 
+     *
      * @param _competitorWebsiteId - Competitor website ID (unused for now)
      * @returns Site configuration
      */
-    private async loadSiteConfiguration(_competitorWebsiteId: string): Promise<SiteConfiguration> {
-        // TODO: Load from database
-        // For now, return default configuration
+    private async loadSiteConfiguration(competitorWebsiteId: string): Promise<SiteConfiguration> {
+        try {
+            const config = await prisma.scrapingConfig.findUnique({
+                where: { competitorWebsiteId },
+            });
+
+            if (config) {
+                return {
+                    preferredStrategy: config.preferredStrategy as ScrapingStrategy,
+                    requiresJavaScript: config.requiresJavascript,
+                    rateLimit: {
+                        baseDelay: config.baseDelayMs,
+                        maxDelay: config.maxDelayMs,
+                        backoffMultiplier: Number(config.backoffMultiplier),
+                        jitterRange: 20, // Default jitter
+                    },
+                    proxyRequired: config.proxyRequired,
+                    customSelectors: {
+                        priceSelectors: (config.priceSelectors as string[]) || ['.price', '[itemprop="price"]', '.product-price'],
+                        currencySelector: config.currencySelector || undefined,
+                        fallbackRegex: config.fallbackRegex || undefined,
+                    },
+                    maxRetries: config.maxRetries,
+                };
+            }
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Failed to load site configuration', { competitorWebsiteId, error });
+        }
+
+        // Default configuration if not found
         return {
             preferredStrategy: ScrapingStrategy.HTTP_CLIENT,
             requiresJavaScript: false,
@@ -681,46 +922,97 @@ export class ScrapeOrchestrator {
 
     /**
      * Load recent scrape history for a competitor website
-     * 
+     *
      * @param _competitorWebsiteId - Competitor website ID (unused for now)
      * @returns Recent scrape attempts
      */
-    private async loadRecentHistory(_competitorWebsiteId: string): Promise<ScrapeAttempt[]> {
-        // TODO: Load from database
-        // For now, return empty array
-        return [];
+    private async loadRecentHistory(competitorWebsiteId: string): Promise<ScrapeAttempt[]> {
+        try {
+            const history = await prisma.scrapeAttempt.findMany({
+                where: { competitorWebsiteId },
+                orderBy: { createdAt: 'desc' },
+                take: 5,
+            });
+
+            return history.map(h => ({
+                id: h.id,
+                strategy: h.strategy as ScrapingStrategy,
+                success: h.success,
+                protectionDetected: h.protectionDetected,
+                protectionType: h.protectionType as ProtectionType,
+                timestamp: h.createdAt,
+            }));
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Failed to load recent history', { competitorWebsiteId, error });
+            return [];
+        }
     }
 
     /**
      * Log scrape attempt to database
-     * 
+     *
      * @param result - Attempt result
      * @param strategy - Strategy used
      * @param attemptNumber - Attempt number
      */
     private async logScrapeAttempt(
+        request: ScrapeRequest,
         result: AttemptResult,
         strategy: ScrapingStrategy,
         attemptNumber: number
     ): Promise<void> {
-        // TODO: Log to database
-        logger.debug('[ScrapeOrchestrator] Logging scrape attempt', {
-            strategy,
-            attemptNumber,
-            success: result.success,
-            protectionDetected: result.protectionDetected,
-        });
+        try {
+            const scrapeAttempt = await prisma.scrapeAttempt.create({
+                data: {
+                    tenantId: request.tenantId,
+                    competitorProductId: request.competitorProductId,
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    url: request.url,
+                    strategy: strategy,
+                    proxyId: result.proxyId,
+                    userAgent: result.userAgent,
+                    success: result.success,
+                    protectionDetected: result.protectionDetected,
+                    protectionType: result.protectionType,
+                    statusCode: result.statusCode,
+                    responseTimeMs: result.responseTimeMs,
+                    responseSizeBytes: result.responseSizeBytes,
+                    errorMessage: result.errorMessage,
+                    attemptNumber: attemptNumber,
+                },
+            });
+
+            if (result.protectionDetected && result.protectionType) {
+                await prisma.protectionDetection.create({
+                    data: {
+                        scrapeAttemptId: scrapeAttempt.id,
+                        protectionType: result.protectionType,
+                        confidence: 100, // Hardcoded for now, detection engine could provide this
+                        indicators: {}, // Hardcoded for now
+                        reasoning: result.errorMessage,
+                    },
+                });
+            }
+
+            logger.debug('[ScrapeOrchestrator] Logged scrape attempt to database', {
+                id: scrapeAttempt.id,
+                strategy,
+                success: result.success,
+            });
+        } catch (error) {
+            logger.error('[ScrapeOrchestrator] Failed to log scrape attempt', { error });
+        }
     }
 
     /**
      * Update last known good price on successful scrape
-     * 
+     *
      * Stores the last successfully scraped price with timestamp.
      * This allows the system to display the last known good price
      * when current scraping fails.
-     * 
+     *
      * Requirements: 14.1
-     * 
+     *
      * @param competitorProductId - ID of the competitor product
      * @param price - Successfully scraped price
      * @param currency - Price currency
@@ -761,13 +1053,13 @@ export class ScrapeOrchestrator {
 
     /**
      * Check for manual prices and replace with scraped price on success
-     * 
+     *
      * When automated scraping successfully retrieves a price for a product
      * that has a manually entered price, this method replaces the manual
      * price with the scraped price and maintains history.
-     * 
+     *
      * Requirements: 13.5, 13.6
-     * 
+     *
      * @param competitorProductId - ID of the competitor product
      * @param scrapedPrice - Successfully scraped price
      * @param currency - Price currency
@@ -848,6 +1140,109 @@ export class ScrapeOrchestrator {
     async cleanup(): Promise<void> {
         await this.browserScraper.close();
     }
+
+    /**
+     * Get base URL for API detection
+     * 
+     * Tries to get a product listing page URL for better API detection.
+     * Falls back to the product URL if no listing page is available.
+     * 
+     * @param competitorWebsiteId - Competitor website ID
+     * @param productUrl - Product URL
+     * @returns Base URL for detection
+     */
+    private async getBaseUrlForDetection(competitorWebsiteId: string, productUrl: string): Promise<string> {
+        try {
+            // Try to get the base URL from Site (competitor website)
+            const website = await prisma.site.findUnique({
+                where: { id: competitorWebsiteId },
+                select: { baseUrl: true },
+            });
+
+            if (website?.baseUrl) {
+                // Use base URL with a common product listing path
+                const baseUrl = website.baseUrl.replace(/\/$/, '');
+
+                // Try common listing paths
+                const listingPaths = ['/products', '/shop', '/catalog', '/store'];
+
+                for (const path of listingPaths) {
+                    const testUrl = `${baseUrl}${path}`;
+
+                    // Quick check if path exists
+                    try {
+                        const response = await fetch(testUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+                        if (response.ok) {
+                            logger.info('[ScrapeOrchestrator] Found product listing page', {
+                                url: testUrl,
+                            });
+                            return testUrl;
+                        }
+                    } catch {
+                        // Continue to next path
+                    }
+                }
+
+                // If no listing page found, use base URL
+                return baseUrl;
+            }
+        } catch (error) {
+            logger.warn('[ScrapeOrchestrator] Failed to get base URL for detection', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+
+        // Fallback to product URL
+        return productUrl;
+    }
+
+    /**
+     * Find matching product in API response
+     * 
+     * Attempts to match a product from the API response to the requested URL.
+     * Uses URL matching, SKU matching, or takes the first product if only one is returned.
+     * 
+     * @param products - Products from API response
+     * @param requestUrl - Requested product URL
+     * @returns Matching product or null
+     */
+    private findMatchingProduct(products: APIProduct[], requestUrl: string): APIProduct | null {
+        if (products.length === 0) {
+            return null;
+        }
+
+        // If only one product, return it
+        if (products.length === 1) {
+            return products[0];
+        }
+
+        // Try to match by URL
+        const urlMatch = products.find(p => p.url && requestUrl.includes(p.url));
+        if (urlMatch) {
+            return urlMatch;
+        }
+
+        // Try to match by SKU in URL
+        const urlParts = requestUrl.split('/');
+        const lastPart = urlParts[urlParts.length - 1];
+
+        const skuMatch = products.find(p => {
+            if (!p.sku) return false;
+            return lastPart.includes(p.sku) || p.sku.includes(lastPart);
+        });
+
+        if (skuMatch) {
+            return skuMatch;
+        }
+
+        // Return first product as fallback
+        logger.warn('[ScrapeOrchestrator] Could not match product, using first result', {
+            requestUrl,
+            productsCount: products.length,
+        });
+
+        return products[0];
+    }
 }
 
 /**
@@ -862,4 +1257,8 @@ interface AttemptResult {
     proxyId?: string;
     screenshot?: Buffer;
     errorMessage?: string;
+    statusCode: number;
+    responseTimeMs: number;
+    userAgent: string;
+    responseSizeBytes: number;
 }

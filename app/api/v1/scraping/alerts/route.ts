@@ -1,8 +1,8 @@
 /**
  * Scraping Alerts API - List and filter alerts
- * 
+ *
  * GET /api/v1/scraping/alerts
- * 
+ *
  * Query parameters:
  * - severity: Filter by severity (info, warning, critical)
  * - competitorWebsiteId: Filter by competitor site
@@ -10,7 +10,7 @@
  * - sort: Sort order (timestamp, -timestamp)
  * - page: Page number (default: 1)
  * - limit: Items per page (default: 20, max: 100)
- * 
+ *
  * Requirements: 12.1
  */
 
@@ -34,9 +34,9 @@ const alertQuerySchema = z.object({
 
 /**
  * GET /api/v1/scraping/alerts
- * 
+ *
  * List alerts with filtering and pagination
- * 
+ *
  * Requirements: 12.1
  */
 export async function GET(request: NextRequest) {
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
                 skip,
                 take: limit,
                 include: {
-                    competitorWebsite: {
+                    Site: {
                         select: {
                             id: true,
                             baseUrl: true,
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
             title: alert.title,
             message: alert.message,
             competitorWebsiteId: alert.competitorWebsiteId,
-            competitorSiteName: alert.competitorWebsite?.baseUrl,
+            competitorSiteName: alert.Site?.baseUrl,
             metadata: alert.metadata,
             timestamp: alert.createdAt,
             acknowledged: alert.acknowledged,

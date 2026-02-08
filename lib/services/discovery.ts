@@ -23,7 +23,7 @@ export class DiscoveryService {
     const userProducts = await prisma.product.findMany({
       where: {
         tenantId,
-        site: { type: "USER" },
+        Site: { type: "USER" },
       },
     });
 
@@ -134,7 +134,7 @@ export class DiscoveryService {
           const result = await scraper.searchAndScrape(site.baseUrl, cleanTitle, siteId);
 
           if (result) {
-            // ... (successful scrape logic)
+
             if (result.price === 0) {
               await prisma.syncLog.create({
                 data: {
@@ -217,7 +217,7 @@ export class DiscoveryService {
               }
             });
 
-            // Queue a delayed job (as SINGLE retry might be too much overhead per product, 
+            // Queue a delayed job (as SINGLE retry might be too much overhead per product,
             // but user asked for individual background retries).
             // We use RETRY type which we'll handle in worker.
             await getSyncQueue().add(QUEUE_NAMES.SYNC, {

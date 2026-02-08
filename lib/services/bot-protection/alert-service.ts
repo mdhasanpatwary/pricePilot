@@ -1,10 +1,10 @@
 /**
  * AlertService - Monitors metrics and sends notifications when thresholds are breached
- * 
+ *
  * This service checks scraping success rates against configured thresholds and sends
  * alerts through multiple channels (email, webhook, in-app) when issues are detected.
  * Implements alert throttling to prevent notification spam.
- * 
+ *
  * Requirements: 12.1, 12.2, 12.3
  */
 
@@ -77,10 +77,10 @@ export class AlertService {
 
     /**
      * Check all thresholds and trigger alerts as needed
-     * 
+     *
      * This method should be called periodically (e.g., every 5 minutes) to monitor
      * scraping health and trigger alerts when thresholds are breached.
-     * 
+     *
      * Requirements: 12.1, 12.2, 12.3
      */
     async checkThresholds(): Promise<void> {
@@ -103,12 +103,12 @@ export class AlertService {
 
     /**
      * Send an alert through configured channels
-     * 
+     *
      * This method creates the alert in the database and sends notifications
      * through all configured channels (email, webhook, in-app).
-     * 
+     *
      * Requirements: 12.4, 12.6
-     * 
+     *
      * @param alert - The alert to send
      * @returns The created alert with ID
      */
@@ -170,10 +170,10 @@ export class AlertService {
 
     /**
      * Acknowledge an alert
-     * 
+     *
      * Marks an alert as acknowledged by a user, preventing further notifications
      * for the same issue.
-     * 
+     *
      * @param alertId - The alert ID to acknowledge
      * @param userId - The user acknowledging the alert
      */
@@ -197,7 +197,7 @@ export class AlertService {
 
     /**
      * Check thresholds for a specific tenant
-     * 
+     *
      * @param tenantId - The tenant ID to check
      */
     private async checkTenantThresholds(tenantId: string): Promise<void> {
@@ -220,9 +220,9 @@ export class AlertService {
 
     /**
      * Check thresholds for a specific competitor site
-     * 
+     *
      * Requirements: 9.4, 12.1, 12.2, 12.3, 12.7
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param siteId - The competitor site ID
      * @param siteName - The competitor site name
@@ -318,9 +318,9 @@ export class AlertService {
 
     /**
      * Check for CAPTCHA challenges
-     * 
+     *
      * Requirements: 12.2
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param siteId - The competitor site ID
      * @param siteName - The competitor site name
@@ -371,9 +371,9 @@ export class AlertService {
 
     /**
      * Check if all proxies are blocked for a site
-     * 
+     *
      * Requirements: 12.3
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param siteId - The competitor site ID
      * @param siteName - The competitor site name
@@ -453,9 +453,9 @@ export class AlertService {
 
     /**
      * Check if an alert should be throttled
-     * 
+     *
      * Requirements: 12.5
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param alertType - The alert type
      * @param siteId - The competitor site ID (optional)
@@ -499,7 +499,7 @@ export class AlertService {
 
     /**
      * Check if there's an active (unacknowledged) alert for a site
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param siteId - The competitor site ID
      * @param alertTypes - The alert types to check
@@ -526,9 +526,9 @@ export class AlertService {
 
     /**
      * Send notifications through all configured channels
-     * 
+     *
      * Requirements: 12.4, 12.6
-     * 
+     *
      * @param alert - The alert to send notifications for
      */
     private async sendNotifications(alert: any): Promise<void> {
@@ -540,7 +540,7 @@ export class AlertService {
             select: {
                 id: true,
                 companyName: true,
-                users: {
+                User: {
                     where: {
                         emailNotifications: true,
                     },
@@ -582,9 +582,9 @@ export class AlertService {
 
     /**
      * Send email notification
-     * 
+     *
      * Requirements: 12.4, 12.6
-     * 
+     *
      * @param alert - The alert to send
      * @param tenant - The tenant configuration
      * @param siteName - The competitor site name
@@ -592,7 +592,7 @@ export class AlertService {
     private async sendEmailNotification(alert: any, tenant: any, siteName: string): Promise<void> {
         try {
             // Skip if no users with email notifications enabled
-            if (!tenant.users || tenant.users.length === 0) {
+            if (!tenant.User || tenant.User.length === 0) {
                 return;
             }
 
@@ -610,20 +610,20 @@ export class AlertService {
                     <div style="background-color: ${severityColor}; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
                         <h2 style="margin: 0;">[${severityLabel}] ${alert.title}</h2>
                     </div>
-                    
+
                     <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-top: none;">
                         <p style="font-size: 16px; line-height: 1.6;">${alert.message}</p>
-                        
+
                         ${contextDetails}
-                        
+
                         <div style="margin: 30px 0;">
                             <a href="${dashboardUrl}" style="background-color: #0070f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
                                 View Monitoring Dashboard
                             </a>
                         </div>
-                        
+
                         <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-                        
+
                         <p style="font-size: 12px; color: #666;">
                             Alert ID: ${alert.id}<br />
                             Time: ${new Date(alert.createdAt).toLocaleString()}<br />
@@ -634,7 +634,7 @@ export class AlertService {
             `;
 
             // Send email to all users with notifications enabled
-            const emailPromises = tenant.users.map((user: any) =>
+            const emailPromises = tenant.User.map((user: any) =>
                 NotificationSender.sendEmail(
                     user.email,
                     `[PricePilot Alert] ${alert.title}`,
@@ -653,9 +653,9 @@ export class AlertService {
 
     /**
      * Send webhook notification
-     * 
+     *
      * Requirements: 12.4, 12.6
-     * 
+     *
      * @param alert - The alert to send
      * @param tenant - The tenant configuration
      * @param siteName - The competitor site name
@@ -705,9 +705,9 @@ export class AlertService {
 
     /**
      * Build context details HTML for email
-     * 
+     *
      * Requirements: 12.6
-     * 
+     *
      * @param metadata - The alert metadata
      * @param siteName - The competitor site name
      * @returns HTML string with context details
@@ -753,7 +753,7 @@ export class AlertService {
 
     /**
      * Get color for alert severity
-     * 
+     *
      * @param severity - The alert severity
      * @returns Hex color code
      */
