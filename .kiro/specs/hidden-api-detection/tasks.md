@@ -206,7 +206,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 6.5_
 
-- [-] 13. Add performance optimizations
+- [x] 13. Add performance optimizations
   - [x] 13.1 Implement connection pooling for HTTP requests
     - Reuse HTTP connections for API requests
     - Configure pool size and timeout settings
@@ -226,22 +226,22 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 1.4, 5.4_
 
-- [~] 14. Final checkpoint - Integration testing
+- [x] 14. Final checkpoint - Integration testing
   - Test complete scraping flow with real competitor websites
   - Verify cache hit/miss scenarios work correctly
   - Verify fallback to HTML scraping works
   - Verify API extraction is faster than HTML parsing
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 15. Add monitoring dashboard components
-  - [ ] 15.1 Create API detection metrics dashboard
+- [-] 15. Add monitoring dashboard components
+  - [x] 15.1 Create API detection metrics dashboard
     - Display detection success rates per competitor website
     - Show average detection and extraction times
     - Display cache hit rates
     - Show fallback rates and reasons
     - _Requirements: 9.5_
   
-  - [ ] 15.2 Add API pattern management UI
+  - [x] 15.2 Add API pattern management UI
     - Display cached API patterns for each competitor
     - Allow manual invalidation of patterns
     - Show pattern confidence scores and metrics
