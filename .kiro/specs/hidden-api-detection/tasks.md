@@ -12,7 +12,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
   - Add indexes for performance (tenantId, competitorWebsiteId)
   - _Requirements: 1.5, 6.1, 6.2_
 
-- [ ] 2. Implement Network Interceptor component
+- [x] 2. Implement Network Interceptor component
   - [x] 2.1 Create NetworkInterceptor class with Puppeteer integration
     - Implement `startInterception()` to hook into browser network layer using CDP
     - Implement request filtering to capture only XHR/Fetch calls
@@ -28,7 +28,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 1.2_
 
-- [ ] 3. Implement API Pattern Analyzer component
+- [x] 3. Implement API Pattern Analyzer component
   - [x] 3.1 Create APIPatternAnalyzer class
     - Implement `analyzeRequests()` to identify product API patterns
     - Use heuristics: URL keywords, response structure, response size
@@ -49,7 +49,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 3.3_
 
-- [-] 4. Implement API Detector component
+- [x] 4. Implement API Detector component
   - [x] 4.1 Create APIDetector class with validation logic
     - Implement `detectAPIs()` to orchestrate detection process
     - Launch headless browser with Puppeteer
@@ -67,7 +67,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - Handle authentication errors and mark APIs as unusable
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
   
-  - [-] 4.3 Implement API ranking
+  - [x] 4.3 Implement API ranking
     - Implement `rankAPIs()` to sort by quality and completeness
     - Assign confidence scores (0-100) based on validation results
     - Rank by data completeness, consistency, and field coverage
@@ -75,18 +75,18 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 1.3, 2.5_
 
-- [~] 5. Checkpoint - Ensure detection components work
+- [x] 5. Checkpoint - Ensure detection components work
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 6. Implement API Cache component
-  - [ ] 6.1 Create APICache class with database operations
+- [-] 6. Implement API Cache component
+  - [x] 6.1 Create APICache class with database operations
     - Implement `storePattern()` to save API patterns to database
     - Implement `getPattern()` to retrieve cached patterns
     - Implement `invalidatePattern()` to remove failed patterns
     - Implement `updateMetrics()` to track success/failure counts
     - _Requirements: 1.5, 6.1, 6.2, 6.3, 6.5_
   
-  - [ ] 6.2 Add cache validation and metrics
+  - [-] 6.2 Add cache validation and metrics
     - Track success_count and failure_count for each pattern
     - Implement automatic invalidation after N consecutive failures
     - Add last_used_at timestamp tracking
@@ -94,7 +94,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 6.5, 7.5_
 
-- [ ] 7. Implement API Extractor component
+- [~] 7. Implement API Extractor component
   - [ ] 7.1 Create APIExtractor class
     - Implement `extractProducts()` to fetch data using API patterns
     - Make HTTP requests with discovered patterns
@@ -118,7 +118,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 7.2, 7.4, 8.3_
 
-- [ ] 8. Implement security and compliance features
+- [~] 8. Implement security and compliance features
   - [ ] 8.1 Add robots.txt compliance
     - Parse and cache robots.txt rules per website
     - Check disallowed paths before making requests
@@ -138,7 +138,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 8.3_
 
-- [ ] 9. Checkpoint - Ensure extraction and security work
+- [~] 9. Checkpoint - Ensure extraction and security work
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 10. Enhance Scraper Orchestrator with API detection
