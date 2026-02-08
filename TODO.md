@@ -44,18 +44,7 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 
 ---
 
-## �️ Technical Debt & Core Infrastructure (Backend)
-
-*   [x] **Bot Protection Persistence**: Loaded scraping configurations, history, and rate limit states from the database. Added persistence for consecutive failures and next available time.
-*   [ ] **Email Verification**: Re-enable email verification requirement in `lib/auth.ts` before production.
-*   [ ] **Debug API Cleanup**: Secure or remove `/api/v1/debug/*` endpoints before public deployment.
-*   [ ] **Cache Metrics Enhancement**: Implement actual response time tracking in `cache-enhanced.ts`.
-*   [ ] **Code Cleanup**: Remove any remaining redundant placeholder comments (e.g., `// ...`) identifying truncated edits.
-
----
-
 ## �🐛 Issues
-*   (None currently blocking build - System is stable)
 
 ## 📝 Tasks
 * list the uncompleted features and anything which in uncompleted.
@@ -63,12 +52,10 @@ PricePilot is a competitive pricing automation platform for e-commerce businesse
 
 
 ## Questions
-* what's wrong things exist, in this project?
-* amake menually korte hove amon ki ki kaj remaining ache?
+
 
 ## 💡 Feature Requests
-* should care lint error warnings, test errors & build errors in code writing time
-* add "If you're unsure, say you're unsure. Don't guess" in agent rule
+
 
 ---
 
