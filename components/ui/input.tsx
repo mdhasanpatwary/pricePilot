@@ -4,10 +4,15 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+  extends React.InputHTMLAttributes<HTMLInputElement> { }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
+    // If 'value' is provided in props, we ensure it's at least an empty string 
+    // to prevent React from complaining about switching from uncontrolled to controlled.
+    const isControlled = "value" in props;
+    const controlledValue = isControlled ? (props.value ?? "") : undefined;
+
     return (
       <input
         type={type}
@@ -17,6 +22,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         )}
         ref={ref}
         {...props}
+        {...(isControlled ? { value: controlledValue } : {})}
       />
     )
   }

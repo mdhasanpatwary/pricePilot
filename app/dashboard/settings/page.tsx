@@ -520,7 +520,7 @@ export default function SettingsPage() {
                       <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                         Profile Name
                       </label>
-                      <input
+                      <Input
                         {...registerGeneral("name")}
                         type="text"
                         className={cn(
@@ -539,7 +539,7 @@ export default function SettingsPage() {
                       <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                         Contact Email
                       </label>
-                      <input
+                      <Input
                         {...registerGeneral("email")}
                         type="email"
                         className={cn(
@@ -698,7 +698,7 @@ export default function SettingsPage() {
                             Slack Webhook URL
                           </label>
                           <div className="flex gap-2">
-                            <input
+                            <Input
                               type="password"
                               value={tenantPrefs.slackWebhookUrl || ""}
                               onChange={(e) =>
@@ -746,7 +746,7 @@ export default function SettingsPage() {
                         Current Password
                       </label>
                       <div className="relative">
-                        <input
+                        <Input
                           {...registerSecurity("currentPassword")}
                           type={showCurrentPassword ? "text" : "password"}
                           className={cn(
@@ -781,7 +781,7 @@ export default function SettingsPage() {
                           New Password
                         </label>
                         <div className="relative">
-                          <input
+                          <Input
                             {...registerSecurity("newPassword")}
                             type={showNewPassword ? "text" : "password"}
                             className={cn(
@@ -814,7 +814,7 @@ export default function SettingsPage() {
                           Confirm Password
                         </label>
                         <div className="relative">
-                          <input
+                          <Input
                             {...registerSecurity("confirmPassword")}
                             type={showConfirmPassword ? "text" : "password"}
                             className={cn(
@@ -1102,7 +1102,7 @@ export default function SettingsPage() {
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-0.5">
                             Password
                           </label>
-                          <input
+                          <Input
                             required
                             type="password"
                             value={memberForm.password}
@@ -1233,7 +1233,7 @@ export default function SettingsPage() {
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                           Payload URL
                         </label>
-                        <input
+                        <Input
                           value={newWebhookUrl}
                           onChange={(e) => setNewWebhookUrl(e.target.value)}
                           placeholder="https://your-api.com/webhooks"
@@ -1244,7 +1244,7 @@ export default function SettingsPage() {
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                           Secret (Optional)
                         </label>
-                        <input
+                        <Input
                           value={newWebhookSecret}
                           onChange={(e) => setNewWebhookSecret(e.target.value)}
                           placeholder="whsec_..."
@@ -1382,7 +1382,7 @@ export default function SettingsPage() {
                       <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                         Key Name
                       </label>
-                      <input
+                      <Input
                         value={newKeyName}
                         onChange={(e) => setNewKeyName(e.target.value)}
                         placeholder="e.g. Market Dashboard Integration"

@@ -142,6 +142,12 @@ async function handlePOST(req: NextRequest) {
       return snapshot;
     });
 
+    // Invalidate product list cache for this tenant
+    const { invalidateCache } = await import("@/lib/middleware/api-cache");
+    await invalidateCache(`api:products:*:${tenantId}:*`).catch(err =>
+      console.error("Cache invalidation error:", err)
+    );
+
     return NextResponse.json({
       success: true,
       updated: products.length,
@@ -157,6 +163,104 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
+async function handleDELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = session.user.tenantId;
+  let productIds: string[] = [];
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const idsString = searchParams.get("ids");
+
+    if (idsString) {
+      productIds = idsString.split(",").map(id => id.trim()).filter(id => id.length > 0);
+    } else {
+      const body = await req.json().catch(() => ({}));
+      productIds = (body.productIds || []).map((id: string) => id.trim()).filter((id: string) => id.length > 0);
+    }
+
+    if (!productIds || productIds.length === 0) {
+      return NextResponse.json(
+        { error: "At least one product ID is required" },
+        { status: 400 },
+      );
+    }
+
+    // Verify all products belong to this tenant and delete them
+    const result = await prisma.$transaction(async (tx) => {
+      // Find valid products first
+      const validProducts = await tx.product.findMany({
+        where: {
+          id: { in: productIds },
+          tenantId,
+        },
+        select: { id: true },
+      });
+
+      if (validProducts.length === 0) {
+        // Debug: Check if they exist under ANY tenant
+        const existingAnywhere = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, tenantId: true },
+          take: 5
+        });
+
+        const debugInfo = existingAnywhere.length > 0
+          ? `Found ${existingAnywhere.length} products but under different tenants (e.g., ${existingAnywhere[0].tenantId})`
+          : "Products not found in database at all";
+
+        throw new Error(`No valid products found for deletion. ${debugInfo}. Count: ${productIds.length}, Requested Tenant: ${tenantId}`);
+      }
+
+      const validIds = validProducts.map(p => p.id);
+
+      // Perform bulk delete
+      const deleteResult = await tx.product.deleteMany({
+        where: {
+          id: { in: validIds },
+          tenantId,
+        },
+      });
+
+      return deleteResult;
+    });
+
+    // Invalidate product list cache for this tenant
+    const { invalidateCache } = await import("@/lib/middleware/api-cache");
+    await invalidateCache(`api:products:*:${tenantId}:*`).catch(err =>
+      console.error("Cache invalidation error:", err)
+    );
+
+    return NextResponse.json({
+      success: true,
+      deletedCount: result.count,
+      message: `Successfully deleted ${result.count} products`,
+    });
+  } catch (error: any) {
+    console.error("Bulk delete error:", error);
+    return NextResponse.json(
+      {
+        error: error.message || "Failed to perform bulk delete",
+        details: {
+          message: error.message,
+          productIds: productIds,
+          tenantId: tenantId,
+        }
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   return withRateLimit(req, "api", handlePOST);
+}
+
+export async function DELETE(req: NextRequest) {
+  return withRateLimit(req, "write", handleDELETE);
 }

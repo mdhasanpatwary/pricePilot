@@ -79,7 +79,11 @@ function AnalyticsContent() {
         const elasticData = await elasticRes.json();
 
         setStats(summaryData);
-        setHistory(historyData);
+        if (Array.isArray(historyData)) {
+          setHistory(historyData);
+        } else {
+          setHistory(historyData.chartData || []);
+        }
         setTechStats(techData);
         setCompetitorStats(compData);
         setElasticityData(elasticData);

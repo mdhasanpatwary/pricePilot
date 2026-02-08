@@ -215,6 +215,12 @@ async function handleDELETE(req: NextRequest) {
     },
   });
 
+  // Invalidate product list cache for this tenant
+  const { invalidateCache } = await import("@/lib/middleware/api-cache");
+  await invalidateCache(`api:products:*:${tenantId}:*`).catch(err =>
+    console.error("Cache invalidation error:", err)
+  );
+
   await recordAuditLog({
     tenantId,
     userId: session.user.id,

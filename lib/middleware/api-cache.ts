@@ -69,15 +69,20 @@ export function withCache(
         }
 
         try {
-            // Extract tenant ID from request (you may need to adjust this based on your auth)
+            // Extract tenant ID from session if tenant-isolated
             let tenantId: string | undefined;
+            if (options.tenantIsolated) {
+                const { getServerSession } = await import("next-auth/next");
+                const { authOptions } = await import("@/lib/auth");
+                const session = await getServerSession(authOptions);
+                tenantId = session?.user?.tenantId;
 
-            // Try to get tenant ID from headers or session
-            // This is a placeholder - adjust based on your auth implementation
-            const authHeader = req.headers.get('authorization');
-            if (authHeader) {
-                // Extract tenant ID from token or session
-                // For now, we'll skip tenant extraction and rely on the handler
+                // If tenant isolation is required but no tenant is found, 
+                // we should probably not cache at all or return unauthorized.
+                // For now, let's just skip caching to be safe if no session.
+                if (!tenantId) {
+                    return handler(req);
+                }
             }
 
             // Generate cache key

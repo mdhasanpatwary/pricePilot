@@ -49,6 +49,12 @@ async function handleDELETE(
       where: { id },
     });
 
+    // Invalidate product list cache for this tenant
+    const { invalidateCache } = await import("@/lib/middleware/api-cache");
+    await invalidateCache(`api:products:*:${tenantId}:*`).catch(err =>
+      console.error("Cache invalidation error:", err)
+    );
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Delete product error:", error);

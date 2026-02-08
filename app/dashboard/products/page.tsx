@@ -166,6 +166,31 @@ export default function PriceReportPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedItems.length} products? This action cannot be undone.`)) return;
+
+    try {
+      // Using query parameters for DELETE as some environments strip DELETE bodies
+      const res = await fetch(`/api/v1/products/bulk?ids=${selectedItems.join(",")}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success(`Successfully deleted ${selectedItems.length} products`);
+        setSelectedItems([]);
+        fetchProducts(); // Refresh list
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to delete products", {
+          description: err.details ? `Details: ${JSON.stringify(err.details)}` : undefined
+        });
+      }
+    } catch (error) {
+      toast.error("Connection error during bulk deletion");
+    }
+  };
+
   const handleSearchChange: InputChangeHandler = (event) => {
     setSearch(event.target.value);
   };
@@ -450,6 +475,20 @@ export default function PriceReportPage() {
             >
               <ArrowUpDown className="w-4 h-4 rotate-90" />
               Compare {selectedItems.length} Items
+            </Button>
+          )}
+
+          {selectedItems.length > 0 && (
+            <Button
+              variant={BUTTON_VARIANTS.DESTRUCTIVE}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleBulkDelete();
+              }}
+              className="gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete {selectedItems.length}
             </Button>
           )}
 

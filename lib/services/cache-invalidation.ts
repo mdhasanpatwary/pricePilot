@@ -104,6 +104,8 @@ export class CacheInvalidationService {
                 this.cacheService.invalidateComparisons(tenantId),
                 this.cacheService.invalidateMatches(tenantId),
                 this.cacheService.invalidateAnalytics(tenantId),
+                // Also invalidate the generic API cache for products list
+                this.cacheService.invalidateApiCache(tenantId, 'api:products'),
             ]);
 
             logger.info('[CacheInvalidation] Product sync invalidation completed', {

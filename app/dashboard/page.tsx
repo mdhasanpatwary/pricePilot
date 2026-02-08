@@ -104,7 +104,12 @@ function DashboardContent() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setChartData(data);
+        // API might return { chartData: [...] } or just [...]
+        if (Array.isArray(data)) {
+          setChartData(data);
+        } else {
+          setChartData(data.chartData || []);
+        }
       }
     } catch (e) {
       console.error(e);

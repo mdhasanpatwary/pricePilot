@@ -330,9 +330,28 @@ export class CacheEnhancedService {
         try {
             const pattern = `${tenantId}:*`;
             await this.cacheLayer.invalidate(pattern);
+
+            // Also invalidate common API prefixes that are tenant-isolated
+            await this.cacheLayer.invalidate(`api:products:*:${tenantId}:*`);
+            await this.cacheLayer.invalidate(`api:competitors:*:${tenantId}:*`);
+            await this.cacheLayer.invalidate(`api:analytics:summary:*:${tenantId}:*`);
+
             logger.info('[CacheEnhanced] Invalidated all caches for tenant', { tenantId });
         } catch (error) {
             logger.error('[CacheEnhanced] Error invalidating all caches', { tenantId, error });
+        }
+    }
+
+    /**
+     * Invalidate generic API cache with prefix and tenant isolation
+     */
+    async invalidateApiCache(tenantId: string, prefix: string): Promise<void> {
+        try {
+            // Pattern matches: prefix + any path + tenantId + any vary params
+            const pattern = `${prefix}:*:${tenantId}:*`;
+            await this.cacheLayer.invalidate(pattern);
+        } catch (error) {
+            logger.error('[CacheEnhanced] Error invalidating API cache', { tenantId, prefix, error });
         }
     }
 
