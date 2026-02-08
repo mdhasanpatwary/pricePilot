@@ -186,20 +186,20 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 5.5_
 
-- [~] 12. Create API endpoints for management
-  - [ ] 12.1 Create endpoint to trigger manual API detection
+- [-] 12. Create API endpoints for management
+  - [x] 12.1 Create endpoint to trigger manual API detection
     - `POST /api/v1/competitors/:id/detect-api`
     - Force re-detection even if cached pattern exists
     - Return discovered API patterns
     - _Requirements: 1.1_
   
-  - [ ] 12.2 Create endpoint to view cached API patterns
+  - [x] 12.2 Create endpoint to view cached API patterns
     - `GET /api/v1/competitors/:id/api-pattern`
     - Return cached pattern with metrics
     - Include success/failure counts
     - _Requirements: 6.3_
   
-  - [ ] 12.3 Create endpoint to invalidate cached patterns
+  - [x] 12.3 Create endpoint to invalidate cached patterns
     - `DELETE /api/v1/competitors/:id/api-pattern`
     - Invalidate cache and force re-detection on next scrape
     - run yarn build if has error, fix them
