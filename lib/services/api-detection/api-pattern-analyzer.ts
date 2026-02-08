@@ -13,6 +13,7 @@ import type {
     PaginationPattern,
 } from '@/lib/types/api-detection';
 import { randomUUID } from 'crypto';
+import { AuthTokenDetector } from './auth-token-detector';
 
 /**
  * Keywords that suggest product-related API endpoints
@@ -54,6 +55,12 @@ const MIN_RESPONSE_SIZE = 5000;
  * Analyzes captured network requests to discover product API patterns
  */
 export class APIPatternAnalyzer {
+    private authTokenDetector: AuthTokenDetector;
+
+    constructor() {
+        this.authTokenDetector = new AuthTokenDetector();
+    }
+
     /**
      * Analyze captured requests to find product API patterns
      * 
@@ -67,6 +74,9 @@ export class APIPatternAnalyzer {
      */
     analyzeRequests(requests: CapturedRequest[]): Partial<APIPattern>[] {
         const patterns: Partial<APIPattern>[] = [];
+
+        // Detect authentication tokens from all requests
+        const authTokens = this.authTokenDetector.detectAuthTokens(requests);
 
         for (const request of requests) {
             // Skip non-JSON responses
@@ -129,13 +139,30 @@ export class APIPatternAnalyzer {
                 queryParams[key] = value;
             });
 
+            // Apply authentication tokens to headers and query params
+            let headers = { ...request.headers };
+            let updatedQueryParams = { ...queryParams };
+
+            if (authTokens.length > 0) {
+                headers = this.authTokenDetector.applyAuthTokens(headers, authTokens);
+                updatedQueryParams = this.authTokenDetector.applyAuthQueryParams(
+                    updatedQueryParams,
+                    authTokens
+                );
+            }
+
+            // Ensure User-Agent is set
+            if (!headers['User-Agent'] && !headers['user-agent']) {
+                headers['User-Agent'] = 'PricePilot/1.0 (API Detector)';
+            }
+
             // Create API pattern
             const pattern: Partial<APIPattern> = {
                 id: randomUUID(),
                 url: url.origin + url.pathname,
                 method: request.method,
-                headers: request.headers,
-                queryParams,
+                headers,
+                queryParams: updatedQueryParams,
                 bodyTemplate: request.requestBody,
                 responseFormat: 'json',
                 dataPath,

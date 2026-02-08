@@ -12,6 +12,7 @@ import type {
     FieldMapping,
 } from '@/lib/types/api-detection';
 import { XMLParser } from 'fast-xml-parser';
+import { RobotsTxtParser } from './robots-txt-parser';
 
 /**
  * Configuration for retry logic
@@ -43,6 +44,7 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 class RateLimiter {
     private lastRequestTime: Map<string, number> = new Map();
     private minInterval: number;
+    private endpointLimits: Map<string, number> = new Map();
 
     constructor(minIntervalMs: number = 1000) {
         this.minInterval = minIntervalMs;
@@ -52,14 +54,16 @@ class RateLimiter {
      * Wait if necessary to respect rate limits
      * 
      * @param key - Rate limit key (e.g., domain)
+     * @param customInterval - Optional custom interval for this specific request
      */
-    async wait(key: string): Promise<void> {
+    async wait(key: string, customInterval?: number): Promise<void> {
+        const interval = customInterval || this.endpointLimits.get(key) || this.minInterval;
         const lastTime = this.lastRequestTime.get(key) || 0;
         const now = Date.now();
         const timeSinceLastRequest = now - lastTime;
 
-        if (timeSinceLastRequest < this.minInterval) {
-            const waitTime = this.minInterval - timeSinceLastRequest;
+        if (timeSinceLastRequest < interval) {
+            const waitTime = interval - timeSinceLastRequest;
             await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
 
@@ -74,6 +78,44 @@ class RateLimiter {
     setMinInterval(intervalMs: number): void {
         this.minInterval = intervalMs;
     }
+
+    /**
+     * Set rate limit for a specific endpoint
+     * 
+     * @param endpoint - Endpoint URL or domain
+     * @param intervalMs - Minimum interval in milliseconds
+     */
+    setEndpointLimit(endpoint: string, intervalMs: number): void {
+        this.endpointLimits.set(endpoint, intervalMs);
+    }
+
+    /**
+     * Get rate limit for an endpoint
+     * 
+     * @param endpoint - Endpoint URL or domain
+     * @returns Rate limit interval in milliseconds
+     */
+    getEndpointLimit(endpoint: string): number {
+        return this.endpointLimits.get(endpoint) || this.minInterval;
+    }
+
+    /**
+     * Clear rate limit for an endpoint
+     * 
+     * @param endpoint - Endpoint URL or domain
+     */
+    clearEndpointLimit(endpoint: string): void {
+        this.endpointLimits.delete(endpoint);
+        this.lastRequestTime.delete(endpoint);
+    }
+
+    /**
+     * Clear all rate limits
+     */
+    clearAll(): void {
+        this.endpointLimits.clear();
+        this.lastRequestTime.clear();
+    }
 }
 
 /**
@@ -86,6 +128,7 @@ export class APIExtractor {
     private xmlParser: XMLParser;
     private retryConfig: RetryConfig;
     private rateLimiter: RateLimiter;
+    private robotsParser: RobotsTxtParser;
 
     constructor(retryConfig?: Partial<RetryConfig>, rateLimitMs: number = 1000) {
         // Initialize XML parser for XML responses
@@ -102,6 +145,9 @@ export class APIExtractor {
 
         // Initialize rate limiter
         this.rateLimiter = new RateLimiter(rateLimitMs);
+
+        // Initialize robots.txt parser
+        this.robotsParser = new RobotsTxtParser();
     }
 
     /**
@@ -125,6 +171,15 @@ export class APIExtractor {
         } = options;
 
         try {
+            // Check robots.txt compliance before making requests
+            const baseUrl = new URL(pattern.url).origin;
+            const path = new URL(pattern.url).pathname;
+            const isAllowed = await this.robotsParser.isPathAllowed(baseUrl, path);
+
+            if (!isAllowed) {
+                throw new Error(`Path ${path} is disallowed by robots.txt for ${baseUrl}`);
+            }
+
             // If pattern has pagination, use paginated extraction
             if (pattern.paginationPattern) {
                 return await this.extractPaginatedProducts(pattern, options);
@@ -393,6 +448,7 @@ export class APIExtractor {
      * 
      * Implements exponential backoff for failed requests and handles
      * various HTTP errors (4xx, 5xx) with appropriate retry strategies.
+     * Respects Retry-After headers from APIs.
      * 
      * @param url - Request URL
      * @param method - HTTP method
@@ -428,7 +484,7 @@ export class APIExtractor {
                         method,
                         headers: {
                             ...headers,
-                            'User-Agent': 'PricePilot/1.0 (API Extractor)',
+                            'User-Agent': headers['User-Agent'] || 'PricePilot/1.0 (API Extractor)',
                         },
                         body: body && method !== 'GET' ? body : undefined,
                         signal: controller.signal,
@@ -442,11 +498,33 @@ export class APIExtractor {
                         if (response.status === 429) {
                             const retryAfter = response.headers.get('Retry-After');
                             if (retryAfter) {
-                                const retryAfterMs = parseInt(retryAfter, 10) * 1000;
-                                if (!isNaN(retryAfterMs) && retryAfterMs < this.retryConfig.maxDelay) {
-                                    await this.sleep(retryAfterMs);
-                                    continue; // Retry after waiting
+                                // Retry-After can be in seconds or HTTP date
+                                let retryAfterMs: number;
+
+                                // Try parsing as seconds
+                                const seconds = parseInt(retryAfter, 10);
+                                if (!isNaN(seconds)) {
+                                    retryAfterMs = seconds * 1000;
+                                } else {
+                                    // Try parsing as HTTP date
+                                    const retryDate = new Date(retryAfter);
+                                    if (!isNaN(retryDate.getTime())) {
+                                        retryAfterMs = retryDate.getTime() - Date.now();
+                                    } else {
+                                        // Default to exponential backoff
+                                        retryAfterMs = this.calculateBackoffDelay(attempt);
+                                    }
                                 }
+
+                                // Cap at max delay
+                                retryAfterMs = Math.min(retryAfterMs, this.retryConfig.maxDelay);
+
+                                // Update rate limit for this endpoint
+                                this.rateLimiter.setEndpointLimit(domain, retryAfterMs);
+
+                                console.log(`Rate limited. Waiting ${retryAfterMs}ms before retry.`);
+                                await this.sleep(retryAfterMs);
+                                continue; // Retry after waiting
                             }
                         }
 
@@ -489,6 +567,8 @@ export class APIExtractor {
 
                 // Calculate exponential backoff delay
                 const delay = this.calculateBackoffDelay(attempt);
+
+                console.log(`Request failed (attempt ${attempt + 1}). Retrying in ${delay}ms...`);
 
                 // Wait before retrying
                 await this.sleep(delay);
@@ -556,6 +636,38 @@ export class APIExtractor {
      */
     private sleep(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Set rate limit for a specific endpoint
+     * 
+     * Allows configuring custom rate limits per endpoint to avoid
+     * overwhelming APIs or getting blocked.
+     * 
+     * @param endpoint - Endpoint URL or domain
+     * @param intervalMs - Minimum interval between requests in milliseconds
+     */
+    setEndpointRateLimit(endpoint: string, intervalMs: number): void {
+        this.rateLimiter.setEndpointLimit(endpoint, intervalMs);
+    }
+
+    /**
+     * Get current rate limit for an endpoint
+     * 
+     * @param endpoint - Endpoint URL or domain
+     * @returns Rate limit interval in milliseconds
+     */
+    getEndpointRateLimit(endpoint: string): number {
+        return this.rateLimiter.getEndpointLimit(endpoint);
+    }
+
+    /**
+     * Clear rate limit for an endpoint
+     * 
+     * @param endpoint - Endpoint URL or domain
+     */
+    clearEndpointRateLimit(endpoint: string): void {
+        this.rateLimiter.clearEndpointLimit(endpoint);
     }
 
     /**

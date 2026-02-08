@@ -15,6 +15,7 @@ import type {
 } from '@/lib/types/api-detection';
 import { NetworkInterceptor } from './network-interceptor';
 import { APIPatternAnalyzer } from './api-pattern-analyzer';
+import { RobotsTxtParser } from './robots-txt-parser';
 import { randomUUID } from 'crypto';
 
 /**
@@ -41,10 +42,12 @@ export class APIDetector {
     private browser: Browser | null = null;
     private networkInterceptor: NetworkInterceptor;
     private patternAnalyzer: APIPatternAnalyzer;
+    private robotsParser: RobotsTxtParser;
 
     constructor() {
         this.networkInterceptor = new NetworkInterceptor();
         this.patternAnalyzer = new APIPatternAnalyzer();
+        this.robotsParser = new RobotsTxtParser();
     }
 
     /**
@@ -124,6 +127,16 @@ export class APIDetector {
         options: DetectionOptions
     ): Promise<Partial<APIPattern>[]> {
         try {
+            // Check robots.txt compliance before proceeding
+            const baseUrl = new URL(url).origin;
+            const path = new URL(url).pathname;
+            const isAllowed = await this.robotsParser.isPathAllowed(baseUrl, path);
+
+            if (!isAllowed) {
+                console.log(`Path ${path} is disallowed by robots.txt for ${baseUrl}`);
+                return [];
+            }
+
             // Start network interception
             await this.startNetworkInterception(page);
 
@@ -159,6 +172,16 @@ export class APIDetector {
                 if (validatedPatterns.length >= 5) {
                     // Limit to top 5 patterns
                     break;
+                }
+
+                // Check robots.txt compliance for API endpoint
+                const apiUrl = new URL(pattern.url!);
+                const apiPath = apiUrl.pathname;
+                const apiAllowed = await this.robotsParser.isPathAllowed(baseUrl, apiPath);
+
+                if (!apiAllowed) {
+                    console.log(`API endpoint ${apiPath} is disallowed by robots.txt`);
+                    continue;
                 }
 
                 const endpoint: APIEndpoint = {
