@@ -13,6 +13,8 @@ import type {
 } from '@/lib/types/api-detection';
 import { XMLParser } from 'fast-xml-parser';
 import { RobotsTxtParser } from './robots-txt-parser';
+import { ApiDetectionLogger } from './api-detection-logger';
+import { ApiDetectionMetrics } from './api-detection-metrics';
 
 /**
  * Configuration for retry logic
@@ -158,17 +160,25 @@ export class APIExtractor {
      * 
      * @param pattern - Validated API pattern
      * @param options - Extraction options
+     * @param competitorWebsiteId - Competitor website ID for logging
+     * @param tenantId - Tenant ID for metrics tracking
      * @returns Array of extracted products
      * @throws Error if extraction fails
      */
     async extractProducts(
         pattern: APIPattern,
-        options: ExtractionOptions = {}
+        options: ExtractionOptions = {},
+        competitorWebsiteId?: string,
+        tenantId?: string
     ): Promise<Product[]> {
         const {
             maxProducts,
             timeout = 60000,
         } = options;
+
+        const startTime = Date.now();
+        const websiteId = competitorWebsiteId || 'unknown';
+        const tenant = tenantId || pattern.tenantId || 'unknown';
 
         try {
             // Check robots.txt compliance before making requests
@@ -177,12 +187,23 @@ export class APIExtractor {
             const isAllowed = await this.robotsParser.isPathAllowed(baseUrl, path);
 
             if (!isAllowed) {
-                throw new Error(`Path ${path} is disallowed by robots.txt for ${baseUrl}`);
+                const error = `Path ${path} is disallowed by robots.txt for ${baseUrl}`;
+
+                ApiDetectionLogger.logApiExtraction({
+                    competitorWebsiteId: websiteId,
+                    apiUrl: pattern.url,
+                    success: false,
+                    productCount: 0,
+                    extractionTimeMs: Date.now() - startTime,
+                    error,
+                });
+
+                throw new Error(error);
             }
 
             // If pattern has pagination, use paginated extraction
             if (pattern.paginationPattern) {
-                return await this.extractPaginatedProducts(pattern, options);
+                return await this.extractPaginatedProducts(pattern, options, websiteId, tenant);
             }
 
             // Build request URL with query parameters
@@ -220,11 +241,48 @@ export class APIExtractor {
                 products = products.slice(0, maxProducts);
             }
 
+            // Log successful extraction
+            ApiDetectionLogger.logApiExtraction({
+                competitorWebsiteId: websiteId,
+                apiUrl: pattern.url,
+                success: true,
+                productCount: products.length,
+                extractionTimeMs: Date.now() - startTime,
+            });
+
+            // Track extraction metrics
+            await ApiDetectionMetrics.trackExtraction({
+                tenantId: tenant,
+                competitorWebsiteId: websiteId,
+                extractionTimeMs: Date.now() - startTime,
+                productCount: products.length,
+                success: true,
+            });
+
             return products;
         } catch (error) {
-            throw new Error(
-                `Failed to extract products: ${error instanceof Error ? error.message : 'Unknown error'}`
-            );
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            // Log failed extraction
+            ApiDetectionLogger.logApiExtraction({
+                competitorWebsiteId: websiteId,
+                apiUrl: pattern.url,
+                success: false,
+                productCount: 0,
+                extractionTimeMs: Date.now() - startTime,
+                error: errorMessage,
+            });
+
+            // Track failed extraction metrics
+            await ApiDetectionMetrics.trackExtraction({
+                tenantId: tenant,
+                competitorWebsiteId: websiteId,
+                extractionTimeMs: Date.now() - startTime,
+                productCount: 0,
+                success: false,
+            });
+
+            throw new Error(`Failed to extract products: ${errorMessage}`);
         }
     }
 
@@ -238,12 +296,16 @@ export class APIExtractor {
      * 
      * @param pattern - API pattern with pagination
      * @param options - Extraction options
+     * @param competitorWebsiteId - Competitor website ID for logging
+     * @param tenantId - Tenant ID for metrics tracking
      * @returns All products across pages
      * @throws Error if extraction fails completely
      */
     async extractPaginatedProducts(
         pattern: APIPattern,
-        options: ExtractionOptions = {}
+        options: ExtractionOptions = {},
+        _competitorWebsiteId?: string,
+        _tenantId?: string
     ): Promise<Product[]> {
         const {
             maxProducts,

@@ -1150,6 +1150,7 @@ model Site {
   isAdvancedProtected Boolean            @default(false)
   lastSecurityBlockAt DateTime?
   searchQueryPattern  String?
+  ApiDetectionMetric  ApiDetectionMetric[]
   ApiPattern          ApiPattern?
   Product             Product[]
   ProxySiteHealth     ProxySiteHealth[]
@@ -1257,6 +1258,7 @@ model Tenant {
   slackEnabled              Boolean                    @default(false)
   slackWebhookUrl           String?
   AlertRule                 AlertRule[]
+  ApiDetectionMetric        ApiDetectionMetric[]
   ApiKey                    ApiKey[]
   ApiPattern                ApiPattern[]
   ApprovalDelegation        ApprovalDelegation[]
@@ -1517,4 +1519,28 @@ enum StrategyType {
 enum UpdateStatus {
   SUCCESS
   FAILED
+}
+
+model ApiDetectionMetric {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  competitorWebsiteId String
+  date                DateTime @db.Date
+  detectionAttempts   Int      @default(0)
+  successfulDetections Int     @default(0)
+  failedDetections    Int      @default(0)
+  totalDetectionTimeMs BigInt  @default(0)
+  totalExtractionTimeMs BigInt @default(0)
+  totalProductsExtracted Int   @default(0)
+  cacheHits           Int      @default(0)
+  cacheMisses         Int      @default(0)
+  fallbackCount       Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  Tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, competitorWebsiteId, date])
+  @@index([tenantId, date])
+  @@index([competitorWebsiteId, date])
 }

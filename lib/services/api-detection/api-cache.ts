@@ -7,6 +7,8 @@
 
 import { prisma } from '@/lib/prisma';
 import type { APIPattern } from '@/lib/types/api-detection';
+import { ApiDetectionLogger } from './api-detection-logger';
+import { ApiDetectionMetrics } from './api-detection-metrics';
 
 /**
  * APICache class manages persistent storage of API patterns
@@ -60,8 +62,25 @@ export class APICache {
                     updatedAt: new Date(),
                 },
             });
+
+            // Log cache operation
+            ApiDetectionLogger.logCacheOperation({
+                competitorWebsiteId: websiteId,
+                operation: 'store',
+                success: true,
+            });
         } catch (error) {
-            throw new Error(`Failed to store API pattern: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            // Log failed cache operation
+            ApiDetectionLogger.logCacheOperation({
+                competitorWebsiteId: websiteId,
+                operation: 'store',
+                success: false,
+                error: errorMessage,
+            });
+
+            throw new Error(`Failed to store API pattern: ${errorMessage}`);
         }
     }
 
@@ -81,8 +100,43 @@ export class APICache {
             });
 
             if (!cached) {
+                // Log cache miss
+                ApiDetectionLogger.logCacheOperation({
+                    competitorWebsiteId: websiteId,
+                    operation: 'miss',
+                    success: true,
+                });
+
+                // Track cache miss metric
+                const pattern = await prisma.apiPattern.findFirst({
+                    where: { competitorWebsiteId: websiteId },
+                    select: { tenantId: true },
+                });
+
+                if (pattern) {
+                    await ApiDetectionMetrics.trackCache({
+                        tenantId: pattern.tenantId,
+                        competitorWebsiteId: websiteId,
+                        hit: false,
+                    });
+                }
+
                 return null;
             }
+
+            // Log cache hit
+            ApiDetectionLogger.logCacheOperation({
+                competitorWebsiteId: websiteId,
+                operation: 'hit',
+                success: true,
+            });
+
+            // Track cache hit metric
+            await ApiDetectionMetrics.trackCache({
+                tenantId: cached.tenantId,
+                competitorWebsiteId: websiteId,
+                hit: true,
+            });
 
             // Reconstruct APIPattern from database record
             const pattern = cached.pattern as any;
@@ -108,7 +162,17 @@ export class APICache {
                 updatedAt: cached.updatedAt,
             };
         } catch (error) {
-            throw new Error(`Failed to retrieve API pattern: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            // Log failed cache operation
+            ApiDetectionLogger.logCacheOperation({
+                competitorWebsiteId: websiteId,
+                operation: 'hit',
+                success: false,
+                error: errorMessage,
+            });
+
+            throw new Error(`Failed to retrieve API pattern: ${errorMessage}`);
         }
     }
 
@@ -125,12 +189,35 @@ export class APICache {
                     competitorWebsiteId: websiteId,
                 },
             });
+
+            // Log cache invalidation
+            ApiDetectionLogger.logCacheOperation({
+                competitorWebsiteId: websiteId,
+                operation: 'invalidate',
+                success: true,
+            });
         } catch (error) {
             // If pattern doesn't exist, that's fine (already invalidated)
             if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
+                ApiDetectionLogger.logCacheOperation({
+                    competitorWebsiteId: websiteId,
+                    operation: 'invalidate',
+                    success: true,
+                });
                 return;
             }
-            throw new Error(`Failed to invalidate API pattern: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            // Log failed cache operation
+            ApiDetectionLogger.logCacheOperation({
+                competitorWebsiteId: websiteId,
+                operation: 'invalidate',
+                success: false,
+                error: errorMessage,
+            });
+
+            throw new Error(`Failed to invalidate API pattern: ${errorMessage}`);
         }
     }
 

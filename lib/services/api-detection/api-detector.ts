@@ -16,6 +16,9 @@ import type {
 import { NetworkInterceptor } from './network-interceptor';
 import { APIPatternAnalyzer } from './api-pattern-analyzer';
 import { RobotsTxtParser } from './robots-txt-parser';
+import { ApiDetectionLogger } from './api-detection-logger';
+import { ApiDetectionMetrics } from './api-detection-metrics';
+import { ApiDetectionProgress, type ProgressEvent } from './api-detection-progress';
 import { randomUUID } from 'crypto';
 
 /**
@@ -43,11 +46,23 @@ export class APIDetector {
     private networkInterceptor: NetworkInterceptor;
     private patternAnalyzer: APIPatternAnalyzer;
     private robotsParser: RobotsTxtParser;
+    private progressEmitter: ApiDetectionProgress | null = null;
 
     constructor() {
         this.networkInterceptor = new NetworkInterceptor();
         this.patternAnalyzer = new APIPatternAnalyzer();
         this.robotsParser = new RobotsTxtParser();
+    }
+
+    /**
+     * Set progress callback for detection updates
+     * 
+     * @param callback - Callback function to receive progress events
+     */
+    onProgress(callback: (event: ProgressEvent) => void): void {
+        if (this.progressEmitter) {
+            this.progressEmitter.on('progress', callback);
+        }
     }
 
     /**
@@ -58,17 +73,28 @@ export class APIDetector {
      * 
      * @param url - Competitor website URL (product listing page)
      * @param options - Detection configuration
+     * @param competitorWebsiteId - Competitor website ID for logging
+     * @param tenantId - Tenant ID for logging
      * @returns Array of discovered and validated API patterns
      */
     async detectAPIs(
         url: string,
-        options: Partial<DetectionOptions> = {}
+        options: Partial<DetectionOptions> = {},
+        competitorWebsiteId?: string,
+        tenantId?: string
     ): Promise<Partial<APIPattern>[]> {
         const opts = { ...DEFAULT_OPTIONS, ...options };
         const startTime = Date.now();
+        const websiteId = competitorWebsiteId || 'unknown';
+        const tenant = tenantId || 'unknown';
+
+        // Create progress emitter
+        this.progressEmitter = new ApiDetectionProgress(websiteId);
+        this.progressEmitter.detectionStarted(url);
 
         try {
             // Launch headless browser
+            this.progressEmitter.emitProgress('browser_launched', 'Launching headless browser');
             this.browser = await chromium.launch({
                 headless: true,
                 args: [
@@ -86,30 +112,81 @@ export class APIDetector {
             });
 
             const page = await context.newPage();
+            this.progressEmitter.browserLaunched();
 
             // Set timeout for detection
             const timeoutPromise = new Promise<Partial<APIPattern>[]>((resolve) => {
                 setTimeout(() => {
-                    console.log('Detection timeout reached');
+                    // Log timeout event
+                    this.progressEmitter?.emitProgress('detection_failed', 'Detection timeout reached');
+                    ApiDetectionLogger.logFallbackEvent({
+                        competitorWebsiteId: websiteId,
+                        websiteUrl: url,
+                        tenantId: tenant,
+                        reason: 'timeout',
+                    });
                     resolve([]);
                 }, opts.timeout);
             });
 
             // Run detection with timeout
-            const detectionPromise = this.runDetection(page, url, opts);
+            const detectionPromise = this.runDetection(page, url, opts, websiteId);
 
             const patterns = await Promise.race([detectionPromise, timeoutPromise]);
 
+            // Emit completion event
+            this.progressEmitter.detectionCompleted(patterns.length);
+
+            // Log detection attempt
+            const duration = Date.now() - startTime;
+            ApiDetectionLogger.logDetectionAttempt({
+                competitorWebsiteId: websiteId,
+                websiteUrl: url,
+                tenantId: tenant,
+                success: patterns.length > 0,
+                discoveredApiCount: patterns.length,
+                detectionTimeMs: duration,
+            });
+
+            // Track detection metrics
+            await ApiDetectionMetrics.trackDetection({
+                tenantId: tenant,
+                competitorWebsiteId: websiteId,
+                detectionTimeMs: duration,
+                success: patterns.length > 0,
+            });
+
             return patterns;
         } catch (error) {
-            console.error('Error during API detection:', error);
+            const duration = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            // Emit failure event
+            this.progressEmitter?.detectionFailed(errorMessage);
+
+            // Log failed detection attempt
+            ApiDetectionLogger.logDetectionAttempt({
+                competitorWebsiteId: websiteId,
+                websiteUrl: url,
+                tenantId: tenant,
+                success: false,
+                discoveredApiCount: 0,
+                detectionTimeMs: duration,
+                error: errorMessage,
+            });
+
+            // Track failed detection metrics
+            await ApiDetectionMetrics.trackDetection({
+                tenantId: tenant,
+                competitorWebsiteId: websiteId,
+                detectionTimeMs: duration,
+                success: false,
+            });
+
             throw error;
         } finally {
             // Cleanup browser
             await this.cleanup();
-
-            const duration = Date.now() - startTime;
-            console.log(`Detection completed in ${duration}ms`);
         }
     }
 
@@ -119,13 +196,17 @@ export class APIDetector {
      * @param page - Playwright page instance
      * @param url - URL to analyze
      * @param options - Detection options
+     * @param competitorWebsiteId - Competitor website ID for logging
      * @returns Discovered API patterns
      */
     private async runDetection(
         page: Page,
         url: string,
-        options: DetectionOptions
+        options: DetectionOptions,
+        competitorWebsiteId: string
     ): Promise<Partial<APIPattern>[]> {
+        const interceptionStart = Date.now();
+
         try {
             // Check robots.txt compliance before proceeding
             const baseUrl = new URL(url).origin;
@@ -133,15 +214,22 @@ export class APIDetector {
             const isAllowed = await this.robotsParser.isPathAllowed(baseUrl, path);
 
             if (!isAllowed) {
-                console.log(`Path ${path} is disallowed by robots.txt for ${baseUrl}`);
+                ApiDetectionLogger.logFallbackEvent({
+                    competitorWebsiteId,
+                    websiteUrl: url,
+                    tenantId: 'unknown',
+                    reason: 'no_api_found',
+                    error: 'Path disallowed by robots.txt',
+                });
                 return [];
             }
 
             // Start network interception
+            this.progressEmitter?.networkInterceptionStarted();
             await this.startNetworkInterception(page);
 
             // Navigate to the URL
-            console.log(`Navigating to ${url}`);
+            this.progressEmitter?.pageNavigated(url, 1);
             await page.goto(url, {
                 waitUntil: 'networkidle',
                 timeout: 15000,
@@ -159,14 +247,38 @@ export class APIDetector {
             await this.networkInterceptor.stopInterception();
             const capturedRequests = this.networkInterceptor.getCapturedRequests();
 
-            console.log(`Captured ${capturedRequests.length} network requests`);
+            const interceptionTime = Date.now() - interceptionStart;
+
+            // Emit requests captured event
+            this.progressEmitter?.requestsCaptured(capturedRequests.length);
+
+            // Log network interception
+            ApiDetectionLogger.logNetworkInterception({
+                competitorWebsiteId,
+                capturedRequestCount: capturedRequests.length,
+                filteredRequestCount: capturedRequests.length,
+                interceptionTimeMs: interceptionTime,
+            });
 
             // Analyze requests to find API patterns
+            this.progressEmitter?.patternAnalysisStarted(capturedRequests.length);
+            const analysisStart = Date.now();
             const patterns = this.patternAnalyzer.analyzeRequests(capturedRequests);
+            const analysisTime = Date.now() - analysisStart;
 
-            console.log(`Discovered ${patterns.length} potential API patterns`);
+            // Emit pattern analysis completed event
+            this.progressEmitter?.patternAnalysisCompleted(patterns.length);
+
+            // Log pattern analysis
+            ApiDetectionLogger.logPatternAnalysis({
+                competitorWebsiteId,
+                requestsAnalyzed: capturedRequests.length,
+                patternsFound: patterns.length,
+                analysisTimeMs: analysisTime,
+            });
 
             // Validate discovered APIs
+            this.progressEmitter?.validationStarted(patterns.length);
             const validatedPatterns: Partial<APIPattern>[] = [];
             for (const pattern of patterns) {
                 if (validatedPatterns.length >= 5) {
@@ -180,7 +292,6 @@ export class APIDetector {
                 const apiAllowed = await this.robotsParser.isPathAllowed(baseUrl, apiPath);
 
                 if (!apiAllowed) {
-                    console.log(`API endpoint ${apiPath} is disallowed by robots.txt`);
                     continue;
                 }
 
@@ -196,24 +307,70 @@ export class APIDetector {
 
                 const validationResult = await this.validateAPI(endpoint);
 
+                // Log validation result
+                ApiDetectionLogger.logValidation({
+                    competitorWebsiteId,
+                    apiUrl: pattern.url!,
+                    isValid: validationResult.isValid,
+                    confidenceScore: validationResult.confidenceScore,
+                    errors: validationResult.errors,
+                });
+
                 if (validationResult.isValid) {
                     // Update confidence score based on validation
                     pattern.confidenceScore = validationResult.confidenceScore;
                     validatedPatterns.push(pattern);
+
+                    // Log discovered API
+                    ApiDetectionLogger.logDiscoveredApi({
+                        competitorWebsiteId,
+                        apiUrl: pattern.url!,
+                        method: pattern.method!,
+                        responseFormat: pattern.responseFormat!,
+                        confidenceScore: validationResult.confidenceScore,
+                        hasAuthentication: Object.keys(pattern.headers || {}).some(h =>
+                            h.toLowerCase().includes('auth') || h.toLowerCase().includes('token')
+                        ),
+                        hasPagination: !!pattern.paginationPattern,
+                        fieldCount: pattern.fieldMappings?.length || 0,
+                    });
                 }
             }
 
-            console.log(`Validated ${validatedPatterns.length} API patterns`);
+            // Emit validation completed event
+            this.progressEmitter?.validationCompleted(validatedPatterns.length, patterns.length);
 
             // Rank APIs by quality
             const rankedPatterns = this.rankAPIs(validatedPatterns);
 
             // Filter by minimum confidence
-            return rankedPatterns.filter(
+            const finalPatterns = rankedPatterns.filter(
                 (p) => (p.confidenceScore || 0) >= options.minConfidence
             );
+
+            // Log fallback if no APIs found
+            if (finalPatterns.length === 0) {
+                ApiDetectionLogger.logFallbackEvent({
+                    competitorWebsiteId,
+                    websiteUrl: url,
+                    tenantId: 'unknown',
+                    reason: 'no_api_found',
+                    attemptedApis: patterns.length,
+                });
+            }
+
+            return finalPatterns;
         } catch (error) {
-            console.error('Error in detection process:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            ApiDetectionLogger.logFallbackEvent({
+                competitorWebsiteId,
+                websiteUrl: url,
+                tenantId: 'unknown',
+                reason: 'validation_failed',
+                error: errorMessage,
+            });
+
             return [];
         }
     }
