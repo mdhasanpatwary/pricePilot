@@ -138,18 +138,18 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 8.3_
 
-- [~] 9. Checkpoint - Ensure extraction and security work
+- [x] 9. Checkpoint - Ensure extraction and security work
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Enhance Scraper Orchestrator with API detection
-  - [ ] 10.1 Update ScraperOrchestrator to integrate API detection
+- [-] 10. Enhance Scraper Orchestrator with API detection
+  - [x] 10.1 Update ScraperOrchestrator to integrate API detection
     - Add cache lookup before detection
     - Run API detection if no cached pattern exists
     - Use API extraction when pattern is available
     - Fallback to HTML scraping when API fails or not found
     - _Requirements: 3.1, 4.1, 4.2, 5.2, 6.3, 6.4_
   
-  - [ ] 10.2 Implement fallback logic
+  - [x] 10.2 Implement fallback logic
     - Trigger fallback on detection timeout
     - Trigger fallback when no APIs discovered
     - Trigger fallback when all APIs fail validation
@@ -157,14 +157,14 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - Mark websites as "API not available" after fallback
     - _Requirements: 4.1, 4.2, 4.5, 7.3, 7.4_
   
-  - [ ] 10.3 Ensure output format consistency
+  - [-] 10.3 Ensure output format consistency
     - Normalize Product_Data format for both API and HTML extraction
     - Ensure same fields and types regardless of extraction method
     - run yarn build if has error, fix them
     - make a short commit 
     - _Requirements: 4.4_
 
-- [ ] 11. Implement logging and monitoring
+- [~] 11. Implement logging and monitoring
   - [ ] 11.1 Add structured logging
     - Log all detection attempts with success/failure status
     - Log discovered APIs with URL, format, and confidence score
@@ -186,7 +186,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 5.5_
 
-- [ ] 12. Create API endpoints for management
+- [~] 12. Create API endpoints for management
   - [ ] 12.1 Create endpoint to trigger manual API detection
     - `POST /api/v1/competitors/:id/detect-api`
     - Force re-detection even if cached pattern exists
@@ -206,7 +206,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 6.5_
 
-- [ ] 13. Add performance optimizations
+- [~] 13. Add performance optimizations
   - [ ] 13.1 Implement connection pooling for HTTP requests
     - Reuse HTTP connections for API requests
     - Configure pool size and timeout settings
@@ -226,14 +226,14 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 1.4, 5.4_
 
-- [ ] 14. Final checkpoint - Integration testing
+- [~] 14. Final checkpoint - Integration testing
   - Test complete scraping flow with real competitor websites
   - Verify cache hit/miss scenarios work correctly
   - Verify fallback to HTML scraping works
   - Verify API extraction is faster than HTML parsing
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 15. Add monitoring dashboard components
+- [~] 15. Add monitoring dashboard components
   - [ ] 15.1 Create API detection metrics dashboard
     - Display detection success rates per competitor website
     - Show average detection and extraction times
