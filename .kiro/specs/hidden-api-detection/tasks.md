@@ -186,7 +186,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 5.5_
 
-- [-] 12. Create API endpoints for management
+- [x] 12. Create API endpoints for management
   - [x] 12.1 Create endpoint to trigger manual API detection
     - `POST /api/v1/competitors/:id/detect-api`
     - Force re-detection even if cached pattern exists
@@ -206,19 +206,19 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - make a short commit 
     - _Requirements: 6.5_
 
-- [~] 13. Add performance optimizations
-  - [ ] 13.1 Implement connection pooling for HTTP requests
+- [-] 13. Add performance optimizations
+  - [x] 13.1 Implement connection pooling for HTTP requests
     - Reuse HTTP connections for API requests
     - Configure pool size and timeout settings
     - _Requirements: 5.3_
   
-  - [ ] 13.2 Add in-memory LRU cache for frequently used patterns
+  - [x] 13.2 Add in-memory LRU cache for frequently used patterns
     - Cache patterns in memory for faster access
     - Implement LRU eviction policy
     - Sync with database cache
     - _Requirements: 5.2_
   
-  - [ ] 13.3 Optimize detection phase
+  - [x] 13.3 Optimize detection phase
     - Limit pages analyzed to 3 by default
     - Filter requests early to reduce memory usage
     - Implement parallel validation of multiple APIs

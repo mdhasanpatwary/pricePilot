@@ -26,7 +26,7 @@ import { randomUUID } from 'crypto';
  */
 const DEFAULT_OPTIONS: DetectionOptions = {
     timeout: 30000, // 30 seconds
-    maxPages: 3,
+    maxPages: 3, // Limit to 3 pages by default for performance
     minConfidence: 70,
 };
 
@@ -277,22 +277,22 @@ export class APIDetector {
                 analysisTimeMs: analysisTime,
             });
 
-            // Validate discovered APIs
+            // Validate discovered APIs in parallel
             this.progressEmitter?.validationStarted(patterns.length);
             const validatedPatterns: Partial<APIPattern>[] = [];
-            for (const pattern of patterns) {
-                if (validatedPatterns.length >= 5) {
-                    // Limit to top 5 patterns
-                    break;
-                }
 
+            // Limit to top 5 patterns for validation
+            const patternsToValidate = patterns.slice(0, 5);
+
+            // Validate APIs in parallel for better performance
+            const validationPromises = patternsToValidate.map(async (pattern) => {
                 // Check robots.txt compliance for API endpoint
                 const apiUrl = new URL(pattern.url!);
                 const apiPath = apiUrl.pathname;
                 const apiAllowed = await this.robotsParser.isPathAllowed(baseUrl, apiPath);
 
                 if (!apiAllowed) {
-                    continue;
+                    return null;
                 }
 
                 const endpoint: APIEndpoint = {
@@ -305,37 +305,52 @@ export class APIDetector {
                     sampleResponse: null,
                 };
 
-                const validationResult = await this.validateAPI(endpoint);
+                try {
+                    const validationResult = await this.validateAPI(endpoint);
 
-                // Log validation result
-                ApiDetectionLogger.logValidation({
-                    competitorWebsiteId,
-                    apiUrl: pattern.url!,
-                    isValid: validationResult.isValid,
-                    confidenceScore: validationResult.confidenceScore,
-                    errors: validationResult.errors,
-                });
-
-                if (validationResult.isValid) {
-                    // Update confidence score based on validation
-                    pattern.confidenceScore = validationResult.confidenceScore;
-                    validatedPatterns.push(pattern);
-
-                    // Log discovered API
-                    ApiDetectionLogger.logDiscoveredApi({
+                    // Log validation result
+                    ApiDetectionLogger.logValidation({
                         competitorWebsiteId,
                         apiUrl: pattern.url!,
-                        method: pattern.method!,
-                        responseFormat: pattern.responseFormat!,
+                        isValid: validationResult.isValid,
                         confidenceScore: validationResult.confidenceScore,
-                        hasAuthentication: Object.keys(pattern.headers || {}).some(h =>
-                            h.toLowerCase().includes('auth') || h.toLowerCase().includes('token')
-                        ),
-                        hasPagination: !!pattern.paginationPattern,
-                        fieldCount: pattern.fieldMappings?.length || 0,
+                        errors: validationResult.errors,
                     });
+
+                    if (validationResult.isValid) {
+                        // Update confidence score based on validation
+                        pattern.confidenceScore = validationResult.confidenceScore;
+
+                        // Log discovered API
+                        ApiDetectionLogger.logDiscoveredApi({
+                            competitorWebsiteId,
+                            apiUrl: pattern.url!,
+                            method: pattern.method!,
+                            responseFormat: pattern.responseFormat!,
+                            confidenceScore: validationResult.confidenceScore,
+                            hasAuthentication: Object.keys(pattern.headers || {}).some(h =>
+                                h.toLowerCase().includes('auth') || h.toLowerCase().includes('token')
+                            ),
+                            hasPagination: !!pattern.paginationPattern,
+                            fieldCount: pattern.fieldMappings?.length || 0,
+                        });
+
+                        return pattern;
+                    }
+
+                    return null;
+                } catch (error) {
+                    // Log validation error but continue with other patterns
+                    console.error(`Validation error for ${pattern.url}:`, error);
+                    return null;
                 }
-            }
+            });
+
+            // Wait for all validations to complete
+            const validationResults = await Promise.all(validationPromises);
+
+            // Filter out null results (failed validations)
+            validatedPatterns.push(...validationResults.filter((p): p is Partial<APIPattern> => p !== null));
 
             // Emit validation completed event
             this.progressEmitter?.validationCompleted(validatedPatterns.length, patterns.length);
@@ -398,22 +413,12 @@ export class APIDetector {
                 const url = request.url();
                 const resourceType = request.resourceType();
 
-                // Filter by resource type (xhr, fetch)
+                // Early filtering: resource type check (most efficient)
                 if (resourceType !== 'xhr' && resourceType !== 'fetch') {
                     return;
                 }
 
-                // Filter by URL patterns
-                const productKeywords = ['/api/', '/product', '/item', '/catalog', '/search', '/list'];
-                const hasProductKeyword = productKeywords.some((keyword) =>
-                    url.toLowerCase().includes(keyword)
-                );
-
-                if (!hasProductKeyword) {
-                    return;
-                }
-
-                // Exclude analytics and tracking
+                // Early filtering: exclude patterns (before URL pattern matching)
                 const excludePatterns = [
                     'google-analytics',
                     'facebook.com',
@@ -423,11 +428,22 @@ export class APIDetector {
                     'pixel',
                     'beacon',
                 ];
+                const urlLower = url.toLowerCase();
                 const isExcluded = excludePatterns.some((pattern) =>
-                    url.toLowerCase().includes(pattern)
+                    urlLower.includes(pattern)
                 );
 
                 if (isExcluded) {
+                    return;
+                }
+
+                // Filter by URL patterns (include product-related)
+                const productKeywords = ['/api/', '/product', '/item', '/catalog', '/search', '/list'];
+                const hasProductKeyword = productKeywords.some((keyword) =>
+                    urlLower.includes(keyword)
+                );
+
+                if (!hasProductKeyword) {
                     return;
                 }
 

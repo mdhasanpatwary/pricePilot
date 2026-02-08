@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import type { APIPattern } from '@/lib/types/api-detection';
 import { ApiDetectionLogger } from './api-detection-logger';
 import { ApiDetectionMetrics } from './api-detection-metrics';
+import { getGlobalPatternCache, type PatternLRUCache } from './pattern-lru-cache';
 
 /**
  * APICache class manages persistent storage of API patterns
@@ -19,6 +20,15 @@ export class APICache {
      * Maximum consecutive failures before automatic invalidation
      */
     private readonly MAX_CONSECUTIVE_FAILURES = 3;
+
+    /**
+     * In-memory LRU cache for fast access
+     */
+    private lruCache: PatternLRUCache;
+
+    constructor() {
+        this.lruCache = getGlobalPatternCache();
+    }
 
     /**
      * Store API pattern for a competitor website
@@ -43,7 +53,7 @@ export class APICache {
             }));
 
             // Upsert pattern (insert or update if exists)
-            await prisma.apiPattern.upsert({
+            const stored = await prisma.apiPattern.upsert({
                 where: {
                     competitorWebsiteId: websiteId,
                 },
@@ -62,6 +72,30 @@ export class APICache {
                     updatedAt: new Date(),
                 },
             });
+
+            // Store in LRU cache for fast access
+            const fullPattern: APIPattern = {
+                id: stored.id,
+                tenantId: stored.tenantId,
+                competitorWebsiteId: stored.competitorWebsiteId,
+                url: pattern.url,
+                method: pattern.method,
+                headers: pattern.headers,
+                queryParams: pattern.queryParams,
+                bodyTemplate: pattern.bodyTemplate,
+                responseFormat: pattern.responseFormat,
+                dataPath: pattern.dataPath,
+                fieldMappings: pattern.fieldMappings,
+                confidenceScore: pattern.confidenceScore,
+                paginationPattern: pattern.paginationPattern,
+                successCount: stored.successCount,
+                failureCount: stored.failureCount,
+                lastUsedAt: stored.lastUsedAt || undefined,
+                createdAt: stored.createdAt,
+                updatedAt: stored.updatedAt,
+            };
+
+            this.lruCache.set(websiteId, fullPattern);
 
             // Log cache operation
             ApiDetectionLogger.logCacheOperation({
@@ -93,6 +127,27 @@ export class APICache {
      */
     async getPattern(websiteId: string): Promise<APIPattern | null> {
         try {
+            // Check LRU cache first for fast access
+            const cachedPattern = this.lruCache.get(websiteId);
+            if (cachedPattern) {
+                // Log cache hit
+                ApiDetectionLogger.logCacheOperation({
+                    competitorWebsiteId: websiteId,
+                    operation: 'hit',
+                    success: true,
+                });
+
+                // Track cache hit metric
+                await ApiDetectionMetrics.trackCache({
+                    tenantId: cachedPattern.tenantId,
+                    competitorWebsiteId: websiteId,
+                    hit: true,
+                });
+
+                return cachedPattern;
+            }
+
+            // Not in LRU cache, check database
             const cached = await prisma.apiPattern.findUnique({
                 where: {
                     competitorWebsiteId: websiteId,
@@ -141,7 +196,7 @@ export class APICache {
             // Reconstruct APIPattern from database record
             const pattern = cached.pattern as any;
 
-            return {
+            const fullPattern: APIPattern = {
                 id: cached.id,
                 tenantId: cached.tenantId,
                 competitorWebsiteId: cached.competitorWebsiteId,
@@ -161,6 +216,11 @@ export class APICache {
                 createdAt: cached.createdAt,
                 updatedAt: cached.updatedAt,
             };
+
+            // Store in LRU cache for future fast access
+            this.lruCache.set(websiteId, fullPattern);
+
+            return fullPattern;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -184,6 +244,9 @@ export class APICache {
      */
     async invalidatePattern(websiteId: string): Promise<void> {
         try {
+            // Remove from LRU cache
+            this.lruCache.delete(websiteId);
+
             await prisma.apiPattern.delete({
                 where: {
                     competitorWebsiteId: websiteId,
@@ -199,6 +262,9 @@ export class APICache {
         } catch (error) {
             // If pattern doesn't exist, that's fine (already invalidated)
             if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
+                // Still remove from LRU cache
+                this.lruCache.delete(websiteId);
+
                 ApiDetectionLogger.logCacheOperation({
                     competitorWebsiteId: websiteId,
                     operation: 'invalidate',
@@ -326,6 +392,11 @@ export class APICache {
         avgSuccessRate: number;
         avgConfidenceScore: number;
         patternsWithFailures: number;
+        lruCacheStats?: {
+            size: number;
+            maxSize: number;
+            hitRate: number;
+        };
     }> {
         try {
             const where = tenantId ? { tenantId } : {};
@@ -345,6 +416,11 @@ export class APICache {
                     avgSuccessRate: 0,
                     avgConfidenceScore: 0,
                     patternsWithFailures: 0,
+                    lruCacheStats: {
+                        size: this.lruCache.size(),
+                        maxSize: 100,
+                        hitRate: 0,
+                    },
                 };
             }
 
@@ -355,11 +431,19 @@ export class APICache {
             const avgConfidenceScore = patterns.reduce((sum, p) => sum + p.confidenceScore, 0) / totalPatterns;
             const patternsWithFailures = patterns.filter(p => p.failureCount > 0).length;
 
+            // Get LRU cache statistics
+            const lruStats = this.lruCache.getStats();
+
             return {
                 totalPatterns,
                 avgSuccessRate,
                 avgConfidenceScore,
                 patternsWithFailures,
+                lruCacheStats: {
+                    size: lruStats.size,
+                    maxSize: lruStats.maxSize,
+                    hitRate: lruStats.hitRate,
+                },
             };
         } catch (error) {
             throw new Error(`Failed to get cache stats: ${error instanceof Error ? error.message : 'Unknown error'}`);

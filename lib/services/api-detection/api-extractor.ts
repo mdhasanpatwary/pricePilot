@@ -15,6 +15,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { RobotsTxtParser } from './robots-txt-parser';
 import { ApiDetectionLogger } from './api-detection-logger';
 import { ApiDetectionMetrics } from './api-detection-metrics';
+import { getGlobalConnectionPool, type ConnectionPool } from './connection-pool';
 
 /**
  * Configuration for retry logic
@@ -131,6 +132,7 @@ export class APIExtractor {
     private retryConfig: RetryConfig;
     private rateLimiter: RateLimiter;
     private robotsParser: RobotsTxtParser;
+    private connectionPool: ConnectionPool;
 
     constructor(retryConfig?: Partial<RetryConfig>, rateLimitMs: number = 1000) {
         // Initialize XML parser for XML responses
@@ -150,6 +152,9 @@ export class APIExtractor {
 
         // Initialize robots.txt parser
         this.robotsParser = new RobotsTxtParser();
+
+        // Initialize connection pool
+        this.connectionPool = getGlobalConnectionPool();
     }
 
     /**
@@ -550,6 +555,8 @@ export class APIExtractor {
                         },
                         body: body && method !== 'GET' ? body : undefined,
                         signal: controller.signal,
+                        // @ts-ignore - Node.js fetch supports agent option
+                        agent: this.connectionPool.getAgentForUrl(url),
                     });
 
                     clearTimeout(timeoutId);
