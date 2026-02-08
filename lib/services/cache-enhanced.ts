@@ -41,6 +41,8 @@ export interface CacheStats {
 
 export class CacheEnhancedService {
     private cacheLayer: CacheLayer;
+    private responseTimes: number[] = [];
+    private readonly MAX_RESPONSE_TIME_SAMPLES = 1000; // Keep last 1000 samples
 
     // Default TTLs (in seconds)
     // Requirement 2.9.4: Cache expensive operations with appropriate TTLs
@@ -56,6 +58,31 @@ export class CacheEnhancedService {
 
     constructor(cacheLayer?: CacheLayer) {
         this.cacheLayer = cacheLayer || CacheLayer.getInstance();
+    }
+
+    /**
+     * Track response time for cache operations
+     */
+    private trackResponseTime(startTime: number): void {
+        const responseTime = Date.now() - startTime;
+        this.responseTimes.push(responseTime);
+
+        // Keep only the last MAX_RESPONSE_TIME_SAMPLES samples
+        if (this.responseTimes.length > this.MAX_RESPONSE_TIME_SAMPLES) {
+            this.responseTimes.shift();
+        }
+    }
+
+    /**
+     * Calculate average response time from tracked samples
+     */
+    private calculateAvgResponseTime(): number {
+        if (this.responseTimes.length === 0) {
+            return 0;
+        }
+
+        const sum = this.responseTimes.reduce((acc, time) => acc + time, 0);
+        return sum / this.responseTimes.length;
     }
 
     /**
@@ -95,11 +122,15 @@ export class CacheEnhancedService {
      * Requirement 5.2: Tenant data access isolation
      */
     async getCachedProduct(tenantId: string, productId: string): Promise<any | null> {
+        const startTime = Date.now();
         try {
             const key = this.buildCacheKey(tenantId, 'products', 'get', { productId });
-            return await this.cacheLayer.get(key);
+            const result = await this.cacheLayer.get(key);
+            this.trackResponseTime(startTime);
+            return result;
         } catch (error) {
             logger.error('[CacheEnhanced] Error getting cached product', { tenantId, productId, error });
+            this.trackResponseTime(startTime);
             return null;
         }
     }
@@ -136,11 +167,15 @@ export class CacheEnhancedService {
      * Get cached comparison data
      */
     async getCachedComparison(tenantId: string, filters: ComparisonFilters): Promise<any | null> {
+        const startTime = Date.now();
         try {
             const key = this.buildCacheKey(tenantId, 'comparison', 'report', filters);
-            return await this.cacheLayer.get(key);
+            const result = await this.cacheLayer.get(key);
+            this.trackResponseTime(startTime);
+            return result;
         } catch (error) {
             logger.error('[CacheEnhanced] Error getting cached comparison', { tenantId, filters, error });
+            this.trackResponseTime(startTime);
             return null;
         }
     }
@@ -176,11 +211,15 @@ export class CacheEnhancedService {
      * Get cached product matches
      */
     async getCachedMatches(tenantId: string, productId: string): Promise<any | null> {
+        const startTime = Date.now();
         try {
             const key = this.buildCacheKey(tenantId, 'matching', 'findMatches', { productId });
-            return await this.cacheLayer.get(key);
+            const result = await this.cacheLayer.get(key);
+            this.trackResponseTime(startTime);
+            return result;
         } catch (error) {
             logger.error('[CacheEnhanced] Error getting cached matches', { tenantId, productId, error });
+            this.trackResponseTime(startTime);
             return null;
         }
     }
@@ -220,11 +259,15 @@ export class CacheEnhancedService {
      * Get cached competitor products
      */
     async getCachedCompetitorProducts(tenantId: string, competitorId: string): Promise<any[] | null> {
+        const startTime = Date.now();
         try {
             const key = this.buildCacheKey(tenantId, 'competitor', 'products', { competitorId });
-            return await this.cacheLayer.get(key);
+            const result = await this.cacheLayer.get<any[]>(key);
+            this.trackResponseTime(startTime);
+            return result;
         } catch (error) {
             logger.error('[CacheEnhanced] Error getting cached competitor products', { tenantId, competitorId, error });
+            this.trackResponseTime(startTime);
             return null;
         }
     }
@@ -260,11 +303,15 @@ export class CacheEnhancedService {
      * Get cached price history
      */
     async getCachedPriceHistory(tenantId: string, productId: string): Promise<any[] | null> {
+        const startTime = Date.now();
         try {
             const key = this.buildCacheKey(tenantId, 'priceHistory', 'get', { productId });
-            return await this.cacheLayer.get(key);
+            const result = await this.cacheLayer.get<any[]>(key);
+            this.trackResponseTime(startTime);
+            return result;
         } catch (error) {
             logger.error('[CacheEnhanced] Error getting cached price history', { tenantId, productId, error });
+            this.trackResponseTime(startTime);
             return null;
         }
     }
@@ -299,11 +346,15 @@ export class CacheEnhancedService {
      * Get cached analytics data
      */
     async getCachedAnalytics(tenantId: string, type: string): Promise<any | null> {
+        const startTime = Date.now();
         try {
             const key = this.buildCacheKey(tenantId, 'analytics', type, {});
-            return await this.cacheLayer.get(key);
+            const result = await this.cacheLayer.get(key);
+            this.trackResponseTime(startTime);
+            return result;
         } catch (error) {
             logger.error('[CacheEnhanced] Error getting cached analytics', { tenantId, type, error });
+            this.trackResponseTime(startTime);
             return null;
         }
     }
@@ -364,7 +415,7 @@ export class CacheEnhancedService {
                 hits: stats.hitRate * 100, // Convert to percentage
                 misses: stats.missRate * 100,
                 hitRate: stats.hitRate,
-                avgResponseTime: 0, // TODO: Implement response time tracking
+                avgResponseTime: this.calculateAvgResponseTime(),
                 memoryUsage: stats.memoryUsedBytes,
             };
         } catch (error) {
