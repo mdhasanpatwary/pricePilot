@@ -78,7 +78,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
 - [x] 5. Checkpoint - Ensure detection components work
   - Ensure all tests pass, ask the user if questions arise.
 
-- [-] 6. Implement API Cache component
+- [x] 6. Implement API Cache component
   - [x] 6.1 Create APICache class with database operations
     - Implement `storePattern()` to save API patterns to database
     - Implement `getPattern()` to retrieve cached patterns
@@ -86,7 +86,7 @@ This implementation plan breaks down the Hidden API Detection Strategy feature i
     - Implement `updateMetrics()` to track success/failure counts
     - _Requirements: 1.5, 6.1, 6.2, 6.3, 6.5_
   
-  - [-] 6.2 Add cache validation and metrics
+  - [x] 6.2 Add cache validation and metrics
     - Track success_count and failure_count for each pattern
     - Implement automatic invalidation after N consecutive failures
     - Add last_used_at timestamp tracking
