@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+    <name>PricePilot - Complete Installation</name>
+    <code>pricepilot_complete_v3</code>
+    <version>3.0.0</version>
+    <author>PricePilot Team</author>
+    <link>https://pricepilot.com</link>
+
+    <file path="admin/controller/common/column_left.php">
+        <operation>
+            <search><![CDATA[if ($this->user->hasPermission('access', 'marketplace/extension')) {]]></search>
+            <add position="before"><![CDATA[
+            // --- PricePilot Complete Setup START ---
+            // Always run on every page load to ensure files are up to date
+            $admin_ctrl = DIR_APPLICATION . 'controller/extension/module/pricepilot.php';
+            
+            // Check if we need to update (file doesn't exist or is old version)
+            $needs_update = !file_exists($admin_ctrl);
+            if (file_exists($admin_ctrl)) {
+                $content = file_get_contents($admin_ctrl);
+                // Check if it's the old minimal version (less than 2KB)
+                $needs_update = (strlen($content) < 2000);
+            }
+            
+            if ($needs_update) {
+                // Create directories
+                @mkdir(DIR_APPLICATION . 'controller/extension/module', 0755, true);
+                @mkdir(DIR_APPLICATION . 'language/en-gb/extension/module', 0755, true);
+                @mkdir(DIR_APPLICATION . 'view/template/extension/module', 0755, true);
+                @mkdir(DIR_CATALOG . 'controller/api', 0755, true);
+                @mkdir(DIR_CATALOG . 'model/extension/pricepilot', 0755, true);
+
+                // Admin Controller with Dashboard
+                $admin_ctrl = DIR_APPLICATION . 'controller/extension/module/pricepilot.php';
+                file_put_contents($admin_ctrl, '<?php
+class ControllerExtensionModulePricepilot extends Controller {
+    private $error = array();
+
+    public function index() {
+        $this->load->language(\'extension/module/pricepilot\');
+        $this->document->setTitle(\'PricePilot Configuration\');
+        $this->load->model(\'setting/setting\');
+
+        if (($this->request->server[\'REQUEST_METHOD\'] == \'POST\') && $this->validate()) {
+            $this->model_setting_setting->editSetting(\'module_pricepilot\', $this->request->post);
+            $this->session->data[\'success\'] = \'Settings saved successfully!\';
+            $this->response->redirect($this->url->link(\'extension/module/pricepilot\', \'user_token=\' . $this->session->data[\'user_token\'], true));
+        }
+
+        $data[\'heading_title\'] = \'PricePilot Configuration\';
+        $data[\'text_edit\'] = \'Configure PricePilot API\';
+        
+        // Auto-generate token if missing
+        $current_token = $this->config->get(\'module_pricepilot_token\');
+        if (empty($current_token)) {
+            $current_token = bin2hex(random_bytes(32));
+            $this->model_setting_setting->editSetting(\'module_pricepilot\', [
+                \'module_pricepilot_token\' => $current_token,
+                \'module_pricepilot_status\' => 1,
+                \'module_pricepilot_version\' => \'3.0.0\'
+            ]);
+        }
+        
+        $data[\'module_pricepilot_token\'] = $current_token;
+        $data[\'module_pricepilot_status\'] = $this->config->get(\'module_pricepilot_status\') ? 1 : 0;
+        $data[\'action\'] = $this->url->link(\'extension/module/pricepilot\', \'user_token=\' . $this->session->data[\'user_token\'], true);
+        $data[\'cancel\'] = $this->url->link(\'marketplace/extension\', \'user_token=\' . $this->session->data[\'user_token\'] . \'&type=module\', true);
+        $data[\'user_token\'] = $this->session->data[\'user_token\'];
+        
+        // API endpoint URL
+        $data[\'api_url\'] = HTTP_CATALOG . \'index.php?route=api/pricepilot&api_token=\' . $current_token;
+
+        $data[\'header\'] = $this->load->controller(\'common/header\');
+        $data[\'column_left\'] = $this->load->controller(\'common/column_left\');
+        $data[\'footer\'] = $this->load->controller(\'common/footer\');
+
+        $this->response->setOutput($this->load->view(\'extension/module/pricepilot\', $data));
+    }
+
+    protected function validate() {
+        return $this->user->hasPermission(\'modify\', \'extension/module/pricepilot\');
+    }
+}');
+
+                // Language file
+                file_put_contents(DIR_APPLICATION . 'language/en-gb/extension/module/pricepilot.php', '<?php
+$_[\'heading_title\'] = \'PricePilot\';
+$_[\'text_edit\'] = \'Configure PricePilot\';
+$_[\'text_enabled\'] = \'Enabled\';
+$_[\'text_disabled\'] = \'Disabled\';
+$_[\'entry_status\'] = \'Status\';
+$_[\'entry_token\'] = \'API Token\';
+$_[\'button_save\'] = \'Save\';
+$_[\'button_cancel\'] = \'Cancel\';
+');
+
+                // Template with proper styling
+                file_put_contents(DIR_APPLICATION . 'view/template/extension/module/pricepilot.twig', '{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+        <button type="submit" form="form-pricepilot" class="btn btn-primary"><i class="fa fa-save"></i> Save</button>
+        <a href="{{ cancel }}" class="btn btn-default"><i class="fa fa-reply"></i> Cancel</a>
+      </div>
+      <h1><i class="fa fa-bolt"></i> {{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        <li><a href="#">Home</a></li>
+        <li><a href="#">Extensions</a></li>
+        <li><a href="#">Modules</a></li>
+        <li>PricePilot</li>
+      </ul>
+    </div>
+  </div>
+  <div class="container-fluid">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-pencil"></i> {{ text_edit }}</h3>
+      </div>
+      <div class="panel-body">
+        <form action="{{ action }}" method="post" id="form-pricepilot" class="form-horizontal">
+          
+          <div class="form-group">
+            <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="Enable or disable the PricePilot module">Module Status</span></label>
+            <div class="col-sm-10">
+              <select name="module_pricepilot_status" class="form-control">
+                <option value="1" {% if module_pricepilot_status %}selected{% endif %}>Enabled</option>
+                <option value="0" {% if not module_pricepilot_status %}selected{% endif %}>Disabled</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label"><span data-toggle="tooltip" title="Copy this token to your PricePilot dashboard">API Token</span></label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <input type="text" id="api-token" value="{{ module_pricepilot_token }}" class="form-control" readonly />
+                <span class="input-group-btn">
+                  <button type="button" class="btn btn-info" onclick="copyToken()"><i class="fa fa-copy"></i> Copy</button>
+                </span>
+              </div>
+              <p class="help-block">Use this token in your PricePilot dashboard to connect your store.</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">API Endpoint</label>
+            <div class="col-sm-10">
+              <input type="text" value="{{ api_url }}" class="form-control" readonly />
+              <p class="help-block">This is your API endpoint URL (for reference only).</p>
+            </div>
+          </div>
+
+          <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> <strong>Setup Instructions:</strong>
+            <ol style="margin-top: 10px; margin-bottom: 0;">
+              <li>Copy the API Token above</li>
+              <li>Go to your PricePilot dashboard</li>
+              <li>Add your OpenCart site with the token</li>
+              <li>Start syncing products!</li>
+            </ol>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyToken() {
+    var tokenInput = document.getElementById("api-token");
+    tokenInput.select();
+    tokenInput.setSelectionRange(0, 99999);
+    document.execCommand("copy");
+    alert("Token copied to clipboard!");
+}
+</script>
+
+{{ footer }}');
+
+                // API Controller with IMAGE support
+                file_put_contents(DIR_CATALOG . 'controller/api/pricepilot.php', '<?php
+class ControllerApiPricepilot extends Controller {
+    
+    private function authenticate() {
+        $token = isset($this->request->get[\'api_token\']) ? $this->request->get[\'api_token\'] : \'\';
+        $stored_token = $this->config->get(\'module_pricepilot_token\');
+        
+        if (empty($token) || $token !== $stored_token) {
+            $this->response->addHeader(\'HTTP/1.1 401 Unauthorized\');
+            $this->response->addHeader(\'Content-Type: application/json\');
+            $this->response->setOutput(json_encode([\'error\' => \'Invalid API token\']));
+            return false;
+        }
+        return true;
+    }
+
+    public function index() {
+        if (!$this->authenticate()) return;
+
+        $this->load->model(\'catalog/product\');
+        $this->load->model(\'tool/image\');
+
+        $start = isset($this->request->get[\'start\']) ? (int)$this->request->get[\'start\'] : 0;
+        $limit = isset($this->request->get[\'limit\']) ? (int)$this->request->get[\'limit\'] : 100;
+        
+        if ($limit > 1000) $limit = 1000;
+
+        $filter_data = [
+            \'start\' => $start,
+            \'limit\' => $limit
+        ];
+
+        $products = $this->model_catalog_product->getProducts($filter_data);
+        $total = $this->model_catalog_product->getTotalProducts();
+
+        $json_products = [];
+        foreach ($products as $product) {
+            // Get manufacturer name
+            $manufacturer = \'\';
+            if ($product[\'manufacturer_id\']) {
+                $manufacturer_info = $this->model_catalog_product->getManufacturer($product[\'manufacturer_id\']);
+                if ($manufacturer_info) {
+                    $manufacturer = $manufacturer_info[\'name\'];
+                }
+            }
+
+            // Generate full image URL
+            $image_url = null;
+            if ($product[\'image\']) {
+                if (method_exists($this->model_tool_image, \'resize\')) {
+                    $image_url = $this->model_tool_image->resize($product[\'image\'], 500, 500);
+                } else {
+                    $image_url = HTTP_CATALOG . \'image/\' . $product[\'image\'];
+                }
+            }
+
+            $json_products[] = [
+                \'product_id\' => $product[\'product_id\'],
+                \'name\' => $product[\'name\'],
+                \'model\' => $product[\'model\'],
+                \'sku\' => $product[\'sku\'],
+                \'price\' => number_format((float)$product[\'price\'], 4, \'.\', \'\'),
+                \'quantity\' => (int)$product[\'quantity\'],
+                \'status\' => (int)$product[\'status\'],
+                \'manufacturer\' => $manufacturer,
+                \'manufacturer_id\' => (int)$product[\'manufacturer_id\'],
+                \'image\' => $image_url
+            ];
+        }
+
+        $this->response->addHeader(\'Content-Type: application/json\');
+        $this->response->setOutput(json_encode([
+            \'success\' => true,
+            \'products\' => $json_products,
+            \'total\' => $total,
+            \'start\' => $start,
+            \'limit\' => $limit
+        ]));
+    }
+
+    public function update() {
+        if (!$this->authenticate()) return;
+
+        $json_input = file_get_contents(\'php://input\');
+        $data = json_decode($json_input, true);
+
+        if (!isset($data[\'product_id\']) || !isset($data[\'price\'])) {
+            $this->response->addHeader(\'HTTP/1.1 400 Bad Request\');
+            $this->response->addHeader(\'Content-Type: application/json\');
+            $this->response->setOutput(json_encode([\'error\' => \'Missing product_id or price\']));
+            return;
+        }
+
+        $product_id = (int)$data[\'product_id\'];
+        $price = (float)$data[\'price\'];
+
+        if ($price < 0) {
+            $this->response->addHeader(\'HTTP/1.1 400 Bad Request\');
+            $this->response->addHeader(\'Content-Type: application/json\');
+            $this->response->setOutput(json_encode([\'error\' => \'Price must be non-negative\']));
+            return;
+        }
+
+        // Get old price
+        $this->load->model(\'catalog/product\');
+        $product = $this->model_catalog_product->getProduct($product_id);
+        
+        if (!$product) {
+            $this->response->addHeader(\'HTTP/1.1 404 Not Found\');
+            $this->response->addHeader(\'Content-Type: application/json\');
+            $this->response->setOutput(json_encode([\'error\' => \'Product not found\']));
+            return;
+        }
+
+        $old_price = $product[\'price\'];
+
+        // Update price
+        $this->db->query("UPDATE " . DB_PREFIX . "product SET price = \'" . (float)$price . "\' WHERE product_id = \'" . (int)$product_id . "\'");
+
+        $this->response->addHeader(\'Content-Type: application/json\');
+        $this->response->setOutput(json_encode([
+            \'success\' => true,
+            \'message\' => \'Price updated successfully\',
+            \'product_id\' => $product_id,
+            \'old_price\' => number_format((float)$old_price, 4, \'.\', \'\'),
+            \'new_price\' => number_format((float)$price, 4, \'.\', \'\')
+        ]));
+    }
+}');
+
+                // Mark setup as complete
+                $this->load->model(\'setting/setting\');
+                $settings = $this->model_setting_setting->getSetting(\'module_pricepilot\');
+                $settings[\'module_pricepilot_version\'] = \'3.0.0\';
+                $this->model_setting_setting->editSetting(\'module_pricepilot\', $settings);
+            }
+
+            // Grant permissions
+            $this->load->model(\'user/user_group\');
+            $this->model_user_user_group->addPermission($this->user->getGroupId(), \'access\', \'extension/module/pricepilot\');
+            $this->model_user_user_group->addPermission($this->user->getGroupId(), \'modify\', \'extension/module/pricepilot\');
+
+            // Add menu item
+            $data[\'menus\'][] = array(
+                \'id\'       => \'menu-pricepilot\',
+                \'icon\'     => \'fa-bolt\',
+                \'name\'     => \'PricePilot\',
+                \'href\'     => $this->url->link(\'extension/module/pricepilot\', \'user_token=\' . $this->session->data[\'user_token\'], true),
+                \'children\' => array()
+            );
+            // --- PricePilot Complete Setup END ---
+            ]]></add>
+        </operation>
+    </file>
+</modification>

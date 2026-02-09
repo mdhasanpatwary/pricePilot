@@ -787,7 +787,7 @@ export class SyncService {
    * the standard ExternalProduct format.
    *
    * **API Endpoint:**
-   * - URL: `{baseUrl}/index.php?route=api/pricepilot&api_token={token}`
+   * - URL: `{baseUrl}/api/pricepilot.php?api_token={token}&action=products`
    * - Method: GET
    * - Timeout: 30 seconds
    *
@@ -881,7 +881,7 @@ export class SyncService {
 
       // Normalize URL (avoid double slashes)
       const cleanBaseUrl = site.baseUrl.replace(/\/$/, "");
-      const apiUrl = `${cleanBaseUrl}/index.php?route=api/pricepilot&api_token=${apiToken}`;
+      const apiUrl = `${cleanBaseUrl}/api/pricepilot.php?api_token=${apiToken}&action=products`;
 
       console.log(`[SyncService] Fetching from OpenCart: ${apiUrl}`);
 
@@ -1474,7 +1474,7 @@ export class SyncService {
    * handling and logging.
    *
    * **API Endpoint:**
-   * - URL: `{baseUrl}/index.php?route=api/pricepilot/update&api_token={token}`
+   * - URL: `{baseUrl}/api/pricepilot.php?api_token={token}&action=update`
    * - Method: POST
    * - Timeout: 10 seconds
    *
@@ -1550,7 +1550,7 @@ export class SyncService {
         );
       }
 
-      const url = `${site.baseUrl}/index.php?route=api/pricepilot/update&api_token=${apiToken}`;
+      const url = `${site.baseUrl}/api/pricepilot.php?api_token=${apiToken}&action=update`;
 
       let response;
       try {

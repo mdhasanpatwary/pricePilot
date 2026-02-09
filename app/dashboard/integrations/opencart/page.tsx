@@ -18,25 +18,17 @@ export default function OpenCartIntegrationPage() {
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      const response = await fetch("/api/v1/downloads/opencart");
+      // Direct download of the simple PHP file
+      const link = document.createElement("a");
+      link.href = "/downloads/opencart/pricepilot-simple.php";
+      link.download = "pricepilot-simple.php";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-      if (!response.ok) {
-        throw new Error("Download failed");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "pricepilot-opencart-v1.0.0.ocmod.zip";
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast.success("OpenCart extension downloaded successfully!");
+      toast.success("OpenCart integration file downloaded successfully!");
     } catch (error) {
-      toast.error("Failed to download extension. Please try again.");
+      toast.error("Failed to download file. Please try again.");
     } finally {
       setIsDownloading(false);
     }
@@ -73,7 +65,7 @@ export default function OpenCartIntegrationPage() {
       <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-full">
         <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
         <span className="text-xs font-bold text-primary uppercase tracking-widest">
-          Latest Version: v1.0.0
+          Simple Setup • 3 Minutes • 1 File
         </span>
       </div>
 
@@ -84,10 +76,9 @@ export default function OpenCartIntegrationPage() {
           {/* Download Card */}
           <div className="bg-card border border-border rounded-lg p-6 space-y-6">
             <div className="space-y-2">
-              <h2 className="text-xl font-bold">Download Extension</h2>
+              <h2 className="text-xl font-bold">Download Integration File</h2>
               <p className="text-sm text-muted-foreground">
-                Get the official PricePilot OpenCart extension. Standard
-                .ocmod.zip format for easy installation.
+                Get the simple PricePilot integration file. Just one PHP file to upload - no complex installation needed!
               </p>
             </div>
 
@@ -104,14 +95,14 @@ export default function OpenCartIntegrationPage() {
               ) : (
                 <>
                   <Download className="w-5 h-5" />
-                  Download PricePilot OpenCart Extension
+                  Download pricepilot-simple.php
                 </>
               )}
             </button>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Shield className="w-4 h-4" />
-              <span>Version 1.0.0 • Supports OpenCart 3.x • MIT License</span>
+              <span>Single File • ~5 KB • Works with OpenCart 3.x & 4.x</span>
             </div>
           </div>
 
@@ -132,11 +123,9 @@ export default function OpenCartIntegrationPage() {
                   1
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm">Download OCMOD Package</h3>
+                  <h3 className="font-bold text-sm">Download Integration File</h3>
                   <p className="text-xs text-muted-foreground">
-                    Download the{" "}
-                    <code className="bg-muted px-1 rounded">.ocmod.zip</code>{" "}
-                    extension above. Do not extract it.
+                    Download <code className="bg-muted px-1 rounded">pricepilot-simple.php</code> using the button above.
                   </p>
                 </div>
               </div>
@@ -147,13 +136,16 @@ export default function OpenCartIntegrationPage() {
                   2
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm">
-                    Upload via Extension Installer
-                  </h3>
+                  <h3 className="font-bold text-sm">Upload to OpenCart</h3>
                   <p className="text-xs text-muted-foreground">
-                    In your OpenCart Admin, go to{" "}
-                    <b>Extensions &rarr; Installer</b> and upload the downloaded
-                    zip file.
+                    Upload the file to your OpenCart root directory in the <code className="bg-muted px-1 rounded">api/</code> folder. Rename it to <code className="bg-muted px-1 rounded">pricepilot.php</code>
+                  </p>
+                  <div className="bg-muted/50 p-2 rounded text-xs font-mono">
+                    <div className="text-muted-foreground mb-1">Final location:</div>
+                    <div className="text-primary font-bold">/api/pricepilot.php</div>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">
+                    Example: If your OpenCart is at <code className="bg-muted px-1 rounded">/var/www/html/</code>, upload to <code className="bg-muted px-1 rounded">/var/www/html/api/pricepilot.php</code>
                   </p>
                 </div>
               </div>
@@ -164,10 +156,9 @@ export default function OpenCartIntegrationPage() {
                   3
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm">Refresh Modifications</h3>
+                  <h3 className="font-bold text-sm">Enable API in OpenCart</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to <b>Extensions &rarr; Modifications</b> and click the{" "}
-                    <b>Refresh</b> button (top right) to apply changes.
+                    Go to <b>System → Users → API</b>, click <b>Add New</b>, set username as "pricepilot", enable it, and click <b>Generate</b> to create an API token.
                   </p>
                 </div>
               </div>
@@ -178,11 +169,9 @@ export default function OpenCartIntegrationPage() {
                   4
                 </div>
                 <div className="space-y-2 flex-1">
-                  <h3 className="font-bold text-sm">Configure Module</h3>
+                  <h3 className="font-bold text-sm">Whitelist IP Address</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to <b>PricePilot</b> in your sidebar (or Extensions
-                    &rarr; Modules &rarr; PricePilot). Enable the status and
-                    copy your <b>API Token</b>.
+                    In the API settings, go to <b>IP Addresses</b> tab, click <b>Add IP</b>, and enter <code className="bg-muted px-1 rounded">0.0.0.0</code> to allow all IPs (or add your PricePilot server IP).
                   </p>
                 </div>
               </div>
@@ -197,8 +186,7 @@ export default function OpenCartIntegrationPage() {
                     Connect Your Store
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Now go back to the PricePilot Dashboard and use your store
-                    URL and the API token to finalize the connection.
+                    Copy the API token from OpenCart, then go back to PricePilot Dashboard and paste it along with your store URL to complete the connection.
                   </p>
                   <a
                     href="/dashboard/connections"
@@ -263,11 +251,19 @@ export default function OpenCartIntegrationPage() {
             <div className="space-y-3 text-sm">
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-                <span>Zero Core File Overwrites</span>
+                <span>Single File Upload (3 min setup)</span>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-                <span>Automatic Product Sync</span>
+                <span>Product Images Included</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
+                <span>Brand/Manufacturer Support</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
+                <span>Model & SKU Data</span>
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
@@ -275,11 +271,7 @@ export default function OpenCartIntegrationPage() {
               </div>
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-                <span>Stock Status Monitoring</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-                <span>Secure Token Auth</span>
+                <span>No Maintenance Required</span>
               </div>
             </div>
           </div>

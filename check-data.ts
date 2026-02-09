@@ -1,27 +1,35 @@
-import { prisma } from "./lib/prisma";
+import { prisma } from './lib/prisma';
 
 async function checkData() {
-  console.log("Checking database data...\n");
+  const user = await prisma.user.findUnique({
+    where: { email: 'admin@pricepilot.com' },
+    select: { id: true, tenantId: true, email: true }
+  });
 
-  const tenants = await prisma.tenant.findMany();
-  console.log(`Tenants: ${tenants.length}`);
-  tenants.forEach(t => console.log(`  - ${t.companyName} (${t.id})`));
+  if (!user) {
+    console.log('❌ User not found');
+    process.exit(1);
+  }
 
-  const users = await prisma.user.findMany();
-  console.log(`\nUsers: ${users.length}`);
-  users.forEach(u => console.log(`  - ${u.email} (tenant: ${u.tenantId})`));
+  console.log('✅ User found:', user.email);
+  console.log('Tenant ID:', user.tenantId);
 
-  const sites = await prisma.site.findMany();
-  console.log(`\nSites: ${sites.length}`);
-  sites.forEach(s => console.log(`  - ${s.baseUrl} (${s.type}) - tenant: ${s.tenantId}`));
+  const sites = await prisma.site.findMany({
+    where: { tenantId: user.tenantId },
+    select: { id: true, type: true, baseUrl: true, platform: true }
+  });
+
+  console.log('\n📊 Sites:', sites.length);
+  sites.forEach(s => console.log('  -', s.type, s.platform, s.baseUrl));
 
   const products = await prisma.product.findMany({
-    include: { Site: true }
+    where: { tenantId: user.tenantId },
+    select: { id: true, title: true, siteId: true }
   });
-  console.log(`\nProducts: ${products.length}`);
-  products.forEach(p => console.log(`  - ${p.title} (${p.sku}) - site: ${p.Site.baseUrl} (${p.Site.type})`));
+
+  console.log('\n📦 Products:', products.length);
 
   await prisma.$disconnect();
 }
 
-checkData().catch(console.error);
+checkData();

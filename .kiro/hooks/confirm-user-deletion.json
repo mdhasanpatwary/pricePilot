@@ -1,0 +1,15 @@
+{
+    "name": "Confirm User Deletion",
+    "version": "1.0.0",
+    "description": "Requires explicit confirmation before deleting any user account to prevent accidental data loss",
+    "when": {
+        "type": "preToolUse",
+        "toolTypes": [
+            "write"
+        ]
+    },
+    "then": {
+        "type": "askAgent",
+        "prompt": "⚠️ CRITICAL USER DELETION DETECTED ⚠️\n\nYou are about to DELETE A USER ACCOUNT. This is an EXTREMELY DANGEROUS operation.\n\n🔴 CONSEQUENCES OF USER DELETION:\n1. User account will be PERMANENTLY DELETED\n2. If this is the only user in tenant → Tenant may be deleted\n3. CASCADE EFFECT will delete:\n   - ALL Sites (integration + competitor)\n   - ALL Products (user + competitor)\n   - ALL Product matches\n   - ALL Price history\n   - ALL Sync logs\n   - EVERYTHING related to this user's tenant\n\n✋ MANDATORY CHECKS BEFORE PROCEEDING:\n\n1. Is this operation targeting User table? → If YES, STOP and get confirmation\n2. Is this a DELETE or deleteMany operation? → If YES, STOP\n3. Does the user EXPLICITLY request this deletion? → Must be YES\n4. Has the user confirmed they understand data will be lost? → Must be YES\n5. Is there a backup available? → Should be YES\n\n📋 REQUIRED CONFIRMATION:\nYou MUST ask the human user:\n\"Are you ABSOLUTELY SURE you want to delete this user account? This will permanently delete all associated data including sites, products, and price history. Type 'DELETE USER CONFIRMED' to proceed.\"\n\n❌ DO NOT PROCEED unless you receive explicit confirmation with the exact phrase: 'DELETE USER CONFIRMED'\n\n✅ ALTERNATIVE: Use SOFT DELETE instead:\n- Update user status to 'DELETED'\n- Set deletedAt timestamp\n- Keep all data intact\n- User can be restored later if needed\n\nWhat is your decision?"
+    }
+}
