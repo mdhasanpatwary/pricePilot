@@ -7,11 +7,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * Proxy creation schema
@@ -33,7 +32,7 @@ const createProxySchema = z.object({
  */
 export async function GET(request: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
@@ -137,7 +136,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },

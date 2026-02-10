@@ -7,11 +7,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { RollbackService } from "@/lib/services/rollback";
 import { logger } from "@/lib/logger";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/price-update/rollback/history
@@ -19,7 +18,7 @@ import { logger } from "@/lib/logger";
  * Retrieves rollback history for the authenticated tenant
  */
 async function handleGET(req: NextRequest) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session) {
         return NextResponse.json(
@@ -82,5 +81,5 @@ async function handleGET(req: NextRequest) {
  * Export rate-limited handler
  */
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, "read", handleGET);
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

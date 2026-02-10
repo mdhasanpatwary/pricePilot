@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Notification Channels API
@@ -41,7 +40,7 @@ const createChannelSchema = z.object({
 async function handleGET(_request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
@@ -93,7 +92,7 @@ async function handleGET(_request: NextRequest) {
 async function handlePOST(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
@@ -167,9 +166,9 @@ async function handlePOST(request: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', handleGET);
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', handlePOST);
+    return withRequestContextAndRateLimit(req, 'write', handlePOST);
 }

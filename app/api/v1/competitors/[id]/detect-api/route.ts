@@ -9,20 +9,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { withErrorHandling } from '@/lib/middleware/global-error-handler';
 import { UnauthorizedError, NotFoundError, ValidationError } from '@/lib/utils/error-handler';
 import { prisma } from '@/lib/prisma';
 import { APIDetector } from '@/lib/services/api-detection/api-detector';
 import { apiCache } from '@/lib/services/api-detection/api-cache';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handlePOST(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError('Authentication required to trigger API detection');
@@ -148,7 +147,7 @@ export async function POST(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRateLimit(
+    return withRequestContextAndRateLimit(
         req,
         'write',
         withErrorHandling((req) => handlePOST(req, context))

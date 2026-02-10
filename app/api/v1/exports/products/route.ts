@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Robust CSV Value Formatter
@@ -18,7 +17,7 @@ function formatCSVValue(val: any): string {
 }
 
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -116,5 +115,5 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "importExport", handleGET);
+  return withRequestContextAndRateLimit(req, "importExport", handleGET);
 }

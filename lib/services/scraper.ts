@@ -2014,6 +2014,12 @@ export class ScraperService {
    * This makes the scraping session appear more natural
    */
   private async performSessionWarmup(page: Page, hostname: string, profile: any): Promise<void> {
+    // Skip warmup if disabled via environment variable
+    if (process.env.SCRAPING_ENABLE_WARMUP === 'false') {
+      logger.info(`[ScraperService] ⏭️  Skipping session warmup for ${hostname} (disabled via env)`);
+      return;
+    }
+
     try {
       logger.info(`[ScraperService] 🔥 Performing session warmup for ${hostname}`);
 

@@ -15,10 +15,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * Query parameters schema for alert filtering
@@ -42,7 +41,7 @@ const alertQuerySchema = z.object({
 export async function GET(request: NextRequest) {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.id) {
             return NextResponse.json(
                 {

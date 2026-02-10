@@ -15,12 +15,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { monitoringDashboardService } from '@/lib/services/monitoring/dashboard';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Query parameter validation schema
@@ -36,7 +35,7 @@ const historyQuerySchema = z.object({
 async function handleGET(req: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -152,5 +151,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', () => handleGET(req));
+    return withRequestContextAndRateLimit(req, 'read', () => handleGET(req));
 }

@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
   validateBody,
   validationErrorResponse,
@@ -11,13 +8,15 @@ import {
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { WebsiteService } from "@/lib/services/website-service";
 import { EncryptionError } from "@/lib/services/encryption/errors";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/integrations
  * Fetch all connected sites for the authenticated tenant
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -81,7 +80,7 @@ async function handleGET(_req: NextRequest) {
  * Create a new site connection
  */
 async function handlePOST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -190,7 +189,7 @@ async function handlePOST(req: NextRequest) {
  * Remove a site connection
  */
 async function handleDELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -250,13 +249,13 @@ async function handleDELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", handleGET);
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", handleDELETE);
+  return withRequestContextAndRateLimit(req, "write", handleDELETE);
 }

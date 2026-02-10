@@ -11,11 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST handler for alert acknowledgment endpoint
@@ -29,7 +28,7 @@ async function handlePOST(
 
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -157,5 +156,5 @@ export async function POST(
     req: NextRequest,
     context: { params: Promise<{ alertId: string }> }
 ) {
-    return withRateLimit(req, 'write', () => handlePOST(req, context));
+    return withRequestContextAndRateLimit(req, 'write', () => handlePOST(req, context));
 }

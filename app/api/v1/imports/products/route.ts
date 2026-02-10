@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Enhanced CSV Parser that handles quotes and escapes
@@ -34,7 +33,7 @@ function parseCSVLine(line: string): string[] {
 }
 
 async function handleImport(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -206,5 +205,5 @@ async function handleImport(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "importExport", handleImport);
+  return withRequestContextAndRateLimit(req, "importExport", handleImport);
 }

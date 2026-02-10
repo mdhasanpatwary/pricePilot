@@ -1,0 +1,254 @@
+import { NextRequest, NextResponse } from "next/server";
+import { setBypass } from "@/lib/services/rate-limit-admin";
+import { logger } from "@/lib/logger";
+
+/**
+ * POST /api/v1/admin/rate-limits/[tenantId]/bypass
+ * 
+ * Sets a temporary rate limit bypass for a specific tenant.
+ * This allows the tenant to bypass rate limiting for a specified duration.
+ * Useful for special circumstances like data migrations, bulk operations,
+ * or resolving customer issues.
+ * 
+ * Requirements: 4.3, 4.5
+ * 
+ * Authentication: Super admin only
+ * Rate Limiting: Write limiter
+ * 
+ * Request Body:
+ * {
+ *   "durationMinutes": number (1-1440, max 24 hours),
+ *   "reason": string (min 10 characters)
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "tenantId": "string",
+ *     "expiresAt": "ISO8601",
+ *     "durationMinutes": number,
+ *     "reason": "string"
+ *   },
+ *   "meta": {
+ *     "requestId": "string",
+ *     "timestamp": "ISO8601"
+ *   }
+ * }
+ */
+async function handlePOST(
+    req: NextRequest,
+    { params }: { params: { tenantId: string } }
+) {
+    try {
+        // Check authentication and authorization
+        const session = await getCachedSession();
+
+        if (!session || !session.user) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "UNAUTHORIZED",
+                        message: "Authentication required",
+                    },
+                    meta: {
+                        requestId: crypto.randomUUID(),
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        if (!session.user.isSuperAdmin) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "FORBIDDEN",
+                        message: "Super admin access required",
+                    },
+                    meta: {
+                        requestId: crypto.randomUUID(),
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: 403 }
+            );
+        }
+
+        const { tenantId } = params;
+
+        // Validate tenantId
+        if (!tenantId || typeof tenantId !== "string") {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "INVALID_TENANT_ID",
+                        message: "Valid tenant ID is required",
+                    },
+                    meta: {
+                        requestId: crypto.randomUUID(),
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Parse request body
+        let body;
+        try {
+            body = await req.json();
+        } catch {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "INVALID_JSON",
+                        message: "Invalid JSON in request body",
+                    },
+                    meta: {
+                        requestId: crypto.randomUUID(),
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        const { durationMinutes, reason } = body;
+
+        // Validate input
+        const errors: Record<string, string[]> = {};
+
+        if (typeof durationMinutes !== "number") {
+            errors.durationMinutes = ["Duration must be a number"];
+        } else if (durationMinutes < 1 || durationMinutes > 1440) {
+            errors.durationMinutes = ["Duration must be between 1 and 1440 minutes (24 hours)"];
+        }
+
+        if (typeof reason !== "string") {
+            errors.reason = ["Reason must be a string"];
+        } else if (reason.trim().length < 10) {
+            errors.reason = ["Reason must be at least 10 characters"];
+        }
+
+        if (Object.keys(errors).length > 0) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "VALIDATION_ERROR",
+                        message: "Validation failed",
+                        details: { fields: errors },
+                    },
+                    meta: {
+                        requestId: crypto.randomUUID(),
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: 422 }
+            );
+        }
+
+        // Get client IP for audit log
+        const ipAddress = req.headers.get("x-forwarded-for") ||
+            req.headers.get("x-real-ip") ||
+            "unknown";
+
+        // Set bypass
+        await setBypass(
+            tenantId,
+            session.user.id,
+            durationMinutes,
+            reason.trim(),
+            ipAddress
+        );
+
+        const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+
+        logger.info("[RateLimitAPI] Bypass set successfully", {
+            adminUserId: session.user.id,
+            tenantId,
+            durationMinutes,
+            expiresAt,
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: {
+                tenantId,
+                expiresAt: expiresAt.toISOString(),
+                durationMinutes,
+                reason: reason.trim(),
+            },
+            meta: {
+                requestId: crypto.randomUUID(),
+                timestamp: new Date().toISOString(),
+            },
+        });
+    } catch (error) {
+        logger.error("[RateLimitAPI] Failed to set bypass:", { error });
+
+        // Check for specific error messages
+        if (error instanceof Error) {
+            if (error.message.includes("not found")) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: "TENANT_NOT_FOUND",
+                            message: error.message,
+                        },
+                        meta: {
+                            requestId: crypto.randomUUID(),
+                            timestamp: new Date().toISOString(),
+                        },
+                    },
+                    { status: 404 }
+                );
+            }
+
+            if (error.message.includes("Duration") || error.message.includes("Reason")) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: "VALIDATION_ERROR",
+                            message: error.message,
+                        },
+                        meta: {
+                            requestId: crypto.randomUUID(),
+                            timestamp: new Date().toISOString(),
+                        },
+                    },
+                    { status: 422 }
+                );
+            }
+        }
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "INTERNAL_ERROR",
+                    message: "Failed to set rate limit bypass",
+                    details: error instanceof Error ? error.message : "Unknown error",
+                },
+                meta: {
+                    requestId: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 500 }
+        );
+    }
+}
+
+export async function POST(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
+    const params = await context.params;
+    return withRequestContextAndRateLimit(req, "write", (r) => handlePOST(r, { params }));
+}

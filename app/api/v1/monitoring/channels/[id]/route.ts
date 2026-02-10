@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Notification Channel Detail API
@@ -45,7 +44,7 @@ async function handleGET(
         const { id } = await params;
 
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
@@ -108,7 +107,7 @@ async function handlePUT(
         const { id } = await params;
 
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
@@ -200,7 +199,7 @@ async function handleDELETE(
         const { id } = await params;
 
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
@@ -258,13 +257,13 @@ async function handleDELETE(
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'read', (r) => handleGET(r, context));
+    return withRequestContextAndRateLimit(req, 'read', (r) => handleGET(r, context));
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'write', (r) => handlePUT(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handlePUT(r, context));
 }
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'write', (r) => handleDELETE(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handleDELETE(r, context));
 }

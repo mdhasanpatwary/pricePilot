@@ -9,11 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST handler - Test an alert rule
@@ -28,7 +27,7 @@ async function handlePOST(
         const { id } = params;
 
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -106,5 +105,5 @@ async function handlePOST(
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
     const params = await context.params;
-    return withRateLimit(req, 'write', (r) => handlePOST(r, { params }));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handlePOST(r, { params }));
 }

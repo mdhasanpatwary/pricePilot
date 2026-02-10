@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { z } from "zod";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { BulkApprovalService } from "@/lib/services/bulk-approval";
 import { ApprovalDelegationService } from "@/lib/services/approval-delegation";
 import { SyncService } from "@/lib/services/sync";
 import { prisma } from "@/lib/prisma";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST /api/v1/price-approvals/bulk
@@ -25,7 +24,7 @@ const bulkActionSchema = z.object({
 
 async function handlePOST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId || !session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -166,5 +165,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', () => handlePOST(req));
+    return withRequestContextAndRateLimit(req, 'write', () => handlePOST(req));
 }

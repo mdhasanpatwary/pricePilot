@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
   validateBody,
   validationErrorResponse,
@@ -11,13 +8,15 @@ import {
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { withErrorHandling } from "@/lib/error-api";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/rules
  * Fetch all pricing rules for the tenant
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,7 +37,7 @@ async function handleGET(_req: NextRequest) {
  * Create a new pricing rule
  */
 async function handlePOST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,7 +85,7 @@ async function handlePOST(req: NextRequest) {
  * Update an existing pricing rule
  */
 async function handlePUT(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -135,7 +134,7 @@ async function handlePUT(req: NextRequest) {
  * Delete a pricing rule
  */
 async function handleDELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -175,17 +174,17 @@ async function handleDELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", withErrorHandling(handleGET));
+  return withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET));
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handlePOST));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handlePOST));
 }
 
 export async function PUT(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handlePUT));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handlePUT));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handleDELETE));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handleDELETE));
 }

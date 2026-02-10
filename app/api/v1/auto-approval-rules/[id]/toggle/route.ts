@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * PATCH /api/v1/auto-approval-rules/:id/toggle
@@ -15,7 +14,7 @@ async function handlePATCH(
     { params }: { params: { id: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json(
                 {
@@ -91,5 +90,5 @@ export async function PATCH(
     context: { params: Promise<{ id: string }> }
 ) {
     const params = await context.params;
-    return withRateLimit(req, "write", () => handlePATCH(req, { params }));
+    return withRequestContextAndRateLimit(req, "write", () => handlePATCH(req, { params }));
 }

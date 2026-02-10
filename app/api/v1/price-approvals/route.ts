@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { paginate, getPaginationParams } from "@/lib/utils/pagination";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/price-approvals
@@ -12,7 +11,7 @@ import { paginate, getPaginationParams } from "@/lib/utils/pagination";
  */
 async function handleGET(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -67,7 +66,7 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', () => handleGET(req));
+    return withRequestContextAndRateLimit(req, 'read', () => handleGET(req));
 }
 
 /**
@@ -81,7 +80,7 @@ const actionSchema = z.object({
 
 async function handlePOST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId || !session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -221,5 +220,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', () => handlePOST(req));
+    return withRequestContextAndRateLimit(req, 'write', () => handlePOST(req));
 }

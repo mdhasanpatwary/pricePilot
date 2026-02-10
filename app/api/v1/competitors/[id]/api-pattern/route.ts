@@ -11,19 +11,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { withErrorHandling } from '@/lib/middleware/global-error-handler';
 import { UnauthorizedError, NotFoundError } from '@/lib/utils/error-handler';
 import { prisma } from '@/lib/prisma';
 import { apiCache } from '@/lib/services/api-detection/api-cache';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError('Authentication required to view API patterns');
@@ -111,7 +110,7 @@ async function handleDELETE(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError('Authentication required to invalidate API patterns');
@@ -160,7 +159,7 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRateLimit(
+    return withRequestContextAndRateLimit(
         req,
         'read',
         withErrorHandling((req) => handleGET(req, context))
@@ -171,7 +170,7 @@ export async function DELETE(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRateLimit(
+    return withRequestContextAndRateLimit(
         req,
         'write',
         withErrorHandling((req) => handleDELETE(req, context))

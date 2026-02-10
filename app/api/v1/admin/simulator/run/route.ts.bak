@@ -1,0 +1,95 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { proxySimulator } from '@/lib/services/proxy-simulator';
+import { simulationConfigSchema } from '@/lib/validation/schemas';
+import { logger } from '@/lib/logger';
+import { withRateLimit } from '@/lib/middleware/ratelimit';
+
+/**
+ * POST /api/v1/admin/simulator/run
+ * Run a proxy simulation with specified configuration
+ *
+ * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 8.1, 8.2
+ */
+async function handlePOST(request: NextRequest) {
+    try {
+        // Authentication check
+        const session = await getServerSession(authOptions);
+        if (!session?.user) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        // Check if user is super admin or regular admin
+        const user = session.user as any;
+        const isAdmin = user.role === 'ADMIN' || user.isSuperAdmin === true;
+
+        if (!isAdmin) {
+            return NextResponse.json(
+                { error: 'Unauthorized - Admin access required' },
+                { status: 401 }
+            );
+        }
+
+        // Parse and validate request body
+        const body = await request.json();
+        const validationResult = simulationConfigSchema.safeParse(body);
+
+        if (!validationResult.success) {
+            logger.warn('[Simulator API] Invalid configuration', {
+                errors: validationResult.error.issues,
+            });
+
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Invalid simulation configuration',
+                    details: validationResult.error.issues.map((err: any) => ({
+                        field: err.path.join('.'),
+                        message: err.message,
+                    })),
+                },
+                { status: 400 }
+            );
+        }
+
+        const config = validationResult.data;
+
+        logger.info('[Simulator API] Starting simulation', {
+            scenario: config.scenario,
+            requestCount: config.requestCount,
+            proxyCount: config.proxyPool.length,
+        });
+
+        // Run simulation
+        const result = await proxySimulator.runSimulation(config);
+
+        logger.info('[Simulator API] Simulation completed', {
+            simulationId: result.id,
+            successRate: (result.summary.successfulRequests / result.summary.totalRequests) * 100,
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: result,
+        });
+    } catch (error) {
+        logger.error('[Simulator API] Error running simulation:', error as Error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'Failed to run simulation',
+                details: error instanceof Error ? error.message : 'Unknown error',
+            },
+            { status: 500 }
+        );
+    }
+}
+
+export async function POST(req: NextRequest) {
+    return withRateLimit(req, 'write', () => handlePOST(req));
+}

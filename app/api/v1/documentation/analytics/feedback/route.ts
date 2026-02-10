@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyticsService } from '@/lib/documentation/analytics';
-import { getServerSession } from 'next-auth';
 import { rateLimitFeedback, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
 import { validateFeedback } from '@/lib/documentation/security';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     try {
         const body = await request.json();
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
         const { documentId, rating, comment } = validation.data;
 
         // Get user ID if authenticated (optional)
-        const session = await getServerSession();
+        const session = await getCachedSession();
         const userId = session?.user?.id;
 
         // Rate limit feedback (10 submissions/hour per user or IP)
@@ -69,4 +70,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(request: NextRequest) {
+    return withRequestContextAndRateLimit(request, 'write', handlePOST);
 }

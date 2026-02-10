@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { cacheAlertingService } from "@/lib/services/cache-alerting";
 import { logger } from "@/lib/logger";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/admin/cache/alerts
@@ -15,7 +14,7 @@ import { logger } from "@/lib/logger";
 export async function GET(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: "Unauthorized" },
@@ -69,7 +68,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(_request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: "Unauthorized" },

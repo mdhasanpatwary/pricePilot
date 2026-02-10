@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { UpdateExecutionService } from "@/lib/services/execution";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
   validateBody,
   validationErrorResponse,
   bulkPriceUpdateExecutionSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handlePOST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -66,5 +65,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

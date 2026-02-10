@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
   validateBody,
   validationErrorResponse,
   systemConfigSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 // Default configuration values
 const DEFAULT_CONFIGS = [
@@ -137,7 +136,7 @@ const DEFAULT_CONFIGS = [
 ];
 
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session || !session.user.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -174,7 +173,7 @@ async function handleGET(_req: NextRequest) {
 }
 
 async function handlePOST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session || !session.user.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -220,9 +219,9 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", handleGET);
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
     UpdateAutoApprovalRuleSchema,
     type UpdateAutoApprovalRuleInput,
 } from "@/lib/validation/auto-approval-rules";
 import { AutoApprovalService } from "@/lib/services/auto-approval";
 import { ValidationError } from "@/lib/utils/error-handler";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/auto-approval-rules/:id
@@ -21,7 +20,7 @@ async function handleGET(
     { params }: { params: { id: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json(
                 {
@@ -87,7 +86,7 @@ export async function GET(
     context: { params: Promise<{ id: string }> }
 ) {
     const params = await context.params;
-    return withRateLimit(req, "read", () => handleGET(req, { params }));
+    return withRequestContextAndRateLimit(req, "read", () => handleGET(req, { params }));
 }
 
 /**
@@ -101,7 +100,7 @@ async function handlePUT(
     { params }: { params: { id: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json(
                 {
@@ -246,7 +245,7 @@ export async function PUT(
     context: { params: Promise<{ id: string }> }
 ) {
     const params = await context.params;
-    return withRateLimit(req, "write", () => handlePUT(req, { params }));
+    return withRequestContextAndRateLimit(req, "write", () => handlePUT(req, { params }));
 }
 
 /**
@@ -260,7 +259,7 @@ async function handleDELETE(
     { params }: { params: { id: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json(
                 {
@@ -332,5 +331,5 @@ export async function DELETE(
     context: { params: Promise<{ id: string }> }
 ) {
     const params = await context.params;
-    return withRateLimit(req, "write", () => handleDELETE(req, { params }));
+    return withRequestContextAndRateLimit(req, "write", () => handleDELETE(req, { params }));
 }

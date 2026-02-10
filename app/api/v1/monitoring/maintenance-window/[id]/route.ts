@@ -9,11 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * DELETE handler - Delete a maintenance window
@@ -26,7 +25,7 @@ async function handleDELETE(
         const { id } = await params;
 
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -101,5 +100,5 @@ async function handleDELETE(
 }
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'write', (r) => handleDELETE(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handleDELETE(r, context));
 }

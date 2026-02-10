@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { getTenantStatus } from "@/lib/services/rate-limit-admin";
 import { logger } from "@/lib/logger";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/rate-limits/[tenantId]
@@ -72,7 +71,7 @@ async function handleGET(
 ) {
     try {
         // Check authentication and authorization
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session || !session.user) {
             return NextResponse.json(
@@ -185,5 +184,5 @@ async function handleGET(
 
 export async function GET(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
     const params = await context.params;
-    return withRateLimit(req, "read", (r) => handleGET(r, { params }));
+    return withRequestContextAndRateLimit(req, "read", (r) => handleGET(r, { params }));
 }

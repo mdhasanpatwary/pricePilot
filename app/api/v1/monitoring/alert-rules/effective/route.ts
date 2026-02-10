@@ -8,10 +8,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/monitoring/alert-rules/effective
@@ -20,7 +19,7 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(

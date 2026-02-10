@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import {
     validateBody,
@@ -10,6 +7,8 @@ import {
     updateScrapingConfigSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import {
     UnauthorizedError,
     NotFoundError,
@@ -26,7 +25,7 @@ async function handleGET(
     _req: NextRequest,
     { params }: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError("Authentication required to access scraping configuration");
@@ -113,7 +112,7 @@ async function handlePUT(
     req: NextRequest,
     { params }: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError("Authentication required to update scraping configuration");
@@ -277,12 +276,12 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    return withRateLimit(req, "read", withErrorHandling(() => handleGET(req, context)));
+    return withRequestContextAndRateLimit(req, "read", withErrorHandling(() => handleGET(req, context)));
 }
 
 export async function PUT(
     req: NextRequest,
     context: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    return withRateLimit(req, "write", withErrorHandling(() => handlePUT(req, context)));
+    return withRequestContextAndRateLimit(req, "write", withErrorHandling(() => handlePUT(req, context)));
 }

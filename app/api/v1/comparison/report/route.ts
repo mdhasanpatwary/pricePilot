@@ -6,16 +6,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
 import { ComparisonService } from "@/lib/services/comparison";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET(req: NextRequest) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError('Authentication required to access comparison report');
@@ -43,7 +42,7 @@ async function handleGET(req: NextRequest) {
 export async function GET(req: NextRequest) {
     // Apply caching with 5-minute TTL (300 seconds)
     const cachedHandler = withCache(
-        (req) => withRateLimit(req, "read", withErrorHandling(handleGET)),
+        (req) => withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET)),
         {
             ttl: 300, // 5 minutes
             keyPrefix: 'api:comparison:report',

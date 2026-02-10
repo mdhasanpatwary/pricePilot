@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { z } from "zod";
 import {
   validateBody,
@@ -12,12 +9,14 @@ import {
   uuidSchema,
 } from "@/lib/validation";
 import { CacheInvalidationService } from "@/lib/services/cache-invalidation";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -143,5 +142,5 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  return withRateLimit(req, "write", (r) => handlePOST(r, context));
+  return withRequestContextAndRateLimit(req, "write", (r) => handlePOST(r, context));
 }

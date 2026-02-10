@@ -9,9 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * DELETE /api/v1/scraping/alerts/:id
@@ -29,7 +28,7 @@ export async function DELETE(
         const { id: alertId } = await params;
 
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.id) {
             return NextResponse.json(
                 {

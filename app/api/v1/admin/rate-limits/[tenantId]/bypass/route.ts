@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { setBypass } from "@/lib/services/rate-limit-admin";
 import { logger } from "@/lib/logger";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST /api/v1/admin/rate-limits/[tenantId]/bypass
@@ -45,7 +44,7 @@ async function handlePOST(
 ) {
     try {
         // Check authentication and authorization
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session || !session.user) {
             return NextResponse.json(
@@ -253,5 +252,5 @@ async function handlePOST(
 
 export async function POST(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
     const params = await context.params;
-    return withRateLimit(req, "write", (r) => handlePOST(r, { params }));
+    return withRequestContextAndRateLimit(req, "write", (r) => handlePOST(r, { params }));
 }

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSyncQueue, getNotificationQueue } from "@/lib/queue/client";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 export const dynamic = 'force-dynamic';
 
 async function handleGET() {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -56,5 +55,5 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, 'read', handleGET);
+  return withRequestContextAndRateLimit(req, 'read', handleGET);
 }

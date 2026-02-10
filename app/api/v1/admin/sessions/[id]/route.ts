@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { sessionTracker } from '@/lib/services/session-tracker';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/sessions/[id]
@@ -16,7 +15,7 @@ async function handleGET(
 ) {
     try {
         // Authentication check
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
@@ -71,5 +70,5 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRateLimit(req, 'read', () => handleGET(req, context));
+    return withRequestContextAndRateLimit(req, 'read', () => handleGET(req, context));
 }

@@ -8,10 +8,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { LoggingService } from '@/lib/services/bot-protection/logging-service';
 import { ScreenshotStorage } from '@/lib/services/bot-protection/screenshot-storage';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 const loggingService = new LoggingService();
 const screenshotStorage = new ScreenshotStorage();
@@ -22,7 +21,7 @@ export async function GET(
 ) {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.id) {
             return NextResponse.json(
                 {

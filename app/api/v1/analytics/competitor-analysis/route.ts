@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/analytics/competitor-analysis
  * Cross-competitor comparison data grouped by category.
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -114,5 +113,5 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", handleGET);
 }

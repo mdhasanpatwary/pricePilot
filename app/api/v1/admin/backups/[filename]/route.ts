@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import fs from "fs";
 import path from "path";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 const BACKUP_DIR = path.join(process.cwd(), "backups");
 
@@ -14,7 +13,7 @@ async function handleGET(
   _req: NextRequest,
   { params }: { params: Promise<{ filename: string }> },
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -64,7 +63,7 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ filename: string }> },
 ) {
-  return withRateLimit(req, 'read', () => handleGET(req, context));
+  return withRequestContextAndRateLimit(req, 'read', () => handleGET(req, context));
 }
 
 /**
@@ -74,7 +73,7 @@ async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ filename: string }> },
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -121,5 +120,5 @@ export async function DELETE(
   req: NextRequest,
   context: { params: Promise<{ filename: string }> },
 ) {
-  return withRateLimit(req, 'write', () => handleDELETE(req, context));
+  return withRequestContextAndRateLimit(req, 'write', () => handleDELETE(req, context));
 }

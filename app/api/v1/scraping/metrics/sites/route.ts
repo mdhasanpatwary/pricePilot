@@ -8,14 +8,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { metricsCollector, TimeWindow } from '@/lib/services/bot-protection/metrics-collector';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 export async function GET(request: NextRequest) {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.id) {
             return NextResponse.json(
                 {

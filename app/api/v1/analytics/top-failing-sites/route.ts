@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { MetricsTracker } from "@/lib/services/metrics-tracker";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/analytics/top-failing-sites?limit=10&timeRange=24h
@@ -17,7 +16,7 @@ import { withRateLimit } from "@/lib/middleware/ratelimit";
 async function handleGET(request: NextRequest) {
     try {
         // Authentication check
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -87,5 +86,5 @@ async function handleGET(request: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', handleGET);
 }

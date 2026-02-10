@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import axios from "axios";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
@@ -48,5 +47,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, 'read', () => handleGET(req));
+  return withRequestContextAndRateLimit(req, 'read', () => handleGET(req));
 }

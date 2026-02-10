@@ -1,0 +1,100 @@
+import { NextRequest, NextResponse } from "next/server";
+import { promises as fs } from "fs";
+import path from "path";
+import {
+  validateBody,
+  validationErrorResponse,
+  scraperConfigSchema,
+} from "@/lib/validation";
+
+const CONFIG_FILE = path.join(process.cwd(), "scraper-config.json");
+
+interface ScraperConfig {
+  proxies: string[];
+  userAgents: string[];
+  delay: {
+    min: number;
+    max: number;
+  };
+  bypasses: {
+    headless: boolean;
+    useStealthPlugin: boolean;
+  };
+}
+
+const DEFAULT_CONFIG: ScraperConfig = {
+  proxies: [],
+  userAgents: [
+    // Chrome on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    // Chrome on Mac
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    // Firefox on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    // Firefox on Mac
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0",
+    // Safari on Mac
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    // Edge on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+  ],
+  delay: { min: 1000, max: 5000 },
+  bypasses: { headless: true, useStealthPlugin: true },
+};
+
+async function readConfig(): Promise<ScraperConfig> {
+  try {
+    const data = await fs.readFile(CONFIG_FILE, "utf-8");
+    return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+  } catch (error) {
+    return DEFAULT_CONFIG;
+  }
+}
+
+async function writeConfig(config: ScraperConfig) {
+  await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+async function handleGET(_req: NextRequest) {
+  const session = await getCachedSession();
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const config = await readConfig();
+  return NextResponse.json(config);
+}
+
+async function handlePOST(req: NextRequest) {
+  const session = await getCachedSession();
+  if (!session || !session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const validation = await validateBody(req, scraperConfigSchema);
+    if (!validation.success) {
+      return validationErrorResponse(validation);
+    }
+
+    const currentConfig = await readConfig();
+    const newConfig = { ...currentConfig, ...validation.data! };
+    await writeConfig(newConfig as ScraperConfig);
+    return NextResponse.json({ success: true, config: newConfig });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to save configuration" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function GET(req: NextRequest) {
+  return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
+}

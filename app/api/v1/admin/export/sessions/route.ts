@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { SessionRepository } from "@/lib/services/session-repository";
 import { ExportService, ExportFormat } from "@/lib/services/export-service";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/export/sessions
@@ -20,7 +19,7 @@ import { withRateLimit } from "@/lib/middleware/ratelimit";
  */
 async function handleGET(request: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -86,5 +85,5 @@ async function handleGET(request: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, "importExport", handleGET);
+    return withRequestContextAndRateLimit(req, "importExport", handleGET);
 }

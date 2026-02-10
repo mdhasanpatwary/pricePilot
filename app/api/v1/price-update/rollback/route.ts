@@ -8,13 +8,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { RollbackService } from "@/lib/services/rollback";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Request schema for rollback operations
@@ -35,7 +34,7 @@ const rollbackRequestSchema = z.object({
  * Retrieves rollback history for the authenticated tenant
  */
 async function handleGET(req: NextRequest) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session) {
         return NextResponse.json(
@@ -100,7 +99,7 @@ async function handleGET(req: NextRequest) {
  * Performs a rollback operation for either a single price change or bulk operation
  */
 async function handlePOST(req: NextRequest) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session) {
         return NextResponse.json(
@@ -319,9 +318,9 @@ async function handlePOST(req: NextRequest) {
  * Export rate-limited handlers
  */
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, "read", handleGET);
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, "write", handlePOST);
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

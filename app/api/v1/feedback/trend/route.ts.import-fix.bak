@@ -1,0 +1,41 @@
+/**
+ * API endpoint for retrieving satisfaction trend data
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { UserSatisfactionService } from '@/lib/services/user-satisfaction';
+
+export async function GET(req: NextRequest) {
+    try {
+        const session = await getCachedSession();
+
+        if (!session?.user) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        const { searchParams } = new URL(req.url);
+        const days = parseInt(searchParams.get('days') || '30');
+        const global = searchParams.get('global') === 'true' && session.user.isSuperAdmin;
+
+        const tenantId = global ? undefined : session.user.tenantId;
+
+        const trend = await UserSatisfactionService.getSatisfactionTrend(tenantId, days);
+
+        return NextResponse.json({
+            success: true,
+            data: trend,
+        });
+    } catch (error) {
+        console.error('Failed to get satisfaction trend:', error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'Failed to get satisfaction trend',
+            },
+            { status: 500 }
+        );
+    }
+}

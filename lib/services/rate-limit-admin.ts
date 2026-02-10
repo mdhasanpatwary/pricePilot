@@ -20,6 +20,8 @@ import {
   ENDPOINT_LIMITS
 } from "./rate-limit-config";
 import { getTenantMetrics, getRecentViolations } from "./rate-limit-metrics";
+import { getOrSetRequestCache, hasRequestContext } from "@/lib/cache/request-cache";
+import { getRateLimitRedisCache } from "./rate-limit-redis-cache";
 
 /**
  * Rate limit status for a single tenant
@@ -173,6 +175,10 @@ export async function setBypass(
       ipAddress,
     });
 
+    // Invalidate Redis cache
+    const redisCache = getRateLimitRedisCache();
+    await redisCache.invalidateBypass(tenantId);
+
     logger.info("[RateLimitAdmin] Bypass set successfully:", {
       tenantId,
       adminUserId,
@@ -300,6 +306,10 @@ export async function setCustomMultiplier(
       ipAddress,
     });
 
+    // Invalidate Redis cache
+    const redisCache = getRateLimitRedisCache();
+    await redisCache.invalidateMultiplier(tenantId);
+
     logger.info("[RateLimitAdmin] Custom multiplier set successfully:", {
       tenantId,
       adminUserId,
@@ -385,6 +395,10 @@ export async function removeCustomMultiplier(
       ipAddress,
     });
 
+    // Invalidate Redis cache
+    const redisCache = getRateLimitRedisCache();
+    await redisCache.invalidateMultiplier(tenantId);
+
     logger.info("[RateLimitAdmin] Custom multiplier removed successfully:", {
       tenantId,
       adminUserId,
@@ -403,7 +417,8 @@ export async function removeCustomMultiplier(
  * Check if a tenant has an active bypass
  *
  * This function checks if a tenant currently has an active rate limit bypass.
- * It automatically deactivates expired bypasses.
+ * It uses Redis caching to reduce database load and improve performance.
+ * Falls back to database query if Redis is unavailable.
  *
  * @param tenantId - The tenant to check
  * @returns True if the tenant has an active bypass, false otherwise
@@ -420,9 +435,18 @@ export async function removeCustomMultiplier(
  */
 export async function checkBypass(tenantId: string): Promise<boolean> {
   try {
+    // Try to get from Redis cache first
+    const redisCache = getRateLimitRedisCache();
+    const cachedBypass = await redisCache.getBypass(tenantId);
+
+    if (cachedBypass !== null) {
+      // Cache hit - return cached value
+      return cachedBypass;
+    }
+
+    // Cache miss - query database
     const now = new Date();
 
-    // Find active bypass
     const bypass = await prisma.rateLimitBypass.findFirst({
       where: {
         tenantId,
@@ -433,21 +457,12 @@ export async function checkBypass(tenantId: string): Promise<boolean> {
       },
     });
 
-    // Deactivate expired bypasses (cleanup)
-    await prisma.rateLimitBypass.updateMany({
-      where: {
-        tenantId,
-        isActive: true,
-        expiresAt: {
-          lte: now,
-        },
-      },
-      data: {
-        isActive: false,
-      },
-    });
+    const isActive = !!bypass;
 
-    return !!bypass;
+    // Cache the result in Redis
+    await redisCache.setBypass(tenantId, isActive, bypass?.expiresAt);
+
+    return isActive;
   } catch (error) {
     logger.error("[RateLimitAdmin] Failed to check bypass:", {
       error,
@@ -459,10 +474,42 @@ export async function checkBypass(tenantId: string): Promise<boolean> {
 }
 
 /**
+ * Check if a tenant has an active bypass (with request-scoped caching)
+ *
+ * Cached version of checkBypass that eliminates duplicate queries within
+ * the same request. Falls back to direct query if no request context exists.
+ *
+ * @param tenantId - The tenant to check
+ * @returns True if the tenant has an active bypass, false otherwise
+ *
+ * @example
+ * ```typescript
+ * const hasBypass = await checkBypassCached('tenant-123');
+ * if (hasBypass) {
+ *   // Skip rate limiting
+ * }
+ * ```
+ */
+export async function checkBypassCached(tenantId: string): Promise<boolean> {
+  const cacheKey = `bypass:${tenantId}`;
+
+  // Fallback to direct query if no request context
+  if (!hasRequestContext()) {
+    return checkBypass(tenantId);
+  }
+
+  // Use cached value or fetch and cache
+  return getOrSetRequestCache(cacheKey, async () => {
+    return await checkBypass(tenantId);
+  });
+}
+
+/**
  * Get custom multiplier for a tenant
  *
  * Retrieves the custom multiplier if one is set for the tenant.
- * Returns null if no custom multiplier exists.
+ * Uses Redis caching to reduce database load and improve performance.
+ * Falls back to database query if Redis is unavailable.
  *
  * @param tenantId - The tenant to get custom multiplier for
  * @returns The custom multiplier value, or null if not set
@@ -479,12 +526,27 @@ export async function getCustomMultiplier(
   tenantId: string
 ): Promise<number | null> {
   try {
+    // Try to get from Redis cache first
+    const redisCache = getRateLimitRedisCache();
+    const cachedMultiplier = await redisCache.getMultiplier(tenantId);
+
+    if (cachedMultiplier !== undefined) {
+      // Cache hit - return cached value (can be null)
+      return cachedMultiplier;
+    }
+
+    // Cache miss - query database
     const customMultiplier = await prisma.rateLimitCustomMultiplier.findUnique({
       where: { tenantId },
       select: { multiplier: true },
     });
 
-    return customMultiplier?.multiplier ?? null;
+    const multiplier = customMultiplier?.multiplier ?? null;
+
+    // Cache the result in Redis (including null values)
+    await redisCache.setMultiplier(tenantId, multiplier);
+
+    return multiplier;
   } catch (error) {
     logger.error("[RateLimitAdmin] Failed to get custom multiplier:", {
       error,
@@ -492,6 +554,37 @@ export async function getCustomMultiplier(
     });
     return null;
   }
+}
+
+/**
+ * Get custom multiplier for a tenant (with request-scoped caching)
+ *
+ * Cached version of getCustomMultiplier that eliminates duplicate queries
+ * within the same request. Falls back to direct query if no request context exists.
+ *
+ * @param tenantId - The tenant to get custom multiplier for
+ * @returns The custom multiplier value, or null if not set
+ *
+ * @example
+ * ```typescript
+ * const customMultiplier = await getCustomMultiplierCached('tenant-123');
+ * const effectiveMultiplier = customMultiplier ?? getPlanMultiplier(planType);
+ * ```
+ */
+export async function getCustomMultiplierCached(
+  tenantId: string
+): Promise<number | null> {
+  const cacheKey = `multiplier:${tenantId}`;
+
+  // Fallback to direct query if no request context
+  if (!hasRequestContext()) {
+    return getCustomMultiplier(tenantId);
+  }
+
+  // Use cached value or fetch and cache
+  return getOrSetRequestCache(cacheKey, async () => {
+    return await getCustomMultiplier(tenantId);
+  });
 }
 
 /**
@@ -731,6 +824,36 @@ export async function getTenantStatus(
 }
 
 /**
+ * Get Redis cache metrics for monitoring
+ *
+ * Returns cache hit/miss statistics for bypass and multiplier checks.
+ * Useful for monitoring cache effectiveness and performance.
+ *
+ * @returns Cache metrics including hit rates
+ *
+ * @example
+ * ```typescript
+ * const metrics = getCacheMetrics();
+ * console.log(`Bypass cache hit rate: ${metrics.bypassHitRate.toFixed(2)}%`);
+ * ```
+ */
+export function getCacheMetrics() {
+  const redisCache = getRateLimitRedisCache();
+  return redisCache.getMetrics();
+}
+
+/**
+ * Log current cache metrics
+ *
+ * Logs cache performance metrics for monitoring and debugging.
+ * Should be called periodically to track cache effectiveness.
+ */
+export function logCacheMetrics(): void {
+  const redisCache = getRateLimitRedisCache();
+  redisCache.logMetrics();
+}
+
+/**
  * Export all functions for use in other modules
  */
 export const RateLimitAdmin = {
@@ -738,7 +861,11 @@ export const RateLimitAdmin = {
   setCustomMultiplier,
   removeCustomMultiplier,
   checkBypass,
+  checkBypassCached,
   getCustomMultiplier,
+  getCustomMultiplierCached,
   getAllTenantsStatus,
   getTenantStatus,
+  getCacheMetrics,
+  logCacheMetrics,
 } as const;

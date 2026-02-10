@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { documentationService } from '@/lib/documentation/service';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { rateLimitTenantDocs, rateLimitAdminDocs, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/documentation/:type
@@ -32,7 +31,7 @@ export async function GET(
         // Rate limiting and authentication for admin docs
         let rateLimitResult;
         if (type === 'admin') {
-            const session = await getServerSession(authOptions);
+            const session = await getCachedSession();
             if (!session) {
                 return NextResponse.json(
                     {

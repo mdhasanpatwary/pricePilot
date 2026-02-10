@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/analytics/tech-intelligence
  * Provides tech-specific market intelligence: brand performance and specification-based trends.
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -83,27 +82,27 @@ async function handleGET(_req: NextRequest) {
 
     // 3. Aggregate Specification Insights (RAM / Storage)
     const extractSpec = (p: any, key: string) => {
-        const specs = p.specifications as any;
-        if (!specs) return null;
-        return specs[key];
+      const specs = p.specifications as any;
+      if (!specs) return null;
+      return specs[key];
     };
 
     const aggregateBySpec = (matches: any[], specKey: string) => {
-        const variations = Array.from(new Set(matches.map(m => extractSpec(m.userProduct, specKey)).filter(Boolean)));
-        return variations.map(v => {
-            const varMatches = matches.filter(m => extractSpec(m.userProduct, specKey) === v);
-            const total = varMatches.length;
-            const avgPrice = varMatches.reduce((sum, m) => sum + parseFloat(m.userProduct.currentPrice.toString()), 0) / total;
-            const competitorAvg = varMatches.reduce((sum, m) => sum + parseFloat(m.competitorProduct.currentPrice.toString()), 0) / total;
+      const variations = Array.from(new Set(matches.map(m => extractSpec(m.userProduct, specKey)).filter(Boolean)));
+      return variations.map(v => {
+        const varMatches = matches.filter(m => extractSpec(m.userProduct, specKey) === v);
+        const total = varMatches.length;
+        const avgPrice = varMatches.reduce((sum, m) => sum + parseFloat(m.userProduct.currentPrice.toString()), 0) / total;
+        const competitorAvg = varMatches.reduce((sum, m) => sum + parseFloat(m.competitorProduct.currentPrice.toString()), 0) / total;
 
-            return {
-                value: v,
-                total,
-                avgPrice: Math.round(avgPrice),
-                competitorAvg: Math.round(competitorAvg),
-                gap: Math.round(competitorAvg - avgPrice)
-            };
-        }).sort((a, b) => b.total - a.total);
+        return {
+          value: v,
+          total,
+          avgPrice: Math.round(avgPrice),
+          competitorAvg: Math.round(competitorAvg),
+          gap: Math.round(competitorAvg - avgPrice)
+        };
+      }).sort((a, b) => b.total - a.total);
     };
 
     const ramInsights = aggregateBySpec(matches, 'ram');
@@ -126,5 +125,5 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", handleGET);
 }

@@ -5,17 +5,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { GDPRService } from '@/lib/services/gdpr-service';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * Request account deletion
  */
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user?.id) {
             return NextResponse.json(
@@ -65,7 +64,7 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(_req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user?.id) {
             return NextResponse.json(

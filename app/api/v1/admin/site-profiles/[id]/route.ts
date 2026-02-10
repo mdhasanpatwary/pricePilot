@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * DELETE /api/v1/admin/site-profiles/:id
@@ -18,7 +17,7 @@ async function handleDELETE(
 ) {
     try {
         // Authenticate and verify admin role
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -91,5 +90,5 @@ export async function DELETE(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRateLimit(req, 'write', () => handleDELETE(req, context));
+    return withRequestContextAndRateLimit(req, 'write', () => handleDELETE(req, context));
 }

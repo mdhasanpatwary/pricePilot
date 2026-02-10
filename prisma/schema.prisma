@@ -731,6 +731,7 @@ model Product {
   @@index([sku])
   @@index([tenantId, brand])
   @@index([tenantId])
+  @@index([siteId])
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
 }
 
@@ -1204,6 +1205,8 @@ model SyncLog {
   level     String   @default("INFO")
   createdAt DateTime @default(now())
   Site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt(sort: Desc)])
 }
 
 model SystemAlert {

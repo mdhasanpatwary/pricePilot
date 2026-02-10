@@ -54,10 +54,15 @@ export class BrowserPool {
      * @param config - Pool configuration
      */
     constructor(config?: Partial<BrowserPoolConfig>) {
+        // Use environment variables with fallbacks
+        const maxConcurrent = parseInt(process.env.BROWSER_POOL_MAX_CONCURRENT || '5', 10);
+        const maxRequests = parseInt(process.env.BROWSER_POOL_MAX_REQUESTS || '100', 10);
+        const idleTimeout = parseInt(process.env.BROWSER_POOL_IDLE_TIMEOUT || '300000', 10);
+
         this.config = {
-            maxConcurrent: config?.maxConcurrent ?? 5,
-            maxRequestsPerBrowser: config?.maxRequestsPerBrowser ?? 100,
-            idleTimeout: config?.idleTimeout ?? 300000, // 5 minutes
+            maxConcurrent: config?.maxConcurrent ?? maxConcurrent,
+            maxRequestsPerBrowser: config?.maxRequestsPerBrowser ?? maxRequests,
+            idleTimeout: config?.idleTimeout ?? idleTimeout,
         };
 
         // Start cleanup interval

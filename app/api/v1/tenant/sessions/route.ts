@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { withErrorHandling } from "@/lib/error-api";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/tenant/sessions
  * Returns all active sessions for the logged-in user
  */
 async function getSessions() {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,7 +44,7 @@ async function getSessions() {
  * Revokes a specific session
  */
 async function revokeSession(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -84,9 +83,9 @@ async function revokeSession(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "api", withErrorHandling(getSessions));
+  return withRequestContextAndRateLimit(req, "api", withErrorHandling(getSessions));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "api", withErrorHandling(revokeSession));
+  return withRequestContextAndRateLimit(req, "api", withErrorHandling(revokeSession));
 }

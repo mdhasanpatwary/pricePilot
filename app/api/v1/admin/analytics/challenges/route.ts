@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/analytics/challenges
@@ -18,7 +17,7 @@ import { withRateLimit } from '@/lib/middleware/ratelimit';
 async function handleGET(request: NextRequest) {
     try {
         // Authentication check
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
@@ -215,5 +214,5 @@ async function handleGET(request: NextRequest) {
 
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', handleGET);
 }

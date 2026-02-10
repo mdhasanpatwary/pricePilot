@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { metricsAggregator } from '@/lib/services/metrics-aggregator';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/metrics/dashboard
@@ -13,7 +12,7 @@ import { withRateLimit } from '@/lib/middleware/ratelimit';
 async function handleGET(_request: NextRequest) {
     try {
         // Authentication check
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
@@ -53,5 +52,5 @@ async function handleGET(_request: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', () => handleGET(req));
+    return withRequestContextAndRateLimit(req, 'read', () => handleGET(req));
 }

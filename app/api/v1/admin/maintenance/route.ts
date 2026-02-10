@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { MaintenanceService } from "@/lib/services/maintenance";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handlePOST(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session || !session.user.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,5 +28,5 @@ async function handlePOST(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

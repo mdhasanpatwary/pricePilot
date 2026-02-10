@@ -6,11 +6,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { optimizedPrisma } from '@/lib/database/optimized-prisma';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 const archiveManager = new ArchiveManager(optimizedPrisma);
 
@@ -30,7 +29,7 @@ const archiveManager = new ArchiveManager(optimizedPrisma);
 export async function GET(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },

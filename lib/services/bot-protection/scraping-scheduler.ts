@@ -41,9 +41,9 @@ export interface SchedulerConfig {
 }
 
 const DEFAULT_CONFIG: SchedulerConfig = {
-    maxConcurrentScrapesPerTenant: 5,
-    minDelayPerSite: 2000, // 2 seconds
-    maxBatchSize: 100,
+    maxConcurrentScrapesPerTenant: parseInt(process.env.SCRAPING_MAX_CONCURRENT_PER_TENANT || '5', 10),
+    minDelayPerSite: parseInt(process.env.SCRAPING_MIN_DELAY_PER_SITE || '2000', 10),
+    maxBatchSize: parseInt(process.env.SCRAPING_BATCH_SIZE || '100', 10),
     prioritizeStale: true,
     stalenessThresholdHours: 24,
 };

@@ -9,13 +9,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { notificationRouter } from '@/lib/services/monitoring/notification-router';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import type { TriggeredAlert } from '@/lib/services/monitoring/alert-rules-evaluator';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Request body schema
@@ -37,7 +36,7 @@ const testAlertSchema = z.object({
 async function handlePOST(req: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -166,5 +165,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', handlePOST);
+    return withRequestContextAndRateLimit(req, 'write', handlePOST);
 }

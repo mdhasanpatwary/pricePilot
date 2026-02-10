@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { priceUpdateMonitor } from "@/lib/services/price-update-monitor";
 import { logger } from "@/lib/logger";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * Get Price Update Statistics
@@ -39,7 +38,7 @@ import { logger } from "@/lib/logger";
  */
 export async function GET(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(

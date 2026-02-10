@@ -7,10 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { ProxyManager } from '@/lib/services/bot-protection/proxy-manager';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/scraping/proxies/:id/health
@@ -29,7 +28,7 @@ export async function GET(
 ) {
     let proxyId: string | undefined;
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },

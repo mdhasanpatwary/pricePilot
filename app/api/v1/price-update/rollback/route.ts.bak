@@ -1,0 +1,327 @@
+/**
+ * Rollback API Endpoint
+ * 
+ * POST /api/v1/price-update/rollback
+ * 
+ * Handles rollback operations for price changes and bulk operations.
+ * Supports both single price change rollback and bulk operation rollback.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { RollbackService } from "@/lib/services/rollback";
+import { recordAuditLog, getIpAddress } from "@/lib/audit";
+import { logger } from "@/lib/logger";
+import { z } from "zod";
+
+/**
+ * Request schema for rollback operations
+ */
+const rollbackRequestSchema = z.object({
+    updateLogId: z.string().uuid().optional(),
+    snapshotId: z.string().uuid().optional(),
+}).refine(
+    (data) => data.updateLogId || data.snapshotId,
+    {
+        message: "Either updateLogId or snapshotId must be provided",
+    }
+);
+
+/**
+ * GET /api/v1/price-update/rollback/history
+ * 
+ * Retrieves rollback history for the authenticated tenant
+ */
+async function handleGET(req: NextRequest) {
+    const session = await getServerSession(authOptions);
+
+    if (!session) {
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 401 }
+        );
+    }
+
+    try {
+        const { searchParams } = new URL(req.url);
+        const limit = parseInt(searchParams.get("limit") || "50");
+
+        const history = await RollbackService.getRollbackHistory(
+            session.user.tenantId,
+            limit
+        );
+
+        return NextResponse.json({
+            success: true,
+            data: {
+                history,
+                count: history.length,
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+            },
+        });
+    } catch (error) {
+        logger.error("[RollbackAPI] Failed to get rollback history", {
+            error,
+            tenantId: session.user.tenantId,
+        });
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "ROLLBACK_HISTORY_ERROR",
+                    message: "Failed to retrieve rollback history",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * POST /api/v1/price-update/rollback
+ * 
+ * Performs a rollback operation for either a single price change or bulk operation
+ */
+async function handlePOST(req: NextRequest) {
+    const session = await getServerSession(authOptions);
+
+    if (!session) {
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 401 }
+        );
+    }
+
+    try {
+        // Parse and validate request body
+        const body = await req.json();
+        const validation = rollbackRequestSchema.safeParse(body);
+
+        if (!validation.success) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: "VALIDATION_ERROR",
+                        message: "Invalid request data",
+                        details: {
+                            fields: validation.error.flatten().fieldErrors,
+                        },
+                    },
+                    meta: {
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: 422 }
+            );
+        }
+
+        const { updateLogId, snapshotId } = validation.data;
+
+        // Perform rollback based on type
+        if (updateLogId) {
+            // Check if rollback is possible
+            const { canRollback, reason } = await RollbackService.canRollback(updateLogId);
+
+            if (!canRollback) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: "ROLLBACK_NOT_ALLOWED",
+                            message: reason || "Cannot rollback this price change",
+                        },
+                        meta: {
+                            timestamp: new Date().toISOString(),
+                        },
+                    },
+                    { status: 400 }
+                );
+            }
+
+            // Perform single price change rollback
+            await RollbackService.rollbackPriceChange(updateLogId, session.user.id);
+
+            // Record audit log
+            await recordAuditLog({
+                tenantId: session.user.tenantId,
+                userId: session.user.id,
+                userEmail: session.user.email!,
+                action: "ROLLBACK_PRICE",
+                entityId: updateLogId,
+                ipAddress: getIpAddress(req),
+                details: {
+                    type: "single",
+                    entityType: "PRICE_UPDATE",
+                    updateLogId,
+                },
+            });
+
+            logger.info("[RollbackAPI] Single price change rolled back successfully", {
+                updateLogId,
+                userId: session.user.id,
+                tenantId: session.user.tenantId,
+            });
+
+            return NextResponse.json({
+                success: true,
+                data: {
+                    type: "single",
+                    updateLogId,
+                    message: "Price change rolled back successfully",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            });
+        } else if (snapshotId) {
+            // Check if rollback is possible
+            const { canRollback, reason } = await RollbackService.canRollbackBulkOperation(snapshotId);
+
+            if (!canRollback) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: "ROLLBACK_NOT_ALLOWED",
+                            message: reason || "Cannot rollback this bulk operation",
+                        },
+                        meta: {
+                            timestamp: new Date().toISOString(),
+                        },
+                    },
+                    { status: 400 }
+                );
+            }
+
+            // Perform bulk operation rollback
+            await RollbackService.rollbackBulkOperation(snapshotId, session.user.id);
+
+            // Record audit log
+            await recordAuditLog({
+                tenantId: session.user.tenantId,
+                userId: session.user.id,
+                userEmail: session.user.email!,
+                action: "ROLLBACK_BULK_OPERATION",
+                entityId: snapshotId,
+                ipAddress: getIpAddress(req),
+                details: {
+                    type: "bulk",
+                    entityType: "BULK_OPERATION",
+                    snapshotId,
+                },
+            });
+
+            logger.info("[RollbackAPI] Bulk operation rolled back successfully", {
+                snapshotId,
+                userId: session.user.id,
+                tenantId: session.user.tenantId,
+            });
+
+            return NextResponse.json({
+                success: true,
+                data: {
+                    type: "bulk",
+                    snapshotId,
+                    message: "Bulk operation rolled back successfully",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            });
+        }
+
+        // This should never happen due to schema validation, but just in case
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "INVALID_REQUEST",
+                    message: "Either updateLogId or snapshotId must be provided",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 400 }
+        );
+    } catch (error) {
+        logger.error("[RollbackAPI] Rollback operation failed", {
+            error,
+            userId: session.user.id,
+            tenantId: session.user.tenantId,
+        });
+
+        // Handle specific error types
+        if (error instanceof Error) {
+            const statusCode = (error as any).statusCode || 500;
+            const errorCode = (error as any).errorCode || "ROLLBACK_ERROR";
+            const userMessage = (error as any).userMessage || error.message;
+
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: errorCode,
+                        message: userMessage,
+                    },
+                    meta: {
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+                { status: statusCode }
+            );
+        }
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: "ROLLBACK_ERROR",
+                    message: "Failed to perform rollback operation",
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * Export rate-limited handlers
+ */
+export async function GET(req: NextRequest) {
+    return withRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+    return withRateLimit(req, "write", handlePOST);
+}

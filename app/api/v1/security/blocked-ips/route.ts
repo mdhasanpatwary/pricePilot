@@ -5,10 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { incidentPreventionService } from '@/lib/services/security/incident-prevention';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 const blockIPSchema = z.object({
     ipAddress: z.string().regex(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^(?:[A-F0-9]{1,4}:){7}[A-F0-9]{1,4}$/i, 'Invalid IP address'),
@@ -28,7 +27,7 @@ const unblockIPSchema = z.object({
  */
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session || session.user.role !== 'ADMIN') {
             return NextResponse.json(
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session || session.user.role !== 'ADMIN') {
             return NextResponse.json(

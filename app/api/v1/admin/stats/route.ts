@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/admin/stats
  * Fetch platform-wide statistics for the Super Admin
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session || !session.user.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,5 +67,5 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", handleGET);
 }

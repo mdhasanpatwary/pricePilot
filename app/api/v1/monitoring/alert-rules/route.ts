@@ -10,12 +10,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Validation schema for alert rule creation
@@ -45,7 +44,7 @@ const createAlertRuleSchema = z.object({
 async function handleGET(req: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -125,7 +124,7 @@ async function handleGET(req: NextRequest) {
 async function handlePOST(req: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -214,9 +213,9 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', (r) => handleGET(r));
+    return withRequestContextAndRateLimit(req, 'read', (r) => handleGET(r));
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', (r) => handlePOST(r));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handlePOST(r));
 }

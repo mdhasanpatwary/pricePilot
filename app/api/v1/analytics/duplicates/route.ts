@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 import { compareTwoStrings } from "string-similarity";
 import {
   validateBody,
@@ -16,7 +15,7 @@ import {
  * based on high title similarity, SKU, or Brand/Model combo.
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -108,7 +107,7 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", handleGET);
 }
 
 /**
@@ -118,7 +117,7 @@ export async function GET(req: NextRequest) {
  * duplicateIds: Array of product IDs to REMOVE and move their data to anchor.
  */
 async function handlePOST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -165,5 +164,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", handlePOST);
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

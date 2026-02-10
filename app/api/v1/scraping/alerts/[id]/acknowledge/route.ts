@@ -9,10 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { alertService } from '@/lib/services/bot-protection/alert-service';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * POST /api/v1/scraping/alerts/:id/acknowledge
@@ -30,7 +29,7 @@ export async function POST(
         const { id: alertId } = await params;
 
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.id) {
             return NextResponse.json(
                 {

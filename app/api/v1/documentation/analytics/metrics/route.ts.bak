@@ -1,0 +1,120 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { analyticsService } from '@/lib/documentation/analytics';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+
+/**
+ * GET /api/v1/documentation/analytics/metrics
+ * Get analytics metrics (admin only)
+ */
+export async function GET(request: NextRequest) {
+    try {
+        // Check authentication
+        const session = await getServerSession(authOptions);
+        if (!session) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'Authentication required',
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        if (session.user.role !== 'admin') {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'FORBIDDEN',
+                        message: 'Admin access required',
+                    },
+                },
+                { status: 403 }
+            );
+        }
+
+        // Get query parameters
+        const searchParams = request.nextUrl.searchParams;
+        const type = searchParams.get('type') || 'tenant';
+        const metricType = searchParams.get('metric') || 'all';
+        const days = parseInt(searchParams.get('days') || '30');
+
+        // Validate type
+        if (type !== 'tenant' && type !== 'admin') {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_TYPE',
+                        message: 'Type must be tenant or admin',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Calculate time range
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - days);
+        const timeRange = { start, end };
+
+        // Fetch metrics based on type
+        const metrics: any = {};
+
+        if (metricType === 'all' || metricType === 'popular') {
+            metrics.popularPages = await analyticsService.getPopularPages(type, timeRange);
+        }
+
+        if (metricType === 'all' || metricType === 'search') {
+            metrics.searchMetrics = await analyticsService.getSearchMetrics(type, timeRange);
+        }
+
+        if (metricType === 'all' || metricType === 'bounce') {
+            metrics.bounceRates = await analyticsService.getBounceRates(type, timeRange);
+        }
+
+        // Get feedback summary for specific document if provided
+        const documentId = searchParams.get('documentId');
+        if (documentId) {
+            metrics.feedbackSummary = await analyticsService.getFeedbackSummary(documentId);
+        }
+
+        return NextResponse.json({
+            success: true,
+            data: {
+                metrics,
+                timeRange: {
+                    start: start.toISOString(),
+                    end: end.toISOString(),
+                    days,
+                },
+                type,
+            },
+            meta: {
+                requestId: crypto.randomUUID(),
+                timestamp: new Date().toISOString(),
+            },
+        });
+    } catch (error) {
+        console.error('Error fetching metrics:', error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to fetch metrics',
+                },
+                meta: {
+                    requestId: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 500 }
+        );
+    }
+}

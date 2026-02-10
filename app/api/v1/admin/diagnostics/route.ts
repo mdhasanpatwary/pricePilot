@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SystemHealthService } from "@/lib/services/system-health";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRedisConnection } from "@/lib/queue/connection";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST /api/v1/admin/diagnostics
@@ -14,7 +13,7 @@ import { withRateLimit } from "@/lib/middleware/ratelimit";
  */
 async function handlePOST() {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -46,7 +45,7 @@ async function handlePOST() {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, 'write', handlePOST);
+  return withRequestContextAndRateLimit(req, 'write', handlePOST);
 }
 
 async function runDiagnostics() {
@@ -122,9 +121,9 @@ async function runDatabaseDiagnostics() {
   // Test 3: Table accessibility
   try {
     await Promise.all([
-      prisma.tenant.findFirst(),
-      prisma.user.findFirst(),
-      prisma.scrapingSession.findFirst(),
+      prisma.tenant.findMany({ take: 1 }),
+      prisma.user.findMany({ take: 1 }),
+      prisma.scrapingSession.findMany({ take: 1 }),
     ]);
     tests.push({
       name: "Table Accessibility",

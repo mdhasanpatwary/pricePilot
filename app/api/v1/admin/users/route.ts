@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 import { withErrorHandling } from "@/lib/error-api";
 import {
   validateBody,
@@ -17,7 +16,7 @@ import bcrypt from "bcryptjs";
  * Fetch all users across all tenants
  */
 async function handleGET(_req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -73,7 +72,7 @@ async function handleGET(_req: NextRequest) {
  * Update user details or role
  */
 async function handlePATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -122,7 +121,7 @@ async function handlePATCH(req: NextRequest) {
  * Delete a user
  */
 async function handleDELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -168,13 +167,13 @@ async function handleDELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", withErrorHandling(handleGET));
+  return withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET));
 }
 
 export async function PATCH(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handlePATCH));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handlePATCH));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handleDELETE));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handleDELETE));
 }

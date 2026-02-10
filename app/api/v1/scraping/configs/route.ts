@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/scraping/configs
@@ -14,7 +13,7 @@ import { UnauthorizedError } from "@/lib/utils/error-handler";
  * Requirements: 15.1
  */
 async function handleGET() {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError("Authentication required to access scraping configurations");
@@ -69,5 +68,5 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, "read", withErrorHandling(handleGET));
+    return withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET));
 }

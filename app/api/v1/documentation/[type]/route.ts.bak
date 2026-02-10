@@ -1,0 +1,120 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { documentationService } from '@/lib/documentation/service';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { rateLimitTenantDocs, rateLimitAdminDocs, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
+
+/**
+ * GET /api/v1/documentation/:type
+ * List documents by type with optional filtering
+ */
+export async function GET(
+    request: NextRequest,
+    { params }: { params: Promise<{ type: string }> }
+) {
+    try {
+        const { type } = await params;
+
+        // Validate type
+        if (type !== 'tenant' && type !== 'admin') {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_TYPE',
+                        message: 'Type must be tenant or admin',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Rate limiting and authentication for admin docs
+        let rateLimitResult;
+        if (type === 'admin') {
+            const session = await getServerSession(authOptions);
+            if (!session) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: 'UNAUTHORIZED',
+                            message: 'Authentication required for admin documentation',
+                        },
+                    },
+                    { status: 401 }
+                );
+            }
+
+            if (session.user.role !== 'admin') {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: 'FORBIDDEN',
+                            message: 'Admin access required',
+                        },
+                    },
+                    { status: 403 }
+                );
+            }
+
+            // Rate limit admin docs (1000 req/hour per user)
+            const rateLimitCheck = await rateLimitAdminDocs(request, session.user.id);
+            if ('status' in rateLimitCheck) {
+                return rateLimitCheck;
+            }
+            rateLimitResult = rateLimitCheck.result;
+        } else {
+            // Rate limit tenant docs (100 req/minute per IP)
+            const rateLimitCheck = await rateLimitTenantDocs(request);
+            if ('status' in rateLimitCheck) {
+                return rateLimitCheck;
+            }
+            rateLimitResult = rateLimitCheck.result;
+        }
+
+        // Get query parameters
+        const searchParams = request.nextUrl.searchParams;
+        const category = searchParams.get('category') || undefined;
+
+        // List documents
+        const documents = await documentationService.listDocuments(type, category);
+
+        const response = NextResponse.json({
+            success: true,
+            data: {
+                documents,
+                total: documents.length,
+            },
+            meta: {
+                requestId: crypto.randomUUID(),
+                timestamp: new Date().toISOString(),
+            },
+        });
+
+        // Add rate limit headers
+        return addRateLimitHeaders(
+            response,
+            rateLimitResult.limit,
+            rateLimitResult.remaining,
+            rateLimitResult.reset
+        );
+    } catch (error) {
+        console.error('Error listing documents:', error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to list documents',
+                },
+                meta: {
+                    requestId: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 500 }
+        );
+    }
+}

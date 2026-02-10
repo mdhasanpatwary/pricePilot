@@ -1,0 +1,184 @@
+/**
+ * GET /api/v1/scraping/detections
+ * 
+ * Query bot protection detection logs with filtering and pagination.
+ * Supports filtering by protection type, confidence level, competitor site, and date range.
+ * 
+ * Requirements: 8.7
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { LoggingService } from '@/lib/services/bot-protection/logging-service';
+
+const loggingService = new LoggingService();
+
+export async function GET(request: NextRequest) {
+    try {
+        // Authenticate user
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'Authentication required',
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        const tenantId = session.user.tenantId;
+        if (!tenantId) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'FORBIDDEN',
+                        message: 'Tenant context required',
+                    },
+                },
+                { status: 403 }
+            );
+        }
+
+        // Parse query parameters
+        const searchParams = request.nextUrl.searchParams;
+
+        const competitorWebsiteId = searchParams.get('competitorWebsiteId') || undefined;
+        const protectionType = searchParams.get('protectionType') || undefined;
+
+        // Parse confidence parameter
+        const minConfidenceParam = searchParams.get('minConfidence');
+        const minConfidence = minConfidenceParam ? parseFloat(minConfidenceParam) : undefined;
+
+        // Validate confidence
+        if (minConfidence !== undefined && (isNaN(minConfidence) || minConfidence < 0 || minConfidence > 100)) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_CONFIDENCE',
+                        message: 'minConfidence must be between 0 and 100',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Parse date parameters
+        const startDateParam = searchParams.get('startDate');
+        const startDate = startDateParam ? new Date(startDateParam) : undefined;
+
+        const endDateParam = searchParams.get('endDate');
+        const endDate = endDateParam ? new Date(endDateParam) : undefined;
+
+        // Validate dates
+        if (startDate && isNaN(startDate.getTime())) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_DATE',
+                        message: 'Invalid startDate format. Use ISO 8601 format.',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        if (endDate && isNaN(endDate.getTime())) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_DATE',
+                        message: 'Invalid endDate format. Use ISO 8601 format.',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Parse pagination parameters
+        const limitParam = searchParams.get('limit');
+        const limit = limitParam ? parseInt(limitParam, 10) : 100;
+
+        const offsetParam = searchParams.get('offset');
+        const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+
+        // Validate pagination
+        if (isNaN(limit) || limit < 1 || limit > 1000) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_LIMIT',
+                        message: 'Limit must be between 1 and 1000',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        if (isNaN(offset) || offset < 0) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_OFFSET',
+                        message: 'Offset must be non-negative',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Query detections
+        const detections = await loggingService.queryDetections({
+            tenantId,
+            competitorWebsiteId,
+            protectionType,
+            minConfidence,
+            startDate,
+            endDate,
+            limit,
+            offset,
+        });
+
+        return NextResponse.json(
+            {
+                success: true,
+                data: {
+                    detections,
+                    pagination: {
+                        limit,
+                        offset,
+                        count: detections.length,
+                    },
+                },
+                meta: {
+                    requestId: crypto.randomUUID(),
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            { status: 200 }
+        );
+    } catch (error) {
+        console.error('Failed to query detections:', error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to query detections',
+                    details: error instanceof Error ? error.message : 'Unknown error',
+                },
+            },
+            { status: 500 }
+        );
+    }
+}

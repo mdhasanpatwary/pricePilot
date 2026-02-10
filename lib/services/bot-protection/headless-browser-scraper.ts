@@ -1,6 +1,6 @@
 /**
  * Headless Browser Scraper Implementation
- * 
+ *
  * Provides JavaScript-enabled web scraping using Playwright with stealth plugins.
  * Supports browser automation, screenshot capture, and advanced bot protection evasion.
  */
@@ -94,7 +94,7 @@ export interface BrowserScrapeResponse {
 
 /**
  * Headless Browser Scraper class
- * 
+ *
  * Executes JavaScript-enabled scraping using Playwright with stealth configuration
  * to avoid bot detection. Supports screenshot capture and network monitoring.
  * Uses browser pool for efficient resource management.
@@ -107,21 +107,18 @@ export class HeadlessBrowserScraper {
 
     /**
      * Create a new HeadlessBrowserScraper
-     * 
+     *
      * @param usePool - Whether to use browser pool (default: true)
      */
     constructor(usePool: boolean = true) {
         this.usePool = usePool;
-        this.browserPool = new BrowserPool({
-            maxConcurrent: 5,
-            maxRequestsPerBrowser: 100,
-            idleTimeout: 300000, // 5 minutes
-        });
+        // Use default configuration which reads from environment variables
+        this.browserPool = new BrowserPool();
     }
 
     /**
      * Execute a browser scrape request
-     * 
+     *
      * @param config - Browser scrape configuration
      * @returns Promise resolving to browser scrape response
      * @throws Error if request fails
@@ -226,11 +223,14 @@ export class HeadlessBrowserScraper {
                 headers[key] = value;
             }
 
-            // Capture screenshot
-            const screenshot = await page.screenshot({
-                type: 'png',
-                fullPage: false,
-            });
+            // Capture screenshot (conditional based on environment)
+            let screenshot: Buffer | undefined;
+            if (process.env.SCRAPING_ENABLE_SCREENSHOTS !== 'false') {
+                screenshot = await page.screenshot({
+                    type: 'png',
+                    fullPage: false,
+                });
+            }
 
             const responseTime = Date.now() - startTime;
 
@@ -284,7 +284,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Capture screenshot of a URL
-     * 
+     *
      * @param url - URL to capture
      * @returns Promise resolving to screenshot buffer
      * @throws Error if capture fails
@@ -322,11 +322,17 @@ export class HeadlessBrowserScraper {
                 waitUntil: 'domcontentloaded',
             });
 
-            // Capture screenshot
-            const screenshot = await page.screenshot({
-                type: 'png',
-                fullPage: true,
-            });
+            // Capture screenshot (conditional based on environment)
+            let screenshot: Buffer;
+            if (process.env.SCRAPING_ENABLE_SCREENSHOTS !== 'false') {
+                screenshot = await page.screenshot({
+                    type: 'png',
+                    fullPage: true,
+                });
+            } else {
+                // Return empty buffer if screenshots disabled
+                screenshot = Buffer.from([]);
+            }
 
             // Close page
             await page.close();
@@ -348,11 +354,11 @@ export class HeadlessBrowserScraper {
 
     /**
      * Launch browser with configuration
-     * 
+     *
      * @param config - Browser scrape configuration
      */
     private async launchBrowser(config: BrowserScrapeConfig): Promise<void> {
-        // Build launch options
+        // Build launch options with CPU/Memory optimizations
         const launchOptions: any = {
             headless: true,
             args: [
@@ -362,6 +368,27 @@ export class HeadlessBrowserScraper {
                 '--disable-accelerated-2d-canvas',
                 '--disable-gpu',
                 '--disable-blink-features=AutomationControlled',
+
+                // CPU and Memory optimizations
+                '--disable-background-networking',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-breakpad',
+                '--disable-component-extensions-with-background-pages',
+                '--disable-extensions',
+                '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+                '--disable-ipc-flooding-protection',
+                '--disable-renderer-backgrounding',
+                '--disable-sync',
+                '--metrics-recording-only',
+                '--mute-audio',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-default-apps',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-domain-reliability',
+                '--disable-features=AudioServiceOutOfProcess',
             ],
         };
 
@@ -407,7 +434,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Apply stealth configuration to browser context
-     * 
+     *
      * @param context - Browser context
      */
     private async applyStealthConfiguration(context: BrowserContext): Promise<void> {
@@ -475,7 +502,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Randomize viewport dimensions for stealth
-     * 
+     *
      * @param viewport - Original viewport configuration
      * @returns Randomized viewport
      */
@@ -494,7 +521,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Get random locale for stealth
-     * 
+     *
      * @returns Random locale string
      */
     private getRandomLocale(): string {
@@ -513,7 +540,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Get random timezone for stealth
-     * 
+     *
      * @returns Random timezone string
      */
     private getRandomTimezone(): string {
@@ -532,7 +559,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Convert cookies to Playwright format
-     * 
+     *
      * @param cookies - Array of cookies
      * @param url - URL for cookie domain extraction
      * @returns Playwright cookies
@@ -576,7 +603,7 @@ export class HeadlessBrowserScraper {
 
     /**
      * Get browser pool statistics
-     * 
+     *
      * @returns Pool statistics or null if not using pool
      */
     getPoolStats(): {

@@ -9,10 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { DocumentationSuggestionStatus } from '@prisma/client';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/documentation/suggestions
@@ -23,7 +22,7 @@ import { DocumentationSuggestionStatus } from '@prisma/client';
 export async function GET(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
@@ -142,7 +141,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },

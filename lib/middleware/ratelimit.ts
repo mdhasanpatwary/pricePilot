@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimiters, getRateLimitIdentifier, checkRateLimit } from "@/lib/ratelimit";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { PlanType } from "@prisma/client";
 import {
   getPlanMultiplier,
   getEffectiveLimit,
   RateLimiterType
 } from "@/lib/services/rate-limit-config";
-import { checkBypass, getCustomMultiplier } from "@/lib/services/rate-limit-admin";
+import { checkBypassCached, getCustomMultiplierCached } from "@/lib/services/rate-limit-admin";
 import { recordHit, recordViolation } from "@/lib/services/rate-limit-metrics";
 import { logger } from "@/lib/logger";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 
 /**
  * Rate limit middleware wrapper for Next.js API routes with tenant-based limits
@@ -33,8 +32,8 @@ export async function withRateLimit(
   handler: (req: NextRequest) => Promise<NextResponse>
 ): Promise<NextResponse> {
   try {
-    // Get user session if available
-    const session = await getServerSession(authOptions);
+    // Get user session if available (cached)
+    const session = await getCachedSession();
     const userId = session?.user?.id || null;
     const tenantId = session?.user?.tenantId || null;
 
@@ -44,8 +43,8 @@ export async function withRateLimit(
     let bypassActive = false;
 
     if (tenantId) {
-      // Check if tenant has an active bypass
-      bypassActive = await checkBypass(tenantId);
+      // Check if tenant has an active bypass (cached)
+      bypassActive = await checkBypassCached(tenantId);
 
       if (bypassActive) {
         // Bypass active - skip rate limiting
@@ -63,17 +62,14 @@ export async function withRateLimit(
         return response;
       }
 
-      // Get tenant plan and custom multiplier
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { planType: true },
-      });
+      // Get tenant plan and custom multiplier (cached)
+      const tenant = await getCachedTenant(tenantId);
 
       if (tenant) {
         planType = tenant.planType;
 
-        // Check for custom multiplier (overrides plan multiplier)
-        const customMultiplier = await getCustomMultiplier(tenantId);
+        // Check for custom multiplier (overrides plan multiplier) (cached)
+        const customMultiplier = await getCustomMultiplierCached(tenantId);
         effectiveMultiplier = customMultiplier ?? getPlanMultiplier(planType);
       }
     }

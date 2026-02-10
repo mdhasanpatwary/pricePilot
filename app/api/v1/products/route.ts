@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
 import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     throw new UnauthorizedError('Authentication required to access products');
@@ -222,7 +221,7 @@ export async function GET(req: NextRequest) {
   // Apply caching with 5-minute TTL (300 seconds)
   // Requirement 2.9.4: Cache product lists with 5 minutes TTL
   const cachedHandler = withCache(
-    (req) => withRateLimit(req, "read", withErrorHandling(handleGET)),
+    (req) => withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET)),
     {
       ttl: 300, // 5 minutes
       keyPrefix: 'api:products',

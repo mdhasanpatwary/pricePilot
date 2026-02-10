@@ -10,12 +10,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Validation schema for maintenance window creation
@@ -33,7 +32,7 @@ const createMaintenanceWindowSchema = z.object({
 async function handleGET(_req: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -108,7 +107,7 @@ async function handleGET(_req: NextRequest) {
 async function handlePOST(req: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -202,9 +201,9 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', handleGET);
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', handlePOST);
+    return withRequestContextAndRateLimit(req, 'write', handlePOST);
 }

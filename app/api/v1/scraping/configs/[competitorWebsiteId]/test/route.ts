@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import {
     validateBody,
     validationErrorResponse,
@@ -25,7 +24,7 @@ async function handlePOST(
     req: NextRequest,
     { params }: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError("Authentication required to test scraping configuration");
@@ -125,5 +124,5 @@ export async function POST(
     req: NextRequest,
     context: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    return withRateLimit(req, "write", withErrorHandling(() => handlePOST(req, context)));
+    return withRequestContextAndRateLimit(req, "write", withErrorHandling(() => handlePOST(req, context)));
 }

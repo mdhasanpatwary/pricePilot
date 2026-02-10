@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { withErrorHandling } from "@/lib/error-api";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 import {
   validateBody,
   addUserSchema,
@@ -18,7 +17,7 @@ import { recordAuditLog, getIpAddress } from "@/lib/audit";
  * List all team members for the current tenant
  */
 async function getTeamMembers(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -64,7 +63,7 @@ async function getTeamMembers(req: NextRequest) {
  * Add a new team member
  */
 async function addTeamMember(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user || session.user.role !== "ADMIN") {
     return NextResponse.json(
       { error: "Only admins can add team members" },
@@ -127,7 +126,7 @@ async function addTeamMember(req: NextRequest) {
  * Update a team member's role or details
  */
 async function updateTeamMember(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user || session.user.role !== "ADMIN") {
     return NextResponse.json(
       { error: "Only admins can update team members" },
@@ -187,7 +186,7 @@ async function updateTeamMember(req: NextRequest) {
  * Remove a team member
  */
 async function deleteTeamMember(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
   if (!session?.user || session.user.role !== "ADMIN") {
     return NextResponse.json(
       { error: "Only admins can remove team members" },
@@ -236,17 +235,17 @@ async function deleteTeamMember(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", withErrorHandling(getTeamMembers));
+  return withRequestContextAndRateLimit(req, "read", withErrorHandling(getTeamMembers));
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(addTeamMember));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(addTeamMember));
 }
 
 export async function PATCH(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(updateTeamMember));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(updateTeamMember));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(deleteTeamMember));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(deleteTeamMember));
 }

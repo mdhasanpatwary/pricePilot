@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 const execAsync = promisify(exec);
 const BACKUP_DIR = path.join(process.cwd(), "backups");
@@ -14,7 +13,7 @@ const BACKUP_DIR = path.join(process.cwd(), "backups");
  * GET: List all backup files
  */
 async function handleGET() {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -50,14 +49,14 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, 'read', handleGET);
+  return withRequestContextAndRateLimit(req, 'read', handleGET);
 }
 
 /**
  * POST: Trigger a manual backup
  */
 async function handlePOST() {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user?.isSuperAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -87,5 +86,5 @@ async function handlePOST() {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, 'write', handlePOST);
+  return withRequestContextAndRateLimit(req, 'write', handlePOST);
 }

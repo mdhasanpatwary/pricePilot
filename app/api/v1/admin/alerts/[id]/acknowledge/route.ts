@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { alertRepository } from "@/lib/services/alert-repository";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST /api/v1/admin/alerts/[id]/acknowledge
@@ -15,7 +14,7 @@ async function handlePOST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -56,5 +55,5 @@ export async function POST(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRateLimit(req, 'write', (r) => handlePOST(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handlePOST(r, context));
 }

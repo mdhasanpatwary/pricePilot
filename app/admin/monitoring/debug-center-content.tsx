@@ -190,7 +190,7 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
                         </div>
                         <p className="text-[12px] font-medium leading-relaxed">{log.message}</p>
                         <p className="text-[10px] text-muted-foreground mt-1 opacity-60 truncate">
-                            {log.site.tenant.companyName} • {log.site.baseUrl}
+                            {log.Site?.Tenant?.companyName || 'Unknown'} • {log.Site?.baseUrl || 'N/A'}
                         </p>
                     </div>
                 )}
@@ -208,7 +208,7 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
                             <Badge variant="destructive" className="text-[10px]">EXECUTION_FAILED</Badge>
                             <span className="text-[10px] text-muted-foreground">{new Date(log.executedAt).toLocaleTimeString()}</span>
                         </div>
-                        <p className="text-[12px] font-medium">{log.product.title}</p>
+                        <p className="text-[12px] font-medium">{log.Product?.title || 'Unknown Product'}</p>
                         <p className="text-[11px] text-danger font-mono mt-1 bg-danger/5 p-2 rounded border border-danger/10">
                             {log.errorDetails || "Stack trace unavailable"}
                         </p>
@@ -250,7 +250,7 @@ function IntelligenceView({ data, loading }: { data: DebugData | null; loading: 
                             <Badge variant="outline" className="text-[9px] bg-red-50 text-red-700 border-red-200">MAX_RETRIES</Badge>
                             <span className="text-[10px] text-muted-foreground">{new Date(log.updatedAt).toLocaleTimeString()}</span>
                         </div>
-                        <p className="text-xs font-bold text-foreground/80">{log.userProduct.title}</p>
+                        <p className="text-xs font-bold text-foreground/80">{log.Product?.title || 'Unknown Product'}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 italic">{log.reason}</p>
                     </div>
                 )}

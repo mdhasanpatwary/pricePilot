@@ -6,10 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { ApprovalDelegationService } from '@/lib/services/approval-delegation';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 const createDelegationSchema = z.object({
     toUserId: z.string().uuid(),
@@ -23,7 +22,7 @@ const createDelegationSchema = z.object({
  */
 export async function GET() {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -58,7 +57,7 @@ export async function GET() {
  */
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { AutoApprovalService } from "@/lib/services/auto-approval";
 import { AppError } from "@/lib/utils/error-handler";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/auto-approval-rules/metrics
@@ -25,7 +24,7 @@ import { AppError } from "@/lib/utils/error-handler";
 export async function GET(req: NextRequest): Promise<NextResponse> {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user?.id) {
             return NextResponse.json(

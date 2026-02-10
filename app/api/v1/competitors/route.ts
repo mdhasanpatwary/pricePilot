@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import {
   validateBody,
@@ -13,9 +10,11 @@ import {
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { UnauthorizedError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/utils/error-handler";
 import { paginate, getPaginationParams } from "@/lib/utils/pagination";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     throw new UnauthorizedError('Authentication required to access competitors');
@@ -53,7 +52,7 @@ async function handleGET(req: NextRequest) {
       },
       SyncLog: {
         orderBy: { createdAt: "desc" },
-        take: 50,
+        take: 5,
       },
     }
   );
@@ -118,7 +117,7 @@ async function handleGET(req: NextRequest) {
 }
 
 async function handlePOST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     throw new UnauthorizedError('Authentication required to create competitors');
@@ -194,7 +193,7 @@ async function handlePOST(req: NextRequest) {
 }
 
 async function handleDELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getCachedSession();
 
   if (!session?.user) {
     throw new UnauthorizedError('Authentication required to delete competitors');
@@ -234,13 +233,13 @@ async function handleDELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRateLimit(req, "read", withErrorHandling(handleGET));
+  return withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET));
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handlePOST));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handlePOST));
 }
 
 export async function DELETE(req: NextRequest) {
-  return withRateLimit(req, "write", withErrorHandling(handleDELETE));
+  return withRequestContextAndRateLimit(req, "write", withErrorHandling(handleDELETE));
 }

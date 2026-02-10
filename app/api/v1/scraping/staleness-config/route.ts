@@ -7,13 +7,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import {
     getStalenessConfig,
     setStalenessThreshold,
 } from '@/lib/services/bot-protection/staleness-config';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/scraping/staleness-config
@@ -25,7 +24,7 @@ import { logger } from '@/lib/logger';
 export async function GET(_request: NextRequest) {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 {
@@ -79,7 +78,7 @@ export async function GET(_request: NextRequest) {
 export async function PUT(request: NextRequest) {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 {

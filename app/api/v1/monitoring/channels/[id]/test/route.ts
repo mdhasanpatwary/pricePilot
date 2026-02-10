@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NotificationRouter } from "@/lib/services/monitoring/notification-router";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Test Notification Channel API
@@ -25,7 +24,7 @@ async function handlePOST(
         const { id } = await params;
 
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
@@ -90,5 +89,5 @@ async function handlePOST(
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'write', (r) => handlePOST(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handlePOST(r, context));
 }

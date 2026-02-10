@@ -6,17 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
 import { UnauthorizedError, NotFoundError } from "@/lib/utils/error-handler";
 import { prisma } from "@/lib/prisma";
 import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError('Authentication required to access competitor products');
@@ -116,7 +115,7 @@ export async function GET(
 ) {
     // Apply caching with 10-minute TTL (600 seconds)
     const cachedHandler = withCache(
-        (req) => withRateLimit(req, "read", withErrorHandling((req) => handleGET(req, context))),
+        (req) => withRequestContextAndRateLimit(req, "read", withErrorHandling((req) => handleGET(req, context))),
         {
             ttl: 600, // 10 minutes
             keyPrefix: 'api:competitors:products',

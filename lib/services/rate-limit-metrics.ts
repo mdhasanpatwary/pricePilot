@@ -1,9 +1,12 @@
 /**
  * Rate Limit Metrics Service
- * 
+ *
  * Tracks rate limit hits and violations, aggregates metrics for dashboards,
  * and generates alerts when thresholds are exceeded.
- * 
+ *
+ * OPTIMIZATION: Uses in-memory batching to reduce database write frequency.
+ * Hits and violations are aggregated in memory and flushed to the DB periodically.
+ *
  * Requirements: 3.1, 3.2, 3.3, 3.5, 3.6
  */
 
@@ -11,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { ALERT_THRESHOLDS, RateLimiterType } from "./rate-limit-config";
 import { NotificationService } from "./notification";
 import { logger } from "../logger";
+
+// --- Types ---
 
 /**
  * Tenant metrics aggregated over a time period
@@ -35,23 +40,177 @@ export interface TenantMetrics {
   }>;
 }
 
+interface MetricKey {
+  tenantId: string;
+  limiterType: RateLimiterType;
+  identifier: string;
+  endpoint: string;
+  hourTimestamp: number; // Unix timestamp for the start of the hour
+}
+
+interface AggregatedMetric {
+  hitCount: number;
+  violationCount: number;
+}
+
+// --- Batch Processing Service ---
+
+class MetricBatchProcessor {
+  private buffer: Map<string, AggregatedMetric> = new Map();
+  private isFlushing: boolean = false;
+  private readonly FLUSH_INTERVAL_MS = 10000; // Flush every 10 seconds
+  private readonly MAX_BUFFER_SIZE = 5000; // Trigger flush if buffer gets too large
+
+  constructor() {
+    // Start periodic flush
+    if (typeof window === 'undefined') { // server-side only
+      setInterval(() => this.flush(), this.FLUSH_INTERVAL_MS);
+    }
+  }
+
+  /**
+   * Generates a unique string key for the metric map
+   */
+  private getKey(key: MetricKey): string {
+    return `${key.tenantId}|${key.limiterType}|${key.identifier}|${key.endpoint}|${key.hourTimestamp}`;
+  }
+
+  /**
+   * Parses a string key back into a MetricKey object
+   */
+  private parseKey(keyString: string): MetricKey {
+    const [tenantId, limiterType, identifier, endpoint, timestampStr] = keyString.split('|');
+    return {
+      tenantId,
+      limiterType: limiterType as RateLimiterType,
+      identifier,
+      endpoint,
+      hourTimestamp: parseInt(timestampStr, 10)
+    };
+  }
+
+  /**
+   * Add a hit or violation to the batch
+   */
+  public add(
+    tenantId: string,
+    limiterType: RateLimiterType,
+    identifier: string,
+    endpoint: string,
+    isViolation: boolean
+  ) {
+    // Round to current hour
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    const hourTimestamp = now.getTime();
+
+    const key = this.getKey({
+      tenantId,
+      limiterType,
+      identifier,
+      endpoint,
+      hourTimestamp
+    });
+
+    const current = this.buffer.get(key) || { hitCount: 0, violationCount: 0 };
+
+    if (isViolation) {
+      current.violationCount++;
+    } else {
+      current.hitCount++;
+    }
+
+    this.buffer.set(key, current);
+
+    // Safety valve: flush if buffer gets too large
+    if (this.buffer.size >= this.MAX_BUFFER_SIZE) {
+      this.flush();
+    }
+  }
+
+  /**
+   * Flush aggregated metrics to the database
+   */
+  public async flush() {
+    if (this.isFlushing || this.buffer.size === 0) return;
+
+    this.isFlushing = true;
+    const currentBuffer = new Map(this.buffer);
+    this.buffer.clear();
+
+    try {
+      const entries = Array.from(currentBuffer.entries());
+
+      // Process in batches to avoid overwhelming the DB connection
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+        const batch = entries.slice(i, i + BATCH_SIZE);
+
+        await Promise.all(batch.map(async ([keyString, data]) => {
+          const key = this.parseKey(keyString);
+          const timestamp = new Date(key.hourTimestamp);
+
+          try {
+            // Upsert mechanism: try to find, then update or create
+            // Note: Prisma upsert requires a unique constraint which we might not have on these specific fields combined
+            // reliably depending on the schema. Using findFirst -> update/create path for safety.
+
+            const existing = await prisma.rateLimitMetric.findFirst({
+              where: {
+                tenantId: key.tenantId,
+                limiterType: key.limiterType,
+                identifier: key.identifier,
+                endpoint: key.endpoint,
+                timestamp: timestamp,
+              }
+            });
+
+            if (existing) {
+              await prisma.rateLimitMetric.update({
+                where: { id: existing.id },
+                data: {
+                  hitCount: { increment: data.hitCount },
+                  violationCount: { increment: data.violationCount }
+                }
+              });
+            } else {
+              await prisma.rateLimitMetric.create({
+                data: {
+                  tenantId: key.tenantId,
+                  limiterType: key.limiterType,
+                  identifier: key.identifier,
+                  endpoint: key.endpoint,
+                  timestamp: timestamp,
+                  hitCount: data.hitCount,
+                  violationCount: data.violationCount
+                }
+              });
+            }
+          } catch (err) {
+            logger.error("[RateLimitMetrics] Failed to flush individual metric:", { error: err as any, key });
+          }
+        }));
+      }
+    } catch (error) {
+      logger.error("[RateLimitMetrics] Batch flush failed:", error as any);
+      // Logic to restore buffer could be added here, but for metrics, dropping is preferable to infinite retry loops
+    } finally {
+      this.isFlushing = false;
+    }
+  }
+}
+
+// Global singleton for the batch processor
+const batchProcessor = new MetricBatchProcessor();
+
+
+// --- Public API ---
+
 /**
  * Record a successful rate-limited request (hit)
- * 
- * This function is called for every successful request that passes rate limiting.
- * It records the hit asynchronously to avoid blocking the request.
- * 
- * @param tenantId - The tenant making the request
- * @param limiterType - The type of rate limiter applied
- * @param identifier - The rate limit identifier (user:xxx or ip:xxx)
- * @param endpoint - The API endpoint path
- * 
- * Requirements: 3.2, 3.6
- * 
- * @example
- * ```typescript
- * await recordHit('tenant-123', 'read', 'user:abc', '/api/v1/products');
- * ```
+ *
+ * This function is now optimized to use in-memory batching.
+ * It returns immediately and the write happens in the background.
  */
 export async function recordHit(
   tenantId: string,
@@ -59,74 +218,11 @@ export async function recordHit(
   identifier: string,
   endpoint: string
 ): Promise<void> {
-  try {
-    // Round timestamp to the current hour for aggregation
-    const hourTimestamp = new Date();
-    hourTimestamp.setMinutes(0, 0, 0);
-
-    // Try to find existing metric for this hour
-    const existing = await prisma.rateLimitMetric.findFirst({
-      where: {
-        tenantId,
-        limiterType,
-        identifier,
-        endpoint,
-        timestamp: hourTimestamp,
-      },
-    });
-
-    if (existing) {
-      // Update existing record
-      await prisma.rateLimitMetric.update({
-        where: { id: existing.id },
-        data: {
-          hitCount: {
-            increment: 1,
-          },
-        },
-      });
-    } else {
-      // Create new record
-      await prisma.rateLimitMetric.create({
-        data: {
-          tenantId,
-          limiterType,
-          identifier,
-          endpoint,
-          hitCount: 1,
-          violationCount: 0,
-          timestamp: hourTimestamp,
-        },
-      });
-    }
-  } catch (error) {
-    // Log error but don't throw - metrics recording should not block requests
-    logger.error("[RateLimitMetrics] Failed to record hit:", {
-      error,
-      tenantId,
-      limiterType,
-      endpoint,
-    });
-  }
+  batchProcessor.add(tenantId, limiterType, identifier, endpoint, false);
 }
 
 /**
  * Record a rate limit violation (429 response)
- * 
- * This function is called when a request exceeds the rate limit.
- * It records the violation and checks if alert thresholds are exceeded.
- * 
- * @param tenantId - The tenant that exceeded the limit
- * @param limiterType - The type of rate limiter that was exceeded
- * @param identifier - The rate limit identifier (user:xxx or ip:xxx)
- * @param endpoint - The API endpoint path
- * 
- * Requirements: 3.1, 3.3, 3.5, 3.6
- * 
- * @example
- * ```typescript
- * await recordViolation('tenant-123', 'write', 'user:abc', '/api/v1/products');
- * ```
  */
 export async function recordViolation(
   tenantId: string,
@@ -134,93 +230,29 @@ export async function recordViolation(
   identifier: string,
   endpoint: string
 ): Promise<void> {
-  try {
-    // Round timestamp to the current hour for aggregation
-    const hourTimestamp = new Date();
-    hourTimestamp.setMinutes(0, 0, 0);
+  batchProcessor.add(tenantId, limiterType, identifier, endpoint, true);
 
-    // Try to find existing metric for this hour
-    const existing = await prisma.rateLimitMetric.findFirst({
-      where: {
-        tenantId,
-        limiterType,
-        identifier,
-        endpoint,
-        timestamp: hourTimestamp,
-      },
-    });
-
-    if (existing) {
-      // Update existing record
-      await prisma.rateLimitMetric.update({
-        where: { id: existing.id },
-        data: {
-          violationCount: {
-            increment: 1,
-          },
-        },
-      });
-    } else {
-      // Create new record
-      await prisma.rateLimitMetric.create({
-        data: {
-          tenantId,
-          limiterType,
-          identifier,
-          endpoint,
-          hitCount: 0,
-          violationCount: 1,
-          timestamp: hourTimestamp,
-        },
-      });
-    }
-
-    // Check thresholds asynchronously (don't await to avoid blocking)
-    checkThresholds(tenantId).catch((error) => {
-      logger.error("[RateLimitMetrics] Failed to check thresholds:", {
-        error,
-        tenantId,
-      });
-    });
-  } catch (error) {
-    // Log error but don't throw - metrics recording should not block requests
-    logger.error("[RateLimitMetrics] Failed to record violation:", {
+  // Check thresholds asynchronously
+  // We trigger this immediately for violations as they are more critical than hits
+  checkThresholds(tenantId).catch((error) => {
+    logger.error("[RateLimitMetrics] Failed to check thresholds:", {
       error,
       tenantId,
-      limiterType,
-      endpoint,
     });
-  }
+  });
 }
 
 /**
  * Get aggregated metrics for a tenant over a time period
- * 
- * This function retrieves and aggregates rate limit metrics for dashboard display.
- * It groups metrics by limiter type and identifies top endpoints by usage.
- * 
- * @param tenantId - The tenant to get metrics for
- * @param startDate - Start of the time period
- * @param endDate - End of the time period
- * @returns Aggregated metrics for the tenant
- * 
- * Requirements: 3.2, 3.3, 3.4
- * 
- * @example
- * ```typescript
- * const metrics = await getTenantMetrics(
- *   'tenant-123',
- *   new Date('2024-01-01'),
- *   new Date('2024-01-31')
- * );
- * console.log(metrics.totalViolations); // 42
- * ```
  */
 export async function getTenantMetrics(
   tenantId: string,
   startDate: Date,
   endDate: Date
 ): Promise<TenantMetrics> {
+  // Ensure we flush any pending metrics before reading
+  await batchProcessor.flush();
+
   try {
     // Fetch all metrics for the tenant in the time period
     const metrics = await prisma.rateLimitMetric.findMany({
@@ -327,19 +359,6 @@ export async function getTenantMetrics(
 
 /**
  * Check if rate limit violations exceed alert thresholds
- * 
- * This function checks if a tenant has exceeded violation thresholds
- * and creates alerts if necessary. It checks both hourly and daily thresholds.
- * 
- * @param tenantId - The tenant to check thresholds for
- * 
- * Requirements: 3.5
- * 
- * @example
- * ```typescript
- * await checkThresholds('tenant-123');
- * // Creates alert if violations exceed thresholds
- * ```
  */
 export async function checkThresholds(tenantId: string): Promise<void> {
   try {
@@ -421,17 +440,6 @@ export async function checkThresholds(tenantId: string): Promise<void> {
 
 /**
  * Get recent violations for a tenant
- * 
- * Helper function to retrieve recent violation details for dashboard display.
- * 
- * @param tenantId - The tenant to get violations for
- * @param limit - Maximum number of violations to return (default: 50)
- * @returns Array of recent violations with details
- * 
- * @example
- * ```typescript
- * const violations = await getRecentViolations('tenant-123', 10);
- * ```
  */
 export async function getRecentViolations(
   tenantId: string,
@@ -445,6 +453,9 @@ export async function getRecentViolations(
     violationCount: number;
   }>
 > {
+  // Flush before reading
+  await batchProcessor.flush();
+
   try {
     const violations = await prisma.rateLimitMetric.findMany({
       where: {

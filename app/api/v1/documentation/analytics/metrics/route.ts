@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyticsService } from '@/lib/documentation/analytics';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/documentation/analytics/metrics
@@ -10,7 +9,7 @@ import { authOptions } from '@/lib/auth';
 export async function GET(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session) {
             return NextResponse.json(
                 {

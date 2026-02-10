@@ -6,13 +6,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { documentationMonitor, LogCategory, LogLevel } from '@/lib/documentation/monitoring';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession();
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
@@ -111,4 +112,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(request: NextRequest) {
+    return withRequestContextAndRateLimit(request, 'read', handleGET);
 }

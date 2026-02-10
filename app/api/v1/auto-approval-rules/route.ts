@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
     CreateAutoApprovalRuleSchema,
     type CreateAutoApprovalRuleInput,
 } from "@/lib/validation/auto-approval-rules";
 import { AutoApprovalService } from "@/lib/services/auto-approval";
 import { ValidationError } from "@/lib/utils/error-handler";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/auto-approval-rules
@@ -18,7 +17,7 @@ import { ValidationError } from "@/lib/utils/error-handler";
  */
 async function handleGET(_req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json(
                 {
@@ -69,7 +68,7 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, "read", () => handleGET(req));
+    return withRequestContextAndRateLimit(req, "read", () => handleGET(req));
 }
 
 /**
@@ -80,7 +79,7 @@ export async function GET(req: NextRequest) {
  */
 async function handlePOST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user?.tenantId) {
             return NextResponse.json(
                 {
@@ -191,5 +190,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, "write", () => handlePOST(req));
+    return withRequestContextAndRateLimit(req, "write", () => handlePOST(req));
 }

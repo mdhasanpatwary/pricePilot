@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { sessionTracker } from '@/lib/services/session-tracker';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * POST /api/v1/admin/sessions/bulk
@@ -20,7 +19,7 @@ import { withRateLimit } from '@/lib/middleware/ratelimit';
 async function handlePOST(request: NextRequest) {
     try {
         // Authentication check
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
@@ -114,5 +113,5 @@ async function handlePOST(request: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withRateLimit(req, 'write', () => handlePOST(req));
+    return withRequestContextAndRateLimit(req, 'write', () => handlePOST(req));
 }

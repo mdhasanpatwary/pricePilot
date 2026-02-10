@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 interface UpdateSiteConfigRequest {
     sessionWarmup: boolean;
@@ -24,7 +23,7 @@ async function handlePATCH(
 ) {
     try {
         // Authenticate and get tenant ID
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -192,5 +191,5 @@ export async function PATCH(
     req: NextRequest,
     context: { params: Promise<{ siteId: string }> }
 ) {
-    return withRateLimit(req, 'write', () => handlePATCH(req, context));
+    return withRequestContextAndRateLimit(req, 'write', () => handlePATCH(req, context));
 }

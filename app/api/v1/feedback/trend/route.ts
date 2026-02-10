@@ -3,13 +3,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { UserSatisfactionService } from '@/lib/services/user-satisfaction';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 export async function GET(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(

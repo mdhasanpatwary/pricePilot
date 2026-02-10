@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SystemHealthService } from "@/lib/services/system-health";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/health
@@ -12,7 +11,7 @@ import { withRateLimit } from "@/lib/middleware/ratelimit";
  */
 async function handleGET() {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
@@ -45,5 +44,5 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', handleGET);
 }

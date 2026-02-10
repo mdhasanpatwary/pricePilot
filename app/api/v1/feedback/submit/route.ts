@@ -3,10 +3,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { UserSatisfactionService } from '@/lib/services/user-satisfaction';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 const feedbackSchema = z.object({
     rating: z.number().min(1).max(5),
@@ -32,7 +31,7 @@ const feedbackSchema = z.object({
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(

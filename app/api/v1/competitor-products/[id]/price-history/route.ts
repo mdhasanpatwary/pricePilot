@@ -7,13 +7,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import {
     getPriceHistoryWithGaps,
     getPriceHistorySummary,
 } from '@/lib/services/bot-protection/price-history-maintenance';
 import { logger } from '@/lib/logger';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/competitor-products/:id/price-history
@@ -28,7 +27,7 @@ export async function GET(
 ) {
     try {
         // Authenticate user
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
         if (!session?.user) {
             return NextResponse.json(
                 {

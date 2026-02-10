@@ -1,0 +1,170 @@
+/**
+ * Staleness Configuration API
+ * 
+ * Endpoints for managing staleness threshold configuration.
+ * 
+ * Requirements: 14.4
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import {
+    getStalenessConfig,
+    setStalenessThreshold,
+} from '@/lib/services/bot-protection/staleness-config';
+import { logger } from '@/lib/logger';
+
+/**
+ * GET /api/v1/scraping/staleness-config
+ * 
+ * Get current staleness threshold configuration
+ * 
+ * Requirements: 14.4
+ */
+export async function GET(_request: NextRequest) {
+    try {
+        // Authenticate user
+        const session = await getCachedSession();
+        if (!session?.user) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'Authentication required',
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        // Get staleness configuration
+        const config = await getStalenessConfig();
+
+        logger.info('[StalenessConfigAPI] Retrieved staleness configuration', {
+            userId: session.user.id,
+            config,
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: config,
+        });
+    } catch (error) {
+        logger.error('[StalenessConfigAPI] Error retrieving staleness configuration', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to retrieve staleness configuration',
+                },
+            },
+            { status: 500 }
+        );
+    }
+}
+
+/**
+ * PUT /api/v1/scraping/staleness-config
+ * 
+ * Update staleness threshold configuration
+ * 
+ * Requirements: 14.4
+ */
+export async function PUT(request: NextRequest) {
+    try {
+        // Authenticate user
+        const session = await getCachedSession();
+        if (!session?.user) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'UNAUTHORIZED',
+                        message: 'Authentication required',
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        // Check if user is admin
+        if (session.user.role !== 'ADMIN') {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'FORBIDDEN',
+                        message: 'Admin access required',
+                    },
+                },
+                { status: 403 }
+            );
+        }
+
+        // Parse request body
+        const body = await request.json();
+        const { thresholdDays } = body;
+
+        // Validate input
+        if (typeof thresholdDays !== 'number') {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'VALIDATION_ERROR',
+                        message: 'thresholdDays must be a number',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        if (thresholdDays < 1 || thresholdDays > 90) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'VALIDATION_ERROR',
+                        message: 'thresholdDays must be between 1 and 90',
+                    },
+                },
+                { status: 400 }
+            );
+        }
+
+        // Update configuration
+        await setStalenessThreshold(thresholdDays);
+
+        // Get updated configuration
+        const config = await getStalenessConfig();
+
+        logger.info('[StalenessConfigAPI] Updated staleness configuration', {
+            userId: session.user.id,
+            thresholdDays,
+        });
+
+        return NextResponse.json({
+            success: true,
+            data: config,
+        });
+    } catch (error) {
+        logger.error('[StalenessConfigAPI] Error updating staleness configuration', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to update staleness configuration',
+                },
+            },
+            { status: 500 }
+        );
+    }
+}

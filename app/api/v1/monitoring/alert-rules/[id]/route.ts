@@ -11,12 +11,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * Validation schema for alert rule updates
@@ -49,7 +48,7 @@ async function handleGET(
 
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -129,7 +128,7 @@ async function handlePUT(
 
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -231,7 +230,7 @@ async function handleDELETE(
 
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session?.user) {
             return NextResponse.json(
@@ -305,13 +304,13 @@ async function handleDELETE(
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'read', (r) => handleGET(r, context));
+    return withRequestContextAndRateLimit(req, 'read', (r) => handleGET(r, context));
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'write', (r) => handlePUT(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handlePUT(r, context));
 }
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-    return withRateLimit(req, 'write', (r) => handleDELETE(r, context));
+    return withRequestContextAndRateLimit(req, 'write', (r) => handleDELETE(r, context));
 }

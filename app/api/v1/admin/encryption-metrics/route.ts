@@ -6,10 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { encryptionPerformanceMonitor } from '@/lib/services/encryption/performance-monitor';
-import { withRateLimit } from '@/lib/middleware/ratelimit';
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/encryption-metrics
@@ -20,7 +19,7 @@ import { withRateLimit } from '@/lib/middleware/ratelimit';
 async function handleGET(_request: NextRequest) {
     try {
         // Check authentication
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session || !session.user) {
             return NextResponse.json(
@@ -86,5 +85,5 @@ async function handleGET(_request: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', handleGET);
 }

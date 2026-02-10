@@ -6,10 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { incidentPreventionService } from '@/lib/services/security/incident-prevention';
 import { securityMonitoringService } from '@/lib/services/monitoring/security-monitoring';
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 /**
  * GET /api/v1/security/dashboard
@@ -18,7 +17,7 @@ import { securityMonitoringService } from '@/lib/services/monitoring/security-mo
  */
 export async function GET(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getCachedSession();
 
         if (!session || session.user.role !== 'ADMIN') {
             return NextResponse.json(

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError, NotFoundError } from "@/lib/utils/error-handler";
+import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/scraping/configs/:competitorWebsiteId/history
@@ -17,7 +16,7 @@ async function handleGET(
     _req: NextRequest,
     { params }: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError("Authentication required to access configuration history");
@@ -137,7 +136,7 @@ async function handlePOST(
     req: NextRequest,
     { params }: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    const session = await getServerSession(authOptions);
+    const session = await getCachedSession();
 
     if (!session?.user) {
         throw new UnauthorizedError("Authentication required to revert configuration");
@@ -299,12 +298,12 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    return withRateLimit(req, "read", withErrorHandling(() => handleGET(req, context)));
+    return withRequestContextAndRateLimit(req, "read", withErrorHandling(() => handleGET(req, context)));
 }
 
 export async function POST(
     req: NextRequest,
     context: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
-    return withRateLimit(req, "write", withErrorHandling(() => handlePOST(req, context)));
+    return withRequestContextAndRateLimit(req, "write", withErrorHandling(() => handlePOST(req, context)));
 }
