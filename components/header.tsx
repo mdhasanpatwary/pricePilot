@@ -381,6 +381,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div
+                suppressHydrationWarning
                 className={cn(
                   "flex items-center gap-3 pl-4 border-l border-border group transition-all cursor-pointer",
                   "hover:opacity-80",

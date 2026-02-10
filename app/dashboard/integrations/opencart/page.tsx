@@ -158,7 +158,7 @@ export default function OpenCartIntegrationPage() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-bold text-sm">Enable API in OpenCart</h3>
                   <p className="text-xs text-muted-foreground">
-                    Go to <b>System → Users → API</b>, click <b>Add New</b>, set username as "pricepilot", enable it, and click <b>Generate</b> to create an API token.
+                    Go to <b>System → Users → API</b>, click <b>Add New</b>, set username as &quot;pricepilot&quot;, enable it, and click <b>Generate</b> to create an API token.
                   </p>
                 </div>
               </div>

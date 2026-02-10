@@ -27,8 +27,8 @@ $registry->set('db', $db);
 $token = isset($_GET['api_token']) ? $_GET['api_token'] : '';
 $action = isset($_GET['action']) ? $_GET['action'] : 'products';
 
-// Validate token
-$query = $db->query("SELECT * FROM " . DB_PREFIX . "api WHERE token = '" . $db->escape($token) . "' AND status = 1");
+// Validate token - OpenCart uses 'key' column, not 'token'
+$query = $db->query("SELECT * FROM " . DB_PREFIX . "api WHERE `key` = '" . $db->escape($token) . "' AND status = 1");
 
 if (!$query->num_rows) {
     http_response_code(401);

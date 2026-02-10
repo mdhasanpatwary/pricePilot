@@ -137,6 +137,7 @@ export default function ConnectionsPage() {
       const res = await fetch("/api/v1/integrations");
       if (res.ok) {
         const data = await res.json();
+        console.log('[Connections] Fetched connections:', data.map((c: any) => ({ id: c.id, name: c.name })));
         setConnections(data);
       }
     } catch (error) {
@@ -282,20 +283,29 @@ export default function ConnectionsPage() {
 
   const handleSyncConnection = async (siteId: string) => {
     try {
+      console.log('[Sync] Attempting to sync site:', siteId, 'Type:', typeof siteId);
+
       // Optimistically update UI
       setConnections(prev => prev.map(c => c.id === siteId ? { ...c, isSyncing: true, status: 'SYNCING' } : c));
+
+      const payload = { siteId };
+      console.log('[Sync] Sending payload:', payload);
 
       const res = await fetch("/api/v1/integrations/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         toast.success("Sync started in background");
       } else {
         const errorData = await res.json().catch(() => ({}));
-        toast.error(errorData.error || "Failed to start sync");
+        console.error('[Sync] Error response:', errorData);
+        const errorMsg = errorData.details
+          ? `${errorData.error}: ${errorData.details.map((d: any) => `${d.field}: ${d.message}`).join(', ')}`
+          : errorData.error || "Failed to start sync";
+        toast.error(errorMsg);
         fetchConnections(true);
       }
     } catch (error) {

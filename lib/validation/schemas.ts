@@ -121,6 +121,30 @@ export const skuSchema = z
 export const uuidSchema = z.string().uuid("Invalid ID format");
 
 /**
+ * CUID validation (Collision-resistant Unique Identifier)
+ * Format: starts with 'c', followed by timestamp and random string
+ * Example: cmlf4ph06000zo08ospo4u7rk
+ */
+export const cuidSchema = z.string().regex(
+  /^c[a-z0-9]{24,}$/,
+  "Invalid ID format"
+);
+
+/**
+ * Flexible ID schema that accepts both UUID and CUID
+ */
+export const idSchema = z.string().refine(
+  (val) => {
+    // Check if it's a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Check if it's a valid CUID
+    const cuidRegex = /^c[a-z0-9]{24,}$/;
+    return uuidRegex.test(val) || cuidRegex.test(val);
+  },
+  "Invalid ID format"
+);
+
+/**
  * Positive number
  */
 export const positiveNumberSchema = z
@@ -644,7 +668,7 @@ export const deleteNotificationSchema = z.object({
 // ============================================================================
 
 export const syncSiteSchema = z.object({
-  siteId: uuidSchema,
+  siteId: idSchema,
 });
 
 export const stopSyncSchema = z.object({

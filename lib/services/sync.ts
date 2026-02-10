@@ -881,106 +881,129 @@ export class SyncService {
 
       // Normalize URL (avoid double slashes)
       const cleanBaseUrl = site.baseUrl.replace(/\/$/, "");
-      const apiUrl = `${cleanBaseUrl}/api/pricepilot.php?api_token=${apiToken}&action=products`;
 
-      console.log(`[SyncService] Fetching from OpenCart: ${apiUrl}`);
+      // Fetch all products with pagination
+      const allProducts: OpenCartProduct[] = [];
+      let start = 0;
+      const limit = 100; // Fetch 100 products per request
+      let total = 0;
 
-      let response;
-      try {
-        response = await this.axiosRequestWithRetry<any>({
-          method: "GET",
-          url: apiUrl,
-          timeout: 30000,
-        });
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          const statusCode = error.response?.status;
-          const isRetryable = !statusCode || statusCode >= 500 || statusCode === 429 || statusCode === 408;
+      console.log(`[SyncService] Starting paginated fetch from OpenCart: ${cleanBaseUrl}`);
 
-          throw new ExternalServiceError(
-            'OpenCart',
-            `Failed to connect to OpenCart API: ${error.message}`,
-            {
-              cause: error,
-              serviceStatusCode: statusCode,
-              isRetryable,
-              context: {
-                tenantId: site.tenantId,
-                operation: 'fetchFromOpenCart',
-                metadata: { siteId: site.id, baseUrl: site.baseUrl, statusCode }
-              },
-              userMessage: statusCode === 401 || statusCode === 403
-                ? 'Invalid API token. Please check your OpenCart API token in settings.'
-                : 'Unable to connect to your OpenCart store. Please check your store URL and API token.'
-            }
-          );
-        }
-        throw error;
-      }
+      do {
+        const apiUrl = `${cleanBaseUrl}/api/pricepilot.php?api_token=${apiToken}&action=products&start=${start}&limit=${limit}`;
+        console.log(`[SyncService] Fetching products ${start} to ${start + limit}...`);
 
-      // Check for HTML response (happens on 404/500 if server returns error page)
-      if (typeof response.data === "string" && response.data.includes("<html")) {
-        console.error(`[SyncService] Received HTML instead of JSON from ${site.baseUrl}. Check if the PricePilot extension is correctly installed and accessible.`);
-        throw new ExternalServiceError(
-          'OpenCart',
-          'Invalid API response: Received HTML instead of JSON',
-          {
-            context: {
-              tenantId: site.tenantId,
-              operation: 'fetchFromOpenCart',
-              metadata: { siteId: site.id, baseUrl: site.baseUrl }
-            },
-            userMessage: 'The OpenCart PricePilot extension may not be installed correctly. Please verify the installation.'
-          }
-        );
-      }
+        let response;
+        try {
+          response = await this.axiosRequestWithRetry<any>({
+            method: "GET",
+            url: apiUrl,
+            timeout: 30000,
+          });
+        } catch (error) {
+          if (axios.isAxiosError(error)) {
+            const statusCode = error.response?.status;
+            const isRetryable = !statusCode || statusCode >= 500 || statusCode === 429 || statusCode === 408;
 
-      let responseData = response.data;
-
-      // Handle corrupted JSON responses (common when PHP errors or echoes are present)
-      if (typeof responseData === "string") {
-        console.warn(`[SyncService] Received string response instead of JSON object. Attempting to extract JSON...`);
-        const jsonStart = responseData.indexOf('{"products"');
-        const fallbackStart = responseData.indexOf('{');
-
-        const actualStart = jsonStart !== -1 ? jsonStart : fallbackStart;
-
-        if (actualStart !== -1) {
-          try {
-            // Find the last closing bracket to be safe
-            const lastBracket = responseData.lastIndexOf('}');
-            if (lastBracket !== -1 && lastBracket > actualStart) {
-              const jsonStr = responseData.substring(actualStart, lastBracket + 1);
-              responseData = JSON.parse(jsonStr);
-              console.log(`[SyncService] Successfully extracted and parsed JSON from string response.`);
-            }
-          } catch (parseError) {
-            console.error(`[SyncService] Failed to parse extracted JSON string:`, parseError);
             throw new ExternalServiceError(
               'OpenCart',
-              'Failed to parse API response',
+              `Failed to connect to OpenCart API: ${error.message}`,
               {
-                cause: parseError as Error,
+                cause: error,
+                serviceStatusCode: statusCode,
+                isRetryable,
                 context: {
                   tenantId: site.tenantId,
                   operation: 'fetchFromOpenCart',
-                  metadata: { siteId: site.id, baseUrl: site.baseUrl }
+                  metadata: { siteId: site.id, baseUrl: site.baseUrl, statusCode }
                 },
-                userMessage: 'Received invalid data from OpenCart. Please check your store configuration.'
+                userMessage: statusCode === 401 || statusCode === 403
+                  ? 'Invalid API token. Please check your OpenCart API token in settings.'
+                  : 'Unable to connect to your OpenCart store. Please check your store URL and API token.'
               }
             );
           }
+          throw error;
         }
-      }
 
-      if (!responseData) {
-        console.warn(`[SyncService] Empty or invalid response from ${site.baseUrl}`);
-        return [];
-      }
+        // Check for HTML response
+        if (typeof response.data === "string" && response.data.includes("<html")) {
+          console.error(`[SyncService] Received HTML instead of JSON from ${site.baseUrl}`);
+          throw new ExternalServiceError(
+            'OpenCart',
+            'Invalid API response: Received HTML instead of JSON',
+            {
+              context: {
+                tenantId: site.tenantId,
+                operation: 'fetchFromOpenCart',
+                metadata: { siteId: site.id, baseUrl: site.baseUrl }
+              },
+              userMessage: 'The OpenCart PricePilot extension may not be installed correctly.'
+            }
+          );
+        }
 
-      const rawProducts = Array.isArray(responseData)
-        ? responseData
-        : (responseData.products || []);
+        let responseData = response.data;
+
+        // Handle corrupted JSON responses
+        if (typeof responseData === "string") {
+          console.warn(`[SyncService] Received string response, attempting to extract JSON...`);
+          const jsonStart = responseData.indexOf('{"');
+          if (jsonStart !== -1) {
+            try {
+              const lastBracket = responseData.lastIndexOf('}');
+              if (lastBracket !== -1 && lastBracket > jsonStart) {
+                const jsonStr = responseData.substring(jsonStart, lastBracket + 1);
+                responseData = JSON.parse(jsonStr);
+                console.log(`[SyncService] Successfully extracted JSON from string response`);
+              }
+            } catch (parseError) {
+              console.error(`[SyncService] Failed to parse JSON:`, parseError);
+              throw new ExternalServiceError(
+                'OpenCart',
+                'Failed to parse API response',
+                {
+                  cause: parseError as Error,
+                  context: {
+                    tenantId: site.tenantId,
+                    operation: 'fetchFromOpenCart',
+                    metadata: { siteId: site.id, baseUrl: site.baseUrl }
+                  },
+                  userMessage: 'Received invalid data from OpenCart.'
+                }
+              );
+            }
+          }
+        }
+
+        if (!responseData) {
+          console.warn(`[SyncService] Empty response from ${site.baseUrl}`);
+          break;
+        }
+
+        const products = responseData.products || [];
+        total = responseData.total || 0;
+
+        console.log(`[SyncService] Fetched ${products.length} products (${start + products.length}/${total} total)`);
+
+        // Add products to collection
+        allProducts.push(...products);
+
+        // Move to next page
+        start += limit;
+
+        // Break if we've fetched all products or no more products returned
+        if (products.length < limit || start >= total) {
+          break;
+        }
+
+      } while (start < total);
+
+      console.log(`[SyncService] Completed fetch: ${allProducts.length} total products from OpenCart`);
+
+      // Now process all fetched products
+      const rawProducts = allProducts;
 
       console.log(`[SyncService] Fetched ${rawProducts.length} raw products from OpenCart: ${site.baseUrl}`);
 
