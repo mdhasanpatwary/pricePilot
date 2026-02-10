@@ -133,7 +133,7 @@ async function handlePOST(req: NextRequest) {
     return validationErrorResponse(validation);
   }
 
-  const { url, searchQueryPattern } = validation.data!;
+  const { name, baseUrl, searchQueryPattern } = validation.data!;
 
   // Fetch tenant limits
   const tenant = await prisma.tenant.findUnique({
@@ -160,7 +160,7 @@ async function handlePOST(req: NextRequest) {
 
   const site = await prisma.site.create({
     data: {
-      baseUrl: url,
+      baseUrl,
       type: "COMPETITOR",
       tenantId,
       isSyncing: true, // Start as syncing immediately so UI picks it up
@@ -176,7 +176,7 @@ async function handlePOST(req: NextRequest) {
     action: "CREATE_COMPETITOR",
     entityId: site.id,
     ipAddress: getIpAddress(req),
-    details: { url },
+    details: { name, baseUrl },
   });
 
   // Trigger auto-fetch immediately in background (with slight delay for DB propagation)

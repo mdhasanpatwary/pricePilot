@@ -245,7 +245,8 @@ export const deleteIntegrationSchema = z.object({
 // ============================================================================
 
 export const createCompetitorSchema = z.object({
-  url: urlSchema,
+  name: z.string().trim().min(1, "Name is required").max(255),
+  baseUrl: urlSchema,
   searchQueryPattern: z.string().trim().max(2048).optional(),
 });
 
