@@ -35,24 +35,31 @@ import {
 } from "@/components/ui/form";
 
 const competitorSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  baseUrl: z.string().url("Please enter a valid URL"),
-  searchQueryPattern: z.string().optional(),
+  searchUrl: z.string().url("Please enter a valid search URL"),
 });
 
 type CompetitorFormValues = z.infer<typeof competitorSchema>;
 
 /**
- * Extracts search pattern from a full URL by detecting query parameters
- * and replacing the actual search value with {query} placeholder.
+ * Extracts base URL, name, and search pattern from a full search URL
  * 
  * @example
  * Input: "https://www.ryans.com/search?q=Apple+MacBook+Air"
- * Output: "https://www.ryans.com/search?q={query}"
+ * Output: { 
+ *   baseUrl: "https://www.ryans.com",
+ *   name: "ryans.com",
+ *   searchPattern: "https://www.ryans.com/search?q={query}"
+ * }
  */
-function extractSearchPattern(fullUrl: string): string | null {
+function extractCompetitorInfo(fullUrl: string): {
+  baseUrl: string;
+  name: string;
+  searchPattern: string | null;
+} | null {
   try {
     const url = new URL(fullUrl);
+    const baseUrl = url.origin;
+    const hostname = url.hostname.replace('www.', '');
 
     // Common search parameter names
     const searchParams = ['q', 'query', 'search', 'keyword', 'keywords', 's', 'term'];
@@ -62,8 +69,11 @@ function extractSearchPattern(fullUrl: string): string | null {
       if (url.searchParams.has(param)) {
         // Replace the value with {query} placeholder
         url.searchParams.set(param, '{query}');
-        // Decode the URL to prevent %7Bquery%7D encoding
-        return decodeURIComponent(url.toString());
+        return {
+          baseUrl,
+          name: hostname,
+          searchPattern: decodeURIComponent(url.toString())
+        };
       }
     }
 
@@ -71,10 +81,19 @@ function extractSearchPattern(fullUrl: string): string | null {
     const pathMatch = url.pathname.match(/^(\/search\/|\/products\/|\/s\/)(.+?)(\/?$)/i);
     if (pathMatch) {
       const basePath = pathMatch[1];
-      return `${url.origin}${basePath}{query}`;
+      return {
+        baseUrl,
+        name: hostname,
+        searchPattern: `${url.origin}${basePath}{query}`
+      };
     }
 
-    return null;
+    // If no search pattern detected, just return base info
+    return {
+      baseUrl,
+      name: hostname,
+      searchPattern: null
+    };
   } catch (e) {
     return null;
   }
@@ -127,9 +146,7 @@ export default function CompetitorsPage() {
   const form = useForm<CompetitorFormValues>({
     resolver: zodResolver(competitorSchema),
     defaultValues: {
-      name: "",
-      baseUrl: "",
-      searchQueryPattern: "",
+      searchUrl: "",
     },
   });
 
@@ -171,14 +188,32 @@ export default function CompetitorsPage() {
   const onSubmit = async (data: CompetitorFormValues) => {
     setLoading(true);
     try {
+      // Extract competitor info from the search URL
+      const info = extractCompetitorInfo(data.searchUrl);
+
+      if (!info) {
+        toast.error("Invalid URL format");
+        setLoading(false);
+        return;
+      }
+
+      const payload = {
+        name: info.name,
+        baseUrl: info.baseUrl,
+        searchQueryPattern: info.searchPattern || undefined,
+      };
+
       const res = await fetch("/api/v1/competitors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        toast.success("Crawler deployed successfully");
+        toast.success(`Crawler deployed for ${info.name}`);
+        if (info.searchPattern) {
+          toast.success(`Search pattern detected: ${info.searchPattern}`);
+        }
         setIsAdding(false);
         form.reset();
         fetchCompetitors();
@@ -490,102 +525,31 @@ export default function CompetitorsPage() {
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
                   control={form.control}
-                  name="name"
+                  name="searchUrl"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Competitor Name
+                        Competitor Search URL
                       </FormLabel>
-                      <div className="relative group">
-                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type="text"
-                            placeholder="Competitor Store Name"
-                            className="pl-10"
-                          />
-                        </FormControl>
-                      </div>
-                      <FormMessage className="text-xs font-bold" />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="baseUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Website URL
-                      </FormLabel>
-                      <div className="relative group">
-                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type="text"
-                            placeholder="https://competitor.com"
-                            className="pl-10"
-                          />
-                        </FormControl>
-                      </div>
-                      <FormMessage className="text-xs font-bold" />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="searchQueryPattern"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between">
-                        <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                          Search Pattern (Optional)
-                        </FormLabel>
-                        <div className="group relative">
-                          <span className="text-[10px] text-primary hover:underline cursor-help font-bold uppercase tracking-tighter">What&apos;s this?</span>
-                          <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-secondary border border-border rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                            <p className="text-[10px] text-muted-foreground leading-relaxed">
-                              Paste a full search URL or enter a pattern. Use <code className="text-primary font-bold">{`{query}`}</code> as a placeholder.
-                              <br /><br />
-                              Example:<br />
-                              <code className="text-xs break-all bg-muted p-1 rounded block mt-1">
-                                /search/advance/product/result/{"{query}"}
-                              </code>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
                       <div className="relative group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors" />
                         <FormControl>
-                          <input
+                          <Input
                             {...field}
                             type="text"
-                            placeholder="Paste full URL or pattern: https://site.com/search?q={query}"
-                            className="w-full bg-background border border-border rounded-md py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-primary/20 transition-all text-sm font-medium"
-                            onBlur={(e) => {
-                              const value = e.target.value.trim();
-                              if (!value) return;
-
-                              // If user pasted a full URL (doesn't contain {query}), extract pattern
-                              if (value.includes('http') && !value.includes('{query}')) {
-                                const extracted = extractSearchPattern(value);
-                                if (extracted) {
-                                  field.onChange(extracted);
-                                  toast.success(`Pattern extracted: ${extracted}`);
-                                } else {
-                                  toast.info("Couldn't auto-detect pattern. Please add {query} manually.");
-                                }
-                              }
-
-                              field.onBlur();
-                            }}
+                            placeholder="https://competitor.com/search?q=laptop"
+                            className="pl-10"
                           />
                         </FormControl>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                        <strong>Just paste a search URL!</strong> Go to the competitor site, search for any product, copy the URL from your browser, and paste it here. We&apos;ll automatically extract everything we need.
+                      </p>
+                      <div className="mt-3 p-3 bg-primary/5 border border-primary/10 rounded-md">
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2">Example:</p>
+                        <code className="text-[10px] text-muted-foreground break-all block">
+                          https://www.ryans.com/search?q=laptop
+                        </code>
                       </div>
                       <FormMessage className="text-xs font-bold" />
                     </FormItem>
@@ -1125,10 +1089,10 @@ export default function CompetitorsPage() {
 
                     // If user pasted a full URL (doesn't contain {query}), extract pattern
                     if (value.includes('http') && !value.includes('{query}')) {
-                      const extracted = extractSearchPattern(value);
-                      if (extracted) {
-                        setSearchPatternInput(extracted);
-                        toast.success(`Pattern extracted: ${extracted}`);
+                      const info = extractCompetitorInfo(value);
+                      if (info && info.searchPattern) {
+                        setSearchPatternInput(info.searchPattern);
+                        toast.success(`Pattern extracted: ${info.searchPattern}`);
                       } else {
                         toast.info("Couldn't auto-detect pattern. Please add {query} manually.");
                       }
