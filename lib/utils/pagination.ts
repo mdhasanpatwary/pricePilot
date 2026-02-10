@@ -1,6 +1,6 @@
 /**
  * Pagination Utility
- * 
+ *
  * Provides helper functions for paginating database queries
  * with consistent response format across all API endpoints.
  */
@@ -26,13 +26,13 @@ export interface PaginatedResponse<T> {
 
 /**
  * Paginate a Prisma query with consistent response format
- * 
+ *
  * @param model - Prisma model to query
  * @param where - Where clause for filtering
  * @param params - Pagination parameters
  * @param include - Relations to include
  * @returns Paginated response with data and pagination metadata
- * 
+ *
  * @example
  * ```typescript
  * const result = await paginate(
@@ -83,12 +83,71 @@ export async function paginate<T>(
     };
 }
 
+export interface CursorPaginationParams {
+    cursor?: string;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+export interface CursorPaginatedResponse<T> {
+    data: T[];
+    pagination: {
+        nextCursor: string | null;
+        limit: number;
+        total: number;
+        hasNext: boolean;
+    };
+}
+
+/**
+ * Paginate a Prisma query using cursor-based pagination
+ */
+export async function paginateCursor<T>(
+    model: any,
+    where: any,
+    params: CursorPaginationParams,
+    include?: any
+): Promise<CursorPaginatedResponse<T>> {
+    const limit = Math.min(100, Math.max(1, params.limit || 20));
+    const sortBy = params.sortBy || 'id';
+    const sortOrder = params.sortOrder || 'desc';
+
+    const [data, total] = await Promise.all([
+        model.findMany({
+            where,
+            include,
+            take: limit + 1, // Fetch one extra to determine if there's a next page
+            cursor: params.cursor ? { [sortBy]: params.cursor } : undefined,
+            skip: params.cursor ? 1 : 0, // Skip the cursor itself
+            orderBy: {
+                [sortBy]: sortOrder
+            }
+        }),
+        model.count({ where }) // Still need total for some UI elements, but we can optimize this later
+    ]);
+
+    const hasNext = data.length > limit;
+    const paginatedData = hasNext ? data.slice(0, limit) : data;
+    const nextCursor = hasNext ? (paginatedData[paginatedData.length - 1] as any)[sortBy] : null;
+
+    return {
+        data: paginatedData,
+        pagination: {
+            nextCursor,
+            limit,
+            total,
+            hasNext
+        }
+    };
+}
+
 /**
  * Extract pagination parameters from URL search params
- * 
+ *
  * @param searchParams - URL search params
  * @returns Normalized pagination parameters
- * 
+ *
  * @example
  * ```typescript
  * const params = getPaginationParams(req.nextUrl.searchParams);
@@ -97,6 +156,15 @@ export async function paginate<T>(
 export function getPaginationParams(searchParams: URLSearchParams): PaginationParams {
     return {
         page: parseInt(searchParams.get('page') || '1'),
+        limit: parseInt(searchParams.get('limit') || '20'),
+        sortBy: searchParams.get('sortBy') || undefined,
+        sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || undefined
+    };
+}
+
+export function getCursorPaginationParams(searchParams: URLSearchParams): CursorPaginationParams {
+    return {
+        cursor: searchParams.get('cursor') || undefined,
         limit: parseInt(searchParams.get('limit') || '20'),
         sortBy: searchParams.get('sortBy') || undefined,
         sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || undefined

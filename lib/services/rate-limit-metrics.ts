@@ -141,6 +141,11 @@ class MetricBatchProcessor {
     try {
       const entries = Array.from(currentBuffer.entries());
 
+      // If Redis is available, we can use it for high-performance increments
+      // and only flush to DB periodically for persistence/reporting.
+      // For this implementation, we will stick to the DB as the source of truth
+      // but optimize the flush logic.
+
       // Process in batches to avoid overwhelming the DB connection
       const BATCH_SIZE = 50;
       for (let i = 0; i < entries.length; i += BATCH_SIZE) {
@@ -151,41 +156,46 @@ class MetricBatchProcessor {
           const timestamp = new Date(key.hourTimestamp);
 
           try {
-            // Upsert mechanism: try to find, then update or create
-            // Note: Prisma upsert requires a unique constraint which we might not have on these specific fields combined
-            // reliably depending on the schema. Using findFirst -> update/create path for safety.
+            // Using a single transaction or more efficient upsert if supported
+            // Since we added indexes, findFirst should be fast.
+            // But we can use an 'upsert' with a unique constraint if we have one.
+            // Looking at the schema, we don't have a unique constraint on (tenantId, limiterType, identifier, endpoint, timestamp).
+            // So we'll stick to the findFirst + update/create pattern but optimize it.
 
-            const existing = await prisma.rateLimitMetric.findFirst({
-              where: {
-                tenantId: key.tenantId,
-                limiterType: key.limiterType,
-                identifier: key.identifier,
-                endpoint: key.endpoint,
-                timestamp: timestamp,
-              }
-            });
-
-            if (existing) {
-              await prisma.rateLimitMetric.update({
-                where: { id: existing.id },
-                data: {
-                  hitCount: { increment: data.hitCount },
-                  violationCount: { increment: data.violationCount }
-                }
-              });
-            } else {
-              await prisma.rateLimitMetric.create({
-                data: {
+            await prisma.$transaction(async (tx) => {
+              const existing = await tx.rateLimitMetric.findFirst({
+                where: {
                   tenantId: key.tenantId,
                   limiterType: key.limiterType,
                   identifier: key.identifier,
                   endpoint: key.endpoint,
                   timestamp: timestamp,
-                  hitCount: data.hitCount,
-                  violationCount: data.violationCount
-                }
+                },
+                select: { id: true }
               });
-            }
+
+              if (existing) {
+                await tx.rateLimitMetric.update({
+                  where: { id: existing.id },
+                  data: {
+                    hitCount: { increment: data.hitCount },
+                    violationCount: { increment: data.violationCount }
+                  }
+                });
+              } else {
+                await tx.rateLimitMetric.create({
+                  data: {
+                    tenantId: key.tenantId,
+                    limiterType: key.limiterType,
+                    identifier: key.identifier,
+                    endpoint: key.endpoint,
+                    timestamp: timestamp,
+                    hitCount: data.hitCount,
+                    violationCount: data.violationCount
+                  }
+                });
+              }
+            });
           } catch (err) {
             logger.error("[RateLimitMetrics] Failed to flush individual metric:", { error: err as any, key });
           }

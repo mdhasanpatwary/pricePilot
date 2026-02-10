@@ -50,15 +50,31 @@ async function handleSync(req: NextRequest) {
       );
     }
 
-    // Mark site as syncing immediately to provide instant feedback to the frontend
     const now = new Date();
+    // Check if we should resume a recent unfinished sync or start fresh
+    const currentSiteStatus = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: {
+        syncStartedAt: true,
+        syncProcessed: true,
+        syncTotal: true
+      }
+    });
+
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const isResume = currentSiteStatus?.syncStartedAt &&
+                     currentSiteStatus.syncStartedAt > yesterday &&
+                     currentSiteStatus.syncProcessed > 0 &&
+                     currentSiteStatus.syncProcessed < currentSiteStatus.syncTotal;
+
+    // Mark site as syncing immediately to provide instant feedback to the frontend
     await prisma.site.update({
       where: { id: siteId },
       data: {
         isSyncing: true,
-        syncStartedAt: now,
-        syncLastAction: "Queuing sync job...",
-        syncProcessed: 0
+        syncStartedAt: isResume ? currentSiteStatus.syncStartedAt : now,
+        syncLastAction: isResume ? "Resuming sync session..." : "Queuing sync job...",
+        syncProcessed: isResume ? currentSiteStatus.syncProcessed : 0
       },
     });
 

@@ -724,15 +724,8 @@ model Product {
   ScrapeAttempt                                          ScrapeAttempt[]
   ScrapeRetry                                            ScrapeRetry[]
 
-  @@index([brandId])
-  @@index([brand, model])
-  @@index([categoryId])
-  @@index([category, currentPrice])
-  @@index([sku])
-  @@index([tenantId, brand])
-  @@index([tenantId])
-  @@index([siteId])
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
+  @@index([siteId])
 }
 
 model ProductMatch {
@@ -1163,6 +1156,8 @@ model Site {
   ScrapingMetric      ScrapingMetric[]
   Tenant              Tenant             @relation(fields: [tenantId], references: [id])
   SyncLog             SyncLog[]
+
+  @@index([tenantId, type, createdAt(sort: Desc)])
 }
 
 model SiteProfile {

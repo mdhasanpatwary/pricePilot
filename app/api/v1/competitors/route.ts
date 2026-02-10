@@ -9,9 +9,12 @@ import {
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { UnauthorizedError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/utils/error-handler";
-import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import {
+  getCursorPaginationParams,
+  paginateCursor
+} from "@/lib/utils/pagination";
 
 async function handleGET(req: NextRequest) {
   const session = await getCachedSession();
@@ -24,18 +27,11 @@ async function handleGET(req: NextRequest) {
 
   // Get pagination parameters
   const searchParams = req.nextUrl.searchParams;
-  const paginationParams = getPaginationParams(searchParams);
+  const paginationParams = getCursorPaginationParams(searchParams);
 
-  // Get total number of products the user is tracking (from USER site)
-  const totalUserProducts = await prisma.product.count({
-    where: {
-      tenantId,
-      Site: { type: "USER" }
-    }
-  });
-
-  // Use pagination helper
-  const paginatedResult = await paginate(
+  // Use cursor-based pagination
+  // We use `site.id` as the default cursor since it's unique and indexed
+  const paginatedResult = await paginateCursor(
     prisma.site,
     {
       tenantId,
@@ -43,7 +39,7 @@ async function handleGET(req: NextRequest) {
     },
     {
       ...paginationParams,
-      sortBy: paginationParams.sortBy || 'createdAt',
+      sortBy: paginationParams.sortBy || 'id',
       sortOrder: paginationParams.sortOrder || 'desc'
     },
     {
@@ -58,6 +54,17 @@ async function handleGET(req: NextRequest) {
   );
 
   const competitors = paginatedResult.data;
+
+  // Optimize total request: Fetch only if it's the first page or explicitly requested
+  // This avoids a full count on every scroll/pagination if not needed
+  const totalUserProducts = !paginationParams.cursor
+    ? await prisma.product.count({
+        where: {
+          tenantId,
+          Site: { type: "USER" }
+        }
+      })
+    : 0;
 
   const formattedCompetitors = competitors
     .map((site: any) => {
@@ -82,7 +89,7 @@ async function handleGET(req: NextRequest) {
 
         return {
           id: site.id,
-          name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
+          name: name.charAt(0).toUpperCase() + name.slice(1),
           url: site.baseUrl,
           products: site._count.Product,
           status: site.isSyncing
@@ -99,7 +106,7 @@ async function handleGET(req: NextRequest) {
           syncLastAction: site.syncLastAction,
           syncStartedAt: site.syncStartedAt,
           totalUserProducts: totalUserProducts || 0,
-          isAdvancedProtected: site.isAdvancedProtected || false, // Use the real DB value
+          isAdvancedProtected: site.isAdvancedProtected || false,
           searchQueryPattern: site.searchQueryPattern,
           logs: site.SyncLog || [],
         };

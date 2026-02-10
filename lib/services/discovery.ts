@@ -47,12 +47,14 @@ export class DiscoveryService {
     // Create a Set for O(1) lookup
     const matchedProductIds = new Set(existingMatches.map(m => m.userProductId));
 
-    // Initialize progress (Do NOT reset syncStartedAt here, preserve the session ID)
+    // Initialize progress - only reset if we're starting fresh, otherwise preserve for UI continuity
+    const shouldReset = !site.syncProcessed || site.syncProcessed >= site.syncTotal;
+
     await prisma.site.update({
       where: { id: siteId },
       data: {
         syncTotal: userProducts.length,
-        syncProcessed: 0,
+        syncProcessed: shouldReset ? 0 : site.syncProcessed,
         syncLastAction: "Mapping terminal signals...",
       },
     });
@@ -91,7 +93,7 @@ export class DiscoveryService {
         await prisma.site.update({
           where: { id: siteId },
           data: {
-            syncProcessed: i,
+            syncProcessed: Math.max(i, site.syncProcessed || 0),
             syncLastAction: `Batch Scanning: ${currentBatchStart}-${currentBatchEnd}...`,
           },
         });
