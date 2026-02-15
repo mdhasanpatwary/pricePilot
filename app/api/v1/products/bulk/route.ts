@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { chunkArray } from "@/lib/utils/chunk";
 
 const bulkUpdateSchema = z.object({
   productIds: z.array(z.string()).min(1, "At least one product required"),
@@ -52,20 +53,26 @@ async function handlePOST(req: NextRequest) {
       }
     }
 
-    // Verify all products belong to this tenant
-    const products = await prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        tenantId,
-      },
-      select: {
-        id: true,
-        title: true,
-        sku: true,
-        currentPrice: true,
-        inStock: true,
-      },
-    });
+    // Verify all products belong to this tenant (chunked to avoid oversized IN clauses)
+    const IN_CHUNK_SIZE = 500;
+    const idChunks = chunkArray(productIds, IN_CHUNK_SIZE);
+    const products = (await Promise.all(
+      idChunks.map(chunk =>
+        prisma.product.findMany({
+          where: {
+            id: { in: chunk },
+            tenantId,
+          },
+          select: {
+            id: true,
+            title: true,
+            sku: true,
+            currentPrice: true,
+            inStock: true,
+          },
+        })
+      )
+    )).flat();
 
     if (products.length !== productIds.length) {
       return NextResponse.json(

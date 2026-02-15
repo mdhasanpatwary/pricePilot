@@ -123,8 +123,8 @@ export class MetricsAggregator {
                 challenges,
             };
 
-            // Cache for 30 seconds
-            this.setCache(cacheKey, metrics, 30000);
+            // Cache for 60 seconds (dashboard metrics don't need sub-minute freshness)
+            this.setCache(cacheKey, metrics, 60000);
 
             return metrics;
         } catch (error) {
@@ -177,8 +177,13 @@ export class MetricsAggregator {
                 avgSessionDuration = totalDuration / completedSessions.length;
             }
 
-            // Get total tenants count
-            const totalTenants = await prisma.tenant.count();
+            // Get total tenants count (cached separately with 5-minute TTL since this rarely changes)
+            const totalTenantsCacheKey = 'total_tenants';
+            let totalTenants = this.getCached<number>(totalTenantsCacheKey);
+            if (totalTenants === null) {
+                totalTenants = await prisma.tenant.count();
+                this.setCache(totalTenantsCacheKey, totalTenants, 300000); // 5 minutes
+            }
 
             // Get active tenants (tenants with sessions in last 24 hours)
             const oneDayAgo = new Date(Date.now() - 86400000);

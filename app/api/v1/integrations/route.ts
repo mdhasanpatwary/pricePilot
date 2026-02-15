@@ -9,6 +9,7 @@ import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { WebsiteService } from "@/lib/services/website-service";
 import { EncryptionError } from "@/lib/services/encryption/errors";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
@@ -99,9 +100,7 @@ async function handlePOST(req: NextRequest) {
     const { platform, baseUrl, apiToken, type, searchQueryPattern } = validation.data!;
 
     // Fetch tenant limits
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
+    const tenant = await getCachedTenant(tenantId);
 
     if (!tenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });

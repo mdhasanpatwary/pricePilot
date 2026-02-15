@@ -49,7 +49,7 @@ import type { AppError as AppErrorType, ErrorOptions as ErrorOptionsType } from 
 /**
  * Wraps a ScrapeBlockError into the new error handling system
  * Maps to ExternalServiceError since scraping is an external service concern
- * 
+ *
  * @param originalError - The original ScrapeBlockError
  * @param context - Additional context to include
  * @returns AppError instance wrapping the original error
@@ -516,7 +516,7 @@ export class ScraperService {
    * Scrape a product page with retry queue integration
    * If immediate retries fail, adds the request to the retry queue for later processing
    * Implements Requirements 8.1, 8.5, 6.2, 6.8, 6.9
-   * 
+   *
    * @param url Product URL to scrape
    * @param tenantId Tenant ID
    * @param siteId Site ID
@@ -593,7 +593,7 @@ export class ScraperService {
    * Scrape a product page with session tracking
    * Creates a session, tracks all lifecycle stages, and completes the session
    * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 6.2, 6.8, 6.9
-   * 
+   *
    * @param url Product URL to scrape
    * @param tenantId Tenant ID
    * @param _siteId Site ID (unused but required for interface compatibility)
@@ -808,7 +808,7 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent, proxy);
+      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname);
       page = await context.newPage();
     } catch (error) {
       logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
@@ -872,8 +872,30 @@ export class ScraperService {
       }
 
       const response = await page.goto(url, {
-        waitUntil: profile.strategy === 'full-js' ? 'networkidle' : 'domcontentloaded',
-        timeout: 30000,
+        waitUntil: 'domcontentloaded', // Always use domcontentloaded for faster navigation
+        timeout: 15000, // Reduced from 30s to 15s
+      });
+
+      // Add manual wait for common price selectors to ensure content is loaded (Task 1 in Plan)
+      const commonPriceSelectors = [
+        '[itemprop="price"]',
+        '.price',
+        '.product-price',
+        '.current-price',
+        '.p-item-price', // Startech
+        '.rp-product-price', // Ryans
+      ];
+
+      // Wait for any of the common price selectors to become visible
+      await Promise.any(
+        commonPriceSelectors.map(selector =>
+          page.waitForSelector(selector, {
+            state: 'visible',
+            timeout: 5000
+          })
+        )
+      ).catch(() => {
+        logger.debug(`[ScraperService] No common price selectors found within 5s for ${hostname}`);
       });
 
       // Track this navigation for future referrer chain
@@ -1383,7 +1405,7 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent, proxy);
+      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname);
       page = await context.newPage();
     } catch (error) {
       logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
@@ -1430,15 +1452,36 @@ export class ScraperService {
       if (profile.strategy !== 'full-js') {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5000);
-          const preFlight = await fetch(url, { method: "HEAD", signal: controller.signal });
+          const timeout = setTimeout(() => controller.abort(), 8000); // Increased to 8s
+          const headers: HeadersInit = {
+            'User-Agent': userAgent, // Use the rotated UA for pre-flight
+          };
+          if (proxyUrl) {
+            // Note: native fetch doesn't support proxy easily without agent,
+            // but we rely on the main browser request mostly.
+            // This pre-flight is just an early check.
+          }
+
+          const preFlight = await fetch(url, { method: "HEAD", signal: controller.signal, headers });
           clearTimeout(timeout);
-          if (!preFlight.ok && preFlight.status !== 403 && preFlight.status !== 429) {
-            logger.warn(`[Scraper] 🛑 Pre-flight failed: ${preFlight.status} for ${url}.`);
-            return null;
+
+          // Enhanced Anti-Bot Detection in Pre-flight
+          const serverHeader = preFlight.headers.get('server') || '';
+          const cfRay = preFlight.headers.get('cf-ray');
+
+          if (!preFlight.ok) {
+            if (preFlight.status === 403 || preFlight.status === 429 || serverHeader.includes('cloudflare')) {
+              logger.warn(`[Scraper] 🛡️ Potentially blocked by Anti-Bot (${preFlight.status}) for ${url}. CF-Ray: ${cfRay || 'none'}. Proceeding with browser for better evasion.`);
+              // Don't return null, let the browser attempt to bypass
+            } else if (preFlight.status === 404) {
+              logger.warn(`[Scraper] 🛑 Pre-flight 404 for ${url}. Page likely gone.`);
+              return null;
+            } else {
+              logger.warn(`[Scraper] ⚠️ Pre-flight warning: ${preFlight.status} for ${url}. Continuing.`);
+            }
           }
         } catch (e) {
-          logger.warn(`[Scraper] Pre-flight net error: ${e}.`);
+          logger.warn(`[Scraper] Pre-flight net warning: ${e}. Continuing with browser.`);
         }
       }
 
@@ -1456,8 +1499,8 @@ export class ScraperService {
       }
 
       const response = await page.goto(url, {
-        waitUntil: profile.strategy === 'full-js' ? 'networkidle' : 'domcontentloaded',
-        timeout: 30000,
+        waitUntil: 'domcontentloaded', // Always use domcontentloaded for faster navigation
+        timeout: 15000, // Reduced from 30s to 15s
       });
 
       const navigationTime = Date.now() - navigationStartTime;
@@ -1468,6 +1511,25 @@ export class ScraperService {
       }
 
       statusCode = response?.status() || 0;
+
+      // Cloudflare / Anti-Bot Detection Logic
+      if (statusCode === 403 || statusCode === 429 || statusCode === 503) {
+        const pageContent = await page.content();
+        const lowerContent = pageContent.toLowerCase();
+
+        if (
+          lowerContent.includes('cf-browser-verification') ||
+          lowerContent.includes('just a moment...') ||
+          lowerContent.includes('cloudflare') ||
+          lowerContent.includes('attention required')
+        ) {
+          logger.warn(`[ScraperService] 🛡️ Cloudflare detected for ${url} (Status: ${statusCode})`);
+
+          const isAdvanced = lowerContent.includes('turnstile') || lowerContent.includes('challenge');
+
+          throw new ScrapeBlockError('Cloudflare', url, isAdvanced);
+        }
+      }
 
       // Requirement 9.2: Throw RateLimitError for HTTP 429
       if (statusCode === 429) {
@@ -2566,7 +2628,41 @@ export class ScraperService {
 
       // If price is 0 but product exists, check stock status
       if (price === 0 && data.title) {
-        logger.warn(`[ScraperService] Price = 0 detected. Stock status: "${data.stockText}"`);
+        logger.warn(`[ScraperService] Price = 0 detected on first attempt. Stock status: "${data.stockText}"`);
+
+        // Retry with alternative price extraction methods
+        const fallbackPrice = await page.evaluate(() => {
+          // Fallback selectors for price extraction
+          const fallbackSelectors = [
+            'meta[property="product:price:amount"]',
+            'meta[property="og:price:amount"]',
+            '[data-price]',
+            '.sale-price',
+            '.offer-price',
+            '.discounted-price',
+          ];
+
+          for (const selector of fallbackSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const priceText = element.getAttribute('content') || element.textContent || '';
+              const match = priceText.replace(/,/g, '').match(/\d+\.?\d*/);
+              if (match) {
+                const extractedPrice = parseFloat(match[0]);
+                if (extractedPrice > 0) return extractedPrice;
+              }
+            }
+          }
+          return 0;
+        }).catch(() => 0);
+
+        if (fallbackPrice > 0) {
+          price = fallbackPrice;
+          logger.info(`[ScraperService] ✅ Fallback extraction succeeded: ${price}`);
+        } else {
+          // Mark as parse failure
+          logger.error(`[ScraperService] ❌ Price extraction failed after retry - marking as PARSE_FAILED`);
+        }
 
         if (data.isComingSoon) {
           logger.info(`[ScraperService] Product is "Coming Soon" - marking as out of stock`);
@@ -2574,8 +2670,6 @@ export class ScraperService {
           logger.info(`[ScraperService] Product is "Pre-Order" - marking as out of stock`);
         } else if (data.isOos) {
           logger.info(`[ScraperService] Product is "Out of Stock"`);
-        } else {
-          logger.error(`[ScraperService] Price extraction failed - no valid price found`);
         }
       }
 
@@ -2657,20 +2751,22 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent);
+      const proxyResult = await this.getNextProxy();
+      const proxyUrl = proxyResult.url;
+      const proxy = proxyUrl ? { server: proxyUrl } : undefined;
+      const hostname = new URL(baseUrl).hostname;
+
+      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname);
       page = await context.newPage();
+
+      if (proxyUrl) {
+        logger.info(`[ScraperService] Discovery using proxy: ${proxyUrl}`);
+      }
     } catch (error) {
       logger.error(`[ScraperService] Failed to acquire context or create page for search:`, { error });
       return null;
     }
 
-    const log = async (message: string, level: "INFO" | "WARN" | "ERROR" | "SUCCESS" = "INFO") => {
-      if (siteId) {
-        await prisma.syncLog.create({
-          data: { siteId, message, level }
-        }).catch(() => { });
-      }
-    };
 
     try {
       // 0. Clean retry flags from the search term
@@ -2705,7 +2801,7 @@ export class ScraperService {
           // If the pattern itself is a full URL, use it as base. Otherwise, append to baseUrl.
           let baseUrlToUse = baseUrl.replace(/\/$/, "");
           if (pattern.startsWith("http")) {
-            // If pattern is absolute, we ignore the passed baseUrl for the search part 
+            // If pattern is absolute, we ignore the passed baseUrl for the search part
             // but we still need to process the query replacement.
             baseUrlToUse = "";
           }
@@ -2739,7 +2835,7 @@ export class ScraperService {
       logger.info(
         `[ScraperService] Searching: ${searchUrl} (Strategy: ${usedCustomPattern ? "Database Pattern" : (strategyKey || "Default")})`,
       );
-      await log(`🔍 Searching: ${searchUrl}`, "INFO");
+      // await log removed to avoid duplication with DiscoveryService
 
       // Add small random delay before navigation (more human-like)
       await page.waitForTimeout(Math.random() * 1000 + 500); // 500-1500ms
@@ -2755,7 +2851,7 @@ export class ScraperService {
       if (securityInfo.isBlocked) {
         const msg = `🛡️[Scraper] Blocked by ${securityInfo.provider} at ${hostname} `;
         logger.warn(`[ScraperService] ${msg} `);
-        await log(msg, "WARN");
+        // await log removed to avoid duplication with DiscoveryService
 
         // Try to wait for Cloudflare challenge before throwing error
         if (securityInfo.provider === "CLOUDFLARE") {
@@ -2926,11 +3022,14 @@ export class ScraperService {
         if (text.length < 4 && !href.includes("product_id=")) return;
         if (href.includes("javascript:") || href.includes("#")) return;
 
-        // Skip navigation/sort/compare links
+        // Skip navigation/sort/compare/search links
         const isJunk =
+          href === window.location.href.toLowerCase() ||
           href.includes("sort=") || href.includes("limit=") ||
           href.includes("page=") || href.includes("order=") ||
           href.includes("compare") || href.includes("wishlist") ||
+          href.includes("/search?") || href.includes("/search/") ||
+          href.includes("search_query=") ||
           href.includes("/account") || href.includes("/checkout");
 
         if (isJunk) return;

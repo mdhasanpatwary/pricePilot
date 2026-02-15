@@ -150,13 +150,14 @@ export class BrowserPool {
     userAgent?: string,
     proxy?: { server: string },
     stealthOptions?: StealthOptions,
+    hostname?: string,
   ): Promise<BrowserContext> {
     if (!this.browser) {
       await this.init();
     }
 
     // Try to find an available context with matching config
-    const contextKey = this.getContextKey(userAgent, proxy);
+    const contextKey = this.getContextKey(userAgent, proxy, hostname);
     const pooled = this.contexts.get(contextKey);
 
     if (pooled && !pooled.inUse) {
@@ -191,7 +192,7 @@ export class BrowserPool {
           "[BrowserPool] Pool limit reached, waiting for available context",
         );
         // Wait for a context to become available
-        return this.waitForAvailableContext(userAgent, proxy, stealthOptions);
+        return this.waitForAvailableContext(userAgent, proxy, stealthOptions, hostname);
       }
     }
 
@@ -408,7 +409,7 @@ export class BrowserPool {
 
     this.contexts.set(contextKey, pooledContext);
     logger.info(
-      `[BrowserPool] Created new context: ${contextKey} (${this.contexts.size}/${this.maxContexts})`,
+      `[BrowserPool] Created new context for ${hostname || 'generic'}: ${contextKey} (${this.contexts.size}/${this.maxContexts})`,
     );
 
     return context;
@@ -444,10 +445,12 @@ export class BrowserPool {
   private getContextKey(
     userAgent?: string,
     proxy?: { server: string },
+    hostname?: string,
   ): string {
     const ua = userAgent || "default";
     const proxyServer = proxy?.server || "none";
-    return `${ua.substring(0, 20)}_${proxyServer}`;
+    const host = hostname || "generic";
+    return `${host}_${ua.substring(0, 10)}_${proxyServer}`;
   }
 
   /**
@@ -457,10 +460,11 @@ export class BrowserPool {
     userAgent?: string,
     proxy?: { server: string },
     _stealthOptions?: StealthOptions,
+    hostname?: string,
   ): Promise<BrowserContext> {
     return new Promise((resolve) => {
       const checkInterval = setInterval(async () => {
-        const contextKey = this.getContextKey(userAgent, proxy);
+        const contextKey = this.getContextKey(userAgent, proxy, hostname);
         const pooled = this.contexts.get(contextKey);
 
         if (pooled && !pooled.inUse) {

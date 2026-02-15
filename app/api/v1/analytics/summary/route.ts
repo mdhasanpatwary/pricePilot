@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withCache } from "@/lib/middleware/api-cache";
+import { withErrorHandling } from "@/lib/middleware/global-error-handler";
+import { withDbRetry } from "@/lib/utils/db-retry";
+import { getTenantCurrency } from "@/lib/tenant/cached-tenant";
 
 /**
  * GET /api/analytics/summary
@@ -29,62 +33,46 @@ async function handleGET(_req: NextRequest) {
     );
   }
 
+  // Determine currency dynamically
+  const currency = await getTenantCurrency(tenantId);
+
   try {
-    // Determine currency dynamically from integrated USER site products first,
-    // then fall back to Tenant.currency, then USD.
-    let currency = "USD";
-    try {
-      // Prefer the USER Site currency (most recently synced or created)
-      const userSite = await prisma.site.findFirst({
-        where: { tenantId, type: "USER" },
-        orderBy: [{ lastSyncAt: "desc" }, { createdAt: "desc" }],
-      });
-      if ((userSite as any)?.currency) {
-        currency = (userSite as any).currency;
-      } else {
-        const anyUserProduct = await prisma.product.findFirst({
-          where: { tenantId, Site: { type: "USER" } },
-          select: { currency: true },
-          orderBy: { createdAt: "desc" },
-        });
-        if (anyUserProduct?.currency) {
-          currency = anyUserProduct.currency;
-        } else {
-          const tenant = await prisma.tenant.findUnique({
-            where: { id: tenantId },
-          });
-          currency = (tenant as any)?.currency || "USD";
-        }
-      }
-    } catch {
-      // ignore and keep default USD
-    }
-    // 1. Total SKUs (user products)
-    const totalProducts = await prisma.product.count({
+    // 1. Total SKUs (user products) - retry on transient failures
+    const totalProducts = await withDbRetry(() => prisma.product.count({
       where: {
         tenantId,
         Site: { type: "USER" },
       },
-    });
+    }), { operationName: 'CountUserProducts' });
 
     // 2. Active Competitors
-    const activeCompetitors = await prisma.site.count({
+    const activeCompetitors = await withDbRetry(() => prisma.site.count({
       where: {
         tenantId,
         type: "COMPETITOR",
       },
-    });
+    }), { operationName: 'CountCompetitors' });
 
-    // 3. Critical Alerts (products at risk - more expensive than competition)
-    const matches = await prisma.productMatch.findMany({
+    // 3. Critical Alerts & Position Summary
+    // Optimization: Select only necessary fields and use DB retry
+    const matches = await withDbRetry(() => prisma.productMatch.findMany({
       where: {
         userProduct: { tenantId },
       },
-      include: {
-        userProduct: true,
-        competitorProduct: true,
-      },
-    });
+      select: {
+        userProduct: {
+          select: {
+            currentPrice: true,
+            category: true,
+          }
+        },
+        competitorProduct: {
+          select: {
+            currentPrice: true,
+          }
+        }
+      }
+    }), { operationName: 'FetchMatchesForAnalytics' });
 
     const atRiskCount = matches.filter((m) => {
       const userPrice = parseFloat(m.userProduct.currentPrice.toString());
@@ -175,5 +163,15 @@ async function handleGET(_req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "read", handleGET);
+  return withRequestContextAndRateLimit(req, "read", (req) => {
+    const cachedHandler = withCache(
+      (req) => withErrorHandling(handleGET)(req),
+      {
+        ttl: 600, // 10 minutes for dashboard stats
+        keyPrefix: 'api:analytics:summary',
+        tenantIsolated: true,
+      }
+    );
+    return cachedHandler(req);
+  });
 }

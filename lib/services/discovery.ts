@@ -2,6 +2,7 @@ import { ScraperService, ScrapeBlockError } from "./scraper";
 import { prisma } from "@/lib/prisma";
 import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
+import { withDbRetry } from "@/lib/utils/db-retry";
 
 export class DiscoveryService {
   /**
@@ -97,20 +98,11 @@ export class DiscoveryService {
             syncLastAction: `Batch Scanning: ${currentBatchStart}-${currentBatchEnd}...`,
           },
         });
-      } catch (e) { }
 
-      // Run batch in parallel
-      const batchResults = await Promise.all(batch.map(async (up, idx) => {
-        // Quick check before starting this product
-        const check = await prisma.site.findUnique({
-          where: { id: siteId },
-          select: { isSyncing: true, syncStartedAt: true }
-        });
-        if (!check?.isSyncing || check.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-          return { aborted: true };
-        }
-        const localProcessedIdx = i + idx + 1;
-        const siteName = new URL(site.baseUrl).hostname.replace("www.", "");
+        // Run batch in parallel but skip redundant individual site checks
+        const batchResults = await Promise.all(batch.map(async (up, idx) => {
+          const localProcessedIdx = i + idx + 1;
+          const siteName = new URL(site.baseUrl).hostname.replace("www.", "");
 
         // FIX: Use the pre-fetched Set instead of querying
         if (matchedProductIds.has(up.id)) {
@@ -123,14 +115,16 @@ export class DiscoveryService {
           .replace(/&quot;/g, '"')
           .replace(/&#39;/g, "'");
 
-        // Log: Starting search
-        await prisma.syncLog.create({
-          data: {
-            siteId,
-            message: `🔍 [${localProcessedIdx}] SEARCHING: "${up.title.substring(0, 30)}..." on ${siteName}`,
-            level: "INFO",
-          },
-        });
+        // Reduced noise: log batch start only or every 10th search if batch is large
+        if (localProcessedIdx % 10 === 0 || localProcessedIdx === 1) {
+          await prisma.syncLog.create({
+            data: {
+              siteId,
+              message: `🔍 [${localProcessedIdx}/${userProducts.length}] SCANNING: "${up.title.substring(0, 30)}..." on ${siteName}`,
+              level: "INFO",
+            },
+          });
+        }
 
         try {
           const result = await scraper.searchAndScrape(site.baseUrl, cleanTitle, siteId);
@@ -156,43 +150,71 @@ export class DiscoveryService {
               },
             });
 
-            // Atomic creation
-            await prisma.$transaction(async (tx) => {
-              const compProduct = await tx.product.create({
-                data: {
-                  tenantId,
-                  siteId: site.id,
-                  url: result.url,
-                  title: result.title,
-                  currentPrice: result.price,
-                  inStock: result.inStock,
-                  currency: result.currency || "BDT",
-                  lastCrawledAt: new Date(),
-                }
+            // Atomic creation with duplicate check
+            await withDbRetry(() => prisma.$transaction(async (tx) => {
+              // But better yet: if result.price is valid, we create the product.
+              // If the competitor product already exists with the same URL, we should reuse it.
+              let compProduct = await tx.product.findFirst({
+                where: { url: result.url, siteId: site.id }
               });
 
-              await tx.productMatch.create({
-                data: {
+              if (!compProduct) {
+                compProduct = await tx.product.create({
+                  data: {
+                    tenantId,
+                    siteId: site.id,
+                    url: result.url,
+                    title: result.title,
+                    currentPrice: result.price,
+                    inStock: result.inStock,
+                    currency: result.currency || "BDT",
+                    lastCrawledAt: new Date(),
+                  }
+                });
+              }
+
+              // Check if THIS specific match already exists
+              const matchExists = await tx.productMatch.findFirst({
+                where: {
                   userProductId: up.id,
-                  competitorProductId: compProduct.id,
-                  matchType: "AUTO_SKU",
-                  confidenceScore: 0.9,
+                  competitorProductId: compProduct.id
                 }
               });
 
-              await tx.priceHistory.create({
-                data: { productId: compProduct.id, price: result.price }
+              if (!matchExists) {
+                await tx.productMatch.create({
+                  data: {
+                    userProductId: up.id,
+                    competitorProductId: compProduct.id,
+                    matchType: "AUTO_SKU",
+                    confidenceScore: 0.9,
+                  }
+                });
+              }
+
+              // Only create price history if it doesn't exist for this exact time (prevent duplicates)
+              const now = new Date();
+              const historyExists = await tx.priceHistory.findFirst({
+                where: { productId: compProduct.id, recordedAt: now }
               });
-            });
+
+              if (!historyExists) {
+                await tx.priceHistory.create({
+                  data: { productId: compProduct.id, price: result.price, recordedAt: now }
+                });
+              }
+            }), { operationName: 'DiscoveryMatchTransaction' });
             discoveredCount++;
           } else {
-            await prisma.syncLog.create({
-              data: {
-                siteId,
-                message: `❌ [${localProcessedIdx}] FAILED: "${up.title.substring(0, 30)}..." - No match found on ${siteName}`,
-                level: "ERROR",
-              },
-            });
+            if (localProcessedIdx % 5 === 0 || localProcessedIdx === userProducts.length) {
+              await prisma.syncLog.create({
+                data: {
+                  siteId,
+                  message: `❌ [${localProcessedIdx}] NO MATCH: "${up.title.substring(0, 30)}..."`,
+                  level: "ERROR",
+                },
+              });
+            }
           }
         } catch (error) {
           if (error instanceof ScrapeBlockError) {
@@ -261,10 +283,13 @@ export class DiscoveryService {
           }
         }
         return { aborted: false };
-      }));
+        }));
 
-      if (batchResults.some((r: any) => r?.aborted)) {
-        return { discoveredCount, aborted: true };
+        if (batchResults.some((r: any) => r?.aborted)) {
+          return { discoveredCount, aborted: true };
+        }
+      } catch (error) {
+        console.error("[DiscoveryService] Batch error:", error);
       }
 
       // Small throttle between batches to be nice to CPUs

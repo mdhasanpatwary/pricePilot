@@ -13,6 +13,8 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getOrSetRequestCache } from "@/lib/cache/request-cache";
+import { withDbRetry } from "@/lib/utils/db-retry";
 
 async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await getCachedSession();
@@ -24,14 +26,22 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
     const tenantId = session.user.tenantId;
     const { id: competitorId } = await params;
 
-    // Verify the competitor site belongs to this tenant
-    const competitorSite = await prisma.site.findFirst({
-        where: {
-            id: competitorId,
-            tenantId,
-            type: "COMPETITOR",
-        },
-    });
+    // Verify the competitor site belongs to this tenant - cached per request
+    const competitorSite = await getOrSetRequestCache(
+        `competitor-site:${competitorId}:${tenantId}`,
+        () => withDbRetry(() => prisma.site.findFirst({
+            where: {
+                id: competitorId,
+                tenantId,
+                type: "COMPETITOR",
+            },
+            include: {
+                _count: {
+                    select: { Product: true }
+                }
+            }
+        }), { operationName: 'VerifyCompetitorSite' })
+    );
 
     if (!competitorSite) {
         throw new NotFoundError('Competitor site', competitorId);
@@ -44,33 +54,23 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
     const skip = (page - 1) * limit;
 
     // Get competitor products
-    const [products, total] = await Promise.all([
-        prisma.product.findMany({
-            where: {
-                siteId: competitorId,
-                tenantId,
-            },
-                include: {
-                    Site: true,
-                    matchesAsCompetitor: {
-                        include: {
-                            userProduct: true,
-                        },
-                    },
-                },
-            orderBy: {
-                updatedAt: "desc",
-            },
-            skip,
-            take: limit,
-        }),
-        prisma.product.count({
-            where: {
-                siteId: competitorId,
-                tenantId,
-            },
-        }),
-    ]);
+    const total = (competitorSite as any)._count.Product;
+    const products = await withDbRetry(() => prisma.product.findMany({
+        where: {
+            siteId: competitorId,
+            tenantId,
+        },
+        include: {
+            _count: {
+                select: { matchesAsCompetitor: true }
+            }
+        },
+        orderBy: {
+            updatedAt: "desc",
+        },
+        skip,
+        take: limit,
+    }), { operationName: 'FetchCompetitorProducts' });
 
     // Format products for response
     const formattedProducts = products.map((product) => ({
@@ -85,7 +85,7 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
         category: product.category || "Uncategorized",
         url: product.url || null,
         lastScrapedAt: product.updatedAt,
-        matchCount: product.matchesAsCompetitor.length,
+        matchCount: (product as any)._count.matchesAsCompetitor,
         specifications: product.specifications || {},
     }));
 
@@ -113,16 +113,16 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    // Apply caching with 10-minute TTL (600 seconds)
-    const cachedHandler = withCache(
-        (req) => withRequestContextAndRateLimit(req, "read", withErrorHandling((req) => handleGET(req, context))),
-        {
-            ttl: 600, // 10 minutes
-            keyPrefix: 'api:competitors:products',
-            varyBy: ['page', 'limit'],
-            tenantIsolated: true,
-        }
-    );
-
-    return cachedHandler(req);
+    return withRequestContextAndRateLimit(req, "read", (req) => {
+        const cachedHandler = withCache(
+            (req) => withErrorHandling((req) => handleGET(req, context))(req),
+            {
+                ttl: 600, // 10 minutes
+                keyPrefix: 'api:competitors:products',
+                varyBy: ['page', 'limit'],
+                tenantIsolated: true,
+            }
+        );
+        return cachedHandler(req);
+    });
 }

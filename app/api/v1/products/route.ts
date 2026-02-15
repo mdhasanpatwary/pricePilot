@@ -7,6 +7,8 @@ import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getTenantCurrency } from "@/lib/tenant/cached-tenant";
+import { withDbRetry } from "@/lib/utils/db-retry";
 
 async function handleGET(req: NextRequest) {
   const session = await getCachedSession();
@@ -30,27 +32,7 @@ async function handleGET(req: NextRequest) {
   // Determine currency
   let currency = "USD";
   try {
-    const anyUserProduct = await prisma.product.findFirst({
-      where: { tenantId, Site: { type: "USER" } },
-      select: { currency: true },
-      orderBy: { createdAt: "desc" },
-    });
-    if (anyUserProduct?.currency) {
-      currency = anyUserProduct.currency;
-    } else {
-      const userSite = await prisma.site.findFirst({
-        where: { tenantId, type: "USER" },
-        orderBy: { createdAt: "desc" },
-      });
-      if (userSite?.currency) {
-        currency = userSite.currency;
-      } else {
-        const tenant = await prisma.tenant.findUnique({
-          where: { id: tenantId },
-        });
-        currency = (tenant as any)?.currency || "USD";
-      }
-    }
+    currency = await getTenantCurrency(tenantId);
   } catch (e) {
     // keep default USD
   }
@@ -90,29 +72,22 @@ async function handleGET(req: NextRequest) {
 
   // Get pagination parameters
   const paginationParams = getPaginationParams(searchParams);
+  const { page, limit, sortBy = 'updatedAt', sortOrder = 'desc' } = paginationParams;
 
-  // Use pagination helper
-  const paginatedResult = await paginate(
-    prisma.product,
-    where,
-    {
-      ...paginationParams,
-      sortBy: paginationParams.sortBy || 'updatedAt',
-      sortOrder: paginationParams.sortOrder || 'desc'
-    },
-    {
-      Site: true,
-      matchesAsUser: {
-        include: {
-          competitorProduct: {
-            include: {
-              Site: true,
-            },
-          },
+  // Get paginated results - retry on transient failures
+  const paginatedResult = await withDbRetry(() => paginate(prisma.product, where, { page, limit, sortBy, sortOrder }, {
+    matchesAsUser: {
+      include: {
+        competitorProduct: {
+          include: { Site: true },
         },
       },
-    }
-  );
+      orderBy: {
+        competitorProduct: { currentPrice: "asc" },
+      },
+    },
+    Site: true,
+  }), { operationName: 'ListProducts' });
 
   const products = paginatedResult.data;
 
@@ -218,17 +193,19 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // Apply caching with 5-minute TTL (300 seconds)
-  // Requirement 2.9.4: Cache product lists with 5 minutes TTL
-  const cachedHandler = withCache(
-    (req) => withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET)),
-    {
-      ttl: 300, // 5 minutes
-      keyPrefix: 'api:products',
-      varyBy: ['q', 'brand', 'category', 'stock', 'ram', 'storage', 'processor', 'page', 'limit', 'sortBy', 'sortOrder'],
-      tenantIsolated: true,
-    }
-  );
-
-  return cachedHandler(req);
+  // 1. Initialize Request Context & Rate Limiting (Outermost)
+  // 2. Apply Caching (Inner)
+  // 3. Execute Handler
+  return withRequestContextAndRateLimit(req, "read", (req) => {
+    const cachedHandler = withCache(
+      (req) => withErrorHandling(handleGET)(req),
+      {
+        ttl: 300, // 5 minutes
+        keyPrefix: 'api:products',
+        varyBy: ['q', 'brand', 'category', 'stock', 'ram', 'storage', 'processor', 'page', 'limit', 'sortBy', 'sortOrder'],
+        tenantIsolated: true,
+      }
+    );
+    return cachedHandler(req);
+  });
 }

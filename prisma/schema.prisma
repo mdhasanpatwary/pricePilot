@@ -638,6 +638,7 @@ model PriceHistory {
   recordedAt DateTime @default(now())
   Product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@unique([productId, recordedAt])
   @@index([productId, recordedAt(sort: Desc)])
   @@index([recordedAt])
 }
@@ -732,9 +733,12 @@ model Product {
 
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
   @@index([siteId])
-  @@index([tenantId, siteId])
+  @@index([tenantId, brand])
+  @@index([tenantId, category])
+  @@index([tenantId, inStock])
   @@index([tenantId, currentPrice])
   @@index([sku])
+  @@index([updatedAt])
 }
 
 model ProductMatch {
@@ -748,6 +752,7 @@ model ProductMatch {
   competitorProduct Product     @relation("ProductMatch_competitorProductIdToProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
   userProduct       Product     @relation("ProductMatch_userProductIdToProduct", fields: [userProductId], references: [id], onDelete: Cascade)
 
+  @@unique([userProductId, competitorProductId])
   @@index([userProductId, status])
   @@index([competitorProductId, status])
   @@index([status, createdAt])
@@ -888,6 +893,7 @@ model RateLimitMetric {
   timestamp      DateTime @default(now())
   Tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, limiterType, identifier, endpoint, timestamp])
   @@index([limiterType, timestamp])
   @@index([tenantId, limiterType, timestamp])
   @@index([tenantId, timestamp])

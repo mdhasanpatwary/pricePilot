@@ -670,6 +670,7 @@ export const deleteNotificationSchema = z.object({
 
 export const syncSiteSchema = z.object({
   siteId: idSchema,
+  force: z.boolean().optional().default(false),
 });
 
 export const stopSyncSchema = z.object({

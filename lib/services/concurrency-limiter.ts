@@ -32,16 +32,16 @@ interface SiteState {
 
 /**
  * ConcurrencyLimiter dynamically adjusts concurrent request limits based on site behavior.
- * 
+ *
  * Features:
  * - Semaphore-based slot acquisition for concurrent request limiting
  * - Dynamic adjustment based on block rate, success rate, and response time
  * - Per-site concurrency tracking
  * - Automatic reduction on rate limits (HTTP 429)
  * - Gradual increase on high success rates
- * 
+ *
  * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
- * 
+ *
  * @example
  * ```typescript
  * const limiter = new ConcurrencyLimiter({
@@ -49,13 +49,13 @@ interface SiteState {
  *   maxConcurrency: 10,
  *   initialConcurrency: 3
  * });
- * 
+ *
  * // Acquire slot before making request
  * await limiter.acquireSlot('example.com');
  * try {
  *   // Make request
  *   const response = await fetch(url);
- *   
+ *
  *   // Adjust based on metrics
  *   limiter.adjustConcurrency('example.com', {
  *     blockRate: 0.1,
@@ -74,7 +74,7 @@ export class ConcurrencyLimiter {
 
     /**
      * Create a new ConcurrencyLimiter
-     * 
+     *
      * @param config - Configuration options (optional, uses defaults if not provided)
      */
     constructor(config?: Partial<ConcurrencyConfig>) {
@@ -85,16 +85,23 @@ export class ConcurrencyLimiter {
             adjustmentThreshold: config?.adjustmentThreshold ?? 0.2,
         };
 
-        // Validate configuration
+        // Validate and sanitize configuration
         if (this.config.minConcurrency < 1) {
-            throw new Error('minConcurrency must be at least 1');
+            this.config.minConcurrency = 1;
+            logger.warn('[ConcurrencyLimiter] minConcurrency must be at least 1, resetting to 1');
         }
+
         if (this.config.maxConcurrency < this.config.minConcurrency) {
-            throw new Error('maxConcurrency must be >= minConcurrency');
+            this.config.maxConcurrency = this.config.minConcurrency;
+            logger.warn('[ConcurrencyLimiter] maxConcurrency must be >= minConcurrency, resetting to minConcurrency');
         }
-        if (this.config.initialConcurrency < this.config.minConcurrency ||
-            this.config.initialConcurrency > this.config.maxConcurrency) {
-            throw new Error('initialConcurrency must be between minConcurrency and maxConcurrency');
+
+        if (this.config.initialConcurrency < this.config.minConcurrency) {
+            this.config.initialConcurrency = this.config.minConcurrency;
+            logger.warn('[ConcurrencyLimiter] initialConcurrency was below min, clamping to minConcurrency');
+        } else if (this.config.initialConcurrency > this.config.maxConcurrency) {
+            this.config.initialConcurrency = this.config.maxConcurrency;
+            logger.warn('[ConcurrencyLimiter] initialConcurrency was above max, clamping to maxConcurrency');
         }
 
         logger.info('[ConcurrencyLimiter] Initialized', {
@@ -128,12 +135,12 @@ export class ConcurrencyLimiter {
      * Acquire a slot for making a concurrent request.
      * Implements semaphore pattern - waits if limit is reached.
      * Must be paired with releaseSlot() in a try-finally block.
-     * 
+     *
      * Requirements: 6.4, 6.5
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      * @returns Promise that resolves when slot is acquired
-     * 
+     *
      * @example
      * ```typescript
      * await limiter.acquireSlot('example.com');
@@ -166,11 +173,11 @@ export class ConcurrencyLimiter {
      * Release a concurrent request slot.
      * Processes the next queued request if any.
      * Should be called in a finally block after acquireSlot().
-     * 
+     *
      * Requirements: 6.4, 6.5
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
-     * 
+     *
      * @example
      * ```typescript
      * await limiter.acquireSlot('example.com');
@@ -199,18 +206,18 @@ export class ConcurrencyLimiter {
 
     /**
      * Adjust concurrency based on site metrics.
-     * 
+     *
      * Adjustment rules:
      * - Reduce by 50% when block rate > 20%
      * - Reduce by 50% on HTTP 429 (rate limit)
      * - Increase by 10% when success rate > 80% and avg response time < 2000ms
      * - Enforce min/max bounds
-     * 
+     *
      * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      * @param metrics - Site metrics for adjustment decision
-     * 
+     *
      * @example
      * ```typescript
      * limiter.adjustConcurrency('example.com', {
@@ -265,12 +272,12 @@ export class ConcurrencyLimiter {
     /**
      * Immediately reduce concurrency by 50% (e.g., on HTTP 429).
      * This is a more aggressive reduction than the normal adjustment.
-     * 
+     *
      * Requirement 6.1
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      * @param reason - Reason for reduction (e.g., 'HTTP 429 Rate Limit')
-     * 
+     *
      * @example
      * ```typescript
      * if (response.status === 429) {
@@ -300,10 +307,10 @@ export class ConcurrencyLimiter {
 
     /**
      * Get the current concurrency limit for a site.
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      * @returns Current concurrency limit
-     * 
+     *
      * @example
      * ```typescript
      * const limit = limiter.getCurrentConcurrency('example.com');
@@ -317,7 +324,7 @@ export class ConcurrencyLimiter {
 
     /**
      * Get the number of active requests for a site.
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      * @returns Number of active requests
      */
@@ -328,7 +335,7 @@ export class ConcurrencyLimiter {
 
     /**
      * Get the number of queued requests for a site.
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      * @returns Number of queued requests
      */
@@ -339,7 +346,7 @@ export class ConcurrencyLimiter {
 
     /**
      * Get statistics for all sites.
-     * 
+     *
      * @returns Map of site to statistics
      */
     getStats(): Map<string, { currentConcurrency: number; activeRequests: number; queuedRequests: number }> {
@@ -357,7 +364,7 @@ export class ConcurrencyLimiter {
     /**
      * Reset state for a specific site.
      * Useful for testing or when site configuration changes.
-     * 
+     *
      * @param site - Site identifier (e.g., 'example.com')
      */
     resetSite(site: string): void {

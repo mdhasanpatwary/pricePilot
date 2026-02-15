@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 
 async function handleGET(_req: NextRequest) {
   const session = await getCachedSession();
@@ -13,14 +13,7 @@ async function handleGET(_req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        storeLimit: true,
-        competitorLimit: true,
-        planType: true,
-      },
-    });
+    const tenant = await getCachedTenant(tenantId);
 
     if (!tenant) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });

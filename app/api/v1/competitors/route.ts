@@ -11,12 +11,19 @@ import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { UnauthorizedError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/utils/error-handler";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getOrSetRequestCache } from "@/lib/cache/request-cache";
+import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 import {
   getCursorPaginationParams,
   paginateCursor
 } from "@/lib/utils/pagination";
+import { withCache } from "@/lib/middleware/api-cache";
+import { withDbRetry } from "@/lib/utils/db-retry";
+import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
+import { logger } from "@/lib/logger";
 
 async function handleGET(req: NextRequest) {
+  const startTime = Date.now();
   const session = await getCachedSession();
 
   if (!session?.user) {
@@ -29,9 +36,8 @@ async function handleGET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const paginationParams = getCursorPaginationParams(searchParams);
 
-  // Use cursor-based pagination
-  // We use `site.id` as the default cursor since it's unique and indexed
-  const paginatedResult = await paginateCursor(
+  // Use cursor-based pagination - retry on transient failures
+  const paginatedResult = await withDbRetry(() => paginateCursor(
     prisma.site,
     {
       tenantId,
@@ -51,88 +57,110 @@ async function handleGET(req: NextRequest) {
         take: 5,
       },
     }
+  ), { operationName: 'ListCompetitors' });
+
+  const competitorsList = paginatedResult.data;
+
+  // 1. Fetch total user products count once (request-scoped cache)
+  const totalUserProducts = await getOrSetRequestCache(
+    `totalUserProducts:${tenantId}`,
+    () => prisma.product.count({
+      where: {
+        tenantId,
+        Site: { type: "USER" }
+      }
+    })
   );
 
-  const competitors = paginatedResult.data;
+  // 2. Optimization: Bulk fetch matched product IDs for all competitors in this page to avoid N+1
+  const competitorIds = competitorsList.map((c: any) => c.id);
 
-  // Fetch total user products count once for accurate comparison
-  const totalUserProducts = await prisma.product.count({
-    where: {
-      tenantId,
-      Site: { type: "USER" }
+  // Get all unique user product matches for these competitors - retry transient
+  // Optimized using a single query with JOINs and ANY operator for better performance (Task 4 in Plan)
+  let allMatches: any[] = [];
+  if (competitorIds.length > 0) {
+    allMatches = await withDbRetry(() => prisma.$queryRaw`
+      SELECT
+        pm."userProductId",
+        cp."siteId"
+      FROM "ProductMatch" pm
+      INNER JOIN "Product" cp ON cp.id = pm."competitorProductId"
+      INNER JOIN "Product" up ON up.id = pm."userProductId"
+      INNER JOIN "Site" s ON s.id = up."siteId"
+      WHERE cp."siteId" = ANY(${competitorIds}::text[])
+        AND up."tenantId" = ${tenantId}
+        AND s.type = 'USER'
+      LIMIT 10000
+    `, { operationName: 'FetchCompetitorMatchesRaw' });
+  }
+
+  // Aggregate matches by site in memory
+  const siteMatchMap = new Map<string, Set<string>>();
+  allMatches.forEach(m => {
+    const siteId = m.competitorProduct.siteId;
+    if (!siteMatchMap.has(siteId)) {
+      siteMatchMap.set(siteId, new Set());
     }
+    siteMatchMap.get(siteId)!.add(m.userProductId);
   });
 
-  const formattedCompetitors = await Promise.all(competitors
-    .map(async (site: any) => {
-      try {
-        let name = "Unknown";
-        try {
-          const urlObj = new URL(
-            site.baseUrl.startsWith("http")
-              ? site.baseUrl
-              : `https://${site.baseUrl}`,
-          );
-          const hostname = urlObj.hostname;
-          const cleanHostname = hostname.replace(/^www\./, "");
-          const parts = cleanHostname.split(".");
-          const rawName = parts.length > 1 ? parts[0] : cleanHostname;
-          name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-        } catch (e) {
-          console.error(
-            `Invalid baseUrl for site ${site.id}: ${site.baseUrl}`,
-          );
-        }
-
-        // Calculate count of UNIQUE user products that have at least one match on THIS competitor site
-        const matchedUserProductsCount = await prisma.product.count({
-          where: {
-            tenantId,
-            Site: { type: 'USER' },
-            matchesAsUser: {
-              some: {
-                competitorProduct: { siteId: site.id }
-              }
-            }
-          }
-        });
-
-        return {
-          id: site.id,
-          name: name.charAt(0).toUpperCase() + name.slice(1),
-          url: site.baseUrl,
-          products: matchedUserProductsCount, // Shows how many of OUR products have matches
-          totalScraped: site._count.Product, // Keep total count for internal reference if needed
-          status: site.isSyncing
-            ? "SYNCING"
-            : matchedUserProductsCount > 0
-              ? "ACTIVE"
-              : site.lastSyncAt
-                ? "NO MATCHES"
-                : "PENDING",
-          health: totalUserProducts > 0
-            ? Math.round((matchedUserProductsCount / totalUserProducts) * 100)
-            : 0,
-          isSyncing: site.isSyncing,
-          syncTotal: site.syncTotal,
-          syncProcessed: site.syncProcessed,
-          syncLastAction: site.syncLastAction,
-          syncStartedAt: site.syncStartedAt,
-          totalUserProducts: totalUserProducts,
-          isAdvancedProtected: site.isAdvancedProtected || false,
-          searchQueryPattern: site.searchQueryPattern,
-          logs: site.SyncLog || [],
-        };
-      } catch (e) {
-        console.error(`Error formatting site ${site.id}:`, e);
-        return null;
+  const formattedCompetitors = competitorsList.map((site: any) => {
+    let name = "Unknown";
+    try {
+      if (site.baseUrl) {
+        // Faster hostname extraction using regex
+        const match = site.baseUrl.match(/^(?:https?:\/\/)?(?:www\.)?([^\/:]+)/i);
+        const hostname = match ? match[1] : site.baseUrl;
+        const parts = hostname.split(".");
+        const rawName = parts.length > 1 ? parts[0] : hostname;
+        name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
       }
-    }));
+    } catch (e) {
+      console.error(`Invalid baseUrl for site ${site.id}: ${site.baseUrl}`);
+    }
 
-  return NextResponse.json({
-    competitors: formattedCompetitors.filter(Boolean),
-    pagination: paginatedResult.pagination,
+    const matchedCount = siteMatchMap.get(site.id)?.size || 0;
+
+    return {
+      id: site.id,
+      name,
+      url: site.baseUrl,
+      products: matchedCount,
+      totalScraped: site._count.Product,
+      status: site.isSyncing
+        ? "SYNCING"
+        : matchedCount > 0
+          ? "ACTIVE"
+          : site.lastSyncAt
+            ? "NO MATCHES"
+            : "PENDING",
+      health: totalUserProducts > 0
+        ? Math.round((matchedCount / totalUserProducts) * 100)
+        : 0,
+      isSyncing: site.isSyncing,
+      syncTotal: site.syncTotal,
+      syncProcessed: site.syncProcessed,
+      syncLastAction: site.syncLastAction,
+      syncStartedAt: site.syncStartedAt,
+      totalUserProducts: totalUserProducts,
+      isAdvancedProtected: site.isAdvancedProtected || false,
+      searchQueryPattern: site.searchQueryPattern,
+      logs: site.SyncLog || [],
+    };
   });
+
+  const response = {
+    competitors: formattedCompetitors,
+    pagination: paginatedResult.pagination,
+  };
+
+  // Record metrics
+  const duration = Date.now() - startTime;
+  metricsCollector.recordResponseTime("/api/v1/competitors", duration, tenantId).catch(err =>
+    logger.warn('Failed to record response time metric', { error: err })
+  );
+
+  return NextResponse.json(response);
 }
 
 async function handlePOST(req: NextRequest) {
@@ -154,9 +182,7 @@ async function handlePOST(req: NextRequest) {
   const { name, baseUrl, searchQueryPattern } = validation.data!;
 
   // Fetch tenant limits
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-  });
+  const tenant = await getCachedTenant(tenantId);
 
   if (!tenant) {
     throw new NotFoundError('Tenant', tenantId);
@@ -197,16 +223,13 @@ async function handlePOST(req: NextRequest) {
     details: { name, baseUrl },
   });
 
-  // Trigger auto-fetch immediately in background (with slight delay for DB propagation)
-  setTimeout(() => {
-    // Pass true to force sync even though isSyncing is already true
-    SyncOrchestrator.processSiteSync(site.id, true).catch((error) => {
-      console.error(
-        `[API] Auto-fetch failed for new site ${site.id}:`,
-        error,
-      );
-    });
-  }, 500);
+  // Trigger auto-fetch immediately in background (Asynchronous & Non-blocking)
+  SyncOrchestrator.dispatchSiteSync(site.id, true).catch((error) => {
+    console.error(
+      `[API] Auto-fetch failed for new site ${site.id}:`,
+      error,
+    );
+  });
 
   return NextResponse.json(site);
 }
@@ -252,7 +275,16 @@ async function handleDELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "read", withErrorHandling(handleGET));
+  return withRequestContextAndRateLimit(
+    req,
+    "read",
+    withCache(withErrorHandling(handleGET), {
+      ttl: 30, // 30s cache for medium dataset as requested
+      keyPrefix: "api:competitors",
+      tenantIsolated: true,
+      varyBy: ["cursor", "limit", "sortBy", "sortOrder"],
+    })
+  );
 }
 
 export async function POST(req: NextRequest) {

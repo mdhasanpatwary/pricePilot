@@ -27,6 +27,12 @@ async function handlePOST(req: NextRequest) {
       data: { isSyncing: false },
     });
 
+    // Invalidate competitors list cache for this tenant
+    const { invalidateCache } = await import("@/lib/middleware/api-cache");
+    await invalidateCache(`api:competitors:*:${session.user.tenantId}*`).catch(err =>
+      console.error("Cache invalidation error:", err)
+    );
+
     return NextResponse.json({
       success: true,
       message: "Stop signal sent to crawler",

@@ -6,9 +6,11 @@ export const QUEUE_NAMES = {
 export interface SyncJobData {
   siteId?: string;
   tenantId?: string;
+  productId?: string;
   productIds?: string[]; // IDs for chunked processing
   isCron?: boolean;
-  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE" | "SOURCE_SYNC" | "RETRY";
+  force?: boolean;
+  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE" | "SOURCE_SYNC" | "RETRY" | "PRODUCT";
 }
 
 export interface NotificationJobData {

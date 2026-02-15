@@ -7,6 +7,7 @@ import {
   validationErrorResponse,
   syncSiteSchema,
 } from "@/lib/validation";
+import { withDbRetry } from "@/lib/utils/db-retry";
 
 /**
  * POST /api/competitors/sync
@@ -27,24 +28,25 @@ async function handleSync(req: NextRequest) {
       return validationErrorResponse(validation);
     }
 
-    const { siteId } = validation.data!;
+    const { siteId, force } = validation.data!;
 
     // Check if site is already syncing
     const { prisma } = await import("@/lib/prisma");
-    const site = await prisma.site.findUnique({
+    const site = await withDbRetry(() => prisma.site.findUnique({
       where: { id: siteId, tenantId: session.user.tenantId },
       select: { isSyncing: true },
-    });
+    }), { operationName: 'CheckSyncStatus' });
 
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
-    if (site.isSyncing) {
+    if (site.isSyncing && !force) {
       return NextResponse.json(
         {
           error: "Sync is already in progress for this site",
           success: false,
+          isSyncing: true,
         },
         { status: 409 },
       );
@@ -52,14 +54,14 @@ async function handleSync(req: NextRequest) {
 
     const now = new Date();
     // Check if we should resume a recent unfinished sync or start fresh
-    const currentSiteStatus = await prisma.site.findUnique({
+    const currentSiteStatus = await withDbRetry(() => prisma.site.findUnique({
       where: { id: siteId },
       select: {
         syncStartedAt: true,
         syncProcessed: true,
         syncTotal: true
       }
-    });
+    }), { operationName: 'FetchCurrentSyncStatus' });
 
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const isResume = currentSiteStatus?.syncStartedAt &&
@@ -68,18 +70,24 @@ async function handleSync(req: NextRequest) {
                      currentSiteStatus.syncProcessed < currentSiteStatus.syncTotal;
 
     // Mark site as syncing immediately to provide instant feedback to the frontend
-    await prisma.site.update({
+    await withDbRetry(() => prisma.site.update({
       where: { id: siteId },
       data: {
         isSyncing: true,
-        syncStartedAt: isResume ? currentSiteStatus.syncStartedAt : now,
+        syncStartedAt: isResume ? currentSiteStatus!.syncStartedAt : now,
         syncLastAction: isResume ? "Resuming sync session..." : "Queuing sync job...",
-        syncProcessed: isResume ? currentSiteStatus.syncProcessed : 0
+        syncProcessed: isResume ? currentSiteStatus!.syncProcessed : 0
       },
-    });
+    }), { operationName: 'MarkSiteAsSyncing' });
+
+    // Invalidate competitors list cache for this tenant so UI reflects sync state immediately
+    const { invalidateCache } = await import("@/lib/middleware/api-cache");
+    await invalidateCache(`api:competitors:*:${session.user.tenantId}*`).catch(err =>
+      console.error("Cache invalidation error:", err)
+    );
 
     // Run sync in background (don't await)
-    SyncOrchestrator.dispatchSiteSync(siteId).catch((error) => {
+    SyncOrchestrator.dispatchSiteSync(siteId, force).catch((error) => {
       console.error(`[API] Background sync failed for site ${siteId}:`, error);
     });
 

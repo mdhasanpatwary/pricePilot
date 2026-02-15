@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handlePOST(req: NextRequest) {
@@ -38,9 +39,7 @@ async function handlePOST(req: NextRequest) {
       where: { tenantId, type: "COMPETITOR" },
     });
 
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
+    const tenant = await getCachedTenant(tenantId);
 
     const limit = tenant?.competitorLimit || 5;
 

@@ -1,9 +1,9 @@
 /**
  * API Cache Middleware
- * 
+ *
  * Provides caching for API endpoints with automatic cache key generation
  * and invalidation support.
- * 
+ *
  * Requirements: 4.1, 4.2, 4.3
  */
 
@@ -72,12 +72,11 @@ export function withCache(
             // Extract tenant ID from session if tenant-isolated
             let tenantId: string | undefined;
             if (options.tenantIsolated) {
-                const { getServerSession } = await import("next-auth/next");
-                const { authOptions } = await import("@/lib/auth");
-                const session = await getServerSession(authOptions);
+                const { getCachedSession } = await import("@/lib/auth/cached-session");
+                const session = await getCachedSession();
                 tenantId = session?.user?.tenantId;
 
-                // If tenant isolation is required but no tenant is found, 
+                // If tenant isolation is required but no tenant is found,
                 // we should probably not cache at all or return unauthorized.
                 // For now, let's just skip caching to be safe if no session.
                 if (!tenantId) {

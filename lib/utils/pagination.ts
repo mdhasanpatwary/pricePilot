@@ -113,19 +113,16 @@ export async function paginateCursor<T>(
     const sortBy = params.sortBy || 'id';
     const sortOrder = params.sortOrder || 'desc';
 
-    const [data, total] = await Promise.all([
-        model.findMany({
-            where,
-            include,
-            take: limit + 1, // Fetch one extra to determine if there's a next page
-            cursor: params.cursor ? { [sortBy]: params.cursor } : undefined,
-            skip: params.cursor ? 1 : 0, // Skip the cursor itself
-            orderBy: {
-                [sortBy]: sortOrder
-            }
-        }),
-        model.count({ where }) // Still need total for some UI elements, but we can optimize this later
-    ]);
+    const data = await model.findMany({
+        where,
+        include,
+        take: limit + 1, // Fetch one extra to determine if there's a next page
+        cursor: params.cursor ? { [sortBy]: params.cursor } : undefined,
+        skip: params.cursor ? 1 : 0, // Skip the cursor itself
+        orderBy: {
+            [sortBy]: sortOrder
+        }
+    });
 
     const hasNext = data.length > limit;
     const paginatedData = hasNext ? data.slice(0, limit) : data;
@@ -136,7 +133,7 @@ export async function paginateCursor<T>(
         pagination: {
             nextCursor,
             limit,
-            total,
+            total: -1, // Count omitted for performance; use hasNext for pagination
             hasNext
         }
     };

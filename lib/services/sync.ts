@@ -319,12 +319,17 @@ export class SyncService {
         // 2. Process and Upsert products in transactions
         // FIX: Fetch all existing products upfront to avoid N+1 queries
         const externalIds = externalProducts.map(p => p.external_id).filter(Boolean);
-        const existingProducts = await prisma.product.findMany({
-          where: {
-            siteId: site.id,
-            externalId: { in: externalIds },
-          },
-        });
+
+        // Guard against empty IN query (Issue 5)
+        let existingProducts: any[] = [];
+        if (externalIds.length > 0) {
+          existingProducts = await prisma.product.findMany({
+            where: {
+              siteId: site.id,
+              externalId: { in: externalIds },
+            },
+          });
+        }
 
         // Create a map for O(1) lookup
         const existingProductMap = new Map(

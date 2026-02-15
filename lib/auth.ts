@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { cacheWarmingService } from "@/lib/services/cache-warming";
 import { securityMonitoringService } from "@/lib/services/monitoring/security-monitoring";
+import { getOrSetRequestCache } from "@/lib/cache/request-cache";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
@@ -146,9 +147,12 @@ export const authOptions: NextAuthOptions = {
 
       // ON EVERY REQUEST: Verify session still exists in DB (revocation check)
       if (token.sessionId) {
-        const sessionRecord = await (prisma as any).session.findUnique({
-          where: { sessionToken: token.sessionId as string },
-        });
+        const sessionRecord = await getOrSetRequestCache<any>(
+          `session:${token.sessionId}`,
+          () => (prisma as any).session.findUnique({
+            where: { sessionToken: token.sessionId as string },
+          })
+        );
 
         if (!sessionRecord) {
           // Session was revoked! Force logout by returning empty token

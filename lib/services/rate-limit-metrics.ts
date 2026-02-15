@@ -58,7 +58,7 @@ interface AggregatedMetric {
 class MetricBatchProcessor {
   private buffer: Map<string, AggregatedMetric> = new Map();
   private isFlushing: boolean = false;
-  private readonly FLUSH_INTERVAL_MS = 10000; // Flush every 10 seconds
+  private readonly FLUSH_INTERVAL_MS = 60000; // Increased from 10s to 60s for better aggregation
   private readonly MAX_BUFFER_SIZE = 5000; // Trigger flush if buffer gets too large
 
   constructor() {
@@ -156,45 +156,30 @@ class MetricBatchProcessor {
           const timestamp = new Date(key.hourTimestamp);
 
           try {
-            // Using a single transaction or more efficient upsert if supported
-            // Since we added indexes, findFirst should be fast.
-            // But we can use an 'upsert' with a unique constraint if we have one.
-            // Looking at the schema, we don't have a unique constraint on (tenantId, limiterType, identifier, endpoint, timestamp).
-            // So we'll stick to the findFirst + update/create pattern but optimize it.
-
-            await prisma.$transaction(async (tx) => {
-              const existing = await tx.rateLimitMetric.findFirst({
-                where: {
+            // Atomic upsert using @@unique(tenantId, limiterType, identifier, endpoint, timestamp)
+            await prisma.rateLimitMetric.upsert({
+              where: {
+                tenantId_limiterType_identifier_endpoint_timestamp: {
                   tenantId: key.tenantId,
                   limiterType: key.limiterType,
                   identifier: key.identifier,
                   endpoint: key.endpoint,
                   timestamp: timestamp,
                 },
-                select: { id: true }
-              });
-
-              if (existing) {
-                await tx.rateLimitMetric.update({
-                  where: { id: existing.id },
-                  data: {
-                    hitCount: { increment: data.hitCount },
-                    violationCount: { increment: data.violationCount }
-                  }
-                });
-              } else {
-                await tx.rateLimitMetric.create({
-                  data: {
-                    tenantId: key.tenantId,
-                    limiterType: key.limiterType,
-                    identifier: key.identifier,
-                    endpoint: key.endpoint,
-                    timestamp: timestamp,
-                    hitCount: data.hitCount,
-                    violationCount: data.violationCount
-                  }
-                });
-              }
+              },
+              update: {
+                hitCount: { increment: data.hitCount },
+                violationCount: { increment: data.violationCount },
+              },
+              create: {
+                tenantId: key.tenantId,
+                limiterType: key.limiterType,
+                identifier: key.identifier,
+                endpoint: key.endpoint,
+                timestamp: timestamp,
+                hitCount: data.hitCount,
+                violationCount: data.violationCount,
+              },
             });
           } catch (err) {
             logger.error("[RateLimitMetrics] Failed to flush individual metric:", { error: err as any, key });

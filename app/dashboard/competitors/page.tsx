@@ -241,11 +241,15 @@ export default function CompetitorsPage() {
       return;
     }
 
+    let force = false;
     // Check if already syncing
     const competitor = Array.isArray(competitors) ? competitors.find((c) => c.id === id) : undefined;
     if (competitor?.isSyncing) {
-      toast.info("Sync is already in progress for this site");
-      return;
+      const shouldForce = confirm(
+        "A sync is already marked as in progress. If it's stuck, you can force a restart. Do you want to restart the sync?",
+      );
+      if (!shouldForce) return;
+      force = true;
     }
 
     // Set syncing state to prevent double clicks
@@ -263,7 +267,7 @@ export default function CompetitorsPage() {
       const res = await fetch("/api/v1/competitors/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId: id }),
+        body: JSON.stringify({ siteId: id, force }),
       });
 
       if (!res.ok) {

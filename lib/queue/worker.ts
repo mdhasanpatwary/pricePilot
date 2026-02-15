@@ -19,7 +19,7 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
       await SyncOrchestrator.processFullSync(job.data.tenantId, job.data.isCron);
     } else if (job.data.type === "SINGLE") {
       if (!job.data.siteId) throw new Error("SiteID required for single sync");
-      await SyncOrchestrator.processSiteSync(job.data.siteId, false, job.data.isCron);
+      await SyncOrchestrator.processSiteSync(job.data.siteId, job.data.force, job.data.isCron);
     } else if (job.data.type === "CHUNK") {
       if (!job.data.siteId || !job.data.productIds)
         throw new Error("Missing data for chunk sync");
@@ -34,6 +34,9 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     } else if (job.data.type === "RETRY") {
        if (!job.data.siteId || !job.data.productIds) throw new Error("Missing data for retry sync");
        await SyncOrchestrator.processRetrySync(job.data.siteId, job.data.productIds);
+    } else if (job.data.type === "PRODUCT") {
+      if (!job.data.productId) throw new Error("ProductID required for product sync");
+      await SyncOrchestrator.syncProduct(job.data.productId);
     } else if (job.data.type === "MAINTENANCE") {
       const { MaintenanceService } = await import("@/lib/services/maintenance");
       await MaintenanceService.runDataRetention();

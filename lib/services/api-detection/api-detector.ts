@@ -231,7 +231,7 @@ export class APIDetector {
             // Navigate to the URL
             this.progressEmitter?.pageNavigated(url, 1);
             await page.goto(url, {
-                waitUntil: 'networkidle',
+                waitUntil: 'domcontentloaded', // Changed from networkidle for performance
                 timeout: 15000,
             });
 
@@ -509,7 +509,7 @@ export class APIDetector {
                         const nextLink = await page.$(selector);
                         if (nextLink) {
                             await nextLink.click();
-                            await page.waitForLoadState('networkidle', { timeout: 10000 });
+                            await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
                             await page.waitForTimeout(2000);
                             navigated = true;
                             break;

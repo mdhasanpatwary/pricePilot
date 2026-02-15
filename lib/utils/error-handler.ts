@@ -1,6 +1,6 @@
 /**
  * Error Handling System for PricePilot
- * 
+ *
  * This module provides a comprehensive error handling framework with:
  * - Hierarchical error classes for different scenarios
  * - Rich context capture (tenantId, userId, operation, etc.)
@@ -31,7 +31,7 @@ export interface ErrorOptions {
     developerMessage?: string;
     context?: Partial<ErrorContext>;
     cause?: Error;
-    /** 
+    /**
      * Indicates if this error represents a transient failure that can be retried.
      * Defaults to false for most errors.
      * Set to true for network timeouts, rate limits, and temporary service unavailability.
@@ -51,7 +51,7 @@ export interface ErrorOptions {
 /**
  * Base application error class
  * All application-specific errors should extend this class
- * 
+ *
  * Retry Behavior:
  * - By default, errors are NOT retryable (isRetryable = false)
  * - RateLimitError is automatically retryable with backoff
@@ -199,7 +199,7 @@ export class AppError extends Error {
 /**
  * Validation error for invalid input data
  * HTTP Status: 422 Unprocessable Entity
- * 
+ *
  * This error is NOT retryable as it indicates a client error that
  * requires the input to be corrected before retrying.
  */
@@ -234,7 +234,7 @@ export class ValidationError extends AppError {
 /**
  * Not found error for missing resources
  * HTTP Status: 404 Not Found
- * 
+ *
  * This error is NOT retryable as it indicates the resource does not exist.
  */
 export class NotFoundError extends AppError {
@@ -278,7 +278,7 @@ export class NotFoundError extends AppError {
 /**
  * Unauthorized error for authentication failures
  * HTTP Status: 401 Unauthorized
- * 
+ *
  * This error is NOT retryable as it indicates missing or invalid credentials.
  */
 export class UnauthorizedError extends AppError {
@@ -299,7 +299,7 @@ export class UnauthorizedError extends AppError {
 /**
  * Forbidden error for authorization failures
  * HTTP Status: 403 Forbidden
- * 
+ *
  * This error is NOT retryable as it indicates insufficient permissions.
  */
 export class ForbiddenError extends AppError {
@@ -342,7 +342,7 @@ export class ForbiddenError extends AppError {
 /**
  * Conflict error for resource conflicts
  * HTTP Status: 409 Conflict
- * 
+ *
  * This error is NOT retryable as it indicates a conflict that must be
  * resolved before the operation can succeed.
  */
@@ -381,11 +381,11 @@ export class ConflictError extends AppError {
 /**
  * Rate limit error for rate limiting violations
  * HTTP Status: 429 Too Many Requests
- * 
+ *
  * This error is automatically marked as retryable with a retry delay
  * equal to the rate limit window. The retryAfter value can be overridden
  * in options if a different delay is desired.
- * 
+ *
  * Example:
  * ```typescript
  * throw new RateLimitError(100, 3600); // 100 requests per hour
@@ -436,11 +436,11 @@ export class RateLimitError extends AppError {
 /**
  * External service error for third-party API failures
  * HTTP Status: 502 Bad Gateway
- * 
+ *
  * This error is used when external API calls fail. Transient failures
  * (network timeouts, temporary service unavailability) should be marked
  * as retryable by setting isRetryable: true in options.
- * 
+ *
  * Example:
  * ```typescript
  * throw new ExternalServiceError(
@@ -487,6 +487,37 @@ export class ExternalServiceError extends AppError {
             isRetryable: this.isRetryable,
             retryAfter: this.retryAfter,
         };
+    }
+
+    protected getLogLevel(): 'error' | 'warn' | 'info' {
+        return 'error';
+    }
+}
+
+/**
+ * Database error for Prisma and database-level failures
+ * HTTP Status: 503 Service Unavailable (for transient) or 500 Internal Server Error
+ *
+ * This error is used for database connection issues, timeouts, or query failures.
+ */
+export class DatabaseError extends AppError {
+    public readonly operation?: string;
+
+    constructor(
+        message: string,
+        options?: ErrorOptions
+    ) {
+        // Use 503 for retryable database errors (service unavailable)
+        // Use 500 for non-retryable database errors
+        const statusCode = options?.isRetryable ? 503 : 500;
+
+        super(
+            message,
+            statusCode,
+            'DATABASE_ERROR',
+            options
+        );
+        this.operation = options?.context?.operation;
     }
 
     protected getLogLevel(): 'error' | 'warn' | 'info' {
