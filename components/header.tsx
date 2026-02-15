@@ -297,7 +297,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   className="fixed inset-0 z-10"
                   onClick={() => setIsNotificationsOpen(false)}
                 />
-                <div className="absolute right-0 mt-3 w-80 bg-card border border-border rounded-xl shadow-2xl z-20 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
+                <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-20 sm:top-full mt-0 sm:mt-3 sm:w-80 bg-card border border-border rounded-xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
                   <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
                     <h3 className="font-bold text-sm">Notifications</h3>
                     {unreadCount > 0 && (
