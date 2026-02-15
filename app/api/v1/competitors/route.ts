@@ -55,19 +55,16 @@ async function handleGET(req: NextRequest) {
 
   const competitors = paginatedResult.data;
 
-  // Optimize total request: Fetch only if it's the first page or explicitly requested
-  // This avoids a full count on every scroll/pagination if not needed
-  const totalUserProducts = !paginationParams.cursor
-    ? await prisma.product.count({
-        where: {
-          tenantId,
-          Site: { type: "USER" }
-        }
-      })
-    : 0;
+  // Fetch total user products count once for accurate comparison
+  const totalUserProducts = await prisma.product.count({
+    where: {
+      tenantId,
+      Site: { type: "USER" }
+    }
+  });
 
-  const formattedCompetitors = competitors
-    .map((site: any) => {
+  const formattedCompetitors = await Promise.all(competitors
+    .map(async (site: any) => {
       try {
         let name = "Unknown";
         try {
@@ -87,25 +84,41 @@ async function handleGET(req: NextRequest) {
           );
         }
 
+        // Calculate count of UNIQUE user products that have at least one match on THIS competitor site
+        const matchedUserProductsCount = await prisma.product.count({
+          where: {
+            tenantId,
+            Site: { type: 'USER' },
+            matchesAsUser: {
+              some: {
+                competitorProduct: { siteId: site.id }
+              }
+            }
+          }
+        });
+
         return {
           id: site.id,
           name: name.charAt(0).toUpperCase() + name.slice(1),
           url: site.baseUrl,
-          products: site._count.Product,
+          products: matchedUserProductsCount, // Shows how many of OUR products have matches
+          totalScraped: site._count.Product, // Keep total count for internal reference if needed
           status: site.isSyncing
             ? "SYNCING"
-            : site._count.Product > 0
+            : matchedUserProductsCount > 0
               ? "ACTIVE"
               : site.lastSyncAt
                 ? "NO MATCHES"
                 : "PENDING",
-          health: site._count.Product > 0 ? 100 : 0,
+          health: totalUserProducts > 0
+            ? Math.round((matchedUserProductsCount / totalUserProducts) * 100)
+            : 0,
           isSyncing: site.isSyncing,
           syncTotal: site.syncTotal,
           syncProcessed: site.syncProcessed,
           syncLastAction: site.syncLastAction,
           syncStartedAt: site.syncStartedAt,
-          totalUserProducts: totalUserProducts || 0,
+          totalUserProducts: totalUserProducts,
           isAdvancedProtected: site.isAdvancedProtected || false,
           searchQueryPattern: site.searchQueryPattern,
           logs: site.SyncLog || [],
@@ -114,11 +127,10 @@ async function handleGET(req: NextRequest) {
         console.error(`Error formatting site ${site.id}:`, e);
         return null;
       }
-    })
-    .filter(Boolean);
+    }));
 
   return NextResponse.json({
-    competitors: formattedCompetitors,
+    competitors: formattedCompetitors.filter(Boolean),
     pagination: paginatedResult.pagination,
   });
 }

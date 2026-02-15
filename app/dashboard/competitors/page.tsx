@@ -650,7 +650,7 @@ export default function CompetitorsPage() {
                           <Info className="w-3 h-3 text-muted-foreground/50" />
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          <p className="text-xs font-semibold">(Matched Products / Your Total Products)</p>
+                          <p className="text-xs font-semibold">(Your Products with matches / Your Total Products)</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
