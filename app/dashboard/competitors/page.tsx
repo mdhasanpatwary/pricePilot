@@ -18,9 +18,16 @@ import {
   ShieldCheck,
   Settings,
   Loader2,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -42,10 +49,10 @@ type CompetitorFormValues = z.infer<typeof competitorSchema>;
 
 /**
  * Extracts base URL, name, and search pattern from a full search URL
- * 
+ *
  * @example
  * Input: "https://www.ryans.com/search?q=Apple+MacBook+Air"
- * Output: { 
+ * Output: {
  *   baseUrl: "https://www.ryans.com",
  *   name: "ryans.com",
  *   searchPattern: "https://www.ryans.com/search?q={query}"
@@ -635,7 +642,19 @@ export default function CompetitorsPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                   <th className="py-4 px-6">Source</th>
-                  <th className="py-4 px-6 text-center">Products</th>
+                  <th className="py-4 px-6 text-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help flex items-center justify-center gap-1 mx-auto uppercase">
+                          Products
+                          <Info className="w-3 h-3 text-muted-foreground/50" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p className="text-xs font-semibold">(Matched Products / Your Total Products)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </th>
                   <th className="py-4 px-6">Protection</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 w-48">Health</th>
