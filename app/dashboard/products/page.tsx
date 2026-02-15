@@ -463,59 +463,62 @@ export default function PriceReportPage() {
             Compare your prices against live market data.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
           {selectedItems.length > 1 && (
             <Button
               variant={BUTTON_VARIANTS.OUTLINE}
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsComparisonOpen(true);
               }}
-              className="gap-2 border-primary/20 text-primary hover:bg-primary/5"
+              className="gap-2 border-primary/20 text-primary hover:bg-primary/5 h-9"
             >
-              <ArrowUpDown className="w-4 h-4 rotate-90" />
-              Compare {selectedItems.length} Items
+              <ArrowUpDown className="w-3.5 h-3.5 rotate-90" />
+              <span className="hidden xs:inline">Compare</span> {selectedItems.length}
             </Button>
           )}
 
           {selectedItems.length > 0 && (
             <Button
               variant={BUTTON_VARIANTS.DESTRUCTIVE}
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 handleBulkDelete();
               }}
-              className="gap-2"
+              className="gap-2 h-9"
             >
-              <Trash2 className="w-4 h-4" />
-              Delete {selectedItems.length}
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Delete</span> {selectedItems.length}
             </Button>
           )}
 
           {selectedItems.length > 0 && (
             <Button
               variant={BUTTON_VARIANTS.PRIMARY}
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsUpdateDrawerOpen(true);
               }}
-              className="gap-2"
+              className="gap-2 h-9"
             >
-              <Zap className="w-4 h-4 fill-current" />
-              Sync {selectedItems.length} Products
+              <Zap className="w-3.5 h-3.5 fill-current" />
+              <span className="hidden xs:inline">Sync</span> {selectedItems.length}
             </Button>
           )}
 
-          {competitors.length > 1 && (
-            <div className="relative group">
+          {competitors.length > 0 && (
+            <div className="relative shrink-0">
               <Select value={refCompetitor} onValueChange={setRefCompetitor}>
-                <SelectTrigger className="appearance-none bg-background border border-border rounded-md py-2 pl-3 pr-10 text-sm font-semibold hover:bg-muted/50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20">
+                <SelectTrigger className="appearance-none bg-background border border-border rounded-md h-9 pl-3 pr-8 text-[11px] md:text-sm font-semibold hover:bg-muted/50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-primary/20 min-w-[120px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {competitors.map((comp) => (
                     <SelectItem key={comp} value={comp}>
-                      Compare: {cleanName(comp)}
+                      <span className="text-[11px] md:text-xs">Compare: {cleanName(comp)}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -523,37 +526,42 @@ export default function PriceReportPage() {
             </div>
           )}
 
-          <Button
-            variant={BUTTON_VARIANTS.OUTLINE}
-            onClick={handleExport}
-            className="gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={BUTTON_VARIANTS.OUTLINE}
+              size="sm"
+              onClick={handleExport}
+              className="gap-2 h-9 px-3 md:px-4"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
 
-          <label className="bg-primary/5 text-primary text-sm font-semibold px-4 py-2 rounded-md border border-primary/10 hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer active:scale-95">
-            {isImporting ? (
-              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            ) : (
-              <Download className="w-4 h-4 rotate-180" />
-            )}
-            Import CSV
-            <input
-              type="file"
-              className="hidden"
-              accept=".csv"
-              onChange={handleImport}
-              disabled={isImporting}
-            />
-          </label>
+            <label className="bg-primary/5 text-primary text-xs font-semibold px-3 md:px-4 h-9 rounded-md border border-primary/10 hover:bg-primary/10 transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap">
+              {isImporting ? (
+                <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 rotate-180" />
+              )}
+              <span className="hidden sm:inline">Import CSV</span>
+              <span className="sm:hidden">Import</span>
+              <input
+                type="file"
+                className="hidden"
+                accept=".csv"
+                onChange={handleImport}
+                disabled={isImporting}
+              />
+            </label>
+          </div>
 
           <Button
             variant={BUTTON_VARIANTS.GHOST}
+            size="sm"
             onClick={handleDownloadTemplate}
-            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+            className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors h-9 px-2"
           >
-            Get Template
+            Template
           </Button>
         </div>
       </div>
@@ -812,8 +820,9 @@ export default function PriceReportPage() {
         </div>
       </div>
 
-      <Card className="overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+      <Card className="overflow-hidden shadow-sm border-none md:border md:border-border bg-transparent md:bg-card">
+        {/* Desktop View Table */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
@@ -1173,6 +1182,193 @@ export default function PriceReportPage() {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile View Cards */}
+        <div className="md:hidden space-y-4 p-4">
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, index) => (
+              <Card key={index} className="p-4 space-y-4">
+                <div className="flex gap-4">
+                  <Skeleton className="h-16 w-16 rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              </Card>
+            ))
+          ) : filteredData.length === 0 ? (
+            <div className="py-20 text-center text-muted-foreground bg-muted/5 rounded-xl border-2 border-dashed border-border px-6">
+              No products found in the current selection.
+            </div>
+          ) : (
+            paginatedData.map((item) => (
+              <Card
+                key={item.id}
+                onClick={() => handleProductRowClick(item)}
+                className={cn(
+                  "p-4 transition-all active:scale-[0.98] border border-border/50 shadow-sm relative overflow-hidden",
+                  selectedItems.includes(item.id) ? "ring-2 ring-primary ring-inset bg-primary/2" : "bg-card"
+                )}
+              >
+                {/* Selection Indicator */}
+                <div
+                  className="absolute top-0 left-0 w-1.5 h-full"
+                  style={{ backgroundColor: selectedItems.includes(item.id) ? 'hsl(var(--primary))' : 'transparent' }}
+                />
+
+                <div className="flex gap-4 relative">
+                  <div className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted border border-border">
+                    <ProductImage
+                      src={item.image}
+                      alt={item.title}
+                      sizes="64px"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-[13px] font-bold leading-tight line-clamp-2 text-foreground">
+                        {item.title}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                         {/* Selection Checkbox */}
+                         <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleItem(e, item.id);
+                          }}
+                          className={cn(
+                            "w-5 h-5 rounded border flex items-center justify-center transition-all",
+                            selectedItems.includes(item.id)
+                              ? "bg-primary border-primary shadow-sm"
+                              : "border-border bg-background",
+                          )}
+                        >
+                          {selectedItems.includes(item.id) && (
+                            <Check className="w-3.5 h-3.5 text-primary-foreground" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant={BADGE_VARIANTS.SECONDARY} className="h-5 px-1.5 text-[9px] uppercase tracking-tighter">
+                        {item.sku || 'No SKU'}
+                      </Badge>
+                      {item.inStock ? (
+                        <span className="text-[10px] text-success font-bold flex items-center gap-0.5">
+                          <Check className="w-2.5 h-2.5" /> In Stock
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-danger font-bold">OOS</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-border/50">
+                  <div className="bg-muted/30 p-2 rounded-lg">
+                    <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-black mb-1">Your Price</div>
+                    <div className="text-sm font-bold text-foreground">
+                      {item.yourPrice > 0 ? formatCurrency(item.yourPrice, currency) : 'N/A'}
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/5 p-2 rounded-lg">
+                    <div className="text-[9px] uppercase tracking-widest text-primary font-black mb-1">{cleanName(refCompetitor)}</div>
+                    <div className="text-sm font-bold text-primary">
+                      {(() => {
+                        const match = item.allMatches?.find(m => m.siteName === refCompetitor);
+                        return match?.inStock ? formatCurrency(match.price, currency) : 'N/A';
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-3">
+                   <div className="flex items-center gap-2">
+                      {(() => {
+                        let status = item.status;
+                        let diff = item.diff;
+                        if (refCompetitor !== "BEST") {
+                          const match = item.allMatches?.find(m => m.siteName === refCompetitor);
+                          if (match && match.price) {
+                            diff = match.price - item.yourPrice;
+                            if (!match.inStock) status = "COMP_OOS";
+                            else if (diff < 0) status = "RED";
+                            else if (diff > 0) status = "GREEN";
+                            else status = "NEUTRAL";
+                          } else {
+                            return null;
+                          }
+                        }
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <PriceStatus status={status as any} size="sm" />
+                            {diff !== 0 && (
+                               <Badge
+                                variant={diff > 0 ? BADGE_VARIANTS.SUCCESS : BADGE_VARIANTS.DESTRUCTIVE}
+                                className="h-5 text-[9px] font-bold"
+                              >
+                                {diff > 0 ? '+' : ''}{formatCurrency(Math.abs(diff), currency)}
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })()}
+                   </div>
+
+                   <div className="flex items-center gap-1">
+                      {item.specifications?.ram && (
+                        <span className="text-[9px] font-bold bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                          {item.specifications.ram}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedProduct(item);
+                        }}
+                        className={commonInteractiveStyles.iconButton}
+                        title="View Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className={commonInteractiveStyles.iconButton}
+                            title="More Actions"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-40" align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteProduct(item.id, item.title);
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete Product
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                   </div>
+                </div>
+              </Card>
+            ))
+          )}
         </div>
 
         {/* Pagination Footer */}
