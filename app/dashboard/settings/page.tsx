@@ -22,6 +22,10 @@ import {
   Key,
   Copy,
   BookOpen,
+  Tag,
+  Settings2,
+  ShieldCheck,
+  UserCog,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
@@ -466,10 +470,13 @@ export default function SettingsPage() {
     { id: "developers", label: "Developers", icon: Code2 },
     { id: "billing", label: "Billing", icon: CreditCard },
     { id: "system", label: "System", icon: Database },
+    { id: "tickets", label: "Ticket Attributes", icon: Tag },
+    { id: "privacy", label: "Privacy", icon: ShieldCheck },
+    { id: "delegations", label: "Delegations", icon: UserCog },
   ].filter((tab) => {
-    // Only admins can see Team, Developers, and System tabs
+    // Only admins can see Team, Developers, System, Tickets, Privacy, and Delegations tabs
     if (session?.user?.role !== "ADMIN") {
-      return !["team", "developers", "system"].includes(tab.id);
+      return !["team", "developers", "system", "tickets", "privacy", "delegations"].includes(tab.id);
     }
     return true;
   });
@@ -1666,6 +1673,114 @@ export default function SettingsPage() {
                         Reset Everything
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "tickets" && (
+              <div className="space-y-4 animate-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold">Ticket Attributes</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Manage ticket priorities and other attributes.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-xl border border-border bg-background space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-primary/5 border border-primary/10">
+                        <Tag className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Ticket Priorities</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          Configure priority levels, colors, and descriptions for support tickets.
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href="/dashboard/settings/tickets/attributes"
+                      className="text-xs font-bold text-primary hover:bg-primary/5 px-4 py-2 rounded-md border border-primary/20 transition-all flex items-center gap-2"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      Configure
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "privacy" && (
+              <div className="space-y-4 animate-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold">Privacy & Data</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Manage GDPR compliance, data exports, and account deletion.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-xl border border-border bg-background space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-primary/5 border border-primary/10">
+                        <ShieldCheck className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Privacy Settings</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          Access tools for data export, right to be forgotten, and privacy policy information.
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href="/dashboard/settings/privacy"
+                      className="text-xs font-bold text-primary hover:bg-primary/5 px-4 py-2 rounded-md border border-primary/20 transition-all flex items-center gap-2"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      Manage Privacy
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "delegations" && (
+              <div className="space-y-4 animate-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold">Approval Delegations</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Delegate your approval authority to other team members during absence.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-xl border border-border bg-background space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-primary/5 border border-primary/10">
+                        <UserCog className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Delegate Authority</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          Set up temporary or permanent delegation rules for price approval workflows.
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href="/dashboard/settings/delegations"
+                      className="text-xs font-bold text-primary hover:bg-primary/5 px-4 py-2 rounded-md border border-primary/20 transition-all flex items-center gap-2"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      Manage Delegations
+                    </Link>
                   </div>
                 </div>
               </div>

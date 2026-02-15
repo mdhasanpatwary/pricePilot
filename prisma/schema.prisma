@@ -637,6 +637,9 @@ model PriceHistory {
   price      Decimal  @db.Decimal(10, 2)
   recordedAt DateTime @default(now())
   Product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, recordedAt(sort: Desc)])
+  @@index([recordedAt])
 }
 
 model PriceUpdateLog {
@@ -649,6 +652,9 @@ model PriceUpdateLog {
   errorDetails String?
   executedAt   DateTime     @default(now())
   Product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, executedAt(sort: Desc)])
+  @@index([executedAt])
 }
 
 model PriceUpdateRetryQueue {
@@ -726,6 +732,9 @@ model Product {
 
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
   @@index([siteId])
+  @@index([tenantId, siteId])
+  @@index([tenantId, currentPrice])
+  @@index([sku])
 }
 
 model ProductMatch {
@@ -738,6 +747,10 @@ model ProductMatch {
   status            MatchStatus @default(PENDING)
   competitorProduct Product     @relation("ProductMatch_competitorProductIdToProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
   userProduct       Product     @relation("ProductMatch_userProductIdToProduct", fields: [userProductId], references: [id], onDelete: Cascade)
+
+  @@index([userProductId, status])
+  @@index([competitorProductId, status])
+  @@index([status, createdAt])
 }
 
 model ProtectionDetection {
@@ -1202,6 +1215,7 @@ model SyncLog {
   Site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt(sort: Desc)])
+  @@index([createdAt])
 }
 
 model SystemAlert {

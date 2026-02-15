@@ -15,29 +15,38 @@ async function handleGET(_req: NextRequest) {
   }
 
   try {
-    const tenantCount = await prisma.tenant.count();
-    const productCount = await prisma.product.count();
+    // 1. Optimize counts using Promise.all and groupBy
+    const [productCount, planStats, recentTenants] = await Promise.all([
+      prisma.product.count(),
+      prisma.tenant.groupBy({
+        by: ['planType'],
+        _count: { _all: true },
+      }),
+      prisma.tenant.findMany({
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        select: {
+          companyName: true,
+          planType: true,
+          createdAt: true,
+          User: {
+            take: 1,
+            select: { email: true }
+          },
+          _count: {
+            select: { Product: true }
+          }
+        }
+      })
+    ]);
 
-    // Calculate simulated MRR based on plans (Mock logic for now but using real counts)
-    const proTenants = await prisma.tenant.count({
-      where: { planType: "PRO" },
-    });
-    const basicTenants = await prisma.tenant.count({
-      where: { planType: "BASIC" },
-    });
+    // Calculate totals from planStats
+    const tenantCount = planStats.reduce((sum, stat) => sum + stat._count._all, 0);
+    const proTenants = planStats.find(s => s.planType === 'PRO')?._count._all || 0;
+    const basicTenants = planStats.find(s => s.planType === 'BASIC')?._count._all || 0;
 
     // PRO = $199, BASIC = $49 (Example pricing)
     const mrr = proTenants * 199 + basicTenants * 49;
-
-    // Get recent tenants
-    const recentTenants = await prisma.tenant.findMany({
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      include: {
-        User: { take: 1 },
-        _count: { select: { Product: true } },
-      },
-    });
 
     const formattedTenants = recentTenants.map((t) => ({
       name: t.companyName,

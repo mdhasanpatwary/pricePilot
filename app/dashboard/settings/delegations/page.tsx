@@ -30,6 +30,8 @@ import {
 } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
+import { ArrowLeft, Plus } from 'lucide-react';
 
 interface User {
     id: string;
@@ -77,11 +79,10 @@ export default function DelegationsPage() {
 
     const loadUsers = useCallback(async () => {
         try {
-            // Assuming there's a users API endpoint
-            const response = await fetch('/api/v1/users');
+            const response = await fetch('/api/v1/tenant/team?limit=100');
             const data = await response.json();
 
-            if (data.success) {
+            if (data.data) {
                 // Filter out current user
                 setUsers(data.data.filter((u: User) => u.id !== session?.user?.id));
             }
@@ -177,80 +178,94 @@ export default function DelegationsPage() {
     }
 
     return (
-        <div className="p-6 max-w-6xl">
-            <div className="flex justify-between items-center mb-6">
+        <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+            <div className="flex items-center gap-4">
+                <Link
+                  href="/dashboard/settings"
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+                </Link>
                 <div>
-                    <h1 className="text-2xl font-bold">Approval Delegations</h1>
-                    <p className="text-gray-600 mt-1">
-                        Delegate your price approval authority to team members
+                    <h2 className="text-2xl font-bold tracking-tight">Approval Delegations</h2>
+                    <p className="text-muted-foreground text-sm">
+                        Delegate your price approval authority to team members.
                     </p>
                 </div>
-
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button>Create Delegation</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <form onSubmit={handleCreateDelegation}>
-                            <DialogHeader>
-                                <DialogTitle>Create New Delegation</DialogTitle>
-                                <DialogDescription>
-                                    Delegate your approval authority to another team member for a specific period.
-                                </DialogDescription>
-                            </DialogHeader>
-
-                            <div className="space-y-4 py-4">
-                                <div>
-                                    <Label htmlFor="user">Delegate To</Label>
-                                    <Select value={selectedUserId} onValueChange={setSelectedUserId} required>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a team member" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {users.map((user) => (
-                                                <SelectItem key={user.id} value={user.id}>
-                                                    {user.name || user.email}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="startDate">Start Date</Label>
-                                    <Input
-                                        id="startDate"
-                                        type="datetime-local"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="endDate">End Date</Label>
-                                    <Input
-                                        id="endDate"
-                                        type="datetime-local"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={submitting}>
-                                    {submitting ? 'Creating...' : 'Create Delegation'}
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
             </div>
+
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold">Active Delegations</h3>
+                    </div>
+                     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button size="sm" className="font-bold">
+                                <Plus className="mr-2 h-4 w-4" /> Create Delegation
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <form onSubmit={handleCreateDelegation}>
+                                <DialogHeader>
+                                    <DialogTitle>Create New Delegation</DialogTitle>
+                                    <DialogDescription>
+                                        Delegate your approval authority to another team member for a specific period.
+                                    </DialogDescription>
+                                </DialogHeader>
+
+                                <div className="space-y-4 py-4">
+                                    <div>
+                                        <Label htmlFor="user">Delegate To</Label>
+                                        <Select value={selectedUserId} onValueChange={setSelectedUserId} required>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a team member" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {users.map((user) => (
+                                                    <SelectItem key={user.id} value={user.id}>
+                                                        {user.name || user.email}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="startDate">Start Date</Label>
+                                        <Input
+                                            id="startDate"
+                                            type="datetime-local"
+                                            value={startDate}
+                                            onChange={(e) => setStartDate(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="endDate">End Date</Label>
+                                        <Input
+                                            id="endDate"
+                                            type="datetime-local"
+                                            value={endDate}
+                                            onChange={(e) => setEndDate(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <DialogFooter>
+                                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" disabled={submitting}>
+                                        {submitting ? 'Creating...' : 'Create Delegation'}
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+                </div>
 
             {delegations.length === 0 ? (
                 <Card className="p-8 text-center">
@@ -307,5 +322,6 @@ export default function DelegationsPage() {
                 </div>
             )}
         </div>
+    </div>
     );
 }

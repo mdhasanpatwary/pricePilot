@@ -1,6 +1,6 @@
 /**
  * Privacy Settings Page
- * 
+ *
  * GDPR compliance interface for users to:
  * - Export their data
  * - Delete their account
@@ -24,8 +24,10 @@ import {
     AlertTriangle,
     CheckCircle2,
     FileText,
-    Mail
+    Mail,
+    ArrowLeft
 } from 'lucide-react';
+import Link from 'next/link';
 
 export default function PrivacySettingsPage() {
     const { data: session } = useSession();
@@ -119,11 +121,19 @@ export default function PrivacySettingsPage() {
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-4xl">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-2">Privacy & Data Management</h1>
-                <p className="text-muted-foreground">
-                    Manage your personal data and exercise your privacy rights under GDPR
-                </p>
+            <div className="flex items-center gap-4 mb-8">
+                <Link
+                  href="/dashboard/settings"
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+                </Link>
+                <div>
+                    <h1 className="text-3xl font-bold mb-2">Privacy & Data Management</h1>
+                    <p className="text-muted-foreground">
+                        Manage your personal data and exercise your privacy rights under GDPR
+                    </p>
+                </div>
             </div>
 
             {error && (

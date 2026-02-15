@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { escapeHtml, sanitizeUrl } from "@/lib/utils/sanitize";
 
@@ -69,6 +70,11 @@ export default function ProductDetailDrawer({
 }: ProductDetailDrawerProps) {
   const [matchUrl, setMatchUrl] = useState("");
   const [isLinking, setIsLinking] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [product?.id]);
 
   const handleLinkCompetitor: ButtonClickHandler = async () => {
     if (!matchUrl || !product) return;
@@ -105,33 +111,67 @@ export default function ProductDetailDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full max-w-2xl p-0 overflow-hidden">
-        <div className="h-full flex flex-col">
+      <SheetContent className="w-full sm:max-w-[500px] p-0 overflow-hidden border-l border-border shadow-2xl">
+        <div className="h-full overflow-y-auto">
           {/* Header */}
-          <SheetHeader className="p-8 md:p-10 border-b border-border bg-muted/20">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">
-                  SKU: {sanitizedSku}
-                </Badge>
-                <Badge
-                  variant={product.status === "RED" ? "destructive" : "success"}
-                  className="text-[10px] font-black uppercase tracking-widest"
-                >
-                  {product.status === "RED" ? "Action Required" : "Optimized"}
-                </Badge>
+          <SheetHeader className="p-0 border-b border-border bg-muted/20 relative">
+            {product.image && !imgError ? (
+              <div className="w-full h-48 sm:h-64 relative overflow-hidden group">
+                <Image
+                  src={product.image}
+                  alt={product.title}
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-105"
+                  priority
+                  onError={() => setImgError(true)}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
+                <div className="absolute bottom-6 left-8 md:left-10 flex items-center gap-3">
+                  <Badge variant="outline" className="bg-background/80 backdrop-blur-sm text-[10px] font-black uppercase tracking-widest border-border/50">
+                    SKU: {sanitizedSku}
+                  </Badge>
+                  <Badge
+                    variant={product.status === "RED" ? "destructive" : "success"}
+                    className="text-[10px] font-black uppercase tracking-widest shadow-lg"
+                  >
+                    {product.status === "RED" ? "Action Required" : "Optimized"}
+                  </Badge>
+                </div>
               </div>
-              <SheetTitle className="text-3xl font-black tracking-tight">
+            ) : (
+              <div className="w-full h-40 sm:h-64 relative overflow-hidden bg-primary/5 border-b border-border flex flex-col items-center justify-center gap-4">
+                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
+                   <Zap className="w-10 h-10 text-primary fill-current opacity-60" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="bg-background/80 backdrop-blur-sm text-[10px] font-black uppercase tracking-widest border-border/50">
+                    SKU: {sanitizedSku}
+                  </Badge>
+                  <Badge
+                    variant={product.status === "RED" ? "destructive" : "success"}
+                    className="text-[10px] font-black uppercase tracking-widest shadow-lg"
+                  >
+                    {product.status === "RED" ? "Action Required" : "Optimized"}
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            <div className={cn("px-8 md:px-10 pb-8", !product.image && "pt-0")}>
+              <SheetTitle className="text-2xl font-black tracking-tight leading-tight mb-2">
                 {sanitizedTitle}
               </SheetTitle>
-              <SheetDescription className="text-muted-foreground font-medium flex items-center gap-2">
-                <Globe className="w-4 h-4" /> Global Tracking Active via 8
-                Crawlers
+              <SheetDescription className="text-muted-foreground font-semibold flex items-center gap-2 text-xs">
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                    <Globe className="w-3 h-3" />
+                    <span className="uppercase tracking-tighter">Live Intelligence</span>
+                </span>
+                <span>• Tracked via 8 Distributed Crawlers</span>
               </SheetDescription>
             </div>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-12">
+          <div className="p-8 md:p-10 space-y-12">
             {/* Competitor Price Comparison */}
             <div className="space-y-6">
               <div className="flex items-center gap-3">

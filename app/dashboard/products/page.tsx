@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import Image from "next/image";
 import { toast } from "sonner";
 import {
   Search,
@@ -24,6 +23,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import BulkUpdateDrawer from "@/components/dashboard/bulk-update-drawer";
 import ProductDetailDrawer from "@/components/dashboard/product-detail-drawer";
 import ProductComparisonDrawer from "@/components/dashboard/product-comparison-drawer";
+import { ProductImage } from "@/components/dashboard/product-image";
 import { useDebounce, searchItems } from "@/lib/hooks/useSearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -936,19 +936,11 @@ export default function PriceReportPage() {
                     <TableCell className="py-4 px-6">
                       <div className="flex items-center gap-4">
                         <div className="relative w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted border border-border">
-                          {item.image ? (
-                            <Image
-                              src={item.image}
-                              alt={item.title}
-                              fill
-                              className="object-cover"
-                              sizes="48px"
-                            />
-                          ) : (
-                            <div className="flex items-center justify-center h-full text-muted-foreground">
-                              <Zap className="w-5 h-5 opacity-20" />
-                            </div>
-                          )}
+                          <ProductImage
+                            src={item.image}
+                            alt={item.title}
+                            sizes="48px"
+                          />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">

@@ -1,97 +1,97 @@
 {
   "totalQueries": 17,
-  "totalTime": 2153.1722480000008,
-  "avgQueryTime": 126.65719105882357,
+  "totalTime": 2201.663541,
+  "avgQueryTime": 129.50962005882351,
   "slowestQueries": [
     {
       "model": "Tenant",
       "operation": "count",
       "count": 1,
-      "totalTime": 491.58299999999997,
-      "avgTime": 491.58299999999997,
-      "minTime": 491.58299999999997,
-      "maxTime": 491.58299999999997,
-      "lastExecuted": "2026-02-10T10:30:24.961Z"
+      "totalTime": 456.932584,
+      "avgTime": 456.932584,
+      "minTime": 456.932584,
+      "maxTime": 456.932584,
+      "lastExecuted": "2026-02-15T05:01:08.303Z"
     },
     {
       "model": "Product",
       "operation": "findMany",
       "count": 5,
-      "totalTime": 915.4004160000004,
-      "avgTime": 183.08008320000008,
-      "minTime": 59.42645799999991,
-      "maxTime": 555.1581249999999,
-      "lastExecuted": "2026-02-10T10:30:26.515Z"
+      "totalTime": 1048.9124159999997,
+      "avgTime": 209.78248319999994,
+      "minTime": 54.11008300000003,
+      "maxTime": 693.127292,
+      "lastExecuted": "2026-02-15T05:01:09.936Z"
     },
     {
       "model": "Site",
       "operation": "findMany",
       "count": 3,
-      "totalTime": 243.05158299999994,
-      "avgTime": 81.01719433333331,
-      "minTime": 63.74549999999999,
-      "maxTime": 115.1697079999999,
-      "lastExecuted": "2026-02-10T10:30:26.631Z"
+      "totalTime": 231.85741600000017,
+      "avgTime": 77.28580533333339,
+      "minTime": 57.5562910000001,
+      "maxTime": 115.49654099999998,
+      "lastExecuted": "2026-02-15T05:01:10.052Z"
     },
     {
       "model": "Tenant",
       "operation": "findFirst",
       "count": 1,
-      "totalTime": 69.79812500000003,
-      "avgTime": 69.79812500000003,
-      "minTime": 69.79812500000003,
-      "maxTime": 69.79812500000003,
-      "lastExecuted": "2026-02-10T10:30:25.032Z"
+      "totalTime": 64.32966699999997,
+      "avgTime": 64.32966699999997,
+      "minTime": 64.32966699999997,
+      "maxTime": 64.32966699999997,
+      "lastExecuted": "2026-02-15T05:01:08.368Z"
     },
     {
       "model": "Product",
       "operation": "count",
       "count": 3,
-      "totalTime": 197.90312499999993,
-      "avgTime": 65.9677083333333,
-      "minTime": 65.09070799999995,
-      "maxTime": 66.68758400000002,
-      "lastExecuted": "2026-02-10T10:30:25.360Z"
+      "totalTime": 185.00358300000005,
+      "avgTime": 61.667861000000016,
+      "minTime": 58.745750000000044,
+      "maxTime": 63.583167,
+      "lastExecuted": "2026-02-15T05:01:08.671Z"
     },
     {
       "model": "ProductMatch",
       "operation": "count",
       "count": 1,
-      "totalTime": 62.48470800000018,
-      "avgTime": 62.48470800000018,
-      "minTime": 62.48470800000018,
-      "maxTime": 62.48470800000018,
-      "lastExecuted": "2026-02-10T10:30:25.422Z"
+      "totalTime": 54.722375000000056,
+      "avgTime": 54.722375000000056,
+      "minTime": 54.722375000000056,
+      "maxTime": 54.722375000000056,
+      "lastExecuted": "2026-02-15T05:01:08.726Z"
     },
     {
       "model": "TenantAuditLog",
       "operation": "findMany",
       "count": 1,
-      "totalTime": 60.01645800000006,
-      "avgTime": 60.01645800000006,
-      "minTime": 60.01645800000006,
-      "maxTime": 60.01645800000006,
-      "lastExecuted": "2026-02-10T10:30:26.276Z"
+      "totalTime": 54.28791699999988,
+      "avgTime": 54.28791699999988,
+      "minTime": 54.28791699999988,
+      "maxTime": 54.28791699999988,
+      "lastExecuted": "2026-02-15T05:01:09.707Z"
     },
     {
       "model": "PricingRule",
       "operation": "findMany",
       "count": 1,
-      "totalTime": 57.02045799999996,
-      "avgTime": 57.02045799999996,
-      "minTime": 57.02045799999996,
-      "maxTime": 57.02045799999996,
-      "lastExecuted": "2026-02-10T10:30:26.216Z"
+      "totalTime": 53.875249999999824,
+      "avgTime": 53.875249999999824,
+      "minTime": 53.875249999999824,
+      "maxTime": 53.875249999999824,
+      "lastExecuted": "2026-02-15T05:01:09.652Z"
     },
     {
       "model": "Product",
       "operation": "groupBy",
       "count": 1,
-      "totalTime": 55.914375000000064,
-      "avgTime": 55.914375000000064,
-      "minTime": 55.914375000000064,
-      "maxTime": 55.914375000000064,
-      "lastExecuted": "2026-02-10T10:30:26.332Z"
+      "totalTime": 51.742333000000144,
+      "avgTime": 51.742333000000144,
+      "minTime": 51.742333000000144,
+      "maxTime": 51.742333000000144,
+      "lastExecuted": "2026-02-15T05:01:09.759Z"
     }
   ],
   "queryBreakdown": [
@@ -100,99 +100,99 @@
       "model": "Tenant",
       "operation": "count",
       "count": 1,
-      "totalTime": 491.58299999999997,
-      "avgTime": 491.58299999999997,
-      "minTime": 491.58299999999997,
-      "maxTime": 491.58299999999997,
-      "lastExecuted": "2026-02-10T10:30:24.961Z"
+      "totalTime": 456.932584,
+      "avgTime": 456.932584,
+      "minTime": 456.932584,
+      "maxTime": 456.932584,
+      "lastExecuted": "2026-02-15T05:01:08.303Z"
     },
     {
       "key": "Tenant.findFirst",
       "model": "Tenant",
       "operation": "findFirst",
       "count": 1,
-      "totalTime": 69.79812500000003,
-      "avgTime": 69.79812500000003,
-      "minTime": 69.79812500000003,
-      "maxTime": 69.79812500000003,
-      "lastExecuted": "2026-02-10T10:30:25.032Z"
+      "totalTime": 64.32966699999997,
+      "avgTime": 64.32966699999997,
+      "minTime": 64.32966699999997,
+      "maxTime": 64.32966699999997,
+      "lastExecuted": "2026-02-15T05:01:08.368Z"
     },
     {
       "key": "Site.findMany",
       "model": "Site",
       "operation": "findMany",
       "count": 3,
-      "totalTime": 243.05158299999994,
-      "avgTime": 81.01719433333331,
-      "minTime": 63.74549999999999,
-      "maxTime": 115.1697079999999,
-      "lastExecuted": "2026-02-10T10:30:26.631Z"
+      "totalTime": 231.85741600000017,
+      "avgTime": 77.28580533333339,
+      "minTime": 57.5562910000001,
+      "maxTime": 115.49654099999998,
+      "lastExecuted": "2026-02-15T05:01:10.052Z"
     },
     {
       "key": "Product.count",
       "model": "Product",
       "operation": "count",
       "count": 3,
-      "totalTime": 197.90312499999993,
-      "avgTime": 65.9677083333333,
-      "minTime": 65.09070799999995,
-      "maxTime": 66.68758400000002,
-      "lastExecuted": "2026-02-10T10:30:25.360Z"
+      "totalTime": 185.00358300000005,
+      "avgTime": 61.667861000000016,
+      "minTime": 58.745750000000044,
+      "maxTime": 63.583167,
+      "lastExecuted": "2026-02-15T05:01:08.671Z"
     },
     {
       "key": "ProductMatch.count",
       "model": "ProductMatch",
       "operation": "count",
       "count": 1,
-      "totalTime": 62.48470800000018,
-      "avgTime": 62.48470800000018,
-      "minTime": 62.48470800000018,
-      "maxTime": 62.48470800000018,
-      "lastExecuted": "2026-02-10T10:30:25.422Z"
+      "totalTime": 54.722375000000056,
+      "avgTime": 54.722375000000056,
+      "minTime": 54.722375000000056,
+      "maxTime": 54.722375000000056,
+      "lastExecuted": "2026-02-15T05:01:08.726Z"
     },
     {
       "key": "Product.findMany",
       "model": "Product",
       "operation": "findMany",
       "count": 5,
-      "totalTime": 915.4004160000004,
-      "avgTime": 183.08008320000008,
-      "minTime": 59.42645799999991,
-      "maxTime": 555.1581249999999,
-      "lastExecuted": "2026-02-10T10:30:26.515Z"
+      "totalTime": 1048.9124159999997,
+      "avgTime": 209.78248319999994,
+      "minTime": 54.11008300000003,
+      "maxTime": 693.127292,
+      "lastExecuted": "2026-02-15T05:01:09.936Z"
     },
     {
       "key": "PricingRule.findMany",
       "model": "PricingRule",
       "operation": "findMany",
       "count": 1,
-      "totalTime": 57.02045799999996,
-      "avgTime": 57.02045799999996,
-      "minTime": 57.02045799999996,
-      "maxTime": 57.02045799999996,
-      "lastExecuted": "2026-02-10T10:30:26.216Z"
+      "totalTime": 53.875249999999824,
+      "avgTime": 53.875249999999824,
+      "minTime": 53.875249999999824,
+      "maxTime": 53.875249999999824,
+      "lastExecuted": "2026-02-15T05:01:09.652Z"
     },
     {
       "key": "TenantAuditLog.findMany",
       "model": "TenantAuditLog",
       "operation": "findMany",
       "count": 1,
-      "totalTime": 60.01645800000006,
-      "avgTime": 60.01645800000006,
-      "minTime": 60.01645800000006,
-      "maxTime": 60.01645800000006,
-      "lastExecuted": "2026-02-10T10:30:26.276Z"
+      "totalTime": 54.28791699999988,
+      "avgTime": 54.28791699999988,
+      "minTime": 54.28791699999988,
+      "maxTime": 54.28791699999988,
+      "lastExecuted": "2026-02-15T05:01:09.707Z"
     },
     {
       "key": "Product.groupBy",
       "model": "Product",
       "operation": "groupBy",
       "count": 1,
-      "totalTime": 55.914375000000064,
-      "avgTime": 55.914375000000064,
-      "minTime": 55.914375000000064,
-      "maxTime": 55.914375000000064,
-      "lastExecuted": "2026-02-10T10:30:26.332Z"
+      "totalTime": 51.742333000000144,
+      "avgTime": 51.742333000000144,
+      "minTime": 51.742333000000144,
+      "maxTime": 51.742333000000144,
+      "lastExecuted": "2026-02-15T05:01:09.759Z"
     }
   ]
 }

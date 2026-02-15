@@ -332,12 +332,13 @@ export class SyncService {
         );
 
         const results = [];
+        const priceHistoriesToBatch: { productId: string; price: any }[] = [];
         let processed = 0;
 
         for (const extProd of externalProducts) {
           try {
-            // Check if sync was manually stopped (check every 10 products to reduce queries)
-            if (processed % 10 === 0) {
+            // Check if sync was manually stopped (check every 50 products to reduce queries)
+            if (processed % 50 === 0) {
               const currentSite = await prisma.site.findUnique({
                 where: { id: siteId },
                 select: { isSyncing: true },
@@ -390,22 +391,20 @@ export class SyncService {
                 });
               }
 
-              // 3. Record price history (Atomic with the update)
-              await tx.priceHistory.create({
-                data: {
-                  productId: p.id,
-                  price: extProd.price,
-                },
-              });
-
               return p;
+            });
+
+            // 3. Collect price history for batching
+            priceHistoriesToBatch.push({
+              productId: product.id,
+              price: extProd.price,
             });
 
             results.push(product);
             processed++;
 
-            // Update progress every 10 products
-            if (processed % 10 === 0) {
+            // Update progress every 20 products
+            if (processed % 20 === 0) {
               await prisma.site.update({
                 where: { id: siteId },
                 data: {
@@ -422,7 +421,18 @@ export class SyncService {
           }
         }
 
-        // 4. Update last sync time and finish
+        // 4. Batch create all price histories at once
+        if (priceHistoriesToBatch.length > 0) {
+          await prisma.priceHistory.createMany({
+            data: priceHistoriesToBatch.map(h => ({
+              productId: h.productId,
+              price: h.price,
+              recordedAt: new Date()
+            }))
+          });
+        }
+
+        // 5. Update last sync time and finish
         await prisma.site.update({
           where: { id: siteId },
           data: {
