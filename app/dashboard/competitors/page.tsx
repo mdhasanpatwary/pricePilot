@@ -135,6 +135,14 @@ interface CompetitorProgressSnapshot {
   syncProcessed: number;
   syncLastAction?: string | null;
   syncStartedAt?: string | Date | null;
+  latestLogAt?: string | Date | null;
+  logs?: Array<{
+    id: string;
+    siteId: string;
+    message: string;
+    level: string;
+    createdAt: string | Date;
+  }>;
 }
 
 export default function CompetitorsPage() {
@@ -176,7 +184,17 @@ export default function CompetitorsPage() {
       const res = await fetch("/api/v1/competitors");
       if (res.ok) {
         const data = await res.json();
-        setCompetitors(data.competitors || []);
+        const incomingCompetitors: Competitor[] = Array.isArray(data.competitors)
+          ? data.competitors
+          : [];
+
+        setCompetitors((prev) => {
+          const existingById = new Map(prev.map((competitor) => [competitor.id, competitor]));
+          return incomingCompetitors.map((competitor) => ({
+            ...competitor,
+            logs: existingById.get(competitor.id)?.logs || competitor.logs || [],
+          }));
+        });
       } else {
         toast.error("Failed to load competitors");
       }
@@ -210,7 +228,7 @@ export default function CompetitorsPage() {
       const signature = snapshots
         .map(
           (site) =>
-            `${site.id}:${site.isSyncing ? 1 : 0}:${site.syncProcessed || 0}:${site.syncTotal || 0}:${site.syncLastAction || ""}`
+            `${site.id}:${site.isSyncing ? 1 : 0}:${site.syncProcessed || 0}:${site.syncTotal || 0}:${site.syncLastAction || ""}:${site.latestLogAt || ""}`
         )
         .join("|");
       const changed = signature !== lastProgressSignatureRef.current;
@@ -236,6 +254,7 @@ export default function CompetitorsPage() {
             syncProcessed: snapshot.syncProcessed,
             syncLastAction: snapshot.syncLastAction,
             syncStartedAt: snapshot.syncStartedAt,
+            logs: snapshot.logs || [],
             status: nextStatus,
           };
         })
