@@ -36,6 +36,7 @@ import { APIDetector } from '../api-detection/api-detector';
 import { APICache, apiCache } from '../api-detection/api-cache';
 import { APIExtractor } from '../api-detection/api-extractor';
 import type { APIPattern, Product as APIProduct } from '@/lib/types/api-detection';
+import { ConcurrencyLimiter } from '../concurrency-limiter';
 
 /**
  * Scrape request interface
@@ -88,6 +89,7 @@ export class ScrapeOrchestrator {
     private apiDetector: APIDetector;
     private apiCache: APICache;
     private apiExtractor: APIExtractor;
+    private concurrencyLimiter: ConcurrencyLimiter;
 
     constructor() {
         this.detectionEngine = new DetectionEngine();
@@ -102,6 +104,11 @@ export class ScrapeOrchestrator {
         this.apiDetector = new APIDetector();
         this.apiCache = apiCache;
         this.apiExtractor = new APIExtractor();
+        this.concurrencyLimiter = new ConcurrencyLimiter({
+            minConcurrency: 1,
+            maxConcurrency: 10,
+            initialConcurrency: 3
+        });
     }
 
     /**
@@ -134,6 +141,12 @@ export class ScrapeOrchestrator {
             competitorWebsiteId: request.competitorWebsiteId,
             url: request.url,
         });
+
+        // Acquire concurrency slot
+        // Requirement: 6.4
+        await this.concurrencyLimiter.acquireSlot(request.competitorWebsiteId);
+
+        let result: ScrapeResult;
 
         try {
             // Step 1: Check cache for API pattern (unless forced detection)
@@ -273,7 +286,7 @@ export class ScrapeOrchestrator {
 
                         const responseTime = Date.now() - startTime;
 
-                        return {
+                        result = {
                             success: true,
                             price: matchedProduct.price,
                             currency: matchedProduct.currency,
@@ -308,57 +321,59 @@ export class ScrapeOrchestrator {
                 }
             }
 
-            // Step 4: Fallback to HTML scraping
-            // Requirements: 4.1, 4.2
-            logger.info('[ScrapeOrchestrator] Falling back to HTML scraping', {
-                competitorWebsiteId: request.competitorWebsiteId,
-                reason: apiPattern ? 'API extraction failed' : 'No API pattern available',
-            });
+            if (!result!) {
+                // Step 4: Fallback to HTML scraping
+                // Requirements: 4.1, 4.2
+                logger.info('[ScrapeOrchestrator] Falling back to HTML scraping', {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    reason: apiPattern ? 'API extraction failed' : 'No API pattern available',
+                });
 
-            // Load site configuration
-            const siteConfig = await this.loadSiteConfiguration(request.competitorWebsiteId);
+                // Load site configuration
+                const siteConfig = await this.loadSiteConfiguration(request.competitorWebsiteId);
 
-            // Initialize strategy context
-            const strategyContext: StrategyContext = {
-                competitorWebsiteId: request.competitorWebsiteId,
-                siteConfig,
-                recentHistory: await this.loadRecentHistory(request.competitorWebsiteId),
-                currentAttempt: 1,
-            };
+                // Initialize strategy context
+                const strategyContext: StrategyContext = {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    siteConfig,
+                    recentHistory: await this.loadRecentHistory(request.competitorWebsiteId),
+                    currentAttempt: 1,
+                };
 
-            // Select initial strategy
-            const strategy = this.strategySelector.selectStrategy(strategyContext);
+                // Select initial strategy
+                const strategy = this.strategySelector.selectStrategy(strategyContext);
 
-            logger.info('[ScrapeOrchestrator] Selected initial strategy', {
-                strategy,
-                competitorWebsiteId: request.competitorWebsiteId,
-            });
+                logger.info('[ScrapeOrchestrator] Selected initial strategy', {
+                    strategy,
+                    competitorWebsiteId: request.competitorWebsiteId,
+                });
 
-            // Execute scrape with retry logic
-            const result = await this.executeScrapeWithRetry(
-                request,
-                siteConfig,
-                strategy,
-                strategyContext
-            );
+                // Execute scrape with retry logic
+                const scrapeResult = await this.executeScrapeWithRetry(
+                    request,
+                    siteConfig,
+                    strategy,
+                    strategyContext
+                );
 
-            const responseTime = Date.now() - startTime;
+                const responseTime = Date.now() - startTime;
 
-            logger.info('[ScrapeOrchestrator] Scrape completed', {
-                success: result.success,
-                attempts: result.attempts,
-                finalStrategy: result.finalStrategy,
-                responseTime,
-                method: 'html',
-            });
+                logger.info('[ScrapeOrchestrator] Scrape completed', {
+                    success: scrapeResult.success,
+                    attempts: scrapeResult.attempts,
+                    finalStrategy: scrapeResult.finalStrategy,
+                    responseTime,
+                    method: 'html',
+                });
 
-            return {
-                ...result,
-                responseTime,
-                timestamp,
-                method: 'html',
-                detectionTime: detectionTime > 0 ? detectionTime : undefined,
-            };
+                result = {
+                    ...scrapeResult,
+                    responseTime,
+                    timestamp,
+                    method: 'html',
+                    detectionTime: detectionTime > 0 ? detectionTime : undefined,
+                };
+            }
         } catch (error) {
             const responseTime = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -369,7 +384,7 @@ export class ScrapeOrchestrator {
                 url: request.url,
             });
 
-            return {
+            result = {
                 success: false,
                 protectionDetected: false,
                 attempts: 1,
@@ -379,7 +394,20 @@ export class ScrapeOrchestrator {
                 errorMessage,
                 method: 'html',
             };
+        } finally {
+            // Record result and adjust concurrency
+            // Requirement: 6.6
+            this.concurrencyLimiter.recordResult(
+                request.competitorWebsiteId,
+                result!.success,
+                result!.protectionDetected,
+                Date.now() - startTime
+            );
+
+            this.concurrencyLimiter.releaseSlot(request.competitorWebsiteId);
         }
+
+        return result;
     }
 
     /**

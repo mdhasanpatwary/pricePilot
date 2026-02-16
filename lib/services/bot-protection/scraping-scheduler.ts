@@ -130,25 +130,13 @@ export class ScrapingScheduler {
         // Group products by competitor website for rate limiting
         const productsByWebsite = this.groupByWebsite(products);
 
-        // Fetch all scraping configs for these websites upfront
-        const websiteIds = Array.from(productsByWebsite.keys());
-        const scrapingConfigs = await prisma.scrapingConfig.findMany({
-            where: {
-                competitorWebsiteId: { in: websiteIds },
-            },
-        });
-        const configMap = new Map(scrapingConfigs.map(c => [c.competitorWebsiteId, c]));
-
         // Initialize active scrapes set for this tenant
         if (!this.activeScrapes.has(tenantId)) {
             this.activeScrapes.set(tenantId, new Set());
         }
 
         // Queue scrapes with delays between sites
-        for (const [websiteId, websiteProducts] of productsByWebsite.entries()) {
-            const siteConfig = configMap.get(websiteId);
-            const delay = siteConfig?.baseDelayMs || this.config.minDelayPerSite;
-
+        for (const [_, websiteProducts] of productsByWebsite.entries()) {
             for (const product of websiteProducts) {
                 // Skip if already being scraped
                 if (this.activeScrapes.get(tenantId)?.has(product.id)) {
@@ -156,10 +144,14 @@ export class ScrapingScheduler {
                     continue;
                 }
 
-                // Queue the scrape with delay
-                setTimeout(async () => {
-                    await this.executeScrape(tenantId, product);
-                }, delay * result.queued);
+                // Queue the scrape (concurrency controlled by orchestrator)
+                this.executeScrape(tenantId, product).catch(error => {
+                    logger.error('Background scrape failed', {
+                        tenantId,
+                        productId: product.id,
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                });
 
                 result.queued++;
 

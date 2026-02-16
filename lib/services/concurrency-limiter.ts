@@ -28,6 +28,17 @@ interface SiteState {
     activeRequests: number;
     requestQueue: Array<() => void>;
     lastAdjustedAt: number;
+    recentResults: RequestResult[];
+}
+
+/**
+ * Result of a single request
+ */
+interface RequestResult {
+    success: boolean;
+    blocked: boolean;
+    responseTime: number;
+    timestamp: number;
 }
 
 /**
@@ -122,6 +133,7 @@ export class ConcurrencyLimiter {
                 activeRequests: 0,
                 requestQueue: [],
                 lastAdjustedAt: Date.now(),
+                recentResults: [],
             };
             this.siteStates.set(site, state);
             logger.info(`[ConcurrencyLimiter] Initialized state for site: ${site}`, {
@@ -359,6 +371,50 @@ export class ConcurrencyLimiter {
             });
         }
         return stats;
+    }
+
+    /**
+     * Record the result of a request and automatically adjust concurrency.
+     * 
+     * @param site - Site identifier
+     * @param success - Whether the request was successful
+     * @param blocked - Whether the request was blocked
+     * @param responseTime - Response time in milliseconds
+     */
+    recordResult(site: string, success: boolean, blocked: boolean, responseTime: number): void {
+        const state = this.getState(site);
+
+        // Add result to history
+        state.recentResults.push({ success, blocked, responseTime, timestamp: Date.now() });
+
+        // Keep only recent results (last 50)
+        if (state.recentResults.length > 50) {
+            state.recentResults.shift();
+        }
+
+        // Calculate metrics
+        const historyLength = state.recentResults.length;
+        if (historyLength < 5) return; // Need minimal sample size
+
+        // Count blocked results
+        const blockedCount = state.recentResults.filter(r => r.blocked).length;
+
+        // Count successful results
+        const successCount = state.recentResults.filter(r => r.success).length;
+
+        // Calculate average response time
+        const totalResponseTime = state.recentResults.reduce((sum, r) => sum + r.responseTime, 0);
+        const avgResponseTime = totalResponseTime / historyLength;
+
+        const metrics: SiteMetrics = {
+            blockRate: blockedCount / historyLength,
+            successRate: successCount / historyLength,
+            avgResponseTime,
+            recentRequests: historyLength
+        };
+
+        // Adjust concurrency based on metrics
+        this.adjustConcurrency(site, metrics);
     }
 
     /**

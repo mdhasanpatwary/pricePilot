@@ -15,8 +15,8 @@
 - [ done ] Improve Redis fallback with circuit breaker + periodic health recovery checks.
 - [ done ] Isolate build-time side effects (DB/Redis initializers) across services to keep CI/build logs clean.
 - [ done ] Introduce strict API response DTO normalization (`site` vs `Site`) to prevent frontend shape regressions.
-- [ ] Add endpoint SLO observability (p50/p95/p99 latency and error budgets) for top APIs.
-- [ ] Tune background job concurrency/backpressure per domain/site for bot-protected targets.
+- [ done ] Add endpoint SLO observability (p50/p95/p99 latency and error budgets) for top APIs.
+- [ done ] Tune background job concurrency/backpressure per domain/site for bot-protected targets.
 - [ ] Add Playwright E2E regression suite for critical flows (`force sync`, `stop sync`, `price approvals`, `duplicates`).
 
 ---
