@@ -30,6 +30,13 @@ const TECH_SYNONYMS: Record<string, string> = {
   "uhd": "4k",
 };
 
+interface MatchingIndices {
+  skuMap: Map<string, LiteProduct>;
+  modelMap: Map<string, LiteProduct>; // brand:model -> product
+  productsByBrand: Map<string, LiteProduct[]>; // brand -> products list
+  allProducts: LiteProduct[];
+}
+
 /**
  * Advanced Product Matching Service
  * Uses multi-pass strategy: SKU → Brand/Model → Semantic Similarity
@@ -38,10 +45,11 @@ const TECH_SYNONYMS: Record<string, string> = {
  * Requirements: 1.1, 1.6
  */
 export class MatchingService {
-  // These will be loaded dynamically in runMatching
+  // Tweakable constants
   private static SIMILARITY_THRESHOLD = 0.65;
   private static HIGH_CONFIDENCE = 0.9;
   private static MEDIUM_CONFIDENCE = 0.75;
+  private static BATCH_SIZE = 50; // Process user products in small batches
 
   // Cache service instance
   private static cacheService: CacheEnhancedService;
@@ -49,6 +57,7 @@ export class MatchingService {
   // TTL for matching operations
   // Requirement 2.9.4: Cache competitor products with 1 hour TTL
   private static readonly MATCHING_TTL = 900; // 15 minutes for match results
+
 
 
   // Common e-commerce noise to strip during matching
@@ -138,16 +147,8 @@ export class MatchingService {
       this.HIGH_CONFIDENCE = 0.9; // We keep these as internal logic constants unless requested otherwise
       this.MEDIUM_CONFIDENCE = 0.75;
 
-      // 1. Get all user products that don't have matches yet
-      const userProducts = await prisma.product.findMany({
-        where: {
-          tenantId,
-          Site: { type: "USER" },
-          matchesAsUser: { none: {} },
-        },
-      });
-
-      // 2. Get all competitor products for this tenant
+      // 1. Get all competitor products (Reference Catalog)
+      // We load these into memory to build indices. Assuming specific tenant catalog < 50k items.
       const competitorProducts = await prisma.product.findMany({
         where: {
           tenantId,
@@ -155,43 +156,71 @@ export class MatchingService {
         },
       });
 
+      // Build Blocking Indices (O(M))
+      const indices = this.buildIndices(competitorProducts as LiteProduct[]);
+
       const matchesCreated = [];
-      const matchesToCreate: Array<{
-        userProductId: string;
-        competitorProductId: string;
-        matchType: MatchType;
-        confidenceScore: number;
-      }> = [];
+      let processedCount = 0;
+      let totalProcessed = 0;
 
-      for (const up of userProducts) {
-        const match = await this.findBestMatch(
-          up as LiteProduct,
-          competitorProducts as LiteProduct[],
-          tenantId,
-        );
-
-        if (match) {
-          // FIX: Collect matches to create in batch instead of creating one by one
-          matchesToCreate.push({
-            userProductId: up.id,
-            competitorProductId: match.product.id,
-            matchType: match.type,
-            confidenceScore: match.confidence,
-          });
-        }
-      }
-
-      // FIX: Batch create all matches at once
-      if (matchesToCreate.length > 0) {
-        const created = await prisma.productMatch.createMany({
-          data: matchesToCreate,
-          skipDuplicates: true,
+      // 2. Process User Products in Batches (O(N) with batched DB access)
+      while (true) {
+        const userProducts = await prisma.product.findMany({
+          where: {
+            tenantId,
+            Site: { type: "USER" },
+            matchesAsUser: { none: {} },
+          },
+          take: this.BATCH_SIZE,
+          skip: processedCount,
         });
-        matchesCreated.push(...Array(created.count).fill(null));
+
+        if (userProducts.length === 0) break;
+
+        const matchesToCreate: Array<{
+          userProductId: string;
+          competitorProductId: string;
+          matchType: MatchType;
+          confidenceScore: number;
+        }> = [];
+
+        for (const up of userProducts) {
+          const match = await this.findBestMatch(
+            up as LiteProduct,
+            indices,
+            tenantId,
+          );
+
+          if (match) {
+            matchesToCreate.push({
+              userProductId: up.id,
+              competitorProductId: match.product.id,
+              matchType: match.type,
+              confidenceScore: match.confidence,
+            });
+          }
+        }
+
+        // Batch persist matches
+        if (matchesToCreate.length > 0) {
+          const created = await prisma.productMatch.createMany({
+            data: matchesToCreate,
+            skipDuplicates: true,
+          });
+          matchesCreated.push(...Array(created.count).fill(null));
+        }
+
+        processedCount += userProducts.length;
+        totalProcessed += userProducts.length;
+
+        // Yield to event loop to prevent blocking main thread
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
+
 
       const result = {
         totalMatches: matchesCreated.length,
+        processed: totalProcessed
       };
 
       // Cache the result
@@ -200,7 +229,6 @@ export class MatchingService {
         await this.cacheService.cacheMatches(tenantId, cacheKey, result, this.MATCHING_TTL);
       } catch (cacheError) {
         // Log cache error but don't fail the operation
-        // Requirement 1.6: Graceful degradation
         logger.warn('[MatchingService] Cache write failed', {
           tenantId,
           error: cacheError
@@ -237,7 +265,7 @@ export class MatchingService {
    */
   private static async findBestMatch(
     userProduct: LiteProduct,
-    competitorProducts: LiteProduct[],
+    indices: MatchingIndices,
     tenantId: string,
   ): Promise<{
     product: LiteProduct;
@@ -260,11 +288,11 @@ export class MatchingService {
         );
       }
 
-      // Validate competitor products array
-      if (!Array.isArray(competitorProducts)) {
+      // Validate competitor products indices (basic check)
+      if (!indices || !indices.allProducts) {
         throw new ValidationError(
-          'Invalid competitor products list',
-          { competitorProducts: ['Competitor products must be an array'] },
+          'Invalid matching indices',
+          { indices: ['Indices must be initialized'] },
           {
             context: {
               tenantId,
@@ -296,7 +324,7 @@ export class MatchingService {
       }
 
       // Perform matching logic
-      const matchResult = await this.performMatching(userProduct, competitorProducts, tenantId);
+      const matchResult = await this.performMatching(userProduct, indices, tenantId);
 
       // Cache the result if found
       if (matchResult) {
@@ -349,12 +377,48 @@ export class MatchingService {
   }
 
   /**
+   * Build blocking indices for O(1) lookups
+   */
+  private static buildIndices(products: LiteProduct[]): MatchingIndices {
+    const indices: MatchingIndices = {
+      skuMap: new Map(),
+      modelMap: new Map(),
+      productsByBrand: new Map(),
+      allProducts: products
+    };
+
+    for (const p of products) {
+      // SKU Map
+      if (p.sku) {
+        indices.skuMap.set(p.sku.toLowerCase(), p);
+      }
+
+      // Brand+Model Map
+      if (p.brand && p.model) {
+        const key = `${p.brand.toLowerCase()}:${p.model.toLowerCase()}`;
+        indices.modelMap.set(key, p);
+      }
+
+      // Brand Map (Blocking for fuzzy search)
+      if (p.brand) {
+        const brandKey = p.brand.toLowerCase();
+        if (!indices.productsByBrand.has(brandKey)) {
+          indices.productsByBrand.set(brandKey, []);
+        }
+        indices.productsByBrand.get(brandKey)!.push(p);
+      }
+    }
+
+    return indices;
+  }
+
+  /**
    * Perform the actual matching logic (extracted from findBestMatch)
-   * This method contains the core matching algorithm without caching
+   * This method contains the core matching algorithm
    */
   private static async performMatching(
     userProduct: LiteProduct,
-    competitorProducts: LiteProduct[],
+    indices: MatchingIndices,
     tenantId: string,
   ): Promise<{
     product: LiteProduct;
@@ -363,12 +427,10 @@ export class MatchingService {
   } | null> {
     try {
 
-      // Pass 1: Exact SKU Match (Highest Confidence)
+      // Pass 1: Exact SKU Match (O(1) Lookup)
       const userSku = userProduct.sku;
       if (userSku) {
-        const skuMatch = competitorProducts.find(
-          (cp) => cp.sku && cp.sku.toLowerCase() === userSku.toLowerCase(),
-        );
+        const skuMatch = indices.skuMap.get(userSku.toLowerCase());
         if (skuMatch) {
           return {
             product: skuMatch,
@@ -377,52 +439,11 @@ export class MatchingService {
           };
         }
       }
-      // Pass 1.5: Regex-based Model Pattern Match (Explicit in Title)
-      // Extracts common patterns like "KRS-82", "S23", "RTX-4090"
-      const userModel = this.extractModelNumber(userProduct.title);
-      if (userModel) {
-        const regexMatch = competitorProducts.find((cp) => {
-          const cpModel = this.extractModelNumber(cp.title);
-          // Match if extracted model numbers are identical and > 3 chars (to avoid noise like 'AMD')
-          return cpModel && cpModel === userModel && userModel.length > 3;
-        });
 
-        if (regexMatch) {
-          return {
-            product: regexMatch,
-            type: "AUTO_MODEL",
-            confidence: 0.95, // Higher than Brand match, slightly lower than explicit SKU
-          };
-        }
-      }
-
-      // Pass 1.8: Specification Match (Check RAM/Storage/Color if available)
-      // This handles "Semantic Product Understanding" by verifying key attributes
-      if (userProduct.specifications) {
-        const bestSpecMatch = competitorProducts
-          .map((cp) => ({
-            product: cp,
-            score: this.compareSpecifications(userProduct, cp),
-          }))
-          .filter((m) => m.score > 0.8) // High threshold for spec match
-          .sort((a, b) => b.score - a.score)[0];
-
-        if (bestSpecMatch) {
-          return {
-            product: bestSpecMatch.product,
-            type: "AUTO_MODEL",
-            confidence: 0.85 + (bestSpecMatch.score * 0.1), // Boost confidence if specs align
-          };
-        }
-      }
-
-      // Pass 2: Brand + Model Match (High Confidence)
+      // Pass 2: Brand + Model Match (O(1) Lookup)
       if (userProduct.brand && userProduct.model) {
-        const modelMatch = competitorProducts.find(
-          (cp) =>
-            cp.brand?.toLowerCase() === userProduct.brand?.toLowerCase() &&
-            cp.model?.toLowerCase() === userProduct.model?.toLowerCase(),
-        );
+        const key = `${userProduct.brand.toLowerCase()}:${userProduct.model.toLowerCase()}`;
+        const modelMatch = indices.modelMap.get(key);
         if (modelMatch) {
           return {
             product: modelMatch,
@@ -432,8 +453,55 @@ export class MatchingService {
         }
       }
 
+      // Prepare Candidates for Fuzzy Matching (Blocking Strategy)
+      // If user product has a brand, ONLY compare with products of same brand (Blocking)
+      // If no brand, fallback to all products (Expensive, but necessary if data is poor)
+      let candidates = indices.allProducts;
+      if (userProduct.brand) {
+        const brandKey = userProduct.brand.toLowerCase();
+        if (indices.productsByBrand.has(brandKey)) {
+          candidates = indices.productsByBrand.get(brandKey)!;
+        }
+      }
+
+      // Pass 1.5: Regex-based Model Pattern Match
+      const userModel = this.extractModelNumber(userProduct.title);
+      if (userModel) {
+        const regexMatch = candidates.find((cp) => {
+          const cpModel = this.extractModelNumber(cp.title);
+          return cpModel && cpModel === userModel && userModel.length > 3;
+        });
+
+        if (regexMatch) {
+          return {
+            product: regexMatch,
+            type: "AUTO_MODEL",
+            confidence: 0.95,
+          };
+        }
+      }
+
+      // Pass 1.8: Specification Match
+      if (userProduct.specifications) {
+        const bestSpecMatch = candidates
+          .map((cp) => ({
+            product: cp,
+            score: this.compareSpecifications(userProduct, cp),
+          }))
+          .filter((m) => m.score > 0.8)
+          .sort((a, b) => b.score - a.score)[0];
+
+        if (bestSpecMatch) {
+          return {
+            product: bestSpecMatch.product,
+            type: "AUTO_MODEL",
+            confidence: 0.85 + (bestSpecMatch.score * 0.1),
+          };
+        }
+      }
+
       // Pass 3: Semantic Title Similarity (Levenshtein Distance)
-      const titleMatches = competitorProducts
+      const titleMatches = candidates
         .map((cp) => ({
           product: cp,
           similarity: this.calculateTitleSimilarity(userProduct.title, cp.title),
@@ -714,21 +782,24 @@ export class MatchingService {
         },
       });
 
+      // Pre-load reference catalog and build indices once
+      const competitorProducts = await prisma.product.findMany({
+        where: {
+          tenantId,
+          Site: { type: "COMPETITOR" },
+        },
+      });
+
+      const indices = this.buildIndices(competitorProducts as LiteProduct[]);
+
       for (const match of lowConfidenceMatches) {
         // Delete old low-confidence match
         await prisma.productMatch.delete({ where: { id: match.id } });
 
         // Try to find a better match
-        const competitorProducts = await prisma.product.findMany({
-          where: {
-            tenantId,
-            Site: { type: "COMPETITOR" },
-          },
-        });
-
         const betterMatch = await this.findBestMatch(
           match.userProduct,
-          competitorProducts,
+          indices,
           tenantId,
         );
 

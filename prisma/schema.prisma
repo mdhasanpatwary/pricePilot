@@ -738,6 +738,7 @@ model Product {
   @@index([tenantId, inStock])
   @@index([tenantId, currentPrice])
   @@index([sku])
+  @@index([siteId, url])
   @@index([updatedAt])
 }
 
@@ -756,6 +757,7 @@ model ProductMatch {
   @@index([userProductId, status])
   @@index([competitorProductId, status])
   @@index([status, createdAt])
+  @@index([createdAt])
 }
 
 model ProtectionDetection {
@@ -1177,6 +1179,8 @@ model Site {
   SyncLog             SyncLog[]
 
   @@index([tenantId, type, createdAt(sort: Desc)])
+  @@index([tenantId, type, isSyncing])
+  @@index([tenantId, type, syncStartedAt])
 }
 
 model SiteProfile {
@@ -1221,6 +1225,7 @@ model SyncLog {
   Site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt(sort: Desc)])
+  @@index([siteId, level, createdAt(sort: Desc)])
   @@index([createdAt])
 }
 

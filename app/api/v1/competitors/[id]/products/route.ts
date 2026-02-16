@@ -113,6 +113,9 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
+    // Await params to get ID for bypass check
+    const { id } = await context.params;
+
     return withRequestContextAndRateLimit(req, "read", (req) => {
         const cachedHandler = withCache(
             (req) => withErrorHandling((req) => handleGET(req, context))(req),
@@ -121,6 +124,21 @@ export async function GET(
                 keyPrefix: 'api:competitors:products',
                 varyBy: ['page', 'limit'],
                 tenantIsolated: true,
+                // Bypass cache if this competitor is currently syncing
+                bypass: async (_req, tenantId) => {
+                    if (!tenantId) return false;
+
+                    const syncing = await prisma.site.findFirst({
+                        where: {
+                            id,
+                            tenantId,
+                            isSyncing: true
+                        },
+                        select: { id: true }
+                    });
+
+                    return !!syncing;
+                }
             }
         );
         return cachedHandler(req);

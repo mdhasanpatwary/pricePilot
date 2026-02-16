@@ -275,6 +275,22 @@ export async function GET(req: NextRequest) {
       keyPrefix: "api:competitors",
       tenantIsolated: true,
       varyBy: ["cursor", "limit", "sortBy", "sortOrder"],
+      // Bypass cache if any competitor is currently syncing for real-time progress updates
+      bypass: async (_req, tenantId) => {
+        if (!tenantId) return false;
+
+        // Fast check: Is any competitor syncing?
+        const syncingSite = await prisma.site.findFirst({
+          where: {
+            tenantId,
+            type: "COMPETITOR",
+            isSyncing: true,
+          },
+          select: { id: true },
+        });
+
+        return !!syncingSite;
+      },
     })
   );
 }

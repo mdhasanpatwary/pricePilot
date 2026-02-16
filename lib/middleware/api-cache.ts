@@ -15,6 +15,7 @@ export interface CacheOptions {
     keyPrefix: string; // Cache key prefix
     varyBy?: string[]; // Query params to include in cache key
     tenantIsolated?: boolean; // Whether to include tenant ID in key
+    bypass?: (req: NextRequest, tenantId?: string) => boolean | Promise<boolean>; // Function to determine if cache should be bypassed
 }
 
 /**
@@ -80,6 +81,15 @@ export function withCache(
                 // we should probably not cache at all or return unauthorized.
                 // For now, let's just skip caching to be safe if no session.
                 if (!tenantId) {
+                    return handler(req);
+                }
+            }
+
+            // Check if cache should be bypassed (e.g. during active sync)
+            if (options.bypass) {
+                const shouldBypass = await options.bypass(req, tenantId);
+                if (shouldBypass) {
+                    // Bypass cache and execute handler directly
                     return handler(req);
                 }
             }
