@@ -139,6 +139,23 @@ export class ScraperService {
   private unsubscribeConfigChange?: () => void;
   private disposed = false;
 
+  /**
+   * Normalize scraped image URLs so relative paths from competitor sites
+   * become absolute URLs resolvable by the frontend.
+   */
+  private normalizeImageUrl(imageUrl: string | undefined, pageUrl: string): string | undefined {
+    if (!imageUrl) return undefined;
+
+    const trimmed = imageUrl.trim();
+    if (!trimmed || trimmed.startsWith("data:")) return undefined;
+
+    try {
+      return new URL(trimmed, pageUrl).toString();
+    } catch {
+      return undefined;
+    }
+  }
+
   constructor() {
     this.browserPool = BrowserPool.getInstance();
     this.challengeHandler = new ChallengeHandler();
@@ -1396,6 +1413,7 @@ export class ScraperService {
         const result = {
           ...jsonLdData,
           url,
+          imageUrl: this.normalizeImageUrl(jsonLdData.imageUrl, url),
           specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
         };
         const validation = TechProductValidator.validateProduct(result);
@@ -1432,6 +1450,7 @@ export class ScraperService {
         const result = {
           ...ogData,
           url,
+          imageUrl: this.normalizeImageUrl(ogData.imageUrl, url),
           specifications: this.parseSpecifications(ogData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
@@ -1466,6 +1485,7 @@ export class ScraperService {
         const result = {
           ...cssData,
           url,
+          imageUrl: this.normalizeImageUrl(cssData.imageUrl, url),
           specifications: this.parseSpecifications(cssData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
@@ -1500,6 +1520,7 @@ export class ScraperService {
         const result = {
           ...heuristicData,
           url,
+          imageUrl: this.normalizeImageUrl(heuristicData.imageUrl, url),
           specifications: this.parseSpecifications(heuristicData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
@@ -2099,6 +2120,7 @@ export class ScraperService {
         const result = {
           ...jsonLdData,
           url,
+          imageUrl: this.normalizeImageUrl(jsonLdData.imageUrl, url),
           specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
         };
         const validation = TechProductValidator.validateProduct(result);
@@ -2142,6 +2164,7 @@ export class ScraperService {
         const result = {
           ...ogData,
           url,
+          imageUrl: this.normalizeImageUrl(ogData.imageUrl, url),
           specifications: this.parseSpecifications(ogData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
@@ -2183,6 +2206,7 @@ export class ScraperService {
         const result = {
           ...cssData,
           url,
+          imageUrl: this.normalizeImageUrl(cssData.imageUrl, url),
           specifications: this.parseSpecifications(cssData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);
@@ -2224,6 +2248,7 @@ export class ScraperService {
         const result = {
           ...heuristicData,
           url,
+          imageUrl: this.normalizeImageUrl(heuristicData.imageUrl, url),
           specifications: this.parseSpecifications(heuristicData.title),
         };
         await cache.set(cacheKey, result, profile.cacheTime);

@@ -367,17 +367,35 @@ export class MetricsCollector implements IMetricsCollector {
             for (const key of keys) {
                 // Upstash Redis client may not expose zrangebyscore; retrieve full set and filter in-app
                 const members = await this.redis.zrange(key, 0, -1);
+                let parseErrors = 0;
 
                 for (const member of members) {
                     try {
-                        const dataPoint = JSON.parse(member as string) as MetricDataPoint;
+                        let dataPoint: MetricDataPoint | null = null;
+
+                        // Upstash may return either raw JSON strings or already-deserialized objects.
+                        if (typeof member === "string") {
+                            dataPoint = JSON.parse(member) as MetricDataPoint;
+                        } else if (member && typeof member === "object") {
+                            dataPoint = member as MetricDataPoint;
+                        }
+
+                        if (!dataPoint || typeof dataPoint.timestamp !== "number") {
+                            throw new Error("Invalid metric data point shape");
+                        }
 
                         if (dataPoint.timestamp >= startTime && dataPoint.timestamp <= now) {
                             allDataPoints.push(dataPoint);
                         }
                     } catch (error) {
-                        console.error("Failed to parse metric data point:", error);
+                        parseErrors++;
                     }
+                }
+
+                if (parseErrors > 0) {
+                    console.warn(
+                        `Skipped ${parseErrors} malformed metric data points for key ${key}`
+                    );
                 }
             }
 

@@ -166,84 +166,75 @@ export default function MonitoringDashboardPage() {
         try {
             // Build query params with optional tenant filter
             const tenantParam = selectedTenantId ? `&tenantId=${selectedTenantId}` : "";
-
-            // Fetch system health
-            const healthRes = await fetch("/api/v1/monitoring/health");
-            if (healthRes.ok) {
-                const healthData = await healthRes.json();
-                setSystemHealth(healthData.data);
-            }
-
-            // Fetch error rate history (last 1 hour)
             const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
             const now = new Date().toISOString();
 
-            const errorRateRes = await fetch(
-                `/api/v1/monitoring/metrics?metricType=error&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
-            );
-            if (errorRateRes.ok) {
-                const errorData = await errorRateRes.json();
-                setErrorRateHistory(errorData.data);
-            }
+            const fetchJsonWithTimeout = async (url: string, timeoutMs = 10000) => {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-            // Fetch endpoint metrics (response time)
-            const endpointRes = await fetch(
-                `/api/v1/monitoring/metrics/by-endpoint?metricType=response_time&startTime=${oneHourAgo}&endTime=${now}${tenantParam}`
-            );
-            if (endpointRes.ok) {
-                const data = await endpointRes.json();
-                setEndpointMetrics(data.data);
-            }
+                try {
+                    const res = await fetch(url, { signal: controller.signal });
+                    if (!res.ok) return null;
+                    return await res.json();
+                } catch (error) {
+                    console.error(`Monitoring request failed: ${url}`, error);
+                    return null;
+                } finally {
+                    clearTimeout(timeout);
+                }
+            };
 
-            // Fetch sync metrics
-            const syncRes = await fetch(
-                `/api/v1/monitoring/metrics/sync?startTime=${oneHourAgo}&endTime=${now}${tenantParam}`
-            );
-            if (syncRes.ok) {
-                const data = await syncRes.json();
-                setSyncMetrics(data.data);
-            }
+            const [
+                healthData,
+                errorData,
+                endpointData,
+                syncData,
+                responseData,
+                scrapingData,
+                priceData,
+                alertsData,
+                resolvedData,
+            ] = await Promise.all([
+                fetchJsonWithTimeout("/api/v1/monitoring/health"),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/metrics?metricType=error&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/metrics/by-endpoint?metricType=response_time&startTime=${oneHourAgo}&endTime=${now}${tenantParam}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/metrics/sync?startTime=${oneHourAgo}&endTime=${now}${tenantParam}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/metrics?metricType=response_time&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/metrics?metricType=scraping_success&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/metrics?metricType=price_update&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/alerts${tenantParam ? `?tenantId=${selectedTenantId}` : ""}`
+                ),
+                fetchJsonWithTimeout(
+                    `/api/v1/monitoring/alerts/history?limit=20${tenantParam ? `&tenantId=${selectedTenantId}` : ""}`
+                ),
+            ]);
 
-            // Fetch response time history
-            const responseTimeRes = await fetch(
-                `/api/v1/monitoring/metrics?metricType=response_time&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
-            );
-            if (responseTimeRes.ok) {
-                const responseData = await responseTimeRes.json();
-                setResponseTimeHistory(responseData.data);
-            }
+            if (healthData?.data) setSystemHealth(healthData.data);
+            if (errorData?.data) setErrorRateHistory(errorData.data);
+            if (endpointData?.data) setEndpointMetrics(endpointData.data);
+            if (syncData?.data) setSyncMetrics(syncData.data);
+            if (responseData?.data) setResponseTimeHistory(responseData.data);
+            if (scrapingData?.data) setScrapingMetrics(scrapingData.data);
+            if (priceData?.data) setPriceUpdateMetrics(priceData.data);
+            if (alertsData?.data?.alerts) setActiveAlerts(alertsData.data.alerts);
 
-            // Fetch scraping metrics
-            const scrapingRes = await fetch(
-                `/api/v1/monitoring/metrics?metricType=scraping_success&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
-            );
-            if (scrapingRes.ok) {
-                const scrapingData = await scrapingRes.json();
-                setScrapingMetrics(scrapingData.data);
-            }
-
-            // Fetch price update metrics
-            const priceUpdateRes = await fetch(
-                `/api/v1/monitoring/metrics?metricType=price_update&startTime=${oneHourAgo}&endTime=${now}&granularity=5m${tenantParam}`
-            );
-            if (priceUpdateRes.ok) {
-                const priceData = await priceUpdateRes.json();
-                setPriceUpdateMetrics(priceData.data);
-            }
-
-            // Fetch active alerts
-            const alertsRes = await fetch(`/api/v1/monitoring/alerts${tenantParam ? `?tenantId=${selectedTenantId}` : ""}`);
-            if (alertsRes.ok) {
-                const alertsData = await alertsRes.json();
-                setActiveAlerts(alertsData.data.alerts || []);
-            }
-
-            // Fetch recently resolved alerts (last 24 hours)
-            const resolvedAlertsRes = await fetch(`/api/v1/monitoring/alerts/history?limit=20${tenantParam ? `&tenantId=${selectedTenantId}` : ""}`);
-            if (resolvedAlertsRes.ok) {
-                const resolvedData = await resolvedAlertsRes.json();
+            if (resolvedData?.data?.alerts) {
                 // Filter to only show resolved alerts
-                const resolved = (resolvedData.data.alerts || []).filter((alert: any) => alert.resolvedAt);
+                const resolved = resolvedData.data.alerts.filter((alert: any) => alert.resolvedAt);
                 setResolvedAlerts(resolved);
             }
 
