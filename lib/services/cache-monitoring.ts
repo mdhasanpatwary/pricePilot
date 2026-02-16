@@ -404,5 +404,20 @@ export class CacheMonitoringService {
     }
 }
 
-// Export singleton instance
-export const cacheMonitoringService = new CacheMonitoringService();
+let cacheMonitoringInstance: CacheMonitoringService | null = null;
+
+export function getCacheMonitoringService(): CacheMonitoringService {
+    if (!cacheMonitoringInstance) {
+        cacheMonitoringInstance = new CacheMonitoringService();
+    }
+    return cacheMonitoringInstance;
+}
+
+// Lazy proxy avoids import-time Redis work.
+export const cacheMonitoringService = new Proxy({} as CacheMonitoringService, {
+    get(_target, property) {
+        const service = getCacheMonitoringService();
+        const value = (service as any)[property];
+        return typeof value === "function" ? value.bind(service) : value;
+    },
+});

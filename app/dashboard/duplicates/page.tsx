@@ -62,6 +62,20 @@ export default function DuplicateDetectionPage() {
 
     const [isMerging, setIsMerging] = useState<string | null>(null);
 
+    const getSiteName = (item: any): string => {
+        const explicitName = item?.site?.name;
+        if (explicitName) return explicitName;
+
+        const baseUrl = item?.site?.baseUrl || item?.Site?.baseUrl;
+        if (!baseUrl) return "Unknown";
+
+        try {
+            return new URL(baseUrl).hostname.replace(/^www\./, "");
+        } catch {
+            return baseUrl;
+        }
+    };
+
     const handleMerge = async (group: any) => {
         setIsMerging(group.anchor.id);
         try {
@@ -150,7 +164,7 @@ export default function DuplicateDetectionPage() {
                                     <span className="text-sm font-bold truncate max-w-md">{group.anchor.title}</span>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <span className="text-[10px] font-bold text-muted-foreground uppercase">{group.anchor.site.name}</span>
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase">{getSiteName(group.anchor)}</span>
                                     <Button
                                         size="sm"
                                         onClick={() => handleMerge(group)}
@@ -176,7 +190,7 @@ export default function DuplicateDetectionPage() {
                                                     </Badge>
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1">
-                                                    <span className="text-[10px] font-mono text-muted-foreground uppercase">{dup.site.name}</span>
+                                                    <span className="text-[10px] font-mono text-muted-foreground uppercase">{getSiteName(dup)}</span>
                                                     <span className="text-[10px] text-muted-foreground">•</span>
                                                     <span className="text-[10px] font-bold text-muted-foreground">{dup.reason}</span>
                                                 </div>
@@ -185,7 +199,9 @@ export default function DuplicateDetectionPage() {
                                         <div className="flex items-center gap-3 shrink-0">
                                             <div className="text-right mr-4">
                                                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Price</p>
-                                                <p className="text-sm font-black">{formatCurrency(dup.currentPrice, group.anchor.currency)}</p>
+                                                <p className="text-sm font-black">
+                                                    {formatCurrency(Number(dup.currentPrice ?? 0), group.anchor.currency || "USD")}
+                                                </p>
                                             </div>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
                                                 <Trash2 className="w-4 h-4" />

@@ -221,5 +221,15 @@ export class RedisSessionManager {
     }
 }
 
-// Export singleton instance
-export const redisSessionManager = RedisSessionManager.getInstance();
+export function getRedisSessionManager(): RedisSessionManager {
+    return RedisSessionManager.getInstance();
+}
+
+// Lazy proxy avoids import-time Redis setup.
+export const redisSessionManager = new Proxy({} as RedisSessionManager, {
+    get(_target, property) {
+        const manager = RedisSessionManager.getInstance();
+        const value = (manager as any)[property];
+        return typeof value === "function" ? value.bind(manager) : value;
+    },
+});

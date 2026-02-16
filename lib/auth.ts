@@ -7,6 +7,65 @@ import { cacheWarmingService } from "@/lib/services/cache-warming";
 import { securityMonitoringService } from "@/lib/services/monitoring/security-monitoring";
 import { getOrSetRequestCache } from "@/lib/cache/request-cache";
 
+type SessionLookupCacheEntry = {
+  value: any | null;
+  expiresAt: number;
+  promise?: Promise<any | null>;
+};
+
+const globalSessionLookupState = globalThis as typeof globalThis & {
+  __ppSessionLookupCache?: Map<string, SessionLookupCacheEntry>;
+};
+
+const sessionLookupCache =
+  globalSessionLookupState.__ppSessionLookupCache ??
+  new Map<string, SessionLookupCacheEntry>();
+if (!globalSessionLookupState.__ppSessionLookupCache) {
+  globalSessionLookupState.__ppSessionLookupCache = sessionLookupCache;
+}
+
+async function getSessionRecordWithShortTtl(
+  sessionToken: string,
+): Promise<any | null> {
+  const ttlMs = Number.parseInt(process.env.SESSION_LOOKUP_CACHE_MS || "5000", 10);
+  const effectiveTtlMs = Number.isFinite(ttlMs) ? Math.max(1000, ttlMs) : 5000;
+  const now = Date.now();
+  const cacheKey = `session:${sessionToken}`;
+  const cached = sessionLookupCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > now) {
+    if (cached.promise) {
+      return cached.promise;
+    }
+    return cached.value;
+  }
+
+  const inFlightLookup = (async () => {
+    const record = await (prisma as any).session.findUnique({
+      where: { sessionToken },
+    });
+
+    sessionLookupCache.set(cacheKey, {
+      value: record ?? null,
+      expiresAt: Date.now() + effectiveTtlMs,
+    });
+
+    return record ?? null;
+  })();
+  sessionLookupCache.set(cacheKey, {
+    value: null,
+    expiresAt: now + effectiveTtlMs,
+    promise: inFlightLookup,
+  });
+
+  try {
+    return await inFlightLookup;
+  } catch (error) {
+    sessionLookupCache.delete(cacheKey);
+    throw error;
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   providers: [
@@ -149,9 +208,7 @@ export const authOptions: NextAuthOptions = {
       if (token.sessionId) {
         const sessionRecord = await getOrSetRequestCache<any>(
           `session:${token.sessionId}`,
-          () => (prisma as any).session.findUnique({
-            where: { sessionToken: token.sessionId as string },
-          })
+          () => getSessionRecordWithShortTtl(token.sessionId as string)
         );
 
         if (!sessionRecord) {
@@ -167,15 +224,20 @@ export const authOptions: NextAuthOptions = {
           }).catch(() => {
             // Ignore errors if already deleted
           });
+          sessionLookupCache.delete(`session:${token.sessionId as string}`);
           return null as any;
         }
 
         // Update lastUsedAt once an hour to minimize DB writes
         const lastUpdate = new Date(sessionRecord.lastUsedAt).getTime();
         if (Date.now() - lastUpdate > 3600000) {
-          await (prisma as any).session.update({
+          const updatedSessionRecord = await (prisma as any).session.update({
             where: { id: sessionRecord.id },
             data: { lastUsedAt: new Date() },
+          });
+          sessionLookupCache.set(`session:${token.sessionId as string}`, {
+            value: updatedSessionRecord,
+            expiresAt: Date.now() + 5000,
           });
         }
       }

@@ -259,6 +259,11 @@ export default function CompetitorsPage() {
     [competitors],
   );
 
+  const terminalTrafficPattern = useMemo(
+    () => [true, false, true, true, false, true, false, true, true, false, true, false],
+    [],
+  );
+
   useEffect(() => {
     if (!hasActiveSync) {
       // Clear syncing state when all syncs are complete
@@ -401,7 +406,16 @@ export default function CompetitorsPage() {
     // 1. Optimistically update UI to start polling immediately
     setCompetitors((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, isSyncing: true, status: "SYNCING" } : c,
+        c.id === id
+          ? {
+            ...c,
+            isSyncing: true,
+            status: "SYNCING",
+            syncProcessed: 0,
+            syncTotal: c.syncTotal ?? 0,
+            syncLastAction: "Queuing sync job...",
+          }
+          : c,
       ),
     );
 
@@ -422,6 +436,8 @@ export default function CompetitorsPage() {
 
       if (result.success) {
         toast.success("Sync started successfully. Monitoring progress...");
+        // Pull fresh progress immediately instead of waiting for next poll tick.
+        await fetchCompetitorProgress();
       } else {
         throw new Error(result.error || "Sync failed to start");
       }
@@ -451,20 +467,23 @@ export default function CompetitorsPage() {
 
       if (res.ok) {
         toast.info("Crawler shutdown signal sent");
-        // Immediately update UI optimistically
+        // Keep visual state stable; progress endpoint is source of truth for stop completion.
         setCompetitors((prev) =>
           prev.map((c) =>
             c.id === id
               ? {
                 ...c,
-                isSyncing: false,
-                status: c.status === "SYNCING" ? "ACTIVE" : c.status,
+                isSyncing: true,
+                status: "SYNCING",
+                syncLastAction: "Stopping crawler...",
               }
               : c,
           ),
         );
-        // Then fetch fresh data
-        await fetchCompetitors(true);
+        await fetchCompetitorProgress();
+        setTimeout(() => {
+          fetchCompetitorProgress();
+        }, 1200);
       } else {
         const errorData = await res.json().catch(() => ({}));
         toast.error(errorData.error || "Failed to stop crawler");
@@ -882,7 +901,7 @@ export default function CompetitorsPage() {
                             <span className="font-mono text-xs font-bold text-primary animate-pulse">
                               {comp.syncTotal && comp.syncTotal > 0
                                 ? `${comp.syncProcessed} / ${comp.syncTotal}`
-                                : "&gt; _"}
+                                : "Starting..."}
                             </span>
                           </div>
                         ) : (
@@ -1054,7 +1073,7 @@ export default function CompetitorsPage() {
           </div>
 
           {/* Global Terminal Feed - Bottom of Table */}
-          {Array.isArray(competitors) && competitors.some((c) => c.isSyncing) && (
+          <div className="mt-6">
             <div className="mt-6 animate-in slide-in-from-bottom-4 duration-500">
               <div className="bg-slate-950 rounded-xl border border-white/10 shadow-2xl overflow-hidden">
                 {/* Terminal Header */}
@@ -1209,14 +1228,12 @@ export default function CompetitorsPage() {
                       </div>
                     </div>
                     <div className="flex gap-1">
-                      {Array.from({ length: 12 }).map((_, i) => (
+                      {terminalTrafficPattern.map((isActive, i) => (
                         <div
                           key={i}
                           className={cn(
                             "w-1.5 h-1.5 rounded-sm transition-all duration-300",
-                            Math.random() > 0.4
-                              ? "bg-primary/40"
-                              : "bg-white/5",
+                            isActive ? "bg-primary/40" : "bg-white/5",
                           )}
                         />
                       ))}
@@ -1225,7 +1242,7 @@ export default function CompetitorsPage() {
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
       {/* Settings Modal */}

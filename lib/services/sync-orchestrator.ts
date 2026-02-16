@@ -14,6 +14,8 @@ import { withDbRetry } from "@/lib/utils/db-retry";
 import { scrapeLogger } from "./scrape-logger";
 
 export class SyncOrchestrator {
+  private static retrySiteLocks = new Map<string, Promise<void>>();
+
   /**
    * Check if current time is off-peak (NIGHT: 10 PM to 6 AM)
    */
@@ -880,6 +882,23 @@ export class SyncOrchestrator {
    * Process a delayed retry for blocked products
    */
   static async processRetrySync(siteId: string, productIds: string[]) {
+    const previousLock = this.retrySiteLocks.get(siteId) || Promise.resolve();
+    const currentLock = previousLock
+      .catch(() => undefined)
+      .then(() => this.processRetrySyncInternal(siteId, productIds));
+
+    this.retrySiteLocks.set(siteId, currentLock);
+
+    try {
+      await currentLock;
+    } finally {
+      if (this.retrySiteLocks.get(siteId) === currentLock) {
+        this.retrySiteLocks.delete(siteId);
+      }
+    }
+  }
+
+  private static async processRetrySyncInternal(siteId: string, productIds: string[]) {
     const site = await prisma.site.findUnique({ where: { id: siteId } });
     if (!site || !site.isSyncing) return;
 
@@ -889,7 +908,8 @@ export class SyncOrchestrator {
     try {
       await scraper.init();
 
-      for (const productId of productIds) {
+      for (let index = 0; index < productIds.length; index++) {
+        const productId = productIds[index];
         const userProduct = await prisma.product.findUnique({ where: { id: productId } });
         if (!userProduct) continue;
 
@@ -904,7 +924,7 @@ export class SyncOrchestrator {
       }
 
       // Status update: heartbeat for ScrapeRetry - only on every 10th product or success/failure
-      if (productIds.indexOf(productId) % 10 === 0) {
+      if (index % 10 === 0) {
         await (prisma as any).scrapeRetry.updateMany({
           where: { userProductId: productId, siteId, status: "PENDING" },
           data: { updatedAt: new Date() }
@@ -988,7 +1008,10 @@ export class SyncOrchestrator {
               siteId,
               tenantId: userProduct.tenantId,
               productIds: [productId]
-            }, { delay: retryAfter * 60 * 1000 });
+            }, {
+              delay: retryAfter * 60 * 1000,
+              jobId: `retry:${siteId}:${productId}:${retryRecord.retryCount + 1}`,
+            });
 
             await prisma.syncLog.create({
               data: {

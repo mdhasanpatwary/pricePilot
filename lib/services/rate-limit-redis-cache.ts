@@ -19,6 +19,8 @@ import { Redis } from "ioredis";
 import { getRedisConnection } from "@/lib/queue/connection";
 import { logger } from "@/lib/logger";
 
+const RATE_LIMIT_CACHE_DEBUG = process.env.RATE_LIMIT_CACHE_DEBUG === "true";
+
 /**
  * Cache key prefixes for different data types
  */
@@ -77,6 +79,11 @@ export class RateLimitRedisCache {
         this.redis = getRedisConnection();
     }
 
+    private debug(message: string, context?: Record<string, unknown>): void {
+        if (!RATE_LIMIT_CACHE_DEBUG) return;
+        logger.debug(message, context);
+    }
+
     /**
      * Get singleton instance
      */
@@ -131,7 +138,7 @@ export class RateLimitRedisCache {
             }
 
             this.metrics.bypassHits++;
-            logger.debug("[RateLimitRedisCache] Bypass cache hit", { tenantId });
+            this.debug("[RateLimitRedisCache] Bypass cache hit", { tenantId });
             return data.isActive;
         } catch (error) {
             logger.error("[RateLimitRedisCache] Error getting bypass from cache", {
@@ -164,7 +171,7 @@ export class RateLimitRedisCache {
 
             await this.redis.setex(key, CACHE_TTL.BYPASS, JSON.stringify(data));
 
-            logger.debug("[RateLimitRedisCache] Bypass cached", {
+            this.debug("[RateLimitRedisCache] Bypass cached", {
                 tenantId,
                 isActive,
                 expiresAt,
@@ -219,7 +226,7 @@ export class RateLimitRedisCache {
             const data: CachedMultiplierData = JSON.parse(cached);
 
             this.metrics.multiplierHits++;
-            logger.debug("[RateLimitRedisCache] Multiplier cache hit", { tenantId });
+            this.debug("[RateLimitRedisCache] Multiplier cache hit", { tenantId });
             return data.multiplier;
         } catch (error) {
             logger.error("[RateLimitRedisCache] Error getting multiplier from cache", {
@@ -251,7 +258,7 @@ export class RateLimitRedisCache {
                 JSON.stringify(data)
             );
 
-            logger.debug("[RateLimitRedisCache] Multiplier cached", {
+            this.debug("[RateLimitRedisCache] Multiplier cached", {
                 tenantId,
                 multiplier,
             });

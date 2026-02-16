@@ -3,6 +3,8 @@ import { getRedisConnection } from "@/lib/queue/connection";
 import { logger } from "@/lib/logger";
 import { cacheInvalidationPubSub, InvalidationEvent } from "./cache-invalidation-pubsub";
 
+const IS_NEXT_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
+
 /**
  * Cache Layer Component for Database Optimization
  * 
@@ -39,6 +41,8 @@ export interface CacheKey {
 }
 
 export class CacheLayer {
+    private static lastRedisUnavailableLogAt = 0;
+    private static lastRedisUnavailableConsoleAt = 0;
     private redis: Redis;
     private static instance: CacheLayer;
     private hitCount: number = 0;
@@ -49,12 +53,15 @@ export class CacheLayer {
     private isRedisAvailable: boolean = false;
     private connectionCheckTimeout: NodeJS.Timeout | null = null;
     private connectionPromise: Promise<void> | null = null;
+    private pubSubInitialized: boolean = false;
+    private pubSubInitPromise: Promise<void> | null = null;
+    private unregisterInvalidationHandler?: () => void;
 
     private constructor() {
         this.redis = getRedisConnection();
 
-        // In test mode, don't auto-connect - only connect when actually needed
-        if (process.env.NODE_ENV !== "test") {
+        // In test mode and Next.js build phase, avoid eager Redis connect/log noise.
+        if (process.env.NODE_ENV !== "test" && !IS_NEXT_BUILD_PHASE) {
             this.checkRedisConnection();
             this.initializePubSub();
         }
@@ -65,20 +72,36 @@ export class CacheLayer {
      * Requirement 7.2: Distributed cache invalidation propagation
      */
     private async initializePubSub(): Promise<void> {
+        if (this.pubSubInitialized) {
+            return;
+        }
+
+        if (this.pubSubInitPromise) {
+            await this.pubSubInitPromise;
+            return;
+        }
+
+        this.pubSubInitPromise = (async () => {
         try {
             // Initialize pub/sub service
             await cacheInvalidationPubSub.initialize();
 
             // Register callback to handle invalidation events from other instances
-            cacheInvalidationPubSub.onInvalidation(async (event: InvalidationEvent) => {
+            this.unregisterInvalidationHandler = cacheInvalidationPubSub.onInvalidation(async (event: InvalidationEvent) => {
                 await this.handleRemoteInvalidation(event);
             });
 
             logger.info("[CacheLayer] Pub/sub initialized for distributed invalidation");
+            this.pubSubInitialized = true;
         } catch (error) {
             logger.error("[CacheLayer] Failed to initialize pub/sub", { error });
             // Don't throw - application should continue without distributed invalidation
+        } finally {
+            this.pubSubInitPromise = null;
         }
+        })();
+
+        await this.pubSubInitPromise;
     }
 
     /**
@@ -138,11 +161,7 @@ export class CacheLayer {
                 }
             } catch (error) {
                 this.isRedisAvailable = false;
-                logger.warn("[CacheLayer] Redis unavailable, cache disabled", { error });
-
-                if (process.env.NODE_ENV !== "test") {
-                    console.warn("⚠️  Cache disabled: Redis connection failed. Application will continue without caching.");
-                }
+                this.logRedisUnavailable(error);
 
                 if (this.connectionCheckTimeout) {
                     clearTimeout(this.connectionCheckTimeout);
@@ -154,6 +173,27 @@ export class CacheLayer {
         })();
 
         return this.connectionPromise;
+    }
+
+    private logRedisUnavailable(error: unknown): void {
+        const now = Date.now();
+        const throttleMs = Number.parseInt(process.env.CACHE_REDIS_WARN_THROTTLE_MS || "60000", 10);
+        const effectiveThrottleMs = Number.isFinite(throttleMs) ? Math.max(1000, throttleMs) : 60000;
+
+        if (now - CacheLayer.lastRedisUnavailableLogAt >= effectiveThrottleMs) {
+            CacheLayer.lastRedisUnavailableLogAt = now;
+            logger.warn("[CacheLayer] Redis unavailable, cache disabled", {
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+
+        if (
+            process.env.NODE_ENV !== "test" &&
+            now - CacheLayer.lastRedisUnavailableConsoleAt >= effectiveThrottleMs
+        ) {
+            CacheLayer.lastRedisUnavailableConsoleAt = now;
+            console.warn("⚠️  Cache disabled: Redis connection failed. Application will continue without caching.");
+        }
     }
 
     /**
@@ -194,6 +234,10 @@ export class CacheLayer {
 
         this.isRedisAvailable = false;
         this.connectionPromise = null;
+        this.pubSubInitialized = false;
+        this.pubSubInitPromise = null;
+        this.unregisterInvalidationHandler?.();
+        this.unregisterInvalidationHandler = undefined;
     }
 
     /**
@@ -507,5 +551,15 @@ export class CacheLayer {
     }
 }
 
-// Export singleton instance
-export const cacheLayer = CacheLayer.getInstance();
+export function getCacheLayer(): CacheLayer {
+    return CacheLayer.getInstance();
+}
+
+// Lazy proxy avoids import-time side effects in build/dev workers.
+export const cacheLayer = new Proxy({} as CacheLayer, {
+    get(_target, property) {
+        const instance = CacheLayer.getInstance();
+        const value = (instance as any)[property];
+        return typeof value === "function" ? value.bind(instance) : value;
+    },
+});

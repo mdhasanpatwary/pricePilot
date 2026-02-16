@@ -41,6 +41,7 @@ export class ErrorLogger {
     private readonly logger: typeof logger;
     private readonly sanitizer: ErrorSanitizer;
     private readonly environment: 'development' | 'production';
+    private static readonly EXPECTED_ERROR_STACK_CODES = new Set([401, 403, 404, 409, 422, 429]);
 
     constructor(
         loggerInstance: typeof logger = logger,
@@ -114,10 +115,9 @@ export class ErrorLogger {
 
             // Only log to audit if we have tenant and user context
             if (!tenantId || !userId) {
-                // Log warning that we couldn't create audit entry
-                this.logger.warn('Security error occurred but missing tenant/user context for audit log', {
+                // This is expected for anonymous/expired-session requests.
+                this.logger.debug('Skipping security audit log due to missing tenant/user context', {
                     errorCode: error.errorCode,
-                    context: error.context,
                 });
                 return;
             }
@@ -207,8 +207,13 @@ export class ErrorLogger {
             sanitized.context = this.sanitizer.sanitizeContext(logEntry.context);
         }
 
+        // Keep stack traces for unexpected/server errors; suppress for expected client/security errors.
+        const shouldIncludeStack =
+            logEntry.statusCode >= 500 ||
+            !ErrorLogger.EXPECTED_ERROR_STACK_CODES.has(logEntry.statusCode);
+
         // Sanitize stack trace (remove sensitive data from error messages in stack)
-        if (logEntry.stack) {
+        if (shouldIncludeStack && logEntry.stack) {
             sanitized.stack = this.sanitizer.sanitizeMessage(logEntry.stack);
         }
 
@@ -216,7 +221,7 @@ export class ErrorLogger {
         if (logEntry.cause) {
             sanitized.cause = {
                 message: this.sanitizer.sanitizeMessage(logEntry.cause.message),
-                stack: logEntry.cause.stack
+                stack: shouldIncludeStack && logEntry.cause.stack
                     ? this.sanitizer.sanitizeMessage(logEntry.cause.stack)
                     : undefined,
             };
@@ -230,4 +235,3 @@ export class ErrorLogger {
  * Default singleton instance of ErrorLogger
  */
 export const defaultErrorLogger = new ErrorLogger();
-

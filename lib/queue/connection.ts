@@ -19,9 +19,17 @@ const getRedisUrl = () => {
 };
 
 const REDIS_URL = getRedisUrl();
+const SHOULD_LOG_REDIS_CONNECT = process.env.REDIS_LOG_CONNECTIONS === "true";
 
-let _redisConnection: Redis | undefined;
-let _connectionAttempts = 0;
+type RedisGlobalState = {
+  __ppRedisConnection?: Redis;
+  __ppRedisConnectionAttempts?: number;
+  __ppRedisHasLoggedConnect?: boolean;
+};
+
+const redisGlobal = globalThis as typeof globalThis & RedisGlobalState;
+let _redisConnection: Redis | undefined = redisGlobal.__ppRedisConnection;
+let _connectionAttempts = redisGlobal.__ppRedisConnectionAttempts ?? 0;
 const MAX_RETRY_ATTEMPTS = process.env.NODE_ENV === "test" ? 3 : 10;
 
 /**
@@ -44,6 +52,7 @@ export const getRedisConnection = () => {
       // Retry strategy with exponential backoff and max attempts
       retryStrategy(times) {
         _connectionAttempts = times;
+        redisGlobal.__ppRedisConnectionAttempts = times;
 
         // In test mode, don't retry at all to avoid hanging
         if (process.env.NODE_ENV === "test") {
@@ -87,8 +96,12 @@ export const getRedisConnection = () => {
 
     _redisConnection.on("connect", () => {
       _connectionAttempts = 0; // Reset counter on successful connection
-      if (process.env.NODE_ENV !== "test") {
-        console.log("✅ Redis connected successfully");
+      redisGlobal.__ppRedisConnectionAttempts = 0;
+      if (process.env.NODE_ENV !== "test" && SHOULD_LOG_REDIS_CONNECT) {
+        if (!redisGlobal.__ppRedisHasLoggedConnect) {
+          console.log("✅ Redis connected successfully");
+          redisGlobal.__ppRedisHasLoggedConnect = true;
+        }
       }
     });
 
@@ -103,6 +116,8 @@ export const getRedisConnection = () => {
         console.error("❌ Redis connection ended after max retry attempts");
       }
     });
+
+    redisGlobal.__ppRedisConnection = _redisConnection;
   }
   return _redisConnection;
 };
@@ -116,6 +131,7 @@ export const disconnectRedis = async (): Promise<void> => {
     try {
       await _redisConnection.quit();
       _redisConnection = undefined;
+      redisGlobal.__ppRedisConnection = undefined;
     } catch (error) {
       // Ignore errors during cleanup
     }

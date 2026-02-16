@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ApprovalStatus } from "@prisma/client";
 import { z } from "zod";
 import { paginate, getPaginationParams } from "@/lib/utils/pagination";
 import { getCachedSession } from "@/lib/auth/cached-session";
@@ -17,7 +18,20 @@ async function handleGET(req: NextRequest) {
         }
 
         const { searchParams } = new URL(req.url);
-        const status = searchParams.get("status") || "PENDING";
+        const rawStatus = (searchParams.get("status") || "PENDING").toUpperCase();
+        const allowedStatuses: ApprovalStatus[] = ["PENDING", "APPROVED", "REJECTED"];
+
+        if (!allowedStatuses.includes(rawStatus as ApprovalStatus)) {
+            return NextResponse.json(
+                {
+                    error: "Invalid status value",
+                    details: `Allowed values: ${allowedStatuses.join(", ")}`,
+                },
+                { status: 400 }
+            );
+        }
+
+        const status = rawStatus as ApprovalStatus;
 
         // Get pagination parameters
         const paginationParams = getPaginationParams(searchParams);
@@ -35,7 +49,7 @@ async function handleGET(req: NextRequest) {
                 sortOrder: paginationParams.sortOrder || 'desc'
             },
             {
-                product: {
+                Product: {
                     select: {
                         id: true,
                         title: true,
@@ -52,8 +66,41 @@ async function handleGET(req: NextRequest) {
             }
         );
 
+        const serializedChanges = paginatedResult.data.map((change: any) => {
+            const product = change.Product
+                ? {
+                    id: change.Product.id,
+                    title: change.Product.title,
+                    sku: change.Product.sku,
+                    imageUrl: change.Product.imageUrl,
+                    site: change.Product.Site
+                        ? {
+                            baseUrl: change.Product.Site.baseUrl,
+                            type: change.Product.Site.type,
+                        }
+                        : null,
+                }
+                : null;
+
+            return {
+                id: change.id,
+                currentPrice: change.currentPrice,
+                recommendedPrice: change.recommendedPrice,
+                reason: change.reason,
+                appliedRule: change.appliedRule,
+                status: change.status,
+                createdAt: change.createdAt,
+                reviewedAt: change.reviewedAt,
+                reviewedBy: change.reviewedBy,
+                expiresAt: change.expiresAt,
+                autoApprovedAt: change.autoApprovedAt,
+                autoApprovedBy: change.autoApprovedBy,
+                product,
+            };
+        });
+
         return NextResponse.json({
-            changes: paginatedResult.data,
+            changes: serializedChanges,
             pagination: paginatedResult.pagination,
         });
     } catch (error) {

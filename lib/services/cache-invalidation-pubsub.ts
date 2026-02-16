@@ -33,7 +33,7 @@ export class CacheInvalidationPubSub {
     private static instance: CacheInvalidationPubSub;
     private readonly CHANNEL = "cache:invalidation";
     private readonly instanceId: string;
-    private callbacks: InvalidationCallback[] = [];
+    private callbacks: Set<InvalidationCallback> = new Set();
     private isSubscribed: boolean = false;
     private isPublisherReady: boolean = false;
     private isSubscriberReady: boolean = false;
@@ -222,12 +222,20 @@ export class CacheInvalidationPubSub {
      * Register callback to handle invalidation events
      * Callbacks are called when invalidation events are received from other instances
      */
-    onInvalidation(callback: InvalidationCallback): void {
-        this.callbacks.push(callback);
+    onInvalidation(callback: InvalidationCallback): () => void {
+        this.callbacks.add(callback);
         logger.debug("[CacheInvalidationPubSub] Registered invalidation callback", {
             instanceId: this.instanceId,
-            totalCallbacks: this.callbacks.length
+            totalCallbacks: this.callbacks.size
         });
+
+        return () => {
+            this.callbacks.delete(callback);
+            logger.debug("[CacheInvalidationPubSub] Unregistered invalidation callback", {
+                instanceId: this.instanceId,
+                totalCallbacks: this.callbacks.size
+            });
+        };
     }
 
     /**
@@ -255,7 +263,7 @@ export class CacheInvalidationPubSub {
 
             // Execute all registered callbacks
             await Promise.all(
-                this.callbacks.map(callback =>
+                Array.from(this.callbacks).map(callback =>
                     callback(event).catch(error => {
                         logger.error("[CacheInvalidationPubSub] Callback error", {
                             pattern: event.pattern,

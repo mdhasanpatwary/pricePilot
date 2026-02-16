@@ -11,6 +11,13 @@ import { PrismaClient } from '@prisma/client';
 import { getQueryAnalyzer } from '@/lib/services/query-analyzer';
 import { SLOW_QUERY_THRESHOLD_MS } from '@/lib/database/optimization-constants';
 
+type QueryTimingGlobalState = {
+    __ppQueryTimingUnavailableLogged?: boolean;
+};
+
+const queryTimingGlobal = globalThis as typeof globalThis & QueryTimingGlobalState;
+const QUERY_TIMING_DEBUG = process.env.QUERY_TIMING_DEBUG === "true";
+
 /**
  * Query timing middleware for Prisma
  * Captures execution time and logs slow queries
@@ -78,5 +85,8 @@ export function createQueryTimingMiddleware(prisma: PrismaClient) {
 export function applyQueryTimingMiddleware(_prisma: PrismaClient): void {
     // Middleware functionality removed in Prisma 5+
     // Query timing can be implemented via Prisma Client Extensions if needed
-    console.log('[QueryTiming] Middleware API not available in Prisma 5+, skipping');
+    if (QUERY_TIMING_DEBUG && !queryTimingGlobal.__ppQueryTimingUnavailableLogged) {
+        console.log('[QueryTiming] Middleware API not available in Prisma 5+, skipping');
+        queryTimingGlobal.__ppQueryTimingUnavailableLogged = true;
+    }
 }

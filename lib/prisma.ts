@@ -20,6 +20,12 @@ const pool = new pg.Pool({
 });
 
 const adapter = new PrismaPg(pool);
+const prismaLogLevels: Array<"query" | "warn" | "error"> =
+  process.env.NODE_ENV === "production"
+    ? ["error"]
+    : process.env.PRISMA_LOG_QUERIES === "true"
+      ? ["query", "warn", "error"]
+      : ["warn", "error"];
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -27,7 +33,7 @@ export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === "production" ? ["error"] : ["query"], // Reduce logging in production
+    log: prismaLogLevels,
     errorFormat: "pretty",
   });
 

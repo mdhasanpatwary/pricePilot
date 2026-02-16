@@ -52,14 +52,30 @@ async function handleGET(req: NextRequest) {
       _count: {
         select: { Product: true },
       },
-      SyncLog: {
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      },
     }
   ), { operationName: 'ListCompetitors' });
 
   const competitorsList = paginatedResult.data;
+  const syncingSiteIds = competitorsList
+    .filter((site: any) => site.isSyncing)
+    .map((site: any) => site.id);
+
+  const syncLogsBySite = new Map<string, Array<{ id: string; siteId: string; message: string; level: string; createdAt: Date }>>();
+  if (syncingSiteIds.length > 0) {
+    const syncLogs = await withDbRetry(() => prisma.syncLog.findMany({
+      where: { siteId: { in: syncingSiteIds } },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }), { operationName: "ListActiveSyncLogs" });
+
+    for (const log of syncLogs) {
+      const bucket = syncLogsBySite.get(log.siteId) || [];
+      if (bucket.length < 20) {
+        bucket.push(log as any);
+        syncLogsBySite.set(log.siteId, bucket);
+      }
+    }
+  }
 
   // 1. Fetch total user products count once (request-scoped cache)
   const totalUserProducts = await getOrSetRequestCache(
@@ -142,7 +158,7 @@ async function handleGET(req: NextRequest) {
       totalUserProducts: totalUserProducts,
       isAdvancedProtected: site.isAdvancedProtected || false,
       searchQueryPattern: site.searchQueryPattern,
-      logs: site.SyncLog || [],
+      logs: syncLogsBySite.get(site.id) || [],
     };
   });
 

@@ -3322,10 +3322,27 @@ export class ScraperService {
         const href = a.href.toLowerCase();
         const text = a.textContent?.trim() || "";
         const lowerText = text.toLowerCase();
+        const hardBlockedPatterns = [
+          "/return",
+          "refund",
+          "cancel",
+          "privacy",
+          "terms",
+          "policy",
+          "/contact",
+          "/about",
+          "/support",
+          "/help",
+          "/faq",
+          "/career",
+          "/blog",
+          "/news",
+        ];
 
         // 1. Basic Filtering (Fail Fast)
         if (text.length < 4 && !href.includes("product_id=")) return;
         if (href.includes("javascript:") || href.includes("#")) return;
+        if (hardBlockedPatterns.some((pattern) => href.includes(pattern) || lowerText.includes(pattern))) return;
 
         // Skip navigation/sort/compare/search links
         const isJunk =
@@ -3343,6 +3360,9 @@ export class ScraperService {
 
         let score = 0;
         const reasons: string[] = [];
+        let hasPriceSignal = false;
+        let queryWordCount = 0;
+        let queryMatchCount = 0;
 
         // 2. Container Score (20% Weight)
         const productContainer =
@@ -3365,6 +3385,7 @@ export class ScraperService {
           if (productContainer.textContent && /([$\u09F3\u20B9]|BDT|TK)\s?\d+/i.test(productContainer.textContent)) {
             score += 15;
             reasons.push("Price Detected Nearby");
+            hasPriceSignal = true;
           }
         }
 
@@ -3396,9 +3417,10 @@ export class ScraperService {
         // 3. Query Match Score (40% Weight)
         if (q) {
           const queryWords = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+          queryWordCount = queryWords.length;
           if (queryWords.length > 0) {
-            const matchCount = queryWords.filter(w => lowerText.includes(w) || href.includes(w)).length;
-            const matchRatio = matchCount / queryWords.length;
+            queryMatchCount = queryWords.filter(w => lowerText.includes(w) || href.includes(w)).length;
+            const matchRatio = queryMatchCount / queryWords.length;
 
             // Boost for full matches
             const boost = matchRatio === 1 ? 40 : (matchRatio * 30);
@@ -3406,7 +3428,7 @@ export class ScraperService {
             reasons.push(`Query Match: ${Math.round(matchRatio * 100)}% `);
 
             // Special penalty: If query has words, but link text has NONE of them, strict penalty
-            if (matchCount === 0 && !productContainer) {
+            if (queryMatchCount === 0 && !productContainer) {
               score -= 50;
             }
           }
@@ -3458,8 +3480,13 @@ export class ScraperService {
           score += (5 - index);
         }
 
+        const hasStrongQueryMatch =
+          queryWordCount > 0 &&
+          queryMatchCount >= Math.max(1, Math.ceil(queryWordCount * 0.5));
+        const hasProductSignal = Boolean(productContainer) || isProductUrl || hasPriceSignal || hasStrongQueryMatch;
+
         // Threshold to be considered a candidate
-        if (score > 10) {
+        if (score > 10 && hasProductSignal) {
           candidates.push({ href: a.href, text: text, score, reasons });
         }
       });

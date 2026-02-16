@@ -261,7 +261,7 @@ export const manualMatchSchema = z.object({
 });
 
 export const matchApprovalSchema = z.object({
-  matchId: uuidSchema,
+  matchId: idSchema,
   action: z.enum(["APPROVE", "REJECT"]),
 });
 
