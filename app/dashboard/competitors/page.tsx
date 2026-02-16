@@ -145,31 +145,182 @@ interface CompetitorProgressSnapshot {
   }>;
 }
 
+type SyncUiState = "IDLE" | "STARTING" | "RUNNING" | "STOPPING" | "STOPPED";
+type SyncActionIntent = "START" | "STOP";
+type SyncUiEvent =
+  | { type: "START_REQUEST" }
+  | { type: "START_FAILED" }
+  | { type: "STOP_REQUEST" }
+  | { type: "STOP_FAILED" }
+  | { type: "BACKEND_SNAPSHOT"; backendSyncing: boolean };
+
+function transitionSyncUiState(current: SyncUiState, event: SyncUiEvent): SyncUiState {
+  switch (event.type) {
+    case "START_REQUEST":
+      return current === "STOPPING" ? "STOPPING" : "STARTING";
+    case "START_FAILED":
+      return current === "STARTING" ? "IDLE" : current;
+    case "STOP_REQUEST":
+      return current === "IDLE" || current === "STOPPED" ? "STOPPED" : "STOPPING";
+    case "STOP_FAILED":
+      return current === "STOPPING" ? "RUNNING" : current;
+    case "BACKEND_SNAPSHOT":
+      if (event.backendSyncing) {
+        return current === "STOPPING" ? "STOPPING" : "RUNNING";
+      }
+
+      if (current === "STOPPING") return "STOPPED";
+      if (current === "STOPPED") return "IDLE";
+      if (current === "RUNNING" || current === "STARTING") return "IDLE";
+      return "IDLE";
+    default:
+      return current;
+  }
+}
+
+function isActiveSyncUiState(state: SyncUiState): boolean {
+  return state === "STARTING" || state === "RUNNING" || state === "STOPPING";
+}
+
+function getSyncStatusLabel(state: SyncUiState, fallbackStatus: string): string {
+  switch (state) {
+    case "STARTING":
+      return "STARTING";
+    case "RUNNING":
+      return "SYNCING";
+    case "STOPPING":
+      return "STOPPING";
+    case "STOPPED":
+      return "STOPPED";
+    default:
+      return fallbackStatus;
+  }
+}
+
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [syncingSiteId, setSyncingSiteId] = useState<string | null>(null);
+  const [syncUiStateBySite, setSyncUiStateBySite] = useState<Record<string, SyncUiState>>({});
+  const [syncActionBySite, setSyncActionBySite] = useState<Record<string, SyncActionIntent | undefined>>({});
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const syncPollingStartedAtRef = useRef<number | null>(null);
   const lastProgressSignatureRef = useRef<string>("");
   const unchangedProgressPollsRef = useRef<number>(0);
   const progressFetchInFlightRef = useRef<boolean>(false);
+  const syncUiStateBySiteRef = useRef<Record<string, SyncUiState>>({});
+  const syncActionBySiteRef = useRef<Record<string, SyncActionIntent | undefined>>({});
+  const syncActionVersionRef = useRef<Record<string, number>>({});
 
   // Settings Modal State
   const [editingSite, setEditingSite] = useState<Competitor | null>(null);
   const [searchPatternInput, setSearchPatternInput] = useState("");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  useEffect(() => {
+    syncUiStateBySiteRef.current = syncUiStateBySite;
+  }, [syncUiStateBySite]);
+
+  useEffect(() => {
+    syncActionBySiteRef.current = syncActionBySite;
+  }, [syncActionBySite]);
+
+  const getSyncUiState = useCallback(
+    (siteId: string, backendIsSyncing?: boolean): SyncUiState =>
+      syncUiStateBySite[siteId] ?? (backendIsSyncing ? "RUNNING" : "IDLE"),
+    [syncUiStateBySite],
+  );
+
+  const applySyncUiEvent = useCallback((siteId: string, event: SyncUiEvent) => {
+    setSyncUiStateBySite((prev) => {
+      const current = prev[siteId] ?? "IDLE";
+      const next = transitionSyncUiState(current, event);
+      if (next === current) return prev;
+      return { ...prev, [siteId]: next };
+    });
+  }, []);
+
+  const reconcileSyncUiState = useCallback((sites: Array<{ id: string; isSyncing?: boolean }>) => {
+    const siteIds = new Set(sites.map((site) => site.id));
+
+    setSyncUiStateBySite((prev) => {
+      const next: Record<string, SyncUiState> = {};
+      let changed = Object.keys(prev).length !== siteIds.size;
+
+      for (const site of sites) {
+        const current = prev[site.id] ?? "IDLE";
+        const derived = transitionSyncUiState(current, {
+          type: "BACKEND_SNAPSHOT",
+          backendSyncing: Boolean(site.isSyncing),
+        });
+        next[site.id] = derived;
+        if (!changed && prev[site.id] !== derived) {
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+
+    setSyncActionBySite((prev) => {
+      let changed = false;
+      const next: Record<string, SyncActionIntent | undefined> = {};
+
+      for (const [siteId, action] of Object.entries(prev)) {
+        if (siteIds.has(siteId)) {
+          next[siteId] = action;
+        } else {
+          delete syncActionVersionRef.current[siteId];
+          changed = true;
+        }
+      }
+
+      syncActionBySiteRef.current = next;
+      return changed ? next : prev;
+    });
+  }, []);
+
+  const beginSyncAction = useCallback((siteId: string, intent: SyncActionIntent): number => {
+    syncActionBySiteRef.current[siteId] = intent;
+    const nextVersion = (syncActionVersionRef.current[siteId] || 0) + 1;
+    syncActionVersionRef.current[siteId] = nextVersion;
+
+    setSyncActionBySite((prev) => ({ ...prev, [siteId]: intent }));
+
+    return nextVersion;
+  }, []);
+
+  const isLatestSyncAction = useCallback(
+    (siteId: string, version: number) => syncActionVersionRef.current[siteId] === version,
+    [],
+  );
+
+  const clearSyncAction = useCallback((siteId: string, version: number) => {
+    if (syncActionVersionRef.current[siteId] !== version) return;
+    delete syncActionBySiteRef.current[siteId];
+
+    setSyncActionBySite((prev) => {
+      if (!(siteId in prev)) return prev;
+      const next = { ...prev };
+      delete next[siteId];
+      return next;
+    });
+  }, []);
+
   // Smart auto-scroll: Only scroll if user hasn't manually scrolled up
   useEffect(() => {
-    if (isAutoScroll && Array.isArray(competitors) && competitors.some((c) => c.isSyncing) && scrollContainerRef.current) {
+    if (
+      isAutoScroll &&
+      Array.isArray(competitors) &&
+      competitors.some((c) => isActiveSyncUiState(getSyncUiState(c.id, c.isSyncing))) &&
+      scrollContainerRef.current
+    ) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [competitors, isAutoScroll]);
+  }, [competitors, isAutoScroll, getSyncUiState]);
 
   const form = useForm<CompetitorFormValues>({
     resolver: zodResolver(competitorSchema),
@@ -195,6 +346,7 @@ export default function CompetitorsPage() {
             logs: existingById.get(competitor.id)?.logs || competitor.logs || [],
           }));
         });
+        reconcileSyncUiState(incomingCompetitors.map((site) => ({ id: site.id, isSyncing: site.isSyncing })));
       } else {
         toast.error("Failed to load competitors");
       }
@@ -203,7 +355,7 @@ export default function CompetitorsPage() {
     } finally {
       if (!silent) setIsDataLoading(false);
     }
-  }, []);
+  }, [reconcileSyncUiState]);
 
   const fetchCompetitorProgress = useCallback(async (): Promise<{
     changed: boolean;
@@ -259,6 +411,7 @@ export default function CompetitorsPage() {
           };
         })
       );
+      reconcileSyncUiState(snapshots.map((site) => ({ id: site.id, isSyncing: site.isSyncing })));
 
       return {
         changed,
@@ -270,12 +423,24 @@ export default function CompetitorsPage() {
     } finally {
       progressFetchInFlightRef.current = false;
     }
-  }, []);
+  }, [reconcileSyncUiState]);
 
   // Polling for active syncs
-  const hasActiveSync = useMemo(
-    () => Array.isArray(competitors) && competitors.some((c) => c.isSyncing),
-    [competitors],
+  const hasActiveSync = useMemo(() => {
+    return (
+      Array.isArray(competitors) &&
+      competitors.some((c) => isActiveSyncUiState(getSyncUiState(c.id, c.isSyncing)))
+    );
+  }, [competitors, getSyncUiState]);
+
+  const activeSyncSites = useMemo(() => {
+    if (!Array.isArray(competitors)) return [];
+    return competitors.filter((c) => isActiveSyncUiState(getSyncUiState(c.id, c.isSyncing)));
+  }, [competitors, getSyncUiState]);
+
+  const primaryActiveSite = useMemo(
+    () => (activeSyncSites.length > 0 ? activeSyncSites[0] : null),
+    [activeSyncSites],
   );
 
   const terminalTrafficPattern = useMemo(
@@ -285,8 +450,6 @@ export default function CompetitorsPage() {
 
   useEffect(() => {
     if (!hasActiveSync) {
-      // Clear syncing state when all syncs are complete
-      setSyncingSiteId(null);
       syncPollingStartedAtRef.current = null;
       unchangedProgressPollsRef.current = 0;
       lastProgressSignatureRef.current = "";
@@ -324,7 +487,15 @@ export default function CompetitorsPage() {
 
       if (progressResult.activeSyncCount === 0) {
         await fetchCompetitors(true);
-        setSyncingSiteId(null);
+        const hasTransientState = Object.values(syncUiStateBySiteRef.current).some(
+          (state) => state === "STARTING" || state === "STOPPING",
+        );
+
+        if (hasTransientState) {
+          scheduleNext(3000);
+          return;
+        }
+
         syncPollingStartedAtRef.current = null;
         unchangedProgressPollsRef.current = 0;
         lastProgressSignatureRef.current = "";
@@ -403,15 +574,19 @@ export default function CompetitorsPage() {
   };
 
   const handleSyncSite = async (id: string) => {
-    // Prevent duplicate sync attempts
-    if (syncingSiteId === id) {
+    if (syncActionBySiteRef.current[id]) {
       return;
     }
 
     let force = false;
-    // Check if already syncing
     const competitor = Array.isArray(competitors) ? competitors.find((c) => c.id === id) : undefined;
-    if (competitor?.isSyncing) {
+    const uiState = getSyncUiState(id, competitor?.isSyncing);
+
+    if (uiState === "STARTING" || uiState === "STOPPING") {
+      return;
+    }
+
+    if (uiState === "RUNNING") {
       const shouldForce = confirm(
         "A sync is already marked as in progress. If it's stuck, you can force a restart. Do you want to restart the sync?",
       );
@@ -419,10 +594,9 @@ export default function CompetitorsPage() {
       force = true;
     }
 
-    // Set syncing state to prevent double clicks
-    setSyncingSiteId(id);
+    const actionVersion = beginSyncAction(id, "START");
+    applySyncUiEvent(id, { type: "START_REQUEST" });
 
-    // 1. Optimistically update UI to start polling immediately
     setCompetitors((prev) =>
       prev.map((c) =>
         c.id === id
@@ -439,7 +613,6 @@ export default function CompetitorsPage() {
     );
 
     try {
-      // 2. Trigger the sync (runs in background on server)
       const res = await fetch("/api/v1/competitors/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -454,29 +627,43 @@ export default function CompetitorsPage() {
       const result = await res.json();
 
       if (result.success) {
+        if (!isLatestSyncAction(id, actionVersion)) return;
         toast.success("Sync started successfully. Monitoring progress...");
-        // Pull fresh progress immediately instead of waiting for next poll tick.
+        applySyncUiEvent(id, { type: "BACKEND_SNAPSHOT", backendSyncing: true });
         await fetchCompetitorProgress();
       } else {
         throw new Error(result.error || "Sync failed to start");
       }
 
-      // Polling will handle the rest of the updates
     } catch (error) {
+      if (!isLatestSyncAction(id, actionVersion)) return;
       // Revert state if request failed
       const errorMessage =
         error instanceof Error ? error.message : "Failed to start sync";
       toast.error(errorMessage);
+      applySyncUiEvent(id, { type: "START_FAILED" });
 
       // Fetch fresh data to revert optimistic update
       await fetchCompetitors(true);
     } finally {
-      setSyncingSiteId(null);
+      clearSyncAction(id, actionVersion);
     }
   };
 
   const handleStopSync = async (id: string) => {
-    setSyncingSiteId(id);
+    if (syncActionBySiteRef.current[id]) {
+      return;
+    }
+
+    const competitor = Array.isArray(competitors) ? competitors.find((c) => c.id === id) : undefined;
+    const uiState = getSyncUiState(id, competitor?.isSyncing);
+    if (uiState === "IDLE" || uiState === "STOPPED" || uiState === "STARTING" || uiState === "STOPPING") {
+      return;
+    }
+
+    const actionVersion = beginSyncAction(id, "STOP");
+    applySyncUiEvent(id, { type: "STOP_REQUEST" });
+
     try {
       const res = await fetch("/api/v1/competitors/sync/stop", {
         method: "POST",
@@ -500,19 +687,22 @@ export default function CompetitorsPage() {
           ),
         );
         await fetchCompetitorProgress();
-        setTimeout(() => {
+        window.setTimeout(() => {
+          if (!isLatestSyncAction(id, actionVersion)) return;
           fetchCompetitorProgress();
         }, 1200);
       } else {
         const errorData = await res.json().catch(() => ({}));
+        applySyncUiEvent(id, { type: "STOP_FAILED" });
         toast.error(errorData.error || "Failed to stop crawler");
       }
     } catch (error) {
+      applySyncUiEvent(id, { type: "STOP_FAILED" });
       const errorMessage =
         error instanceof Error ? error.message : "Failed to stop crawler";
       toast.error(errorMessage);
     } finally {
-      setSyncingSiteId(null);
+      clearSyncAction(id, actionVersion);
     }
   };
 
@@ -876,12 +1066,22 @@ export default function CompetitorsPage() {
                     </td>
                   </tr>
                 ) : (
-                  Array.isArray(competitors) && competitors.map((comp) => (
+                  Array.isArray(competitors) && competitors.map((comp) => {
+                    const uiSyncState = getSyncUiState(comp.id, comp.isSyncing);
+                    const isSyncActive = isActiveSyncUiState(uiSyncState);
+                    const isActionBusy =
+                      Boolean(syncActionBySite[comp.id]) ||
+                      uiSyncState === "STARTING" ||
+                      uiSyncState === "STOPPING";
+                    const displayStatus = getSyncStatusLabel(uiSyncState, comp.status);
+                    const showStopAction = uiSyncState === "RUNNING" || uiSyncState === "STOPPING";
+
+                    return (
                     <tr
                       key={comp.id}
                       className={cn(
                         "border-b border-border/50 hover:bg-muted/30 transition-colors",
-                        comp.isSyncing && "bg-primary/2",
+                        isSyncActive && "bg-primary/2",
                       )}
                     >
                       <td className="py-5 px-6">
@@ -889,7 +1089,7 @@ export default function CompetitorsPage() {
                           <div
                             className={cn(
                               "w-10 h-10 rounded-md flex items-center justify-center transition-all",
-                              comp.isSyncing
+                              isSyncActive
                                 ? "bg-primary/20 text-primary animate-pulse"
                                 : "bg-muted text-muted-foreground/50",
                             )}
@@ -897,7 +1097,7 @@ export default function CompetitorsPage() {
                             <Globe
                               className={cn(
                                 "w-5 h-5",
-                                comp.isSyncing && "animate-spin-slow",
+                                isSyncActive && "animate-spin-slow",
                               )}
                             />
                           </div>
@@ -914,13 +1114,15 @@ export default function CompetitorsPage() {
                         </div>
                       </td>
                       <td className="py-5 px-6 text-center">
-                        {comp.isSyncing ? (
+                        {isSyncActive ? (
                           <div className="flex flex-col items-center gap-1">
                             <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-1" />
                             <span className="font-mono text-xs font-bold text-primary animate-pulse">
                               {comp.syncTotal && comp.syncTotal > 0
                                 ? `${comp.syncProcessed} / ${comp.syncTotal}`
-                                : "Starting..."}
+                                : uiSyncState === "STOPPING"
+                                  ? "Stopping..."
+                                  : "Starting..."}
                             </span>
                           </div>
                         ) : (
@@ -953,29 +1155,31 @@ export default function CompetitorsPage() {
                         <span
                           className={cn(
                             "text-[10px] font-bold px-2 py-0.5 rounded-full border tracking-wide uppercase flex items-center gap-1.5 w-fit",
-                            comp.status === "ACTIVE"
+                            displayStatus === "ACTIVE"
                               ? "bg-success/5 border-success/10 text-success"
-                              : comp.status === "SYNCING"
+                              : isSyncActive
                                 ? "bg-primary/10 border-primary/20 text-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary-rgb),0.1)]"
-                                : comp.status === "NO MATCHES"
+                                : displayStatus === "STOPPED"
+                                  ? "bg-danger/10 border-danger/20 text-danger"
+                                  : displayStatus === "NO MATCHES"
                                   ? "bg-warning/10 border-warning/20 text-warning"
                                   : "bg-muted border-border text-muted-foreground",
                           )}
                         >
-                          {comp.isSyncing && (
+                          {isSyncActive && (
                             <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
                           )}
-                          {comp.status}
+                          {displayStatus}
                         </span>
                       </td>
                       <td className="py-5 px-6">
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">
-                              {comp.isSyncing ? "Sync Progress" : "Site Health"}
+                              {isSyncActive ? "Sync Progress" : "Site Health"}
                             </span>
                             <span className="text-[9px] font-black text-muted-foreground">
-                              {comp.isSyncing
+                              {isSyncActive
                                 ? comp.syncTotal && comp.syncTotal > 0
                                   ? `${Math.round((comp.syncProcessed! / comp.syncTotal) * 100)}%`
                                   : "0%"
@@ -986,23 +1190,23 @@ export default function CompetitorsPage() {
                             <div
                               className={cn(
                                 "h-full rounded-full transition-all duration-700 ease-out",
-                                comp.isSyncing
+                                isSyncActive
                                   ? "bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.4)]"
                                   : "bg-success",
                               )}
                               style={{
-                                width: comp.isSyncing
+                                width: isSyncActive
                                   ? comp.syncTotal && comp.syncTotal > 0
                                     ? `${(comp.syncProcessed! / comp.syncTotal) * 100}%`
                                     : "5%"
                                   : `${comp.health}%`,
                               }}
                             />
-                            {comp.isSyncing && (
+                            {isSyncActive && (
                               <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
                             )}
                           </div>
-                          {comp.isSyncing &&
+                          {isSyncActive &&
                             comp.syncStartedAt &&
                             comp.syncProcessed! > 0 && (
                               <p className="text-[8px] font-medium text-muted-foreground/60 italic">
@@ -1039,28 +1243,23 @@ export default function CompetitorsPage() {
                           </Button>
                           <button
                             onClick={() =>
-                              comp.isSyncing
+                              showStopAction
                                 ? handleStopSync(comp.id)
                                 : handleSyncSite(comp.id)
                             }
-                            disabled={
-                              syncingSiteId === comp.id ||
-                              (comp.isSyncing && syncingSiteId !== null)
-                            }
+                            disabled={isActionBusy}
                             className={cn(
                               "p-2 rounded-md transition-all group",
-                              comp.isSyncing
+                              showStopAction
                                 ? "bg-danger/10 text-danger hover:bg-danger/20"
                                 : "hover:bg-primary/10 hover:text-primary",
-                              (syncingSiteId === comp.id ||
-                                (comp.isSyncing && syncingSiteId !== null)) &&
-                              "opacity-50 cursor-not-allowed",
+                              isActionBusy && "opacity-50 cursor-not-allowed",
                             )}
                             title={
-                              comp.isSyncing ? "Stop Crawler" : "Force Sync"
+                              showStopAction ? "Stop Crawler" : "Force Sync"
                             }
                           >
-                            {comp.isSyncing ? (
+                            {showStopAction ? (
                               <X className="w-4 h-4 animate-pulse" />
                             ) : (
                               <Zap className="w-4 h-4 transition-transform group-active:scale-95" />
@@ -1085,7 +1284,8 @@ export default function CompetitorsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1103,44 +1303,38 @@ export default function CompetitorsPage() {
                       <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/40" />
                       <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/40" />
                     </div>
-                    {(() => {
-                      const activeSite = Array.isArray(competitors) ? competitors.find((c) => c.isSyncing) : undefined;
-                      return activeSite ? (
-                        <div className="text-[10px] font-mono uppercase tracking-widest ml-2 flex flex-col gap-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-primary font-bold">
-                              [SYSTEM]
-                            </span>
-                            <span className="text-white/40">
-                              INITIATING DATA STREAM FOR:
-                            </span>
-                            <span className="text-white font-bold">
-                              {activeSite.name.toUpperCase()}
-                            </span>
-                          </div>
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {(() => {
-                      const activeSite = Array.isArray(competitors) ? competitors.find((c) => c.isSyncing) : undefined;
-                      return activeSite ? (
+                    {primaryActiveSite ? (
+                      <div className="text-[10px] font-mono uppercase tracking-widest ml-2 flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-1 h-1 rounded-full bg-primary animate-ping" />
-                          <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
-                            PROGRESS:{" "}
-                            <span className="text-primary">
-                              {activeSite.syncProcessed}
-                            </span>
-                            /
-                            <span className="text-white/60">
-                              {activeSite.syncTotal}
-                            </span>
+                          <span className="text-primary font-bold">
+                            [SYSTEM]
+                          </span>
+                          <span className="text-white/40">
+                            INITIATING DATA STREAM FOR:
+                          </span>
+                          <span className="text-white font-bold">
+                            {primaryActiveSite.name.toUpperCase()}
                           </span>
                         </div>
-                      ) : null;
-                    })()}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {primaryActiveSite ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-1 rounded-full bg-primary animate-ping" />
+                        <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
+                          PROGRESS:{" "}
+                          <span className="text-primary">
+                            {primaryActiveSite.syncProcessed}
+                          </span>
+                          /
+                          <span className="text-white/60">
+                            {primaryActiveSite.syncTotal}
+                          </span>
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1156,10 +1350,8 @@ export default function CompetitorsPage() {
                     }}
                     className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-white/10"
                   >
-                    {Array.isArray(competitors) && competitors.some((c) => c.isSyncing) ? (
-                      competitors
-                        .filter((c) => c.isSyncing)
-                        .map((site) => (
+                    {activeSyncSites.length > 0 ? (
+                      activeSyncSites.map((site) => (
                           <div key={site.id} className="space-y-0.5">
                             {/* Real Database Logs */}
                             {(site.logs || [])
@@ -1214,7 +1406,7 @@ export default function CompetitorsPage() {
                     )}
 
                     {/* Final system signal */}
-                    {Array.isArray(competitors) && competitors.some((c) => c.isSyncing) && (
+                    {activeSyncSites.length > 0 && (
                       <div className="flex gap-3 px-2 py-2 text-primary/80 font-bold">
                         <span className="animate-pulse">&gt;</span>
                         <span className="animate-pulse">
