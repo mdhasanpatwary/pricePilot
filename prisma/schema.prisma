@@ -733,7 +733,7 @@ model Product {
 
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
   @@index([siteId])
-  @@index([tenantId, brand])
+  @@index([tenantId, brand], map: "idx_product_tenant_brand_unique_name")
   @@index([tenantId, category])
   @@index([tenantId, inStock])
   @@index([tenantId, currentPrice])
@@ -1161,6 +1161,7 @@ model Site {
   syncStartedAt       DateTime?
   syncTotal           Int                @default(0)
   syncLastAction      String?
+  syncToken           String?            @default(cuid()) // Execution token for stronger idempotency
   currency            String             @default("USD")
   isAdvancedProtected Boolean            @default(false)
   lastSecurityBlockAt DateTime?

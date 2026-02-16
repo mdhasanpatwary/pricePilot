@@ -48,7 +48,7 @@ import {
 
 /**
  * Monitoring Dashboard Page
- * 
+ *
  * Displays real-time system health metrics including:
  * - System health status with color indicators
  * - Error rate chart with historical trend
@@ -57,12 +57,12 @@ import {
  * - Price update metrics
  * - Active alerts with severity badges
  * - Resource utilization
- * 
+ *
  * Features:
  * - 30-second auto-refresh
  * - Admin role guard
  * - Real-time metric updates
- * 
+ *
  * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8
  */
 
@@ -122,6 +122,8 @@ export default function MonitoringDashboardPage() {
     const [priceUpdateMetrics, setPriceUpdateMetrics] = useState<MetricData | null>(null);
     const [activeAlerts, setActiveAlerts] = useState<Alert[]>([]);
     const [resolvedAlerts, setResolvedAlerts] = useState<Alert[]>([]);
+    const [endpointMetrics, setEndpointMetrics] = useState<Record<string, any> | null>(null);
+    const [syncMetrics, setSyncMetrics] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
     const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
@@ -182,6 +184,24 @@ export default function MonitoringDashboardPage() {
             if (errorRateRes.ok) {
                 const errorData = await errorRateRes.json();
                 setErrorRateHistory(errorData.data);
+            }
+
+            // Fetch endpoint metrics (response time)
+            const endpointRes = await fetch(
+                `/api/v1/monitoring/metrics/by-endpoint?metricType=response_time&startTime=${oneHourAgo}&endTime=${now}${tenantParam}`
+            );
+            if (endpointRes.ok) {
+                const data = await endpointRes.json();
+                setEndpointMetrics(data.data);
+            }
+
+            // Fetch sync metrics
+            const syncRes = await fetch(
+                `/api/v1/monitoring/metrics/sync?startTime=${oneHourAgo}&endTime=${now}${tenantParam}`
+            );
+            if (syncRes.ok) {
+                const data = await syncRes.json();
+                setSyncMetrics(data.data);
             }
 
             // Fetch response time history
@@ -406,6 +426,39 @@ export default function MonitoringDashboardPage() {
                 </Card>
             )}
 
+            {/* Sync Activity */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="col-span-1 md:col-span-4 bg-muted/10">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Sync Activity (Last hour)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                             <div className="flex flex-col">
+                                <span className="text-muted-foreground text-xs uppercase">Active</span>
+                                <span className="text-2xl font-bold text-primary">{syncMetrics?.active || 0}</span>
+                             </div>
+                             <div className="flex flex-col">
+                                <span className="text-muted-foreground text-xs uppercase">Queued</span>
+                                <span className="text-2xl font-bold">{syncMetrics?.queued || 0}</span>
+                             </div>
+                             <div className="flex flex-col">
+                                <span className="text-muted-foreground text-xs uppercase">Completed</span>
+                                <span className="text-2xl font-bold text-success">{syncMetrics?.completed || 0}</span>
+                             </div>
+                             <div className="flex flex-col">
+                                <span className="text-muted-foreground text-xs uppercase">Failed</span>
+                                <span className="text-2xl font-bold text-destructive">{syncMetrics?.failed || 0}</span>
+                             </div>
+                             <div className="flex flex-col">
+                                <span className="text-muted-foreground text-xs uppercase">Avg Duration</span>
+                                <span className="text-2xl font-bold">{(syncMetrics?.avgDuration / 1000 || 0).toFixed(1)}s</span>
+                             </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Error Rate */}
@@ -590,6 +643,42 @@ export default function MonitoringDashboardPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Top Slowest Endpoints Table */}
+            {endpointMetrics && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-sm font-medium">Top Slowest Endpoints (Last hour)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Endpoint</TableHead>
+                                    <TableHead>Requests</TableHead>
+                                    <TableHead>Avg Latency</TableHead>
+                                    <TableHead>P95 Latency</TableHead>
+                                    <TableHead>P99 Latency</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {Object.entries(endpointMetrics)
+                                    .sort(([, a], [, b]) => b.p95 - a.p95)
+                                    .slice(0, 5)
+                                    .map(([endpoint, metrics]) => (
+                                        <TableRow key={endpoint}>
+                                            <TableCell className="font-medium text-xs font-mono">{endpoint}</TableCell>
+                                            <TableCell>{metrics.count}</TableCell>
+                                            <TableCell>{metrics.avg.toFixed(0)}ms</TableCell>
+                                            <TableCell className="text-warning">{metrics.p95?.toFixed(0)}ms</TableCell>
+                                            <TableCell className="text-destructive">{metrics.p99?.toFixed(0)}ms</TableCell>
+                                        </TableRow>
+                                    ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Active Alerts */}
             <Card>

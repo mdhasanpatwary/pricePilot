@@ -15,6 +15,7 @@ import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { getOrSetRequestCache } from "@/lib/cache/request-cache";
 import { withDbRetry } from "@/lib/utils/db-retry";
+import { toSiteDTO } from "@/lib/dtos/site.dto";
 
 async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await getCachedSession();
@@ -101,11 +102,9 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
             total,
             totalPages: Math.ceil(total / limit),
         },
-        competitor: {
-            id: competitorSite.id,
-            name: competitorSite.baseUrl,
-            url: competitorSite.baseUrl,
-        },
+        competitor: toSiteDTO(competitorSite, {
+            totalScrapedProductsCount: (competitorSite as any)._count.Product
+        }),
     });
 }
 

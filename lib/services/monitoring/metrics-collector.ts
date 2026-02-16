@@ -34,9 +34,9 @@ export interface MetricAggregates {
     avg: number;
     min: number;
     max: number;
-    p50?: number;
-    p95?: number;
-    p99?: number;
+    p50: number;
+    p95: number;
+    p99: number;
 }
 
 /**
@@ -58,6 +58,7 @@ export interface IMetricsCollector {
     recordScrapingResult(competitorId: string, success: boolean, blocked: boolean, tenantId?: string): Promise<void>;
     recordPriceUpdate(tenantId: string, success: boolean, productCount: number): Promise<void>;
     recordAuthFailure(ipAddress: string): Promise<void>;
+    recordSyncLifecycle(siteId: string, stage: 'QUEUE' | 'START' | 'PROGRESS' | 'STOP' | 'FAIL', metadata?: Record<string, any>): Promise<void>;
     getMetrics(metricType: string, timeWindow: number, tenantId?: string): Promise<MetricData>;
 }
 
@@ -95,7 +96,9 @@ export class MetricsCollector implements IMetricsCollector {
         if (!this.redis) return;
 
         const timestamp = Date.now();
-        const key = this.buildKey("response_time", "all", tenantId);
+        // Use normalized endpoint as identifier (replace / with :)
+        const normalizedEndpoint = endpoint === '/' ? 'root' : endpoint.replace(/^\/|\/$/g, '').replace(/\//g, ':');
+        const key = this.buildKey("response_time", normalizedEndpoint, tenantId);
 
         const dataPoint: MetricDataPoint = {
             timestamp,
@@ -107,13 +110,11 @@ export class MetricsCollector implements IMetricsCollector {
         };
 
         try {
-            // Store in sorted set with timestamp as score
             await this.redis.zadd(key, {
                 score: timestamp,
                 member: JSON.stringify(dataPoint),
             });
 
-            // Set TTL for detailed metrics
             await this.redis.expire(key, this.DETAILED_TTL);
         } catch (error) {
             console.error("Failed to record response time:", error);
@@ -135,11 +136,12 @@ export class MetricsCollector implements IMetricsCollector {
         if (!this.redis) return;
 
         const timestamp = Date.now();
-        const key = this.buildKey("error", "all", tenantId);
+        const normalizedEndpoint = endpoint === '/' ? 'root' : endpoint.replace(/^\/|\/$/g, '').replace(/\//g, ':');
+        const key = this.buildKey("error", normalizedEndpoint, tenantId);
 
         const dataPoint: MetricDataPoint = {
             timestamp,
-            value: 1, // Count of errors
+            value: 1,
             labels: {
                 endpoint,
                 errorType,
@@ -156,6 +158,44 @@ export class MetricsCollector implements IMetricsCollector {
             await this.redis.expire(key, this.DETAILED_TTL);
         } catch (error) {
             console.error("Failed to record error:", error);
+        }
+    }
+
+    /**
+     * Record sync lifecycle event
+     *
+     * @param siteId - Site ID
+     * @param stage - Lifecycle stage
+     * @param metadata - Optional metadata
+     */
+    async recordSyncLifecycle(
+        siteId: string,
+        stage: 'QUEUE' | 'START' | 'PROGRESS' | 'STOP' | 'FAIL',
+        metadata?: Record<string, any>
+    ): Promise<void> {
+        if (!this.redis) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("sync_lifecycle", siteId);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: 1,
+            labels: {
+                siteId,
+                stage,
+                ...metadata ? Object.fromEntries(Object.entries(metadata).map(([k,v]) => [k, String(v)])) : {}
+            }
+        };
+
+        try {
+            await this.redis.zadd(key, {
+                score: timestamp,
+                member: JSON.stringify(dataPoint)
+            });
+            await this.redis.expire(key, this.DETAILED_TTL);
+        } catch (error) {
+            console.error("Failed to record sync lifecycle:", error);
         }
     }
 
@@ -404,6 +444,17 @@ export class MetricsCollector implements IMetricsCollector {
             // For now, we'll construct the exact key from the pattern
             // In a full implementation, you'd maintain an index of keys
             const key = pattern.replace("*", "all");
+            // If the pattern has wildcard, it might fail here unless we use KEYS command (expensive)
+            // or maintain a set of known keys.
+            // Given the limitations, we might just look for exact matches or assume the user asks specifically?
+
+            // NOTE: The previous implementation just replaced * with all, effectively disabling wildcard search.
+            // We should use KEYS if safe, or SCAN. Since this is "PricePilot" with Upstash, KEYS is acceptable for low volume.
+            // But Upstash REST API supports 'keys' command.
+
+            if (pattern.includes("*")) {
+                 return await this.redis.keys(pattern);
+            }
 
             // Check if key exists
             const exists = await this.redis.exists(key);
@@ -465,6 +516,109 @@ export class MetricsCollector implements IMetricsCollector {
         return sortedValues[Math.max(0, index)];
     }
 
+    async getEndpointMetrics(
+        metricType: string,
+        timeWindow: number,
+        tenantId?: string
+    ): Promise<Record<string, MetricAggregates>> {
+        if (!this.redis) return {};
+
+        const now = Date.now();
+        const startTime = now - timeWindow * 1000;
+        const keyPattern = this.buildKey(metricType, "*", tenantId);
+
+        try {
+            const keys = await this.getKeysMatchingPattern(keyPattern);
+            const endpointData: Record<string, MetricDataPoint[]> = {};
+
+            for (const key of keys) {
+                const members = await this.redis.zrange(key, 0, -1);
+                for (const member of members) {
+                    try {
+                        const dataPoint = JSON.parse(member as string) as MetricDataPoint;
+                        if (dataPoint.timestamp >= startTime && dataPoint.timestamp <= now) {
+                            const endpoint = dataPoint.labels?.endpoint || 'unknown';
+                            if (!endpointData[endpoint]) endpointData[endpoint] = [];
+                            endpointData[endpoint].push(dataPoint);
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            const result: Record<string, MetricAggregates> = {};
+            for (const [endpoint, points] of Object.entries(endpointData)) {
+                result[endpoint] = this.calculateAggregates(points);
+            }
+            return result;
+        } catch (error) {
+            console.error("Failed to get endpoint metrics:", error);
+            return {};
+        }
+    }
+
+    async getSyncMetrics(timeWindow: number, _tenantId?: string): Promise<{
+        queued: number;
+        active: number;
+        completed: number;
+        failed: number;
+        avgDuration: number;
+    }> {
+        if (!this.redis) return { queued: 0, active: 0, completed: 0, failed: 0, avgDuration: 0 };
+
+        const now = Date.now();
+        const startTime = now - timeWindow * 1000;
+        // Search for sync_lifecycle keys. We can't filter by tenant easily in key name for syncs if we used siteId
+        // But we stored tenantId in labels? No, only siteId.
+        // We might need to iterate all sync keys.
+        const keyPattern = "metrics:sync_lifecycle:*"; // This is expensive if many sites
+
+        try {
+            const keys = await this.getKeysMatchingPattern(keyPattern);
+            let queued = 0;
+            let active = 0;
+            let completed = 0;
+            let failed = 0;
+            let durations: number[] = [];
+
+            const startTimes = new Map<string, number>();
+
+            for (const key of keys) {
+                const members = await this.redis.zrange(key, 0, -1);
+                for (const member of members) {
+                    try {
+                        const dp = JSON.parse(member as string) as MetricDataPoint;
+                        if (dp.timestamp < startTime) continue;
+
+                        const stage = dp.labels?.stage;
+                        if (!stage) continue;
+
+                        // Simple counters for events in window
+                        if (stage === 'QUEUE') queued++;
+                        if (stage === 'START') {
+                            active++;
+                            startTimes.set(dp.labels?.siteId || '', dp.timestamp);
+                        }
+                        if (stage === 'STOP') {
+                            completed++;
+                            const start = startTimes.get(dp.labels?.siteId || '');
+                            if (start) durations.push(dp.timestamp - start);
+                        }
+                        if (stage === 'FAIL') failed++;
+                    } catch (e) {}
+                }
+            }
+
+            // Average duration
+            const avgDuration = durations.length > 0
+                ? durations.reduce((a, b) => a + b, 0) / durations.length
+                : 0;
+
+            return { queued, active, completed, failed, avgDuration };
+        } catch (error) {
+            console.error("Failed to get sync metrics:", error);
+            return { queued: 0, active: 0, completed: 0, failed: 0, avgDuration: 0 };
+        }
+    }
     /**
      * Get empty metric data structure
      *

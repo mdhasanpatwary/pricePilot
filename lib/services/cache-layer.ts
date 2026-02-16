@@ -7,9 +7,9 @@ const IS_NEXT_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
 
 /**
  * Cache Layer Component for Database Optimization
- * 
+ *
  * Implements multi-layer caching strategy to reduce database load.
- * 
+ *
  * Features:
  * - Tenant-isolated cache keys
  * - TTL-based expiration
@@ -17,7 +17,7 @@ const IS_NEXT_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
  * - Cache warming for frequently accessed data
  * - Hit rate monitoring and alerting
  * - Redis pub/sub for distributed invalidation
- * 
+ *
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 7.2
  */
 
@@ -57,13 +57,21 @@ export class CacheLayer {
     private pubSubInitPromise: Promise<void> | null = null;
     private unregisterInvalidationHandler?: () => void;
 
+    // Circuit Breaker State
+    private failureCount: number = 0;
+    private lastFailureTime: number = 0;
+    private circuitState: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+    private readonly FAILURE_THRESHOLD = 5;
+    private readonly CIRCUIT_RESET_TIMEOUT = 30000; // 30s
+    private healthCheckInterval: NodeJS.Timeout | null = null;
+
     private constructor() {
         this.redis = getRedisConnection();
-
         // In test mode and Next.js build phase, avoid eager Redis connect/log noise.
         if (process.env.NODE_ENV !== "test" && !IS_NEXT_BUILD_PHASE) {
             this.checkRedisConnection();
             this.initializePubSub();
+            this.startHealthCheck();
         }
     }
 
@@ -149,6 +157,7 @@ export class CacheLayer {
 
                 const connectPromise = this.redis.connect().then(() => {
                     this.isRedisAvailable = true;
+                    this.recordSuccess();
                     logger.info("[CacheLayer] Redis connection established");
                     this.initializeStats();
                 });
@@ -197,9 +206,80 @@ export class CacheLayer {
     }
 
     /**
+     * Start periodic health check to recover from open circuit
+     */
+    private startHealthCheck(): void {
+        if (this.healthCheckInterval) return;
+
+        // Check every 30 seconds
+        this.healthCheckInterval = setInterval(async () => {
+            if (this.circuitState === 'OPEN') {
+                try {
+                    // Start a race with timeout, just like standard connection check
+                    await Promise.race([
+                        this.redis.ping(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Ping timeout')), 2000))
+                    ]);
+
+                    this.recordSuccess();
+                    logger.info("[CacheLayer] Health check passed, circuit closed");
+                } catch (error) {
+                    // Still failing, stay open
+                    // Use debug level to reduce noise
+                    logger.debug("[CacheLayer] Health check failed, circuit remains open", { error });
+                }
+            } else if (this.redis.status !== 'ready' && this.redis.status !== 'connecting' && this.redis.status !== 'reconnecting') {
+                // If Redis gave up (status='end'), try to reconnect manually
+                if (this.redis.status === 'end') {
+                    logger.info("[CacheLayer] Redis disconnected (end state), attempting manual reconnect");
+                    this.redis.connect().catch(() => {}); // Catch to avoid unhandled promise rejection (handled by error event)
+                }
+            }
+        }, 30000);
+    }
+
+    private recordFailure(error: any): void {
+        this.lastFailureTime = Date.now();
+        this.failureCount++;
+
+        if (this.failureCount >= this.FAILURE_THRESHOLD && this.circuitState === 'CLOSED') {
+            this.circuitState = 'OPEN';
+            this.isRedisAvailable = false;
+            logger.warn("[CacheLayer] Circuit Breaker: OPEN due to repeated failures", {
+                failures: this.failureCount,
+                lastError: error.message
+            });
+        }
+    }
+
+    private recordSuccess(): void {
+        if (this.circuitState !== 'CLOSED') {
+            this.circuitState = 'CLOSED';
+            this.failureCount = 0;
+            this.isRedisAvailable = true;
+            logger.info("[CacheLayer] Circuit Breaker: CLOSED (Recovered)");
+        } else {
+             // Routine success, keep failure count clean
+             this.failureCount = 0;
+        }
+    }
+
+    /**
      * Check if cache is available
+     * Now respects Circuit Breaker state
      */
     private isCacheAvailable(): boolean {
+        if (this.circuitState === 'OPEN') {
+             // Occasionally allow a probe through (Half-Open) outside of interval check
+             const now = Date.now();
+             if (now - this.lastFailureTime > this.CIRCUIT_RESET_TIMEOUT) {
+                 this.circuitState = 'HALF_OPEN';
+                 return true;
+             }
+             return false;
+        }
+
+        // Also check raw Redis status as safety net
         return this.isRedisAvailable && this.redis.status === 'ready';
     }
 
@@ -217,6 +297,11 @@ export class CacheLayer {
         if (this.connectionCheckTimeout) {
             clearTimeout(this.connectionCheckTimeout);
             this.connectionCheckTimeout = null;
+        }
+
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+            this.healthCheckInterval = null;
         }
 
         // Cleanup pub/sub
@@ -295,8 +380,10 @@ export class CacheLayer {
             this.hitCount++;
             await this.incrementStat("hits");
 
+            this.recordSuccess();
             return JSON.parse(data) as T;
         } catch (error) {
+            this.recordFailure(error);
             logger.error("[CacheLayer] Get error", { key, error });
             this.missCount++;
             return null;
@@ -323,8 +410,10 @@ export class CacheLayer {
                 await this.redis.set(fullKey, serialized);
             }
 
+            this.recordSuccess();
             logger.debug("[CacheLayer] Set cache", { key, ttl: ttlSeconds });
         } catch (error) {
+            this.recordFailure(error);
             logger.error("[CacheLayer] Set error", { key, error });
         }
     }
@@ -364,8 +453,10 @@ export class CacheLayer {
                 distributed: true
             });
 
+            this.recordSuccess();
             return keys.length;
         } catch (error) {
+            this.recordFailure(error);
             logger.error("[CacheLayer] Invalidate error", { pattern, error });
             return 0;
         }
@@ -382,8 +473,10 @@ export class CacheLayer {
         try {
             const fullKey = this.buildKey(key);
             await this.redis.del(fullKey);
+            this.recordSuccess();
             logger.debug("[CacheLayer] Deleted cache key", { key });
         } catch (error) {
+            this.recordFailure(error);
             logger.error("[CacheLayer] Delete error", { key, error });
         }
     }

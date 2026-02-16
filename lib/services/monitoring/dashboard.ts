@@ -115,12 +115,46 @@ export interface IMonitoringDashboardService {
     getActiveAlerts(tenantId?: string): Promise<TriggeredAlert[]>;
     getAlertHistory(limit: number, tenantId?: string): Promise<AlertHistoryEntry[]>;
     getTenantMetrics(tenantId: string): Promise<TenantMetrics>;
+    getEndpointMetrics(metricType: string, timeRange: TimeRange, tenantId?: string): Promise<Record<string, any>>;
+    getSyncMetrics(timeRange: TimeRange, tenantId?: string): Promise<{
+        queued: number;
+        active: number;
+        completed: number;
+        failed: number;
+        avgDuration: number;
+    }>;
 }
 
 /**
  * Monitoring Dashboard Service Implementation
  */
 export class MonitoringDashboardService implements IMonitoringDashboardService {
+    async getEndpointMetrics(
+        metricType: string,
+        timeRange: TimeRange,
+        tenantId?: string
+    ): Promise<Record<string, any>> {
+        const timeWindowSeconds = Math.floor(
+            (timeRange.end.getTime() - timeRange.start.getTime()) / 1000
+        );
+        return metricsCollector.getEndpointMetrics(metricType, timeWindowSeconds, tenantId);
+    }
+
+    async getSyncMetrics(
+        timeRange: TimeRange,
+        tenantId?: string
+    ): Promise<{
+        queued: number;
+        active: number;
+        completed: number;
+        failed: number;
+        avgDuration: number;
+    }> {
+        const timeWindowSeconds = Math.floor(
+            (timeRange.end.getTime() - timeRange.start.getTime()) / 1000
+        );
+        return metricsCollector.getSyncMetrics(timeWindowSeconds, tenantId);
+    }
     /**
      * Get overall system health status
      *

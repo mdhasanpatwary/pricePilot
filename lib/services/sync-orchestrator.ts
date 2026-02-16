@@ -11,6 +11,7 @@ import { logger } from "../logger";
 import { CacheInvalidationService } from "./cache-invalidation";
 import { AutoApprovalService } from "./auto-approval";
 import { withDbRetry } from "@/lib/utils/db-retry";
+import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 import { scrapeLogger } from "./scrape-logger";
 
 export class SyncOrchestrator {
@@ -90,6 +91,10 @@ export class SyncOrchestrator {
       siteId,
       force,
     }, { priority: 2 }); // Higher priority for user-triggered single site syncs
+
+    // Record QUEUE event
+    metricsCollector.recordSyncLifecycle(siteId, 'QUEUE', { force, source: 'dispatchSiteSync' }).catch(console.error);
+
     return { success: true, message: "Site sync job queued successfully." };
   }
 
@@ -200,6 +205,9 @@ export class SyncOrchestrator {
           jobId: `sync-${site.id}-${syncSessionStart.getTime()}`,
           priority: isCron ? 4 : 2
         });
+
+        // Record QUEUE for each site in full sync
+        metricsCollector.recordSyncLifecycle(site.id, 'QUEUE', { source: 'fullSync', isCron }).catch(console.error);
       }
 
       await scrapeLogger.log({
@@ -251,6 +259,9 @@ export class SyncOrchestrator {
 
     // Initial delay to let DB pool settle especially on rapid clicks
     await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Record START event
+    metricsCollector.recordSyncLifecycle(siteId, 'START', { force, isCron }).catch(console.error);
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },
@@ -497,6 +508,9 @@ export class SyncOrchestrator {
                   syncLastAction: `Syncing: ${processed}/${matchedProducts.length} items...`,
                 },
               }), { operationName: 'UpdateSyncProgress' });
+
+              // Record PROGRESS event
+              metricsCollector.recordSyncLifecycle(siteId, 'PROGRESS', { processed, total: matchedProducts.length }).catch(console.error);
             }
 
             // Issue 4: Reduce log noise - log every 5th product success or always log failures
@@ -685,6 +699,9 @@ export class SyncOrchestrator {
         level: "SUCCESS",
       });
 
+      // Record STOP event
+      metricsCollector.recordSyncLifecycle(siteId, 'STOP', { count, status: 'Completed' }).catch(console.error);
+
       return { success: true, count };
     } catch (error) {
       // Log the error to the database
@@ -701,6 +718,10 @@ export class SyncOrchestrator {
           message: `❌ SYNC FAILED: ${errorMessage}`,
           level: "ERROR",
         });
+
+        // Record FAIL event
+        metricsCollector.recordSyncLifecycle(siteId, 'FAIL', { error: errorMessage }).catch(console.error);
+
 
         // Send notification to tenant about sync failure
         const site = await prisma.site.findUnique({

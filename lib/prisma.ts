@@ -9,10 +9,12 @@ if (!connectionString) {
   throw new Error('DATABASE_URL environment variable is not set');
 }
 
+const IS_BUILD = process.env.NEXT_PHASE === 'phase-production-build';
+
 const pool = new pg.Pool({
   connectionString,
-  max: 20,
-  min: 2,
+  max: IS_BUILD ? 1 : 20, // Limit connections during build
+  min: IS_BUILD ? 0 : 2,  // No eager connections during build
   idleTimeoutMillis: 60000,
   connectionTimeoutMillis: 30000,
   allowExitOnIdle: true,

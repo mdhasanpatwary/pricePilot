@@ -1,9 +1,9 @@
 /**
  * Centralized Scrape Logging Service
- * 
+ *
  * Batches SyncLog inserts to reduce database write operations.
  * Eliminates duplicate logs across multiple services.
- * 
+ *
  * Performance Impact:
  * - DB write operations: Reduced by 70%
  * - Duplicate logs: Eliminated
@@ -91,7 +91,8 @@ class ScrapeLoggerService {
      * Start periodic flush
      */
     private startPeriodicFlush(): void {
-        if (typeof window === 'undefined') { // Server-side only
+        const IS_BUILD = process.env.NEXT_PHASE === 'phase-production-build';
+        if (typeof window === 'undefined' && !IS_BUILD) { // Server-side only and not build phase
             this.flushInterval = setInterval(() => {
                 this.flush().catch((error: Error) => {
                     logger.error('[ScrapeLogger] Periodic flush error:', error);

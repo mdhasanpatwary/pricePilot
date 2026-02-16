@@ -63,7 +63,8 @@ class MetricBatchProcessor {
 
   constructor() {
     // Start periodic flush
-    if (typeof window === 'undefined') { // server-side only
+    const IS_BUILD = process.env.NEXT_PHASE === 'phase-production-build';
+    if (typeof window === 'undefined' && !IS_BUILD) { // server-side only and not build phase
       setInterval(() => this.flush(), this.FLUSH_INTERVAL_MS);
     }
   }

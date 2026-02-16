@@ -22,6 +22,8 @@ import { withDbRetry } from "@/lib/utils/db-retry";
 import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 import { logger } from "@/lib/logger";
 
+import { toSiteDTO } from "@/lib/dtos/site.dto";
+
 async function handleGET(req: NextRequest) {
   const startTime = Date.now();
   const session = await getCachedSession();
@@ -98,47 +100,13 @@ async function handleGET(req: NextRequest) {
   }
 
   const formattedCompetitors = competitorsList.map((site: any) => {
-    let name = "Unknown";
-    try {
-      if (site.baseUrl) {
-        // Faster hostname extraction using regex
-        const match = site.baseUrl.match(/^(?:https?:\/\/)?(?:www\.)?([^\/:]+)/i);
-        const hostname = match ? match[1] : site.baseUrl;
-        const parts = hostname.split(".");
-        const rawName = parts.length > 1 ? parts[0] : hostname;
-        name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-      }
-    } catch (e) {
-      console.error(`Invalid baseUrl for site ${site.id}: ${site.baseUrl}`);
-    }
-
     const matchedCount = siteMatchCountMap.get(site.id) || 0;
 
-    return {
-      id: site.id,
-      name,
-      url: site.baseUrl,
-      products: matchedCount,
-      totalScraped: site._count.Product,
-      status: site.isSyncing
-        ? "SYNCING"
-        : matchedCount > 0
-          ? "ACTIVE"
-          : site.lastSyncAt
-            ? "NO MATCHES"
-            : "PENDING",
-      health: totalUserProducts > 0
-        ? Math.round((matchedCount / totalUserProducts) * 100)
-        : 0,
-      isSyncing: site.isSyncing,
-      syncTotal: site.syncTotal,
-      syncProcessed: site.syncProcessed,
-      syncLastAction: site.syncLastAction,
-      syncStartedAt: site.syncStartedAt,
-      totalUserProducts: totalUserProducts,
-      isAdvancedProtected: site.isAdvancedProtected || false,
-      searchQueryPattern: site.searchQueryPattern,
-    };
+    return toSiteDTO(site, {
+      matchedProductsCount: matchedCount,
+      totalScrapedProductsCount: site._count.Product,
+      totalUserProductsCount: totalUserProducts
+    });
   });
 
   const response = {
@@ -223,7 +191,8 @@ async function handlePOST(req: NextRequest) {
     );
   });
 
-  return NextResponse.json(site);
+  // Return standardized DTO
+  return NextResponse.json(toSiteDTO(site));
 }
 
 async function handleDELETE(req: NextRequest) {
