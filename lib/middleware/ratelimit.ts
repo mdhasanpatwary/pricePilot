@@ -12,6 +12,21 @@ import { logger } from "@/lib/logger";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 
+const READ_HIT_SAMPLE_PERCENT = 10;
+const READ_HIT_SAMPLE_WEIGHT = Math.round(100 / READ_HIT_SAMPLE_PERCENT);
+
+function shouldSampleReadHit(identifier: string, endpoint: string): boolean {
+  const minuteBucket = Math.floor(Date.now() / 60000);
+  const seed = `${identifier}:${endpoint}:${minuteBucket}`;
+  let hash = 0;
+
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+
+  return (hash % 100) < READ_HIT_SAMPLE_PERCENT;
+}
+
 /**
  * Rate limit middleware wrapper for Next.js API routes with tenant-based limits
  * 
@@ -121,14 +136,21 @@ export async function withRateLimit(
 
     // Record hit asynchronously (non-blocking)
     if (tenantId) {
-      recordHit(
-        tenantId,
-        limiterType as RateLimiterType,
-        baseIdentifier,
-        req.nextUrl.pathname
-      ).catch((error) => {
-        logger.error("[RateLimit] Failed to record hit:", { error });
-      });
+      const isReadLimiter = limiterType === "read";
+      const shouldRecordHit = !isReadLimiter || shouldSampleReadHit(baseIdentifier, req.nextUrl.pathname);
+
+      if (shouldRecordHit) {
+        const hitWeight = isReadLimiter ? READ_HIT_SAMPLE_WEIGHT : 1;
+        recordHit(
+          tenantId,
+          limiterType as RateLimiterType,
+          baseIdentifier,
+          req.nextUrl.pathname,
+          hitWeight
+        ).catch((error) => {
+          logger.error("[RateLimit] Failed to record hit:", { error });
+        });
+      }
     }
 
     // Execute handler
@@ -309,4 +331,3 @@ export function getRateLimiterType(method: string, pathname: string): keyof type
   // Default to general API rate limit
   return "api";
 }
-

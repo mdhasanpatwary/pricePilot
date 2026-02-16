@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCachedSession } from "@/lib/auth/cached-session";
-import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import {
+  withRequestContextAndRateLimit,
+  withRequestContextOnly,
+} from "@/lib/middleware/with-request-context";
+import { withCache, invalidateCache } from "@/lib/middleware/api-cache";
 import {
   validateBody,
   validationErrorResponse,
@@ -19,6 +23,7 @@ async function handleGET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "10");
   const unreadOnly = searchParams.get("unread") === "true";
+  const includeMeta = searchParams.get("includeMeta") === "true";
 
   const where: any = {
     tenantId: session.user.tenantId,
@@ -29,15 +34,18 @@ async function handleGET(req: NextRequest) {
   }
 
   try {
-    const [notifications, totalCount] = await Promise.all([
-      (prisma as any).notification.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      (prisma as any).notification.count({ where }),
-    ]);
+    const notifications = await (prisma as any).notification.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    if (!includeMeta) {
+      return NextResponse.json({ notifications });
+    }
+
+    const totalCount = await (prisma as any).notification.count({ where });
 
     return NextResponse.json({
       notifications,
@@ -53,6 +61,12 @@ async function handleGET(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+async function invalidateNotificationCache(tenantId: string) {
+  await invalidateCache(`api:notifications:/api/v1/notifications:${tenantId}*`).catch((error) => {
+    console.error("Notification cache invalidation error:", error);
+  });
 }
 
 async function handlePATCH(req: NextRequest) {
@@ -81,6 +95,8 @@ async function handlePATCH(req: NextRequest) {
         data: { isRead: true },
       });
     }
+
+    await invalidateNotificationCache(session.user.tenantId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -116,6 +132,8 @@ async function handleDELETE(req: NextRequest) {
       });
     }
 
+    await invalidateNotificationCache(session.user.tenantId);
+
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
@@ -126,7 +144,15 @@ async function handleDELETE(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "read", handleGET);
+  return withRequestContextOnly(
+    req,
+    withCache(handleGET, {
+      ttl: 120,
+      keyPrefix: "api:notifications",
+      tenantIsolated: true,
+      varyBy: ["page", "limit", "unread", "includeMeta"],
+    })
+  );
 }
 
 export async function PATCH(req: NextRequest) {

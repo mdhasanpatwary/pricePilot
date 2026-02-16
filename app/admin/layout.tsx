@@ -52,6 +52,7 @@ const adminMenuItems = [
       { label: "System Health", href: "/admin/monitoring?tab=health", icon: HeartPulse },
       { label: "Debug Center", href: "/admin/monitoring?tab=debug", icon: Bug },
       { label: "Diagnostics", href: "/admin/monitoring?tab=diagnostics", icon: Activity },
+      { label: "Operations", href: "/admin/monitoring?tab=operations", icon: Server },
     ],
   },
   {
@@ -72,6 +73,7 @@ const adminMenuItems = [
     href: "/admin/scraper-profiles",
     children: [
       { label: "Proxy Simulator", href: "/admin/simulator", icon: Microscope },
+      { label: "Proxy Pool", href: "/admin/proxy-pool", icon: Server },
       { label: "Scraper Profiles", href: "/admin/scraper-profiles", icon: Settings },
       { label: "Site Profiles", href: "/admin/site-profiles", icon: Settings },
       { label: "Human Simulation", href: "/admin/human-simulation", icon: Settings },

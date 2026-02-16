@@ -87,6 +87,14 @@ export default function BusinessSetupPage() {
       items: configs.filter((c) => c.key.startsWith("SCRAPER")),
     },
     {
+      id: "captcha",
+      title: "Captcha Solver",
+      description:
+        "Manage provider key, timeout, and toggle for automatic challenge solving.",
+      icon: ShieldCheck,
+      items: configs.filter((c) => c.key.startsWith("CAPTCHA")),
+    },
+    {
       id: "pricing",
       title: "Global Pricing Logic",
       description:
@@ -252,7 +260,13 @@ export default function BusinessSetupPage() {
                       ) : (
                         <div className="relative">
                           <Input
-                            type={item.type === "number" ? "number" : "text"}
+                            type={
+                              item.type === "number"
+                                ? "number"
+                                : item.type === "password"
+                                  ? "password"
+                                  : "text"
+                            }
                             defaultValue={item.value}
                             onBlur={(e) => {
                               if (e.target.value !== item.value) {

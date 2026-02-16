@@ -18,6 +18,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withCache } from "@/lib/middleware/api-cache";
+import { withRequestContextOnly } from "@/lib/middleware/with-request-context";
 
 /**
  * Query parameters schema for alert filtering
@@ -29,6 +31,7 @@ const alertQuerySchema = z.object({
     sort: z.enum(['timestamp', '-timestamp']).optional().default('-timestamp'),
     page: z.coerce.number().int().min(1).optional().default(1),
     limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+    includeMeta: z.enum(['true', 'false']).optional().default('false'),
 });
 
 /**
@@ -38,7 +41,7 @@ const alertQuerySchema = z.object({
  *
  * Requirements: 12.1
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -55,13 +58,9 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get user's tenant
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { tenantId: true },
-        });
+        const tenantId = session.user.tenantId;
 
-        if (!user?.tenantId) {
+        if (!tenantId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -92,11 +91,11 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const { severity, competitorWebsiteId, acknowledged, sort, page, limit } = validationResult.data;
+        const { severity, competitorWebsiteId, acknowledged, sort, page, limit, includeMeta } = validationResult.data;
 
         // Build where clause
         const where: any = {
-            tenantId: user.tenantId,
+            tenantId,
         };
 
         if (severity) {
@@ -120,28 +119,41 @@ export async function GET(request: NextRequest) {
             : { createdAt: 'desc' as const };
 
         // Query alerts with pagination
-        const [alerts, totalCount] = await Promise.all([
-            prisma.scrapingAlert.findMany({
-                where,
-                orderBy,
-                skip,
-                take: limit,
-                include: {
-                    Site: {
-                        select: {
-                            id: true,
-                            baseUrl: true,
-                        },
+        const alerts = await prisma.scrapingAlert.findMany({
+            where,
+            orderBy,
+            skip,
+            take: limit,
+        });
+
+        // Avoid relation include when competitorWebsiteId is null for all rows.
+        // This prevents unnecessary `IN (NULL)` site lookups.
+        const competitorSiteIds = Array.from(
+            new Set(
+                alerts
+                    .map((alert) => alert.competitorWebsiteId)
+                    .filter((id): id is string => Boolean(id))
+            )
+        );
+
+        const siteNameById = new Map<string, string>();
+        if (competitorSiteIds.length > 0) {
+            const sites = await prisma.site.findMany({
+                where: {
+                    id: {
+                        in: competitorSiteIds,
                     },
                 },
-            }),
-            prisma.scrapingAlert.count({ where }),
-        ]);
+                select: {
+                    id: true,
+                    baseUrl: true,
+                },
+            });
 
-        // Calculate pagination metadata
-        const totalPages = Math.ceil(totalCount / limit);
-        const hasNextPage = page < totalPages;
-        const hasPreviousPage = page > 1;
+            sites.forEach((site) => {
+                siteNameById.set(site.id, site.baseUrl);
+            });
+        }
 
         // Format response
         const formattedAlerts = alerts.map((alert) => ({
@@ -152,7 +164,9 @@ export async function GET(request: NextRequest) {
             title: alert.title,
             message: alert.message,
             competitorWebsiteId: alert.competitorWebsiteId,
-            competitorSiteName: alert.Site?.baseUrl,
+            competitorSiteName: alert.competitorWebsiteId
+                ? siteNameById.get(alert.competitorWebsiteId)
+                : undefined,
             metadata: alert.metadata,
             timestamp: alert.createdAt,
             acknowledged: alert.acknowledged,
@@ -160,19 +174,29 @@ export async function GET(request: NextRequest) {
             acknowledgedBy: alert.acknowledgedBy,
         }));
 
+        const responseData: any = {
+            alerts: formattedAlerts,
+        };
+
+        if (includeMeta === 'true') {
+            const totalCount = await prisma.scrapingAlert.count({ where });
+            const totalPages = Math.ceil(totalCount / limit);
+            const hasNextPage = page < totalPages;
+            const hasPreviousPage = page > 1;
+
+            responseData.pagination = {
+                page,
+                limit,
+                totalCount,
+                totalPages,
+                hasNextPage,
+                hasPreviousPage,
+            };
+        }
+
         return NextResponse.json({
             success: true,
-            data: {
-                alerts: formattedAlerts,
-                pagination: {
-                    page,
-                    limit,
-                    totalCount,
-                    totalPages,
-                    hasNextPage,
-                    hasPreviousPage,
-                },
-            },
+            data: responseData,
             meta: {
                 requestId: crypto.randomUUID(),
                 timestamp: new Date().toISOString(),
@@ -192,4 +216,16 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(request: NextRequest) {
+    return withRequestContextOnly(
+        request,
+        withCache(handleGET, {
+            ttl: 75,
+            keyPrefix: "api:scraping-alerts",
+            tenantIsolated: true,
+            varyBy: ["severity", "competitorWebsiteId", "acknowledged", "sort", "page", "limit", "includeMeta"],
+        })
+    );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, createContext, useContext, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { AlertTriangle, XCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -147,13 +147,17 @@ function ToastNotification({
 export function AlertNotificationProvider({ children }: { children: React.ReactNode }) {
     const { data: session } = useSession();
     const [notifications, setNotifications] = useState<AlertNotification[]>([]);
-    const [lastCheckTime, setLastCheckTime] = useState<Date>(new Date());
+    const lastSeenAlertTimestampRef = useRef<number>(0);
 
     useEffect(() => {
-        if (!session?.user) return;
+        if (!session?.user?.id) return;
 
-        // Check for new critical alerts every 30 seconds
+        let isCancelled = false;
+        lastSeenAlertTimestampRef.current = Date.now();
+
         const checkForAlerts = async () => {
+            if (isCancelled || document.hidden) return;
+
             try {
                 const res = await fetch(
                     `/api/v1/scraping/alerts?severity=critical&acknowledged=false&sort=-timestamp&limit=5`
@@ -162,11 +166,12 @@ export function AlertNotificationProvider({ children }: { children: React.ReactN
 
                 const data = await res.json();
                 const alerts = data.data?.alerts || [];
+                const currentLastSeen = lastSeenAlertTimestampRef.current;
 
                 // Filter for alerts created after last check
                 const newAlerts = alerts.filter((alert: any) => {
-                    const alertTime = new Date(alert.timestamp);
-                    return alertTime > lastCheckTime;
+                    const alertTime = new Date(alert.timestamp).getTime();
+                    return Number.isFinite(alertTime) && alertTime > currentLastSeen;
                 });
 
                 if (newAlerts.length > 0) {
@@ -181,21 +186,39 @@ export function AlertNotificationProvider({ children }: { children: React.ReactN
                     }));
 
                     setNotifications((prev) => [...newNotifications, ...prev].slice(0, 5));
-                    setLastCheckTime(new Date());
                 }
+
+                const maxSeenFromBatch = alerts.reduce((maxTs: number, alert: any) => {
+                    const alertTime = new Date(alert.timestamp).getTime();
+                    return Number.isFinite(alertTime) && alertTime > maxTs ? alertTime : maxTs;
+                }, currentLastSeen);
+                lastSeenAlertTimestampRef.current = maxSeenFromBatch;
             } catch (error) {
                 console.error('Failed to check for alerts:', error);
             }
         };
 
         // Initial check
-        checkForAlerts();
+        void checkForAlerts();
 
-        // Poll every 30 seconds
-        const interval = setInterval(checkForAlerts, 30000);
+        // Poll every 30 seconds while tab is visible
+        const interval = setInterval(() => {
+            void checkForAlerts();
+        }, 30000);
 
-        return () => clearInterval(interval);
-    }, [session, lastCheckTime]);
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                void checkForAlerts();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            isCancelled = true;
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [session?.user?.id]);
 
     const dismissNotification = (id: string) => {
         setNotifications((prev) => prev.filter((n) => n.id !== id));

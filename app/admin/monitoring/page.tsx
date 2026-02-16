@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Bug, HeartPulse, Eye, Settings } from "lucide-react";
+import { Activity, Bug, HeartPulse, Eye, Settings, Server } from "lucide-react";
 import RealTimeMonitor from "@/components/admin/real-time-monitor";
 import { SystemHealthMonitor } from "@/components/admin/system-health-monitor";
 import SessionControlPanel from "@/components/admin/session-control-panel";
@@ -12,6 +12,7 @@ import { ScrapingSessionData } from "@/lib/types/admin-dashboard";
 // Import debug page components
 import { DebugCenterContent } from "./debug-center-content";
 import { DiagnosticsContent } from "./diagnostics-content";
+import { OperationsContent } from "./operations-content";
 
 export default function MonitoringHubPage() {
     const searchParams = useSearchParams();
@@ -57,7 +58,7 @@ export default function MonitoringHubPage() {
             </div>
 
             <Tabs value={tabParam} onValueChange={handleTabChange} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 lg:w-auto lg:inline-grid">
+                <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 lg:w-auto lg:inline-grid">
                     <TabsTrigger value="live" className="flex items-center gap-2">
                         <Eye className="w-4 h-4" />
                         <span className="hidden sm:inline">Live Monitor</span>
@@ -82,6 +83,11 @@ export default function MonitoringHubPage() {
                         <Activity className="w-4 h-4" />
                         <span className="hidden sm:inline">Diagnostics</span>
                         <span className="sm:hidden">Tests</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="operations" className="flex items-center gap-2">
+                        <Server className="w-4 h-4" />
+                        <span className="hidden sm:inline">Operations</span>
+                        <span className="sm:hidden">Ops</span>
                     </TabsTrigger>
                 </TabsList>
 
@@ -117,6 +123,10 @@ export default function MonitoringHubPage() {
 
                 <TabsContent value="diagnostics" className="space-y-6">
                     <DiagnosticsContent />
+                </TabsContent>
+
+                <TabsContent value="operations" className="space-y-6">
+                    <OperationsContent />
                 </TabsContent>
             </Tabs>
         </div>

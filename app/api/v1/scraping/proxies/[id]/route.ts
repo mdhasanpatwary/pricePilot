@@ -12,6 +12,11 @@ import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
 
+function hasProxyAdminAccess(session: any): boolean {
+    const role = String(session?.user?.role || '').toUpperCase();
+    return Boolean(session?.user) && (role === 'ADMIN' || session?.user?.isSuperAdmin === true);
+}
+
 /**
  * Proxy update schema
  */
@@ -45,7 +50,7 @@ export async function GET(
             );
         }
 
-        if (session.user.role !== 'admin') {
+        if (!hasProxyAdminAccess(session)) {
             return NextResponse.json(
                 { success: false, error: { code: 'FORBIDDEN', message: 'Admin access required' } },
                 { status: 403 }
@@ -152,7 +157,7 @@ export async function PUT(
             );
         }
 
-        if (session.user.role !== 'admin') {
+        if (!hasProxyAdminAccess(session)) {
             return NextResponse.json(
                 { success: false, error: { code: 'FORBIDDEN', message: 'Admin access required' } },
                 { status: 403 }
@@ -291,7 +296,7 @@ export async function DELETE(
             );
         }
 
-        if (session.user.role !== 'admin') {
+        if (!hasProxyAdminAccess(session)) {
             return NextResponse.json(
                 { success: false, error: { code: 'FORBIDDEN', message: 'Admin access required' } },
                 { status: 403 }

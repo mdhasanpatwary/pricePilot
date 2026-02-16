@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { alertService } from '@/lib/services/bot-protection/alert-service';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { invalidateCache } from "@/lib/middleware/api-cache";
 
 /**
  * POST /api/v1/scraping/alerts/:id/acknowledge
@@ -43,13 +44,9 @@ export async function POST(
             );
         }
 
-        // Get user's tenant
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { tenantId: true },
-        });
+        const tenantId = session.user.tenantId;
 
-        if (!user?.tenantId) {
+        if (!tenantId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -86,7 +83,7 @@ export async function POST(
         }
 
         // Verify tenant ownership
-        if (alert.tenantId !== user.tenantId) {
+        if (alert.tenantId !== tenantId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -115,6 +112,9 @@ export async function POST(
 
         // Acknowledge the alert using the alert service
         await alertService.acknowledgeAlert(alertId, session.user.id);
+        await invalidateCache(`api:scraping-alerts:/api/v1/scraping/alerts:${tenantId}*`).catch((error) => {
+            console.error('Scraping alerts cache invalidation error:', error);
+        });
 
         // Fetch updated alert
         const updatedAlert = await prisma.scrapingAlert.findUnique({

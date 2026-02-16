@@ -72,17 +72,17 @@ async function handleGET(req: NextRequest) {
     })
   );
 
-  // 2. Optimization: Bulk fetch matched product IDs for all competitors in this page to avoid N+1
+  // 2. Optimization: Fetch per-site matched counts in DB to avoid large raw row transfers
   const competitorIds = competitorsList.map((c: any) => c.id);
 
-  // Get all unique user product matches for these competitors - retry transient
-  // Optimized using a single query with JOINs and ANY operator for better performance (Task 4 in Plan)
-  let allMatches: any[] = [];
+  type SiteMatchCountRow = { siteId: string; matchedCount: number | bigint };
+  let siteMatchCountMap = new Map<string, number>();
+
   if (competitorIds.length > 0) {
-    allMatches = await withDbRetry(() => prisma.$queryRaw`
+    const matchCounts = await withDbRetry(() => prisma.$queryRaw<SiteMatchCountRow[]>`
       SELECT
-        pm."userProductId",
-        cp."siteId"
+        cp."siteId",
+        COUNT(DISTINCT pm."userProductId") AS "matchedCount"
       FROM "ProductMatch" pm
       INNER JOIN "Product" cp ON cp.id = pm."competitorProductId"
       INNER JOIN "Product" up ON up.id = pm."userProductId"
@@ -90,19 +90,16 @@ async function handleGET(req: NextRequest) {
       WHERE cp."siteId" = ANY(${competitorIds}::text[])
         AND up."tenantId" = ${tenantId}
         AND s.type = 'USER'
-      LIMIT 10000
-    `, { operationName: 'FetchCompetitorMatchesRaw' });
-  }
+      GROUP BY cp."siteId"
+    `, { operationName: 'FetchCompetitorMatchCountsRaw' });
 
-  // Aggregate matches by site in memory
-  const siteMatchMap = new Map<string, Set<string>>();
-  allMatches.forEach(m => {
-    const siteId = m.competitorProduct.siteId;
-    if (!siteMatchMap.has(siteId)) {
-      siteMatchMap.set(siteId, new Set());
-    }
-    siteMatchMap.get(siteId)!.add(m.userProductId);
-  });
+    siteMatchCountMap = new Map(
+      matchCounts.map((row) => [
+        row.siteId,
+        Number(typeof row.matchedCount === "bigint" ? row.matchedCount : row.matchedCount ?? 0),
+      ])
+    );
+  }
 
   const formattedCompetitors = competitorsList.map((site: any) => {
     let name = "Unknown";
@@ -119,7 +116,7 @@ async function handleGET(req: NextRequest) {
       console.error(`Invalid baseUrl for site ${site.id}: ${site.baseUrl}`);
     }
 
-    const matchedCount = siteMatchMap.get(site.id)?.size || 0;
+    const matchedCount = siteMatchCountMap.get(site.id) || 0;
 
     return {
       id: site.id,

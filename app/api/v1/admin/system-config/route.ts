@@ -133,6 +133,24 @@ const DEFAULT_CONFIGS = [
     description: "Default Slack Webhook URL for global alerts.",
     type: "string",
   },
+  {
+    key: "CAPTCHA_SOLVER_ENABLED",
+    value: "false",
+    description: "Enable/disable automatic captcha solving for protected scraping targets.",
+    type: "boolean",
+  },
+  {
+    key: "CAPTCHA_SOLVER_API_KEY",
+    value: "",
+    description: "API key for captcha provider (e.g., 2Captcha).",
+    type: "password",
+  },
+  {
+    key: "CAPTCHA_SOLVER_TIMEOUT",
+    value: "120000",
+    description: "Maximum captcha solve wait time in milliseconds.",
+    type: "number",
+  },
 ];
 
 async function handleGET(_req: NextRequest) {

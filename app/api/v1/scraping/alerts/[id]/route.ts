@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { invalidateCache } from "@/lib/middleware/api-cache";
 
 /**
  * DELETE /api/v1/scraping/alerts/:id
@@ -42,13 +43,9 @@ export async function DELETE(
             );
         }
 
-        // Get user's tenant
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { tenantId: true },
-        });
+        const tenantId = session.user.tenantId;
 
-        if (!user?.tenantId) {
+        if (!tenantId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -84,7 +81,7 @@ export async function DELETE(
         }
 
         // Verify tenant ownership
-        if (alert.tenantId !== user.tenantId) {
+        if (alert.tenantId !== tenantId) {
             return NextResponse.json(
                 {
                     success: false,
@@ -100,6 +97,9 @@ export async function DELETE(
         // Delete the alert
         await prisma.scrapingAlert.delete({
             where: { id: alertId },
+        });
+        await invalidateCache(`api:scraping-alerts:/api/v1/scraping/alerts:${tenantId}*`).catch((error) => {
+            console.error('Scraping alerts cache invalidation error:', error);
         });
 
         return NextResponse.json({

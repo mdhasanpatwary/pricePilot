@@ -457,8 +457,13 @@ export class ConfigurationManager {
     /**
      * Register a listener for configuration changes
      */
-    onConfigChange(listener: (config: ScraperConfig) => void): void {
+    onConfigChange(listener: (config: ScraperConfig) => void): () => void {
         this.configListeners.push(listener);
+
+        // Return unsubscribe function to avoid listener leaks in short-lived services
+        return () => {
+            this.configListeners = this.configListeners.filter((l) => l !== listener);
+        };
     }
 
     /**

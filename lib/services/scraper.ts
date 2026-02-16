@@ -3,7 +3,7 @@ import { logger } from "../logger";
 import { BrowserPool } from "./browser-pool";
 import { prisma } from "@/lib/prisma";
 import { TECH_BRANDS } from "../data/brands";
-import { getSiteProfile, siteProfileManager } from "../config/site-profiles";
+import { siteProfileManager } from "../config/site-profiles";
 import { CacheService } from "./cache";
 import { TechProductValidator } from "./validation";
 import { HumanSimulation } from "./human-simulation";
@@ -19,6 +19,7 @@ import { getAllUserAgents, getRandomUserAgentExcluding } from "../config/user-ag
 import { getUserAgentTracker } from "./user-agent-tracker";
 import { sessionTracker } from "./session-tracker";
 import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
+import { SystemConfigService } from "@/lib/config";
 
 interface ScrapedProduct {
   title: string;
@@ -31,6 +32,10 @@ interface ScrapedProduct {
   inStock: boolean;
   imageUrl?: string;
   specifications?: Record<string, string>;
+}
+
+interface ScrapeProductOptions {
+  isAdvancedProtected?: boolean;
 }
 
 export class ScrapeBlockError extends Error {
@@ -118,6 +123,8 @@ const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
 const USER_AGENTS = getAllUserAgents();
 
 export class ScraperService {
+  private static appliedAntiBotProfiles: Map<string, 'cloudflare' | 'perimeterx' | 'datadome'> = new Map();
+  private static appliedNoProxySafeProfiles: Set<string> = new Set();
   private browserPool: BrowserPool;
   private proxies: string[] = [];
   private proxyIndex: number = 0;
@@ -128,11 +135,15 @@ export class ScraperService {
   private retryQueueService: RetryQueueService;
   private concurrencyLimiter: ConcurrencyLimiter;
   private captchaSolver: CaptchaSolver | null = null;
+  private captchaConfigState: { enabled: boolean; apiKey: string; timeout: number } | null = null;
+  private unsubscribeConfigChange?: () => void;
+  private disposed = false;
 
   constructor() {
     this.browserPool = BrowserPool.getInstance();
     this.challengeHandler = new ChallengeHandler();
-    this.metricsTracker = new MetricsTracker();
+    // Short-lived scraper instances should not leave background timers running.
+    this.metricsTracker = new MetricsTracker({ autoPersist: false });
     this.retryQueueService = RetryQueueService.getInstance();
     this.retryStrategy = new RetryStrategy({
       maxRetries: 3,
@@ -149,12 +160,18 @@ export class ScraperService {
 
     // Initialize CaptchaSolver if enabled
     const captchaEnabled = process.env.CAPTCHA_SOLVER_ENABLED === 'true';
-    const captchaApiKey = process.env.CAPTCHA_SOLVER_API_KEY;
+    const captchaApiKey = (process.env.CAPTCHA_SOLVER_API_KEY || '').trim();
+    const captchaTimeout = parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || '120000', 10);
+    this.captchaConfigState = {
+      enabled: captchaEnabled,
+      apiKey: captchaApiKey,
+      timeout: captchaTimeout,
+    };
 
     if (captchaEnabled && captchaApiKey) {
       this.captchaSolver = new CaptchaSolver({
         apiKey: captchaApiKey,
-        timeout: parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || '120000', 10),
+        timeout: captchaTimeout,
       });
       logger.info('[ScraperService] CaptchaSolver initialized');
     } else {
@@ -175,12 +192,179 @@ export class ScraperService {
       logger.info(`[ScraperService] ProxyManager initialized with ${config.proxies.length} proxies`);
     } else {
       logger.info('[ScraperService] No proxies configured, operating in direct mode');
+      if (!this.captchaSolver) {
+        logger.warn('[ScraperService] Direct mode without captcha solver will have lower success on protected sites');
+      }
     }
 
     // Register for configuration changes
-    configurationManager.onConfigChange((newConfig) => {
+    this.unsubscribeConfigChange = configurationManager.onConfigChange((newConfig) => {
       this.handleConfigurationChange(newConfig);
     });
+  }
+
+  private mapProviderToAntiBotSystem(provider?: string): 'cloudflare' | 'perimeterx' | 'datadome' | null {
+    const normalized = provider?.toUpperCase?.() || '';
+
+    if (normalized.includes('CLOUDFLARE') || normalized.includes('CF')) {
+      return 'cloudflare';
+    }
+    if (normalized.includes('PERIMETERX') || normalized.includes('PX')) {
+      return 'perimeterx';
+    }
+    if (normalized.includes('DATADOME')) {
+      return 'datadome';
+    }
+
+    return null;
+  }
+
+  private async resolveCaptchaRuntimeConfig(): Promise<{ enabled: boolean; apiKey: string; timeout: number }> {
+    const keys = [
+      'CAPTCHA_SOLVER_ENABLED',
+      'CAPTCHA_SOLVER_API_KEY',
+      'CAPTCHA_SOLVER_TIMEOUT',
+    ];
+
+    const configs = await SystemConfigService.getMany(keys);
+    const hasKey = (key: string): boolean => Object.prototype.hasOwnProperty.call(configs, key);
+
+    const enabled = hasKey('CAPTCHA_SOLVER_ENABLED')
+      ? Boolean(configs.CAPTCHA_SOLVER_ENABLED)
+      : process.env.CAPTCHA_SOLVER_ENABLED === 'true';
+
+    const apiKey = hasKey('CAPTCHA_SOLVER_API_KEY')
+      ? String(configs.CAPTCHA_SOLVER_API_KEY || '').trim()
+      : (process.env.CAPTCHA_SOLVER_API_KEY || '').trim();
+
+    const timeoutFromConfig = hasKey('CAPTCHA_SOLVER_TIMEOUT')
+      ? Number(configs.CAPTCHA_SOLVER_TIMEOUT)
+      : Number.parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || '120000', 10);
+
+    const timeout = Number.isFinite(timeoutFromConfig)
+      ? Math.max(10_000, Math.min(300_000, Math.round(timeoutFromConfig)))
+      : 120_000;
+
+    return { enabled, apiKey, timeout };
+  }
+
+  private async refreshCaptchaSolverConfig(): Promise<void> {
+    try {
+      const runtimeConfig = await this.resolveCaptchaRuntimeConfig();
+      const previous = this.captchaConfigState;
+
+      const isUnchanged = previous &&
+        previous.enabled === runtimeConfig.enabled &&
+        previous.apiKey === runtimeConfig.apiKey &&
+        previous.timeout === runtimeConfig.timeout;
+
+      if (isUnchanged) {
+        return;
+      }
+
+      this.captchaConfigState = runtimeConfig;
+
+      if (runtimeConfig.enabled && runtimeConfig.apiKey) {
+        this.captchaSolver = new CaptchaSolver({
+          apiKey: runtimeConfig.apiKey,
+          timeout: runtimeConfig.timeout,
+        });
+        logger.info('[ScraperService] CaptchaSolver initialized');
+        return;
+      }
+
+      this.captchaSolver = null;
+      if (runtimeConfig.enabled && !runtimeConfig.apiKey) {
+        logger.warn('[ScraperService] CaptchaSolver enabled but API key is missing');
+      } else {
+        logger.info('[ScraperService] CaptchaSolver disabled or API key not configured');
+      }
+    } catch (error) {
+      logger.warn('[ScraperService] Failed to refresh captcha solver configuration', { error });
+    }
+  }
+
+  private isDirectModeWithoutProxy(): boolean {
+    return !this.proxyManager && this.proxies.length === 0;
+  }
+
+  private applyNoProxySafeProfile(hostname: string, reason: string): void {
+    if (!this.isDirectModeWithoutProxy()) {
+      return;
+    }
+
+    if (ScraperService.appliedNoProxySafeProfiles.has(hostname)) {
+      return;
+    }
+
+    try {
+      const currentProfile = siteProfileManager.getProfile(hostname);
+      const existingRpm = currentProfile.rateLimit?.requestsPerMinute;
+      const existingConcurrent = currentProfile.rateLimit?.concurrentRequests;
+      const existingBaseDelay = currentProfile.adaptiveDelay?.baseDelay ?? currentProfile.waitTime;
+      const existingMaxDelay = currentProfile.adaptiveDelay?.maxDelay ?? Math.max(currentProfile.waitTime * 10, 30000);
+
+      siteProfileManager.updateProfile(hostname, {
+        strategy: 'full-js',
+        waitTime: Math.max(currentProfile.waitTime, 5000),
+        rateLimit: {
+          requestsPerMinute: Math.min(existingRpm ?? 4, 4),
+          concurrentRequests: Math.min(existingConcurrent ?? 1, 1),
+        },
+        adaptiveDelay: {
+          enabled: true,
+          baseDelay: Math.max(existingBaseDelay, 5000),
+          multiplier: 1.0,
+          maxDelay: Math.max(existingMaxDelay, 60000),
+        },
+        sessionWarmup: {
+          enabled: true,
+          visitHomepage: true,
+          visitPaths: currentProfile.sessionWarmup?.visitPaths?.length
+            ? currentProfile.sessionWarmup.visitPaths
+            : ['/'],
+        },
+        referrerChain: {
+          enabled: true,
+        },
+      });
+
+      ScraperService.appliedNoProxySafeProfiles.add(hostname);
+      logger.warn(`[ScraperService] Applied no-proxy safe profile for ${hostname}`, { reason });
+    } catch (error) {
+      logger.warn(`[ScraperService] Failed to apply no-proxy safe profile for ${hostname}`, { error, reason });
+    }
+  }
+
+  private hardenProtectionForDomain(hostname: string, provider?: string, increaseDelay: boolean = true): void {
+    try {
+      const antiBotSystem = this.mapProviderToAntiBotSystem(provider);
+
+      if (antiBotSystem) {
+        const appliedProfile = ScraperService.appliedAntiBotProfiles.get(hostname);
+        if (appliedProfile !== antiBotSystem) {
+          siteProfileManager.applyAntiBotProfile(hostname, antiBotSystem);
+          ScraperService.appliedAntiBotProfiles.set(hostname, antiBotSystem);
+        }
+      }
+
+      // Keep conservative constraints in no-proxy mode even after anti-bot profiles are applied.
+      this.applyNoProxySafeProfile(hostname, provider || 'UNKNOWN');
+
+      if (increaseDelay) {
+        siteProfileManager.increaseDelay(hostname);
+      }
+    } catch (error) {
+      logger.warn(`[ScraperService] Failed to harden protection profile for ${hostname}`, { error });
+    }
+  }
+
+  private relaxProtectionForDomain(hostname: string): void {
+    try {
+      siteProfileManager.decreaseDelay(hostname);
+    } catch (error) {
+      logger.warn(`[ScraperService] Failed to relax protection profile for ${hostname}`, { error });
+    }
   }
 
   /**
@@ -188,10 +372,15 @@ export class ScraperService {
    */
   private handleConfigurationChange(newConfig: any): void {
     logger.info('[ScraperService] Configuration changed, updating proxy manager');
+    const hadProxies = this.proxies.length > 0 || !!this.proxyManager;
+    const hasProxiesNow = newConfig.proxies.length > 0;
 
     // Update proxies
-    if (newConfig.proxies.length > 0) {
+    if (hasProxiesNow) {
       this.proxies = newConfig.proxies.map((p: ProxyConfig) => p.url);
+      if (!hadProxies) {
+        ScraperService.appliedNoProxySafeProfiles.clear();
+      }
 
       // Recreate ProxyManager with new proxies
       if (this.proxyManager) {
@@ -206,7 +395,12 @@ export class ScraperService {
         this.proxyManager = null;
       }
       this.proxies = [];
-      logger.info('[ScraperService] Proxies removed, operating in direct mode');
+      if (hadProxies) {
+        ScraperService.appliedNoProxySafeProfiles.clear();
+        logger.info('[ScraperService] Proxies removed, operating in direct mode');
+      } else {
+        logger.debug('[ScraperService] Configuration updated in direct mode (no proxy changes)');
+      }
     }
   }
 
@@ -279,15 +473,29 @@ export class ScraperService {
   }
 
   /**
-   * Close the browser pool (usually called on shutdown)
+   * Dispose scraper resources without touching shared browser pool.
+   */
+  async dispose(options: { flushMetrics?: boolean } = {}): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+
+    if (options.flushMetrics !== false) {
+      await this.metricsTracker.persistMetrics().catch((error) => {
+        logger.error('Failed to persist metrics on dispose', { error });
+      });
+    }
+    this.metricsTracker.stopAutoPersist();
+    this.unsubscribeConfigChange?.();
+    this.unsubscribeConfigChange = undefined;
+  }
+
+  /**
+   * Close the browser pool (usually called on process shutdown)
    */
   async close() {
-    // Persist any remaining metrics before closing
-    await this.metricsTracker.persistMetrics().catch((error) => {
-      logger.error('Failed to persist metrics on close', { error });
-    });
-
-    this.metricsTracker.stopAutoPersist();
+    await this.dispose({ flushMetrics: true });
 
     await this.browserPool.close();
     if (this.proxyManager) {
@@ -424,7 +632,10 @@ export class ScraperService {
    * Scrape a competitor product page with retry logic and human simulation
    * Requirements: 6.2, 6.5, 6.8, 6.9, 8.3, 9.1, 9.2
    */
-  async scrapeProductPage(url: string): Promise<ScrapedProduct | null> {
+  async scrapeProductPage(
+    url: string,
+    options?: ScrapeProductOptions,
+  ): Promise<ScrapedProduct | null> {
     // Extract hostname for context (used in error metadata)
     let hostname = 'unknown';
 
@@ -448,6 +659,14 @@ export class ScraperService {
           }
         );
       }
+
+      if (options?.isAdvancedProtected) {
+        // Pre-apply stricter anti-bot profile for known protected sites
+        // without aggressively increasing delay on every call.
+        this.hardenProtectionForDomain(hostname, "CLOUDFLARE", false);
+      }
+
+      await this.refreshCaptchaSolverConfig();
 
       // Use RetryStrategy to handle retries with exponential backoff
       return await this.retryStrategy.executeWithRetry(
@@ -596,7 +815,7 @@ export class ScraperService {
    *
    * @param url Product URL to scrape
    * @param tenantId Tenant ID
-   * @param _siteId Site ID (unused but required for interface compatibility)
+   * @param siteId Site ID
    * @param _productId Product ID (unused but required for interface compatibility)
    * @param tenantName Optional tenant name for session tracking
    * @returns Scraped product data or null
@@ -604,7 +823,7 @@ export class ScraperService {
   async scrapeProductPageWithTracking(
     url: string,
     tenantId: string,
-    _siteId: string,
+    siteId: string,
     _productId: string,
     tenantName?: string
   ): Promise<ScrapedProduct | null> {
@@ -636,6 +855,19 @@ export class ScraperService {
           }
         );
       }
+
+      if (siteId) {
+        const site = await prisma.site.findUnique({
+          where: { id: siteId },
+          select: { isAdvancedProtected: true },
+        });
+
+        if (site?.isAdvancedProtected) {
+          this.hardenProtectionForDomain(hostname, "CLOUDFLARE", false);
+        }
+      }
+
+      await this.refreshCaptchaSolverConfig();
 
       // Get tenant name if not provided
       const displayTenantName = tenantName || tenantId;
@@ -797,6 +1029,7 @@ export class ScraperService {
 
     // Enforce rate limiting before acquiring browser context
     await siteProfileManager.waitForRateLimit(hostname);
+    await siteProfileManager.acquireConcurrentSlot(hostname);
 
     // Acquire concurrent request slot using ConcurrencyLimiter
     // Requirement 6.6
@@ -814,6 +1047,7 @@ export class ScraperService {
       logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
       // Release concurrent slot before throwing
       this.concurrencyLimiter.releaseSlot(hostname);
+      siteProfileManager.releaseConcurrentSlot(hostname);
       throw error; // Throw to trigger retry
     }
 
@@ -833,6 +1067,7 @@ export class ScraperService {
         await this.browserPool.releaseContext(context).catch(() => { });
         // Release concurrent slot
         this.concurrencyLimiter.releaseSlot(hostname);
+        siteProfileManager.releaseConcurrentSlot(hostname);
         return cached;
       }
     }
@@ -842,7 +1077,7 @@ export class ScraperService {
     let statusCode = 0;
 
     try {
-      const profile = getSiteProfile(hostname);
+      const profile = siteProfileManager.getProfile(hostname);
 
       // Session warmup if enabled
       if (profile.sessionWarmup?.enabled) {
@@ -907,6 +1142,8 @@ export class ScraperService {
 
       // Requirement 9.2: Throw RateLimitError for HTTP 429
       if (statusCode === 429) {
+        this.hardenProtectionForDomain(hostname, "RATE_LIMIT");
+
         // Extract retry-after header if available
         const retryAfterHeader = response?.headers()['retry-after'];
         const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 60;
@@ -938,6 +1175,7 @@ export class ScraperService {
         this.challengeHandler.recordChallengeAttempt(hostname, waitResult);
 
         if (!waitResult.solved) {
+          this.hardenProtectionForDomain(hostname, waitResult.type);
           wasBlocked = true;
           logger.warn(`[ScraperService] Challenge not solved for ${hostname}`);
 
@@ -1039,6 +1277,7 @@ export class ScraperService {
           // If all captcha solve attempts failed, mark request as blocked
           // Requirement 4.4
           if (!captchaSolved) {
+            this.hardenProtectionForDomain(hostname, captchaRequest.type);
             wasBlocked = true;
             logger.error(`[ScraperService] All captcha solve attempts failed for ${hostname}`);
 
@@ -1088,6 +1327,7 @@ export class ScraperService {
       // 3. Security Analysis
       const securityInfo = await this.analyzeSecurity(page, response);
       if (securityInfo.isBlocked) {
+        this.hardenProtectionForDomain(hostname, securityInfo.provider);
         wasBlocked = true;
         logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`);
 
@@ -1183,6 +1423,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1216,6 +1457,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1249,6 +1491,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1282,6 +1525,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1348,6 +1592,7 @@ export class ScraperService {
 
       // Release concurrent request slot
       this.concurrencyLimiter.releaseSlot(hostname);
+      siteProfileManager.releaseConcurrentSlot(hostname);
     }
   }
 
@@ -1395,6 +1640,7 @@ export class ScraperService {
 
     // Enforce rate limiting before acquiring browser context
     await siteProfileManager.waitForRateLimit(hostname);
+    await siteProfileManager.acquireConcurrentSlot(hostname);
 
     // Acquire concurrent request slot using ConcurrencyLimiter
     await this.concurrencyLimiter.acquireSlot(hostname);
@@ -1412,6 +1658,7 @@ export class ScraperService {
       await sessionTracker.recordError(sessionId, error as Error);
       // Release concurrent slot before throwing
       this.concurrencyLimiter.releaseSlot(hostname);
+      siteProfileManager.releaseConcurrentSlot(hostname);
       throw error; // Throw to trigger retry
     }
 
@@ -1431,6 +1678,7 @@ export class ScraperService {
         await this.browserPool.releaseContext(context).catch(() => { });
         // Release concurrent slot
         this.concurrencyLimiter.releaseSlot(hostname);
+        siteProfileManager.releaseConcurrentSlot(hostname);
         return cached;
       }
     }
@@ -1442,7 +1690,7 @@ export class ScraperService {
     let extractionStartTime = 0;
 
     try {
-      const profile = getSiteProfile(hostname);
+      const profile = siteProfileManager.getProfile(hostname);
 
       // Session warmup if enabled
       if (profile.sessionWarmup?.enabled) {
@@ -1533,6 +1781,8 @@ export class ScraperService {
 
       // Requirement 9.2: Throw RateLimitError for HTTP 429
       if (statusCode === 429) {
+        this.hardenProtectionForDomain(hostname, "RATE_LIMIT");
+
         // Extract retry-after header if available
         const retryAfterHeader = response?.headers()['retry-after'];
         const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 60;
@@ -1586,6 +1836,7 @@ export class ScraperService {
         this.challengeHandler.recordChallengeAttempt(hostname, waitResult);
 
         if (!waitResult.solved) {
+          this.hardenProtectionForDomain(hostname, waitResult.type);
           wasBlocked = true;
           logger.warn(`[ScraperService] Challenge not solved for ${hostname}`);
 
@@ -1717,6 +1968,7 @@ export class ScraperService {
 
           // If all captcha solve attempts failed, mark request as blocked
           if (!captchaSolved) {
+            this.hardenProtectionForDomain(hostname, captchaRequest.type);
             wasBlocked = true;
             const challengeSolveTime = Date.now() - challengeSolveStartTime;
 
@@ -1774,6 +2026,7 @@ export class ScraperService {
       // 3. Security Analysis
       const securityInfo = await this.analyzeSecurity(page, response);
       if (securityInfo.isBlocked) {
+        this.hardenProtectionForDomain(hostname, securityInfo.provider);
         wasBlocked = true;
         logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`);
 
@@ -1879,6 +2132,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1919,6 +2173,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1959,6 +2214,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -1999,6 +2255,7 @@ export class ScraperService {
           this.proxyManager.recordSuccess(proxyConfig, responseTime);
         }
 
+        this.relaxProtectionForDomain(hostname);
         return result;
       }
 
@@ -2068,6 +2325,7 @@ export class ScraperService {
 
       // Release concurrent request slot
       this.concurrencyLimiter.releaseSlot(hostname);
+      siteProfileManager.releaseConcurrentSlot(hostname);
     }
   }
 
@@ -2780,6 +3038,8 @@ export class ScraperService {
 
       // 2. Resolve Search Strategy
       const hostname = new URL(baseUrl).hostname.toLowerCase();
+      const profile = siteProfileManager.getProfile(hostname);
+      let isAdvancedProtectedSite = false;
 
       // Find matching strategy by checking if hostname contains the key
       const strategyKey = Object.keys(SEARCH_STRATEGIES).find((domain) =>
@@ -2792,8 +3052,10 @@ export class ScraperService {
       if (siteId) {
         const site = await prisma.site.findUnique({
           where: { id: siteId },
-          select: { searchQueryPattern: true },
+          select: { searchQueryPattern: true, isAdvancedProtected: true },
         });
+
+        isAdvancedProtectedSite = Boolean(site?.isAdvancedProtected);
 
         if (site?.searchQueryPattern) {
           const pattern = site.searchQueryPattern;
@@ -2832,13 +3094,29 @@ export class ScraperService {
         searchUrl = buildUrl(baseUrl, cleanQuery);
       }
 
+      if (isAdvancedProtectedSite) {
+        // Pre-apply anti-bot profile for known protected sites without
+        // aggressively inflating adaptive delay on every request.
+        this.hardenProtectionForDomain(hostname, "CLOUDFLARE", false);
+      }
+
       logger.info(
         `[ScraperService] Searching: ${searchUrl} (Strategy: ${usedCustomPattern ? "Database Pattern" : (strategyKey || "Default")})`,
       );
       // await log removed to avoid duplication with DiscoveryService
 
-      // Add small random delay before navigation (more human-like)
-      await page.waitForTimeout(Math.random() * 1000 + 500); // 500-1500ms
+      const strictSearchMode = isAdvancedProtectedSite || Boolean(
+        profile.adaptiveDelay?.enabled || profile.sessionWarmup?.enabled
+      );
+
+      if (strictSearchMode) {
+        const adaptiveDelay = siteProfileManager.getAdaptiveDelay(hostname);
+        const preNavigateDelay = Math.min(Math.max(adaptiveDelay, 1200), 12000);
+        await page.waitForTimeout(preNavigateDelay + Math.floor(Math.random() * 400));
+      } else {
+        // Add small random delay before navigation (more human-like)
+        await page.waitForTimeout(Math.random() * 1000 + 500); // 500-1500ms
+      }
 
       // Ryans/Startech are heavy on JS, use networkidle if possible or longer wait
       const response = await page.goto(searchUrl, {
@@ -2849,18 +3127,21 @@ export class ScraperService {
       // --- NEW: Security Pre-check ---
       const securityInfo = await this.analyzeSecurity(page, response);
       if (securityInfo.isBlocked) {
+        this.hardenProtectionForDomain(hostname, securityInfo.provider);
         const msg = `🛡️[Scraper] Blocked by ${securityInfo.provider} at ${hostname} `;
         logger.warn(`[ScraperService] ${msg} `);
         // await log removed to avoid duplication with DiscoveryService
 
         // Try to wait for Cloudflare challenge before throwing error
         if (securityInfo.provider === "CLOUDFLARE") {
+          const challengeWaitMs = strictSearchMode ? 12000 : 8000;
           logger.info("[ScraperService] Waiting for Cloudflare challenge to complete...");
-          await page.waitForTimeout(8000); // Wait longer for challenge
+          await page.waitForTimeout(challengeWaitMs);
 
           // Check if challenge was solved
           const recheckSecurity = await this.analyzeSecurity(page, response);
           if (!recheckSecurity.isBlocked) {
+            this.relaxProtectionForDomain(hostname);
             logger.info("[ScraperService] ✅ Cloudflare challenge passed!");
           } else {
             // Still blocked, throw error
@@ -2882,20 +3163,34 @@ export class ScraperService {
       // 2.5 Enhanced Human Simulation for Search Page
       logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
 
-      // Random pause before starting interactions
-      await HumanSimulation.randomPause(200, 600);
+      const searchBehavior = strictSearchMode
+        ? {
+          initialPause: [280, 700] as const,
+          betweenPause: [180, 480] as const,
+          reviewPause: [450, 1200] as const,
+          hoverPause: [220, 520] as const,
+        }
+        : {
+          initialPause: [120, 300] as const,
+          betweenPause: [80, 200] as const,
+          reviewPause: [200, 500] as const,
+          hoverPause: [120, 240] as const,
+        };
+
+      // Keep interactions human-like while adapting to stricter sites.
+      await HumanSimulation.randomPause(searchBehavior.initialPause[0], searchBehavior.initialPause[1]);
 
       // Simulate natural mouse movement
       await HumanSimulation.simulateMouseMove(page);
 
       // Random pause between actions
-      await HumanSimulation.randomPause(150, 400);
+      await HumanSimulation.randomPause(searchBehavior.betweenPause[0], searchBehavior.betweenPause[1]);
 
       // Simulate scrolling to view results
       await HumanSimulation.simulateScroll(page);
 
       // Random pause to simulate reading/reviewing results
-      await HumanSimulation.randomPause(500, 1200);
+      await HumanSimulation.randomPause(searchBehavior.reviewPause[0], searchBehavior.reviewPause[1]);
 
       // Simulate hovering over product items (if they exist)
       const productSelectors = [
@@ -2909,13 +3204,15 @@ export class ScraperService {
       for (const selector of productSelectors) {
         const elements = await page.$$(selector);
         if (elements.length > 0) {
-          // Hover over 1-2 random product items
-          const hoverCount = Math.min(elements.length, Math.floor(Math.random() * 2) + 1);
+          // Hover over a single random product item
+          const hoverCount = 1;
           for (let i = 0; i < hoverCount; i++) {
             const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
             try {
-              await HumanSimulation.hoverElement(page, `${selector}:nth-child(${randomIndex + 1})`);
-              await HumanSimulation.randomPause(300, 800);
+              const element = elements[randomIndex];
+              await element.scrollIntoViewIfNeeded().catch(() => undefined);
+              await element.hover({ timeout: 1000 }).catch(() => undefined);
+              await HumanSimulation.randomPause(searchBehavior.hoverPause[0], searchBehavior.hoverPause[1]);
             } catch (e) {
               // Continue if hover fails
             }
@@ -2940,15 +3237,19 @@ export class ScraperService {
         // This makes the behavior more human-like
         try {
           const linkElement = await page.$(`a[href="${productLink}"]`);
-          if (linkElement) {
+          const hasBox = linkElement ? await linkElement.boundingBox().catch(() => null) : null;
+          if (linkElement && hasBox) {
             await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
-            await HumanSimulation.randomPause(200, 500);
+            await HumanSimulation.randomPause(100, 220);
           }
         } catch (e) {
           // Continue even if hover fails
         }
 
-        return await this.scrapeProductPage(productLink);
+        this.relaxProtectionForDomain(hostname);
+        return await this.scrapeProductPage(productLink, {
+          isAdvancedProtected: isAdvancedProtectedSite,
+        });
       }
 
       // Fallback Strategy: Query Simplification
@@ -2969,14 +3270,18 @@ export class ScraperService {
 
         if (smartQuery !== cleanQuery && smartQuery.length > 5) {
           logger.info(`[ScraperService] 📝 Simplified query: "${cleanQuery}" → "${smartQuery}"`);
-          return this.searchAndScrape(baseUrl, smartQuery + "__RETRY__");
+          return this.searchAndScrape(baseUrl, smartQuery + "__RETRY__", siteId);
         }
       }
 
       logger.error(`[ScraperService] ❌ All strategies exhausted for: "${cleanQuery}"`);
       return null;
     } catch (error) {
-      if (error instanceof ScrapeBlockError) throw error;
+      if (error instanceof ScrapeBlockError) {
+        const hostname = new URL(baseUrl).hostname.toLowerCase();
+        this.hardenProtectionForDomain(hostname, error.provider);
+        throw error;
+      }
       logger.error(`[ScraperService] Search failed for ${query}: `, { error });
       return null;
     } finally {
@@ -3030,7 +3335,9 @@ export class ScraperService {
           href.includes("compare") || href.includes("wishlist") ||
           href.includes("/search?") || href.includes("/search/") ||
           href.includes("search_query=") ||
-          href.includes("/account") || href.includes("/checkout");
+          href.includes("/account") || href.includes("/checkout") ||
+          href.includes("/category/") || href.includes("/categories/") ||
+          href.includes("/brand/") || href.includes("/brands/");
 
         if (isJunk) return;
 

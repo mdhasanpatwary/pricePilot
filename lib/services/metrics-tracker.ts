@@ -137,6 +137,7 @@ export class MetricsTracker {
   private alertsEnabled: boolean;
   private persistTimer?: NodeJS.Timeout;
   private alertedSites: Set<string> = new Set(); // Track sites we've already alerted for
+  private isPersisting = false;
 
   constructor(options: MetricsTrackerOptions = {}) {
     this.blockRateThreshold = options.blockRateThreshold ?? 0.3;
@@ -949,6 +950,23 @@ export class MetricsTracker {
    * ```
    */
   async persistMetrics(): Promise<void> {
+    if (this.isPersisting) {
+      return;
+    }
+
+    const hasSiteData = Array.from(this.siteMetrics.values()).some(
+      (buffer) => buffer.totalRequests > 0
+    );
+    const hasProxyData = Array.from(this.proxyMetrics.values()).some(
+      (buffer) => buffer.totalRequests > 0
+    );
+
+    // Skip expensive DB work when there is no buffered data.
+    if (!hasSiteData && !hasProxyData) {
+      return;
+    }
+
+    this.isPersisting = true;
     try {
       const now = new Date();
 
@@ -1012,6 +1030,8 @@ export class MetricsTracker {
     } catch (error) {
       logger.error('Failed to persist metrics', { error });
       throw error;
+    } finally {
+      this.isPersisting = false;
     }
   }
 

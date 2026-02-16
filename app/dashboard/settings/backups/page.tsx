@@ -32,7 +32,7 @@ export default function TenantBackupPage() {
 
   async function fetchSettings() {
     try {
-      const res = await fetch("/api/v1/tenant/settings"); // Assuming this exists or returns tenant info
+      const res = await fetch("/api/v1/tenant/settings");
       if (res.ok) {
         const data = await res.json();
         const backupConfig = data.tenant.backupConfig || {};

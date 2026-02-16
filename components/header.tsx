@@ -68,7 +68,11 @@ export default function Header({ onMenuClick }: HeaderProps) {
   };
 
   useEffect(() => {
+    if (!session?.user?.id) return;
+
     const fetchNotifications = async () => {
+      if (document.hidden) return;
+
       try {
         const res = await fetch("/api/v1/notifications");
         if (res.ok) {
@@ -83,10 +87,23 @@ export default function Header({ onMenuClick }: HeaderProps) {
       }
     };
 
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000); // Polling every min
-    return () => clearInterval(interval);
-  }, []);
+    void fetchNotifications();
+    const interval = setInterval(() => {
+      void fetchNotifications();
+    }, 120000); // Poll every 2 minutes
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void fetchNotifications();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [session?.user?.id]);
 
   // Search functionality
   useEffect(() => {

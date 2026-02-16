@@ -135,8 +135,15 @@ export class RetryQueueProcessor {
             // Mark as in progress
             await this.retryQueueService.markInProgress(item.id);
 
+            const site = await prisma.site.findUnique({
+                where: { id: item.siteId },
+                select: { isAdvancedProtected: true },
+            });
+
             // Execute retry with fresh context
-            const scrapedData = await this.scraperService.scrapeProductPage(item.url);
+            const scrapedData = await this.scraperService.scrapeProductPage(item.url, {
+                isAdvancedProtected: Boolean(site?.isAdvancedProtected),
+            });
 
             if (scrapedData && scrapedData.price > 0) {
                 // Success! Update product data

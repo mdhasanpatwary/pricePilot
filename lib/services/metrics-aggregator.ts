@@ -40,7 +40,8 @@ export class MetricsAggregator {
     private readonly DEFAULT_CACHE_TTL = 30000; // 30 seconds
 
     private constructor() {
-        this.metricsTracker = new MetricsTracker();
+        // Aggregator only reads historical data; auto-persist timer is unnecessary here.
+        this.metricsTracker = new MetricsTracker({ autoPersist: false });
     }
 
     static getInstance(): MetricsAggregator {

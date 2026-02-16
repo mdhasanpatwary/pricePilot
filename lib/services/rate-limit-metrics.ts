@@ -97,7 +97,8 @@ class MetricBatchProcessor {
     limiterType: RateLimiterType,
     identifier: string,
     endpoint: string,
-    isViolation: boolean
+    isViolation: boolean,
+    weight: number = 1
   ) {
     // Round to current hour
     const now = new Date();
@@ -114,10 +115,12 @@ class MetricBatchProcessor {
 
     const current = this.buffer.get(key) || { hitCount: 0, violationCount: 0 };
 
+    const increment = Number.isFinite(weight) ? Math.max(1, Math.floor(weight)) : 1;
+
     if (isViolation) {
-      current.violationCount++;
+      current.violationCount += increment;
     } else {
-      current.hitCount++;
+      current.hitCount += increment;
     }
 
     this.buffer.set(key, current);
@@ -211,9 +214,10 @@ export async function recordHit(
   tenantId: string,
   limiterType: RateLimiterType,
   identifier: string,
-  endpoint: string
+  endpoint: string,
+  hitWeight: number = 1
 ): Promise<void> {
-  batchProcessor.add(tenantId, limiterType, identifier, endpoint, false);
+  batchProcessor.add(tenantId, limiterType, identifier, endpoint, false, hitWeight);
 }
 
 /**

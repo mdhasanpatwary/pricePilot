@@ -128,6 +128,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
+interface CompetitorProgressSnapshot {
+  id: string;
+  isSyncing: boolean;
+  syncTotal: number;
+  syncProcessed: number;
+  syncLastAction?: string | null;
+  syncStartedAt?: string | Date | null;
+}
+
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
@@ -137,6 +146,10 @@ export default function CompetitorsPage() {
   const [syncingSiteId, setSyncingSiteId] = useState<string | null>(null);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const syncPollingStartedAtRef = useRef<number | null>(null);
+  const lastProgressSignatureRef = useRef<string>("");
+  const unchangedProgressPollsRef = useRef<number>(0);
+  const progressFetchInFlightRef = useRef<boolean>(false);
 
   // Settings Modal State
   const [editingSite, setEditingSite] = useState<Competitor | null>(null);
@@ -174,6 +187,72 @@ export default function CompetitorsPage() {
     }
   }, []);
 
+  const fetchCompetitorProgress = useCallback(async (): Promise<{
+    changed: boolean;
+    activeSyncCount: number;
+    ok: boolean;
+  }> => {
+    if (progressFetchInFlightRef.current) {
+      return { changed: false, activeSyncCount: 0, ok: true };
+    }
+
+    progressFetchInFlightRef.current = true;
+    try {
+      const res = await fetch("/api/v1/competitors/progress", { cache: "no-store" });
+      if (!res.ok) {
+        return { changed: false, activeSyncCount: 0, ok: false };
+      }
+
+      const data = await res.json();
+      const snapshots: CompetitorProgressSnapshot[] = Array.isArray(data.sites) ? data.sites : [];
+      const progressMap = new Map(snapshots.map((site) => [site.id, site]));
+
+      const signature = snapshots
+        .map(
+          (site) =>
+            `${site.id}:${site.isSyncing ? 1 : 0}:${site.syncProcessed || 0}:${site.syncTotal || 0}:${site.syncLastAction || ""}`
+        )
+        .join("|");
+      const changed = signature !== lastProgressSignatureRef.current;
+      lastProgressSignatureRef.current = signature;
+
+      setCompetitors((prev) =>
+        prev.map((competitor) => {
+          const snapshot = progressMap.get(competitor.id);
+          if (!snapshot) return competitor;
+
+          const nextStatus = snapshot.isSyncing
+            ? "SYNCING"
+            : competitor.status === "SYNCING"
+              ? competitor.products > 0
+                ? "ACTIVE"
+                : "PENDING"
+              : competitor.status;
+
+          return {
+            ...competitor,
+            isSyncing: snapshot.isSyncing,
+            syncTotal: snapshot.syncTotal,
+            syncProcessed: snapshot.syncProcessed,
+            syncLastAction: snapshot.syncLastAction,
+            syncStartedAt: snapshot.syncStartedAt,
+            status: nextStatus,
+          };
+        })
+      );
+
+      return {
+        changed,
+        activeSyncCount: Number(data.activeSyncCount || 0),
+        ok: true,
+      };
+    } catch {
+      return { changed: false, activeSyncCount: 0, ok: false };
+    } finally {
+      progressFetchInFlightRef.current = false;
+    }
+  }, []);
+
   // Polling for active syncs
   const hasActiveSync = useMemo(
     () => Array.isArray(competitors) && competitors.some((c) => c.isSyncing),
@@ -184,13 +263,77 @@ export default function CompetitorsPage() {
     if (!hasActiveSync) {
       // Clear syncing state when all syncs are complete
       setSyncingSiteId(null);
+      syncPollingStartedAtRef.current = null;
+      unchangedProgressPollsRef.current = 0;
+      lastProgressSignatureRef.current = "";
       return;
     }
-    const interval = setInterval(() => {
-      fetchCompetitors(true);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [hasActiveSync, fetchCompetitors]);
+
+    if (syncPollingStartedAtRef.current === null) {
+      syncPollingStartedAtRef.current = Date.now();
+    }
+
+    let isCancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (isCancelled) return;
+      timeoutId = setTimeout(poll, delayMs);
+    };
+
+    const poll = async () => {
+      if (isCancelled) return;
+
+      // Pause polling while tab is hidden to reduce unnecessary load.
+      if (document.visibilityState === "hidden") {
+        scheduleNext(10000);
+        return;
+      }
+
+      const progressResult = await fetchCompetitorProgress();
+
+      if (!progressResult.ok) {
+        // On transient errors, back off polling to reduce pressure.
+        scheduleNext(20000);
+        return;
+      }
+
+      if (progressResult.activeSyncCount === 0) {
+        await fetchCompetitors(true);
+        setSyncingSiteId(null);
+        syncPollingStartedAtRef.current = null;
+        unchangedProgressPollsRef.current = 0;
+        lastProgressSignatureRef.current = "";
+        return;
+      }
+
+      if (progressResult.changed) {
+        unchangedProgressPollsRef.current = 0;
+      } else {
+        unchangedProgressPollsRef.current += 1;
+      }
+
+      const startedAt = syncPollingStartedAtRef.current ?? Date.now();
+      const elapsedMs = Date.now() - startedAt;
+      let nextDelayMs = elapsedMs < 60000 ? 5000 : 15000;
+
+      if (unchangedProgressPollsRef.current >= 3) {
+        nextDelayMs = Math.max(nextDelayMs, 15000);
+      }
+      if (unchangedProgressPollsRef.current >= 10) {
+        nextDelayMs = Math.max(nextDelayMs, 30000);
+      }
+
+      scheduleNext(nextDelayMs);
+    };
+
+    poll();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [hasActiveSync, fetchCompetitors, fetchCompetitorProgress]);
 
   const onSubmit = async (data: CompetitorFormValues) => {
     setLoading(true);
