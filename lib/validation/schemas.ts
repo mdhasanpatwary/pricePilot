@@ -265,6 +265,11 @@ export const matchApprovalSchema = z.object({
   action: z.enum(["APPROVE", "REJECT"]),
 });
 
+export const bulkMatchApprovalSchema = z.object({
+  matchIds: z.array(idSchema).min(1, "At least one match ID is required").max(200, "Cannot process more than 200 matches at once"),
+  action: z.enum(["APPROVE", "REJECT"]),
+});
+
 export const deleteCompetitorSchema = z.object({
   id: uuidSchema,
 });

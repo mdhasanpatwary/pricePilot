@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import axios from "axios";
 import {
-  validateBody,
   validationErrorResponse,
   matchApprovalSchema,
+  bulkMatchApprovalSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import { CacheInvalidationService } from "@/lib/services/cache-invalidation";
@@ -41,6 +41,10 @@ const MAX_OG_BACKFILL_PER_REQUEST = Number.parseInt(
   process.env.MATCH_OG_BACKFILL_PER_REQUEST || "5",
   10,
 );
+const MAX_OG_INLINE_RESOLVE_PER_REQUEST = Number.parseInt(
+  process.env.MATCH_OG_INLINE_RESOLVE_PER_REQUEST || "2",
+  10,
+);
 const OG_NEGATIVE_CACHE_MAX_ENTRIES = Number.parseInt(
   process.env.MATCH_OG_NEGATIVE_CACHE_MAX_ENTRIES || "2000",
   10,
@@ -68,6 +72,60 @@ function extractOgImage(html: string): string | undefined {
   }
 
   return undefined;
+}
+
+async function resolveOgImageAndPersist(
+  productId: string,
+  pageUrl: string,
+): Promise<string | undefined> {
+  if (!productId || !pageUrl) return undefined;
+
+  const negativeUntil = ogImageNegativeCache.get(pageUrl);
+  if (negativeUntil && negativeUntil > Date.now()) return undefined;
+
+  // If a backfill is already in-flight, don't duplicate. We can't reliably await it
+  // for a return value, so just skip and let next refresh pick it up.
+  if (ogImageInFlight.has(productId)) return undefined;
+
+  try {
+    const res = await axios.get(pageUrl, {
+      timeout: 5000,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      responseType: "text",
+      maxRedirects: 5,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+
+    const html = typeof res.data === "string" ? res.data : "";
+    const raw = html ? extractOgImage(html) : undefined;
+    const normalized = normalizeImageUrl(raw, pageUrl);
+    if (!normalized) {
+      if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
+        const first = ogImageNegativeCache.keys().next().value;
+        if (first) ogImageNegativeCache.delete(first);
+      }
+      ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+      return undefined;
+    }
+
+    await prisma.product.updateMany({
+      where: { id: productId, imageUrl: null },
+      data: { imageUrl: normalized },
+    });
+
+    return normalized;
+  } catch {
+    if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
+      const first = ogImageNegativeCache.keys().next().value;
+      if (first) ogImageNegativeCache.delete(first);
+    }
+    ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+    return undefined;
+  }
 }
 
 function queueProductImageBackfillFromOgMeta(
@@ -223,6 +281,29 @@ async function handleGET(req: NextRequest) {
       };
     });
 
+    // Inline (bounded) resolve: for a small number of missing competitor images,
+    // try to fetch og:image and include it in THIS response.
+    const inlineBudget = Number.isFinite(MAX_OG_INLINE_RESOLVE_PER_REQUEST)
+      ? Math.max(0, MAX_OG_INLINE_RESOLVE_PER_REQUEST)
+      : 2;
+    let inlineUsed = 0;
+    const inlineTasks: Promise<void>[] = [];
+    for (const m of formattedMatches) {
+      if (inlineUsed >= inlineBudget) break;
+      const competitorPageUrl = m.competitor?.url;
+      if (!m.competitor?.image && competitorPageUrl) {
+        inlineUsed++;
+        inlineTasks.push(
+          resolveOgImageAndPersist(m.competitor.id, competitorPageUrl).then((img) => {
+            if (img) m.competitor.image = img;
+          }),
+        );
+      }
+    }
+    if (inlineTasks.length > 0) {
+      await Promise.allSettled(inlineTasks);
+    }
+
     // Sanitize product matches to prevent XSS attacks
     // Requirement 2.7.3: XSS prevention for competitor product data
     const sanitizedMatches = formattedMatches.map(sanitizeProductMatch);
@@ -258,63 +339,128 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const validation = await validateBody(req, matchApprovalSchema);
-    if (!validation.success) {
-      return validationErrorResponse(validation);
-    }
-    const { matchId, action } = validation.data!;
-    console.log(`[MATCHING_POST] Action: ${action} for ID: ${matchId}`);
-    console.log(
-      `[MATCHING_POST] Session User:`,
-      JSON.stringify(session.user, null, 2),
-    );
+    const body = await req.json().catch(() => null);
 
-    // Fetch match info for audit log
-    const matchInfo = await prisma.productMatch.findUnique({
-      where: { id: matchId },
+    const bulk = bulkMatchApprovalSchema.safeParse(body);
+    if (bulk.success) {
+      const { matchIds, action } = bulk.data;
+      const tenantId = session.user.tenantId;
+
+      // Only operate on matches belonging to this tenant (via userProduct tenancy).
+      const scopedMatches = await prisma.productMatch.findMany({
+        where: {
+          id: { in: matchIds },
+          userProduct: { tenantId },
+        },
+        select: { id: true, userProductId: true },
+      });
+
+      const scopedIds = scopedMatches.map((m) => m.id);
+      const uniqueUserProductIds = Array.from(
+        new Set(scopedMatches.map((m) => m.userProductId)),
+      );
+
+      const updateResult = await prisma.productMatch.updateMany({
+        where: {
+          id: { in: scopedIds },
+          status: "PENDING",
+          userProduct: { tenantId },
+        },
+        data: { status: action === "APPROVE" ? "APPROVED" : "REJECTED" },
+      });
+
+      // Cache invalidation (best-effort, bounded)
+      try {
+        const cacheInvalidation = new CacheInvalidationService();
+        for (let i = 0; i < uniqueUserProductIds.length; i += 10) {
+          const batch = uniqueUserProductIds.slice(i, i + 10);
+          await Promise.allSettled(
+            batch.map((pid) => cacheInvalidation.onMatchUpdate(tenantId, pid)),
+          );
+        }
+      } catch {
+        // Ignore
+      }
+
+      // Audit log (single entry)
+      const userId = session.user.id || (session.user as any).sub;
+      if (userId) {
+        await recordAuditLog({
+          tenantId,
+          userId,
+          userEmail: session.user.email!,
+          action: `${action}_MATCH_BULK`,
+          entityId: scopedIds[0] || "bulk",
+          ipAddress: getIpAddress(req),
+          details: {
+            action,
+            requestedCount: matchIds.length,
+            scopedCount: scopedIds.length,
+            updatedCount: updateResult.count,
+            sampleMatchIds: scopedIds.slice(0, 25),
+          },
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestedCount: matchIds.length,
+        updatedCount: updateResult.count,
+        scopedCount: scopedIds.length,
+      });
+    }
+
+    const single = matchApprovalSchema.safeParse(body);
+    if (!single.success) {
+      // Keep existing error response contract.
+      return validationErrorResponse({
+        success: false,
+        error: "Validation failed",
+        errors: single.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+    }
+
+    const { matchId, action } = single.data;
+
+    // Fetch match info for audit log (also provides tenancy check via relation).
+    const matchInfo = await prisma.productMatch.findFirst({
+      where: {
+        id: matchId,
+        userProduct: { tenantId: session.user.tenantId },
+      },
       include: {
         userProduct: { select: { id: true, title: true } },
         competitorProduct: { select: { title: true } },
       },
     });
-
-    if (action === "APPROVE") {
-      await prisma.productMatch.update({
-        where: { id: matchId },
-        data: { status: "APPROVED" },
-      });
-    } else if (action === "REJECT") {
-      await prisma.productMatch.update({
-        where: { id: matchId },
-        data: { status: "REJECTED" },
-      });
+    if (!matchInfo) {
+      return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
+
+    await prisma.productMatch.update({
+      where: { id: matchId },
+      data: { status: action === "APPROVE" ? "APPROVED" : "REJECTED" },
+    });
 
     // Invalidate cache after match approval/rejection
     // Requirement 2.3: Match update invalidation
-    if (matchInfo) {
-      try {
-        const cacheInvalidation = new CacheInvalidationService();
-        await cacheInvalidation.onMatchUpdate(
-          session.user.tenantId,
-          matchInfo.userProduct.id
-        );
-      } catch (cacheError) {
-        // Log cache invalidation error but don't fail the operation
-        console.error('[MatchingRoute] Cache invalidation failed:', cacheError);
-      }
+    try {
+      const cacheInvalidation = new CacheInvalidationService();
+      await cacheInvalidation.onMatchUpdate(
+        session.user.tenantId,
+        matchInfo.userProduct.id,
+      );
+    } catch (cacheError) {
+      // Log cache invalidation error but don't fail the operation
+      console.error('[MatchingRoute] Cache invalidation failed:', cacheError);
     }
 
     // Create Audit Log
-    console.log(`[MATCHING_POST] Recording audit log...`);
     const userId = session.user.id || (session.user as any).sub;
-
-    if (!userId) {
-      console.error(
-        `[MATCHING_POST] CRITICAL: Cannot record audit log because userId is missing from session!`,
-        JSON.stringify(session.user, null, 2),
-      );
-    } else {
+    if (userId) {
       await recordAuditLog({
         tenantId: session.user.tenantId,
         userId: userId,
@@ -329,7 +475,6 @@ async function handlePOST(req: NextRequest) {
           competitorTitle: matchInfo?.competitorProduct?.title,
         },
       });
-      console.log(`[MATCHING_POST] Audit log sequence finished.`);
     }
 
     return NextResponse.json({ success: true });

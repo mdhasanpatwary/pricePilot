@@ -51,6 +51,8 @@ export default function MatchApprovalPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkProcessingCount, setBulkProcessingCount] = useState(0);
   const [searchQuery, debouncedQuery, setSearchQuery] = useDebounce("", 300);
   const [selectedSite, setSelectedSite] = useState<string>("ALL");
 
@@ -97,6 +99,56 @@ export default function MatchApprovalPage() {
       toast.error("Failed to process request");
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleBulkAction = async (action: "APPROVE" | "REJECT") => {
+    const matchIds = filteredMatches.map((m) => m.id);
+    if (matchIds.length === 0) return;
+
+    const label =
+      selectedSite === "ALL"
+        ? `${matchIds.length} matches`
+        : `${matchIds.length} matches on ${selectedSite}`;
+
+    if (
+      !confirm(
+        action === "APPROVE"
+          ? `Approve ${label}?`
+          : `Reject ${label}?`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkProcessing(true);
+    setBulkProcessingCount(matchIds.length);
+
+    try {
+      const res = await fetch("/api/v1/matching", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchIds, action }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || "Bulk action failed");
+        return;
+      }
+
+      const removed = new Set(matchIds);
+      setMatches((prev) => prev.filter((m) => !removed.has(m.id)));
+      toast.success(
+        action === "APPROVE"
+          ? `Approved ${matchIds.length} match(es)`
+          : `Rejected ${matchIds.length} match(es)`,
+      );
+    } catch (error) {
+      toast.error("Network error");
+    } finally {
+      setBulkProcessing(false);
+      setBulkProcessingCount(0);
     }
   };
 
@@ -193,6 +245,46 @@ export default function MatchApprovalPage() {
                   </button>
               ))}
           </div>
+      )}
+
+      {/* Bulk Actions */}
+      {filteredMatches.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 border border-border rounded-xl bg-muted/10">
+          <div className="text-sm text-muted-foreground">
+            Bulk actions apply to{" "}
+            <span className="font-bold text-foreground">
+              {selectedSite === "ALL" ? "all visible matches" : selectedSite}
+            </span>
+            .
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <Button
+              onClick={() => handleBulkAction("APPROVE")}
+              disabled={bulkProcessing || !!processingId}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {bulkProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              {bulkProcessing ? `Approving ${bulkProcessingCount}...` : "Approve All"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleBulkAction("REJECT")}
+              disabled={bulkProcessing || !!processingId}
+              className="hover:bg-destructive hover:text-destructive-foreground border-border"
+            >
+              {bulkProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <X className="w-4 h-4 mr-2" />
+              )}
+              Reject All
+            </Button>
+          </div>
+        </div>
       )}
 
       {filteredMatches.length === 0 && debouncedQuery && (
