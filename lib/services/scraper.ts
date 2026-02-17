@@ -3063,6 +3063,7 @@ export class ScraperService {
     baseUrl: string,
     query: string,
     siteId?: string,
+    attempt = 0,
   ): Promise<ScrapedProduct | null> {
     await this.init();
     const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
@@ -3089,8 +3090,8 @@ export class ScraperService {
 
 
     try {
-      // 0. Clean retry flags from the search term
-      const actualQuery = query.replace("__RETRY__", "").trim();
+      // 0. Clean retry flags from the search term (kept for backwards compatibility with older logs/flows)
+      const actualQuery = query.replace(/__RETRY__/g, "").trim();
 
       // 1. Sanitize query
       const cleanQuery = this.sanitizeQuery(actualQuery);
@@ -3214,11 +3215,30 @@ export class ScraperService {
         }
       }
 
-      // Wait for results to render (critical for CSR sites like Ryans/Startech)
+      // Wait for results to render (critical for CSR sites like Ryans/Startech).
+      // NOTE: Avoid generic selectors (like ".card") because they can exist before product results mount,
+      // causing us to evaluate links too early and incorrectly conclude "no results".
       try {
-        await page.waitForSelector('.product-thumb, .p-item, .product-box, .p-item-details, .card, .product-item, .search-result', { timeout: 8000 });
-      } catch (e) {
-        // Fallback to static wait if specific selectors don't show up
+        const resultLinkSelectors = [
+          ".p-item a[href]",
+          ".product-thumb a[href]",
+          ".product-box a[href]",
+          ".product-item a[href]",
+          ".product-list a[href]",
+          ".search-result a[href]",
+        ];
+
+        await page.waitForFunction(
+          (selectors: string[]) =>
+            Array.isArray(selectors) &&
+            selectors.some(
+              (sel) => document.querySelectorAll(sel).length > 0,
+            ),
+          resultLinkSelectors,
+          { timeout: 8000 },
+        );
+      } catch (_e) {
+        // Fallback to static wait if product links don't show up.
         await page.waitForTimeout(4000);
       }
 
@@ -3289,6 +3309,44 @@ export class ScraperService {
       if (productLink) {
         logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
       } else {
+        // Lightweight diagnostics to distinguish "true no results" vs DOM/selector/scoring mismatch.
+        // This avoids dumping full HTML but gives enough signal to debug intermittent failures.
+        try {
+          const diag = await page.evaluate(() => {
+            const count = (sel: string) => document.querySelectorAll(sel).length;
+            const text = (document.body?.innerText || "").toLowerCase();
+            const hasNoResultsText =
+              text.includes("no results") ||
+              text.includes("no product") ||
+              text.includes("not found") ||
+              text.includes("0 results");
+
+            const productHrefSample = Array.from(document.querySelectorAll('a[href*="/product/"]'))
+              .map((a) => (a as HTMLAnchorElement).href)
+              .filter(Boolean)
+              .slice(0, 3);
+
+            return {
+              title: document.title,
+              href: window.location.href,
+              counts: {
+                pItemLinks: count(".p-item a[href]"),
+                productThumbLinks: count(".product-thumb a[href]"),
+                productBoxLinks: count(".product-box a[href]"),
+                productItemLinks: count(".product-item a[href]"),
+                productListLinks: count(".product-list a[href]"),
+                searchResultLinks: count(".search-result a[href]"),
+                productUrlLinks: count('a[href*="/product/"]'),
+                allAnchors: count("a[href]"),
+              },
+              hasNoResultsText,
+              productHrefSample,
+            };
+          });
+          logger.warn("[ScraperService] Search diagnostics", { diag });
+        } catch {
+          // Non-fatal
+        }
         logger.warn(`[ScraperService] ⚠️ Direct search returned no results for: "${cleanQuery}"`);
       }
 
@@ -3314,25 +3372,81 @@ export class ScraperService {
         });
       }
 
-      // Fallback Strategy: Query Simplification
-      if (!query.includes("__RETRY__") && cleanQuery.split(" ").length > 3) {
-        logger.info(`[ScraperService] 🔄 No results.Attempting query simplification...`);
+      // Fallback Strategy: Query Simplification + Model/SKU targeting
+      if (attempt < 2) {
+        const stopWords = new Set([
+          "with",
+          "graphics",
+          "processor",
+          "edition",
+          "gaming",
+          "desktop",
+          "casing",
+          "monitor",
+          "series",
+          "feature",
+          "rgb",
+          "tower",
+          "color",
+          "function",
+          "multi",
+          "inch",
+          "usb",
+          "wireless",
+          "bluetooth",
+        ]);
 
-        const stopWords = [
-          "with", "graphics", "processor", "edition", "gaming", "desktop",
-          "casing", "monitor", "series", "feature", "rgb", "tower", "color",
-          "function", "multi", "inch", "usb", "wireless", "bluetooth"
-        ];
-        const words = cleanQuery.split(" ");
+        const words = cleanQuery.split(/\s+/).filter(Boolean);
         const coreWords = words.filter(
-          (w) => !stopWords.includes(w.toLowerCase()) && w.length > 2,
+          (w) => !stopWords.has(w.toLowerCase()) && w.length > 2,
         );
 
-        const smartQuery = coreWords.slice(0, 4).join(" ");
+        const smartQuery = coreWords.slice(0, 4).join(" ").trim();
 
-        if (smartQuery !== cleanQuery && smartQuery.length > 5) {
-          logger.info(`[ScraperService] 📝 Simplified query: "${cleanQuery}" → "${smartQuery}"`);
-          return this.searchAndScrape(baseUrl, smartQuery + "__RETRY__", siteId);
+        const modelTokens = words
+          .map((w) => w.replace(/[^\w.-]/g, ""))
+          .filter((w) => /[a-z]/i.test(w) && /\d/.test(w) && w.length >= 3)
+          .sort((a, b) => b.length - a.length);
+
+        const bestModel = modelTokens[0] || "";
+        const brandToken = words[0] || "";
+
+        const modelVariants = bestModel
+          ? Array.from(
+              new Set(
+                [
+                  bestModel,
+                  bestModel.replace(/-/g, " "),
+                  bestModel.replace(/-/g, ""),
+                  bestModel.replace(/[^a-z0-9]/gi, ""),
+                ]
+                  .map((s) => s.replace(/\s+/g, " ").trim())
+                  .filter(Boolean),
+              ),
+            )
+          : [];
+
+        const fallbackQueries = Array.from(
+          new Set(
+            [
+              smartQuery && smartQuery !== cleanQuery ? smartQuery : "",
+              ...(brandToken && bestModel ? [`${brandToken} ${bestModel}`] : []),
+              ...modelVariants,
+            ].filter(Boolean),
+          ),
+        ).slice(0, 4); // cap retries to avoid extra load
+
+        if (fallbackQueries.length > 0) {
+          logger.info(`[ScraperService] 🔄 No results. Trying fallback queries...`, {
+            attempt,
+            fallbackQueries,
+          });
+
+          for (const fq of fallbackQueries) {
+            if (fq === cleanQuery) continue;
+            const result = await this.searchAndScrape(baseUrl, fq, siteId, attempt + 1);
+            if (result) return result;
+          }
         }
       }
 
@@ -3402,7 +3516,20 @@ export class ScraperService {
         ];
 
         // 1. Basic Filtering (Fail Fast)
-        if (text.length < 4 && !href.includes("product_id=")) return;
+        // Some sites (including common e-commerce templates) use image-only anchors for product links.
+        // Allow those as long as there is *some* labeling signal (image/title/aria-label) or the link
+        // is in a product container (handled later via scoring).
+        const ariaLabel = a.getAttribute("aria-label") || "";
+        const titleAttr = a.getAttribute("title") || "";
+        const hasImg = !!a.querySelector("img");
+        if (
+          text.length < 4 &&
+          !href.includes("product_id=") &&
+          !hasImg &&
+          ariaLabel.trim().length < 3 &&
+          titleAttr.trim().length < 3
+        )
+          return;
         if (href.includes("javascript:") || href.includes("#")) return;
         if (hardBlockedPatterns.some((pattern) => href.includes(pattern) || lowerText.includes(pattern))) return;
 

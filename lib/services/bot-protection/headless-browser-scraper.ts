@@ -112,8 +112,8 @@ export class HeadlessBrowserScraper {
      */
     constructor(usePool: boolean = true) {
         this.usePool = usePool;
-        // Use default configuration which reads from environment variables
-        this.browserPool = new BrowserPool();
+        // Use a shared pool to avoid repeatedly spawning Chromium instances.
+        this.browserPool = BrowserPool.getInstance();
     }
 
     /**

@@ -81,6 +81,17 @@ export class BrowserPool {
   }
 
   /**
+   * Shutdown the singleton pool (best-effort).
+   *
+   * Used by dev scripts/workers to ensure Playwright processes don't linger
+   * after SIGINT/SIGTERM.
+   */
+  static async shutdown(): Promise<void> {
+    if (!BrowserPool.instance) return;
+    await BrowserPool.instance.close();
+  }
+
+  /**
    * Initialize the browser pool
    */
   async init(maxContexts: number = 10) {

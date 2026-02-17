@@ -13,10 +13,14 @@ console.log("🚀 Starting PricePilot Background Workers...");
 interface WorkerLockPayload {
   pid: number;
   cwd: string;
+  repoRoot: string;
   createdAt: string;
 }
 
-const lockSuffix = createHash("sha1").update(process.cwd()).digest("hex").slice(0, 12);
+// Use repo root for lock identity so launching the worker from another CWD
+// (but pointing at the same repo) can't accidentally start a second instance.
+const repoRoot = path.resolve(__dirname, "..");
+const lockSuffix = createHash("sha1").update(repoRoot).digest("hex").slice(0, 12);
 const workerLockPath = path.join(os.tmpdir(), `pricepilot-worker-${lockSuffix}.lock`);
 
 function shouldEnforceSingleWorkerInstance(): boolean {
@@ -152,6 +156,7 @@ async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
   const payload: WorkerLockPayload = {
     pid: process.pid,
     cwd: process.cwd(),
+    repoRoot,
     createdAt: new Date().toISOString(),
   };
 
@@ -180,7 +185,7 @@ async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
       if (
         existingPid &&
         existingPid !== process.pid &&
-        parsed.cwd === process.cwd() &&
+        (parsed.repoRoot === repoRoot || parsed.cwd === process.cwd()) &&
         isProcessAlive(existingPid)
       ) {
         console.log(`⚠️ Worker already running (pid: ${existingPid}). Skipping duplicate worker start.`);
@@ -279,6 +284,15 @@ async function start() {
       } catch { }
       try {
         if (notificationWorker) await notificationWorker.close();
+      } catch { }
+      // Best-effort: close any shared Playwright pools to avoid lingering Chromium processes in dev.
+      try {
+        const { BrowserPool } = await import("../lib/services/browser-pool");
+        await BrowserPool.shutdown();
+      } catch { }
+      try {
+        const { BrowserPool } = await import("../lib/services/bot-protection/browser-pool");
+        await BrowserPool.shutdown();
       } catch { }
       await releaseWorkerLock?.();
       process.exit(0);

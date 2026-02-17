@@ -44,6 +44,34 @@ export interface BrowserPoolConfig {
  * Manages a pool of browser instances with automatic lifecycle management.
  */
 export class BrowserPool {
+    private static instance: BrowserPool | null = null;
+
+    /**
+     * Global singleton instance.
+     *
+     * Why: constructing pools repeatedly can spawn multiple Chromium instances
+     * (and their many subprocesses), which is expensive in local dev.
+     */
+    static getInstance(config?: Partial<BrowserPoolConfig>): BrowserPool {
+        if (!BrowserPool.instance) {
+            BrowserPool.instance = new BrowserPool(config);
+        }
+        return BrowserPool.instance;
+    }
+
+    /**
+     * Shutdown the shared pool (best-effort).
+     *
+     * Used by dev scripts/workers to ensure Playwright processes don't linger
+     * after SIGINT/SIGTERM.
+     */
+    static async shutdown(): Promise<void> {
+        if (!BrowserPool.instance) return;
+        const instance = BrowserPool.instance;
+        BrowserPool.instance = null;
+        await instance.closeAll();
+    }
+
     private instances: BrowserInstance[] = [];
     private config: BrowserPoolConfig;
     private cleanupInterval: NodeJS.Timeout | null = null;
