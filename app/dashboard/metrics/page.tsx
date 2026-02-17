@@ -85,8 +85,13 @@ export default function TenantMetricsDashboard() {
     const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d">("24h");
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-    const fetchTenantMetrics = useCallback(async (showRefreshing = false) => {
-        if (showRefreshing) {
+    const AUTO_REFRESH_MS = Number.parseInt(
+        process.env.NEXT_PUBLIC_TENANT_METRICS_POLL_MS || "30000",
+        10,
+    );
+
+    const fetchTenantMetrics = useCallback(async (mode: "initial" | "manual" | "auto" = "initial") => {
+        if (mode === "manual") {
             setRefreshing(true);
         } else {
             setLoading(true);
@@ -94,7 +99,14 @@ export default function TenantMetricsDashboard() {
 
         try {
             const res = await fetch(
-                `/api/v1/tenant/scraping-metrics?timeRange=${timeRange}`
+                `/api/v1/tenant/scraping-metrics?timeRange=${timeRange}&_ts=${Date.now()}`,
+                {
+                    cache: "no-store",
+                    headers: {
+                        "Cache-Control": "no-cache",
+                        Pragma: "no-cache",
+                    },
+                }
             );
             if (res.ok) {
                 const json: TenantMetricsResponse = await res.json();
@@ -112,12 +124,35 @@ export default function TenantMetricsDashboard() {
     }, [timeRange]);
 
     useEffect(() => {
-        fetchTenantMetrics();
+        fetchTenantMetrics("initial");
     }, [fetchTenantMetrics]);
 
     const handleRefresh = () => {
-        fetchTenantMetrics(true);
+        fetchTenantMetrics("manual");
     };
+
+    // Auto-refresh to keep metrics dynamic (polling + refresh-on-focus)
+    useEffect(() => {
+        const intervalMs = Number.isFinite(AUTO_REFRESH_MS) ? Math.max(5000, AUTO_REFRESH_MS) : 30000;
+        const interval = window.setInterval(() => {
+            if (document.visibilityState !== "visible") return;
+            // Avoid overlapping refresh states; let manual refresh take priority.
+            if (refreshing) return;
+            fetchTenantMetrics("auto");
+        }, intervalMs);
+
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                fetchTenantMetrics("auto");
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
+    }, [AUTO_REFRESH_MS, fetchTenantMetrics, refreshing]);
 
     // Generate recommendations based on metrics
     const getRecommendations = (): Recommendation[] => {

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { getCachedSession } from "@/lib/auth/cached-session";
 
+export const dynamic = "force-dynamic";
+
 interface TenantSiteMetrics {
     domain: string;
     successRate: number;
@@ -37,12 +39,28 @@ async function handleGET(request: NextRequest) {
         // Authenticate and get tenant ID
         const session = await getCachedSession();
         if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                {
+                    status: 401,
+                    headers: {
+                        "Cache-Control": "no-store, max-age=0",
+                    },
+                },
+            );
         }
 
         const tenantId = session.user.tenantId;
         if (!tenantId) {
-            return NextResponse.json({ error: "Tenant ID not found" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Tenant ID not found" },
+                {
+                    status: 400,
+                    headers: {
+                        "Cache-Control": "no-store, max-age=0",
+                    },
+                },
+            );
         }
 
         // Parse query parameters
@@ -53,7 +71,12 @@ async function handleGET(request: NextRequest) {
         if (!['24h', '7d', '30d'].includes(timeRange)) {
             return NextResponse.json(
                 { error: "Invalid time range. Must be '24h', '7d', or '30d'" },
-                { status: 400 }
+                {
+                    status: 400,
+                    headers: {
+                        "Cache-Control": "no-store, max-age=0",
+                    },
+                },
             );
         }
 
@@ -95,6 +118,10 @@ async function handleGET(request: NextRequest) {
                     avgResponseTime: 0,
                     sites: [],
                     timeRange
+                }
+            }, {
+                headers: {
+                    "Cache-Control": "no-store, max-age=0",
                 }
             });
         }
@@ -264,6 +291,10 @@ async function handleGET(request: NextRequest) {
                 ...metrics,
                 timeRange
             }
+        }, {
+            headers: {
+                "Cache-Control": "no-store, max-age=0",
+            }
         });
 
     } catch (error) {
@@ -274,7 +305,12 @@ async function handleGET(request: NextRequest) {
                 error: "Failed to fetch tenant scraping metrics",
                 details: error instanceof Error ? error.message : "Unknown error"
             },
-            { status: 500 }
+            {
+                status: 500,
+                headers: {
+                    "Cache-Control": "no-store, max-age=0",
+                },
+            },
         );
     }
 }
