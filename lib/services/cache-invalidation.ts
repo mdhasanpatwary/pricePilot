@@ -145,6 +145,8 @@ export class CacheInvalidationService {
                 this.cacheService.invalidateMatches(tenantId, productId),
                 this.cacheService.invalidateComparisons(tenantId),
                 this.cacheService.invalidateProduct(tenantId, productId),
+                // Products list includes competitor pricing via matches; invalidate list cache too.
+                this.cacheService.invalidateApiCache(tenantId, 'api:products'),
             ]);
 
             logger.info('[CacheInvalidation] Match update invalidation completed', {
@@ -184,6 +186,8 @@ export class CacheInvalidationService {
             await Promise.allSettled([
                 this.cacheService.invalidateCompetitorProducts(tenantId, competitorId),
                 this.cacheService.invalidateComparisons(tenantId),
+                // Products list surfaces competitor prices; invalidate so UI reflects new scrape results.
+                this.cacheService.invalidateApiCache(tenantId, 'api:products'),
             ]);
 
             logger.info('[CacheInvalidation] Competitor scrape invalidation completed', {
