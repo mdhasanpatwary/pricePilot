@@ -17,6 +17,6 @@
 - [ done ] Introduce strict API response DTO normalization (`site` vs `Site`) to prevent frontend shape regressions.
 - [ done ] Add endpoint SLO observability (p50/p95/p99 latency and error budgets) for top APIs.
 - [ done ] Tune background job concurrency/backpressure per domain/site for bot-protected targets.
-- [ ] Add Playwright E2E regression suite for critical flows (`force sync`, `stop sync`, `price approvals`, `duplicates`).
+- [ done ] Add Playwright E2E regression suite for critical flows (`force sync`, `stop sync`, `price approvals`, `duplicates`).
 
 ---

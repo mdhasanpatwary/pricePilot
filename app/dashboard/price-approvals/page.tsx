@@ -109,8 +109,10 @@ export default function PriceApprovalsPage() {
         setSelectedIds(newSelected);
     };
 
-    const handleAction = async (action: "approve" | "reject") => {
-        if (selectedIds.size === 0) {
+    const handleAction = async (action: "approve" | "reject", specificIds?: string[]) => {
+        const idsToProcess = specificIds || Array.from(selectedIds);
+
+        if (idsToProcess.length === 0) {
             toast.error("Please select at least one price change");
             return;
         }
@@ -122,7 +124,7 @@ export default function PriceApprovalsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     action,
-                    changeIds: Array.from(selectedIds),
+                    changeIds: idsToProcess,
                 }),
             });
 
@@ -321,10 +323,7 @@ export default function PriceApprovalsPage() {
                                 <div className="flex gap-2">
                                     <Button
                                         size="sm"
-                                        onClick={() => {
-                                            setSelectedIds(new Set([change.id]));
-                                            handleAction("approve");
-                                        }}
+                                        onClick={() => handleAction("approve", [change.id])}
                                         disabled={processing}
                                         className="bg-green-600 hover:bg-green-700"
                                     >
@@ -333,10 +332,7 @@ export default function PriceApprovalsPage() {
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => {
-                                            setSelectedIds(new Set([change.id]));
-                                            handleAction("reject");
-                                        }}
+                                        onClick={() => handleAction("reject", [change.id])}
                                         disabled={processing}
                                     >
                                         Reject

@@ -17,6 +17,21 @@ import { scrapeLogger } from "./scrape-logger";
 export class SyncOrchestrator {
   private static retrySiteLocks = new Map<string, Promise<void>>();
 
+  private static sanitizeQueueSegment(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
+  private static buildRetryJobId(siteId: string, productId: string, attempt: number): string {
+    return `retry-${this.sanitizeQueueSegment(siteId)}-${this.sanitizeQueueSegment(productId)}-a${attempt}`;
+  }
+
+  private static getRetryBackoffMinutes(retryCount: number, isAdvancedBlock: boolean): number {
+    const baseMinutes = isAdvancedBlock ? 30 : 20;
+    const exponential = baseMinutes * Math.pow(2, retryCount);
+    const jitter = Math.floor(Math.random() * 11); // 0-10 minutes
+    return Math.min(240, exponential + jitter); // Cap at 4 hours
+  }
+
   /**
    * Check if current time is off-peak (NIGHT: 10 PM to 6 AM)
    */
@@ -422,10 +437,34 @@ export class SyncOrchestrator {
       }
 
       // Process in batches for better performance
-      const BATCH_SIZE = await SystemConfigService.get("SCRAPER_BATCH_SIZE", 5);
-      const effectiveBatchSize = isGoldenRule ? 1 : BATCH_SIZE;
+      const configuredBatchSize = await SystemConfigService.get(
+        "SCRAPER_BATCH_SIZE",
+        5,
+      );
+      const normalizedBatchSize =
+        Number.isFinite(configuredBatchSize) && configuredBatchSize > 0
+          ? Math.floor(configuredBatchSize)
+          : 5;
+      const devBatchCapRaw = Number(process.env.SCRAPER_BATCH_SIZE_DEV_MAX || 2);
+      const devBatchCap =
+        Number.isFinite(devBatchCapRaw) && devBatchCapRaw > 0
+          ? Math.floor(devBatchCapRaw)
+          : 2;
+      const baseBatchSize = process.env.NODE_ENV === "production"
+        ? normalizedBatchSize
+        : Math.min(normalizedBatchSize, devBatchCap);
+      const SCRAPE_TIMEOUT = await SystemConfigService.get(
+        "SCRAPER_TIMEOUT",
+        45000,
+      );
+      const MAX_RETRIES = await SystemConfigService.get(
+        "SCRAPER_MAX_RETRIES",
+        3,
+      );
 
-      for (let i = 0; i < productsToScrape.length; i += effectiveBatchSize) {
+      for (let i = 0; i < productsToScrape.length;) {
+        const batchSize = isGoldenRule ? 1 : baseBatchSize;
+
         // Check if sync was manually stopped OR session invalidated
         const currentStatus = await prisma.site.findUnique({
           where: { id: siteId },
@@ -449,19 +488,11 @@ export class SyncOrchestrator {
           break;
         }
 
-        const batch = productsToScrape.slice(i, i + BATCH_SIZE);
+        const batch = productsToScrape.slice(i, i + batchSize);
         if (batch.length === 0) continue;
         const productsToScrapeBatch = batch;
 
         // Process batch in parallel with retry logic
-        const SCRAPE_TIMEOUT = await SystemConfigService.get(
-          "SCRAPER_TIMEOUT",
-          45000,
-        );
-        const MAX_RETRIES = await SystemConfigService.get(
-          "SCRAPER_MAX_RETRIES",
-          3,
-        );
 
         const results = (await Promise.allSettled(
           batch.map(async (product) => {
@@ -623,9 +654,11 @@ export class SyncOrchestrator {
         }
 
         // Small delay between batches to avoid overwhelming the server
-        if (i + BATCH_SIZE < matchedProducts.length) {
+        if (i + batchSize < productsToScrape.length) {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
+
+        i += batchSize;
       }
 
       // Re-check status before proceeding to rules
@@ -1012,8 +1045,14 @@ export class SyncOrchestrator {
           });
 
           if (retryRecord && retryRecord.retryCount < 3) {
-            const retryAfter = 10 + Math.floor(Math.random() * 10); // Longer delay: 10-20m
+            const isAdvancedBlock =
+              error instanceof ScrapeBlockError ? error.isAdvanced : false;
+            const retryAfter = this.getRetryBackoffMinutes(
+              retryRecord.retryCount,
+              isAdvancedBlock,
+            );
             const nextAttempt = new Date(Date.now() + retryAfter * 60 * 1000);
+            const nextAttemptNumber = retryRecord.retryCount + 1;
 
             await (prisma as any).scrapeRetry.update({
               where: { id: retryRecord.id },
@@ -1031,13 +1070,13 @@ export class SyncOrchestrator {
               productIds: [productId]
             }, {
               delay: retryAfter * 60 * 1000,
-              jobId: `retry:${siteId}:${productId}:${retryRecord.retryCount + 1}`,
+              jobId: this.buildRetryJobId(siteId, productId, nextAttemptNumber),
             });
 
             await prisma.syncLog.create({
               data: {
                 siteId,
-                message: `🛡️ [RETRY] STILL BLOCKED: "${userProduct.title.substring(0, 30)}...". Attempt ${retryRecord.retryCount + 1} scheduled.`,
+                message: `🛡️ [RETRY] STILL BLOCKED: "${userProduct.title.substring(0, 30)}...". Attempt ${nextAttemptNumber} scheduled in ~${retryAfter}m.`,
                 level: "WARN",
               },
             });

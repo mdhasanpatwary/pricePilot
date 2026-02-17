@@ -169,10 +169,32 @@ export class ScraperService {
       backoffMultiplier: 2,
       jitter: true,
     });
+    const parsePositiveInt = (value: string | undefined, fallback: number): number => {
+      const parsed = parseInt(value || '', 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+
+    const configuredMinConcurrency = parsePositiveInt(process.env.CONCURRENCY_MIN, 1);
+    const configuredMaxConcurrency = parsePositiveInt(process.env.CONCURRENCY_MAX, 10);
+    const configuredInitialConcurrency = parsePositiveInt(process.env.CONCURRENCY_INITIAL, 3);
+    const configuredDevConcurrencyCap = parsePositiveInt(process.env.CONCURRENCY_DEV_MAX, 2);
+    const safeDevConcurrencyCap =
+      Number.isFinite(configuredDevConcurrencyCap) && configuredDevConcurrencyCap > 0
+        ? configuredDevConcurrencyCap
+        : 2;
+    const runtimeMaxConcurrency =
+      process.env.NODE_ENV === 'production'
+        ? configuredMaxConcurrency
+        : Math.min(configuredMaxConcurrency, safeDevConcurrencyCap);
+    const runtimeInitialConcurrency = Math.min(
+      configuredInitialConcurrency,
+      runtimeMaxConcurrency,
+    );
+
     this.concurrencyLimiter = new ConcurrencyLimiter({
-      minConcurrency: parseInt(process.env.CONCURRENCY_MIN || '1', 10),
-      maxConcurrency: parseInt(process.env.CONCURRENCY_MAX || '10', 10),
-      initialConcurrency: parseInt(process.env.CONCURRENCY_INITIAL || '3', 10),
+      minConcurrency: configuredMinConcurrency,
+      maxConcurrency: runtimeMaxConcurrency,
+      initialConcurrency: runtimeInitialConcurrency,
     });
 
     // Initialize CaptchaSolver if enabled
@@ -485,7 +507,22 @@ export class ScraperService {
    * Initialize the browser pool
    */
   async init() {
-    const maxContexts = parseInt(process.env.SCRAPER_MAX_CONTEXTS || "10", 10);
+    const parsePositiveInt = (value: string | undefined, fallback: number): number => {
+      const parsed = parseInt(value || '', 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+
+    const configuredMaxContexts = parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS, 10);
+    const configuredDevMaxContexts = parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS_DEV_MAX, 2);
+    const safeDevMaxContexts =
+      Number.isFinite(configuredDevMaxContexts) && configuredDevMaxContexts > 0
+        ? configuredDevMaxContexts
+        : 2;
+    const maxContexts =
+      process.env.NODE_ENV === "production"
+        ? configuredMaxContexts
+        : Math.min(configuredMaxContexts, safeDevMaxContexts);
+
     await this.browserPool.init(maxContexts);
   }
 

@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { withDbRetry } from "@/lib/utils/db-retry";
+import { SystemConfigService } from "@/lib/config";
+
+function sanitizeQueueSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function buildInitialRetryJobId(siteId: string, productId: string): string {
+  return `retry-${sanitizeQueueSegment(siteId)}-${sanitizeQueueSegment(productId)}-a0`;
+}
 
 export class DiscoveryService {
   /**
@@ -72,7 +81,21 @@ export class DiscoveryService {
     let discoveredCount = 0;
 
     // Process in batches for better performance (Parallel Discovery)
-    const BATCH_SIZE = 5;
+    const configuredBatchSize = await SystemConfigService.get("SCRAPER_BATCH_SIZE", 5);
+    const normalizedBatchSize =
+      Number.isFinite(configuredBatchSize) && configuredBatchSize > 0
+        ? Math.floor(configuredBatchSize)
+        : 5;
+    const devBatchCapRaw = Number(process.env.SCRAPER_BATCH_SIZE_DEV_MAX || 2);
+    const devBatchCap =
+      Number.isFinite(devBatchCapRaw) && devBatchCapRaw > 0
+        ? Math.floor(devBatchCapRaw)
+        : 2;
+    const BATCH_SIZE =
+      process.env.NODE_ENV === "production"
+        ? normalizedBatchSize
+        : Math.min(normalizedBatchSize, devBatchCap);
+
     for (let i = 0; i < userProducts.length; i += BATCH_SIZE) {
       const batch = userProducts.slice(i, i + BATCH_SIZE);
 
@@ -218,8 +241,9 @@ export class DiscoveryService {
           }
         } catch (error) {
           if (error instanceof ScrapeBlockError) {
-            const retryAfter = 5 + Math.floor(Math.random() * 6); // 5 to 10 minutes
+            const retryAfter = 15 + Math.floor(Math.random() * 16); // 15 to 30 minutes
             const nextAttempt = new Date(Date.now() + retryAfter * 60 * 1000);
+            const retryJobId = buildInitialRetryJobId(siteId, up.id);
 
             await prisma.syncLog.create({
               data: {
@@ -230,16 +254,36 @@ export class DiscoveryService {
             });
 
             // Track in the list
-            await (prisma as any).scrapeRetry.create({
-              data: {
+            const existingPendingRetry = await (prisma as any).scrapeRetry.findFirst({
+              where: {
                 tenantId,
                 siteId,
                 userProductId: up.id,
-                reason: error.provider,
-                nextAttemptAt: nextAttempt,
                 status: "PENDING",
-              }
+              },
             });
+
+            if (existingPendingRetry) {
+              await (prisma as any).scrapeRetry.update({
+                where: { id: existingPendingRetry.id },
+                data: {
+                  nextAttemptAt: nextAttempt,
+                  reason: error.provider,
+                  updatedAt: new Date(),
+                },
+              });
+            } else {
+              await (prisma as any).scrapeRetry.create({
+                data: {
+                  tenantId,
+                  siteId,
+                  userProductId: up.id,
+                  reason: error.provider,
+                  nextAttemptAt: nextAttempt,
+                  status: "PENDING",
+                }
+              });
+            }
 
             // Queue a delayed job (as SINGLE retry might be too much overhead per product,
             // but user asked for individual background retries).
@@ -249,7 +293,10 @@ export class DiscoveryService {
               siteId,
               tenantId,
               productIds: [up.id]
-            }, { delay: retryAfter * 60 * 1000 });
+            }, {
+              delay: retryAfter * 60 * 1000,
+              jobId: retryJobId,
+            });
 
             // NEW: Trigger Golden Rule if advanced block detected during discovery
             if (error instanceof ScrapeBlockError && error.isAdvanced && !(site as any).isAdvancedProtected) {

@@ -102,10 +102,21 @@ export const createWorkers = () => {
   //    - Min: 1, Max: total CPUs.
   //    - Safe Default: 0.5 * CPUs
   const memBasedSync = Math.floor(totalMemMb / 512);
-  const syncConcurrency = Number(
-    process.env.SYNC_CONCURRENCY ||
-      Math.max(1, Math.min(cpus, Math.floor(cpus * 0.5), memBasedSync)),
+  const computedSyncConcurrency = Math.max(
+    1,
+    Math.min(cpus, Math.floor(cpus * 0.5), memBasedSync),
   );
+  const configuredSyncConcurrency = Number(process.env.SYNC_CONCURRENCY || 0);
+  const configuredDevCap = Number(process.env.SYNC_CONCURRENCY_DEV_MAX || 1);
+  const safeDevSyncCap =
+    Number.isFinite(configuredDevCap) && configuredDevCap > 0
+      ? Math.floor(configuredDevCap)
+      : 1;
+  const syncConcurrency = configuredSyncConcurrency > 0
+    ? configuredSyncConcurrency
+    : process.env.NODE_ENV === "production"
+      ? computedSyncConcurrency
+      : Math.min(computedSyncConcurrency, safeDevSyncCap);
 
   // 2. Notification Worker: I/O intensive, lightweight.
   //    - Rule: 5 tasks per CPU core.
