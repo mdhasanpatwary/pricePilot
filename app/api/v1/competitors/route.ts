@@ -210,10 +210,13 @@ async function handleDELETE(req: NextRequest) {
     throw new ValidationError('Invalid request', { id: ['ID is required'] });
   }
 
-  await prisma.site.delete({
+  // Use deleteMany to make this endpoint idempotent and avoid Prisma P2025
+  // (record not found) errors when the UI retries or the record was already deleted.
+  const deleteResult = await prisma.site.deleteMany({
     where: {
       id,
       tenantId,
+      type: "COMPETITOR",
     },
   });
 
@@ -223,16 +226,18 @@ async function handleDELETE(req: NextRequest) {
     console.error("Cache invalidation error:", err)
   );
 
-  await recordAuditLog({
-    tenantId,
-    userId: session.user.id,
-    userEmail: session.user.email!,
-    action: "DELETE_COMPETITOR",
-    entityId: id,
-    ipAddress: getIpAddress(req),
-  });
+  if (deleteResult.count > 0) {
+    await recordAuditLog({
+      tenantId,
+      userId: session.user.id,
+      userEmail: session.user.email!,
+      action: "DELETE_COMPETITOR",
+      entityId: id,
+      ipAddress: getIpAddress(req),
+    });
+  }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, deleted: deleteResult.count > 0 });
 }
 
 export async function GET(req: NextRequest) {
