@@ -6,6 +6,14 @@ const getRedisUrl = () => {
     return process.env.REDIS_URL;
   }
 
+  // In local development, prefer a local Redis if the user hasn't explicitly set REDIS_URL.
+  // This avoids burning Upstash free-tier request quotas during dev sessions.
+  // Set REDIS_PREFER_LOCAL_IN_DEV=false to force the Upstash connection in development.
+  const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
+  if (process.env.NODE_ENV !== "production" && preferLocalInDev) {
+    return "redis://localhost:6379";
+  }
+
   // If using Upstash, construct the connection URL
   if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
     // Extract host from REST URL (e.g., https://harmless-macaque-50376.upstash.io -> harmless-macaque-50376.upstash.io)

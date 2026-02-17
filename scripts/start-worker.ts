@@ -36,6 +36,33 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+function isRedisStartupError(error: unknown): boolean {
+  const msg =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+
+  // Upstash free-tier / quota related.
+  if (msg.includes("max requests limit exceeded")) return true;
+
+  // Common network/auth/connectivity failures.
+  if (
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ENOTFOUND") ||
+    msg.includes("WRONGPASS") ||
+    msg.includes("NOAUTH") ||
+    msg.includes("Connection is closed") ||
+    msg.includes("connect ETIMEDOUT") ||
+    msg.includes("read ETIMEDOUT")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
   if (!shouldEnforceSingleWorkerInstance()) {
     return async () => {};
@@ -108,31 +135,89 @@ async function start() {
       return;
     }
 
-    const { syncWorker, notificationWorker } = createWorkers();
+    let started = false;
+    let syncWorker: any = null;
+    let notificationWorker: any = null;
 
-    // Schedule internal crons/maintenance only once on worker start
-    const { scheduleSystemTasks } = await import("../lib/queue/client");
-    await scheduleSystemTasks();
+    const startWorkersOnce = async (): Promise<void> => {
+      const created = createWorkers();
+      syncWorker = created.syncWorker as any;
+      notificationWorker = created.notificationWorker as any;
 
-    console.log("✅ Workers active:");
-    console.log(
-      `   - Sync Queue (Concurrency: ${(syncWorker as any).concurrencyValue})`,
-    );
-    console.log(
-      `   - Notification Queue (Concurrency: ${(notificationWorker as any).concurrencyValue})`,
-    );
+      // Schedule internal crons/maintenance only once on worker start.
+      // If Redis is unavailable, don't crash the whole dev session.
+      try {
+        const { scheduleSystemTasks } = await import("../lib/queue/client");
+        await scheduleSystemTasks();
+      } catch (e) {
+        if (process.env.NODE_ENV !== "production" && isRedisStartupError(e)) {
+          console.warn("⚠️ Failed to schedule system tasks (Redis unavailable). Continuing without cron scheduling.");
+        } else {
+          throw e;
+        }
+      }
 
-    // Handle graceful shutdown
+      console.log("✅ Workers active:");
+      console.log(
+        `   - Sync Queue (Concurrency: ${(syncWorker as any).concurrencyValue})`,
+      );
+      console.log(
+        `   - Notification Queue (Concurrency: ${(notificationWorker as any).concurrencyValue})`,
+      );
+
+      started = true;
+    };
+
+    // Handle graceful shutdown (works both in active + degraded modes).
     const gracefulShutdown = async () => {
       console.log("🛑 Shutting down workers...");
-      await syncWorker.close();
-      await notificationWorker.close();
+      try {
+        if (syncWorker) await syncWorker.close();
+      } catch { }
+      try {
+        if (notificationWorker) await notificationWorker.close();
+      } catch { }
       await releaseWorkerLock?.();
       process.exit(0);
     };
 
     process.on("SIGTERM", gracefulShutdown);
     process.on("SIGINT", gracefulShutdown);
+
+    try {
+      await startWorkersOnce();
+    } catch (error) {
+      // In development, Redis is often optional. Keep the process alive so `dev:full`
+      // doesn't kill Next.js when Redis/Upstash is unavailable or quota-limited.
+      if (process.env.NODE_ENV !== "production" && isRedisStartupError(error)) {
+        const retryMs = Number.parseInt(process.env.WORKER_REDIS_RETRY_MS || "30000", 10);
+        const intervalMs =
+          Number.isFinite(retryMs) && retryMs >= 5000 ? Math.floor(retryMs) : 30000;
+
+        console.warn("⚠️ Workers disabled: Redis unavailable (or quota exceeded).");
+        console.warn(`   - Next.js will keep running. Worker will retry in ${Math.round(intervalMs / 1000)}s.`);
+        console.warn("   - Fix: start local Redis and set REDIS_URL, or wait for Upstash quota reset.");
+
+        // Retry in background with a quiet, single interval.
+        const timer = setInterval(async () => {
+          if (started) return;
+          try {
+            await startWorkersOnce();
+            clearInterval(timer);
+          } catch (e) {
+            if (isRedisStartupError(e)) return;
+            console.error("❌ Worker startup failed with a non-Redis error:", e);
+            clearInterval(timer);
+            await gracefulShutdown();
+          }
+        }, intervalMs);
+
+        // Keep process alive in degraded mode.
+        return;
+      }
+
+      throw error;
+    }
   } catch (error) {
     await releaseWorkerLock?.().catch(() => undefined);
     console.error("❌ Failed to start workers:", error);
