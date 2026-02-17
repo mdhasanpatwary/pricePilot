@@ -3,6 +3,7 @@ dotenv.config();
 
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
+import net from "net";
 import os from "os";
 import path from "path";
 import { createWorkers } from "../lib/queue/worker";
@@ -37,22 +38,51 @@ function isProcessAlive(pid: number): boolean {
 }
 
 function isRedisStartupError(error: unknown): boolean {
+  const anyErr = error as any;
+  const directCode: unknown = anyErr?.code;
+  const nestedCode: unknown = anyErr?.error?.code;
+
   const msg =
     error instanceof Error
       ? error.message
       : typeof error === "string"
         ? error
-        : JSON.stringify(error);
+        : (() => {
+          try {
+            return JSON.stringify(error);
+          } catch {
+            return String(error);
+          }
+        })();
+
+  const codes = new Set([
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "ETIMEDOUT",
+    "EPERM",
+    "WRONGPASS",
+    "NOAUTH",
+  ]);
+
+  if (typeof directCode === "string" && codes.has(directCode)) return true;
+  if (typeof nestedCode === "string" && codes.has(nestedCode)) return true;
 
   // Upstash free-tier / quota related.
   if (msg.includes("max requests limit exceeded")) return true;
+  if (msg.includes("ERR max requests limit exceeded")) return true;
+  if (msg.includes("Redis connection failed after")) return true;
+  if (msg.includes("Redis preflight failed")) return true;
+  if (msg.includes("Connection is closed")) return true;
 
   // Common network/auth/connectivity failures.
   if (
     msg.includes("ECONNREFUSED") ||
     msg.includes("ENOTFOUND") ||
+    msg.includes("EAI_AGAIN") ||
     msg.includes("WRONGPASS") ||
     msg.includes("NOAUTH") ||
+    msg.includes("EPERM") ||
     msg.includes("Connection is closed") ||
     msg.includes("connect ETIMEDOUT") ||
     msg.includes("read ETIMEDOUT")
@@ -61,6 +91,66 @@ function isRedisStartupError(error: unknown): boolean {
   }
 
   return false;
+}
+
+function resolveRedisUrlForWorker(): string {
+  if (process.env.REDIS_URL) return process.env.REDIS_URL;
+
+  const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
+  if (process.env.NODE_ENV !== "production" && preferLocalInDev) {
+    return "redis://localhost:6379";
+  }
+
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const restUrl = process.env.UPSTASH_REDIS_REST_URL.replace("https://", "").replace("http://", "");
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    return `rediss://default:${token}@${restUrl}:6379`;
+  }
+
+  return "redis://localhost:6379";
+}
+
+async function canConnectTcp(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    const done = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
+}
+
+async function preflightRedisConnectivity(): Promise<void> {
+  const url = resolveRedisUrlForWorker();
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // If URL parsing fails, skip preflight and let the worker attempt to connect.
+    return;
+  }
+
+  const hostname = parsed.hostname;
+  const port = parsed.port ? Number.parseInt(parsed.port, 10) : 6379;
+  const scheme = parsed.protocol.replace(":", "");
+
+  // Fast path: local redis preflight via TCP so we can degrade instantly (and avoid BullMQ side effects).
+  if (
+    scheme === "redis" &&
+    (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1")
+  ) {
+    const timeoutMs = Number.parseInt(process.env.WORKER_REDIS_PREFLIGHT_TIMEOUT_MS || "250", 10);
+    const ok = await canConnectTcp(hostname === "localhost" ? "127.0.0.1" : hostname, port, timeoutMs);
+    if (!ok) {
+      throw new Error(`Redis preflight failed: ${hostname}:${port} is not reachable`);
+    }
+  }
 }
 
 async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
@@ -138,8 +228,30 @@ async function start() {
     let started = false;
     let syncWorker: any = null;
     let notificationWorker: any = null;
+    let degraded = false;
+
+    const handleProcessError = (err: unknown) => {
+      if (process.env.NODE_ENV !== "production" && isRedisStartupError(err)) {
+        if (!degraded) {
+          // Once we hit a Redis startup failure, treat subsequent Redis failures as non-fatal.
+          degraded = true;
+          console.warn("⚠️ Worker running without Redis (non-fatal Redis startup failure).");
+        }
+        return;
+      }
+
+      // Non-Redis error: fail fast (so we don't hide real bugs).
+      console.error("❌ Worker crashed due to non-Redis error:", err);
+      process.exit(1);
+    };
+
+    // Prevent redis startup failures from hard-crashing `yarn dev:full` in dev.
+    process.on("unhandledRejection", handleProcessError);
+    process.on("uncaughtException", handleProcessError);
 
     const startWorkersOnce = async (): Promise<void> => {
+      await preflightRedisConnectivity();
+
       const created = createWorkers();
       syncWorker = created.syncWorker as any;
       notificationWorker = created.notificationWorker as any;
