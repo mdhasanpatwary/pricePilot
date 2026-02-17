@@ -25,6 +25,8 @@ interface TenantMetrics {
     sites: TenantSiteMetrics[];
 }
 
+type TimeRange = "24h" | "7d" | "30d";
+
 /**
  * GET /api/v1/tenant/scraping-metrics
  * Get scraping metrics for tenant's sites only
@@ -65,7 +67,7 @@ async function handleGET(request: NextRequest) {
 
         // Parse query parameters
         const searchParams = request.nextUrl.searchParams;
-        const timeRange = searchParams.get('timeRange') || '24h';
+        const timeRange = (searchParams.get("timeRange") || "24h") as TimeRange;
 
         // Validate time range
         if (!['24h', '7d', '30d'].includes(timeRange)) {
@@ -102,6 +104,7 @@ async function handleGET(request: NextRequest) {
                 tenantId: tenantId
             },
             select: {
+                id: true,
                 baseUrl: true,
                 lastSyncAt: true
             }
@@ -126,43 +129,32 @@ async function handleGET(request: NextRequest) {
             });
         }
 
-        const siteUrls = tenantSites.map(site => site.baseUrl);
+        const siteIds = tenantSites.map((s) => s.id);
+        const siteIdToBaseUrl = new Map<string, string>(
+            tenantSites.map((s) => [s.id, s.baseUrl]),
+        );
+        const baseUrlToLastSyncAt = new Map<string, Date | null>(
+            tenantSites.map((s) => [s.baseUrl, s.lastSyncAt]),
+        );
 
-        // Fetch scraping metrics only for tenant's sites
-        const scrapingMetrics = await prisma.scrapingMetrics.findMany({
-            where: {
-                site: {
-                    in: siteUrls
-                },
-                timestamp: {
-                    gte: startTime
-                }
-            },
-            orderBy: {
-                timestamp: 'desc'
-            }
-        });
+        // NOTE:
+        // The legacy ScrapingMetrics/ChallengeAttempt tables are not tenant-scoped and historically
+        // stored "site" as a hostname while Site.baseUrl is a full URL (scheme + host, sometimes slash).
+        // ScrapeAttempt is tenant-scoped and reliably recorded by the worker, so we aggregate from it.
+        const attemptsWhere = {
+            tenantId,
+            competitorWebsiteId: { in: siteIds },
+            createdAt: { gte: startTime },
+        } as const;
 
-        // Fetch challenge attempts for tenant's sites
-        const challengeAttempts = await prisma.challengeAttempt.findMany({
-            where: {
-                site: {
-                    in: siteUrls
-                },
-                timestamp: {
-                    gte: startTime
-                }
-            }
-        });
-
-        // Group metrics by site
         const siteMetricsMap = new Map<string, {
             totalRequests: number;
             successfulRequests: number;
             blockedRequests: number;
-            totalResponseTime: number;
-            responseCount: number;
             lastTimestamp: Date | null;
+            avgResponseTimeMs: number;
+            challengesDetected: number;
+            challengesSolved: number;
         }>();
 
         // Initialize map with all tenant sites
@@ -171,49 +163,70 @@ async function handleGET(request: NextRequest) {
                 totalRequests: 0,
                 successfulRequests: 0,
                 blockedRequests: 0,
-                totalResponseTime: 0,
-                responseCount: 0,
-                lastTimestamp: site.lastSyncAt
+                lastTimestamp: site.lastSyncAt,
+                avgResponseTimeMs: 0,
+                challengesDetected: 0,
+                challengesSolved: 0,
             });
         }
 
-        // Aggregate metrics
-        for (const metric of scrapingMetrics) {
-            const siteStats = siteMetricsMap.get(metric.site);
-            if (siteStats) {
-                siteStats.totalRequests += metric.totalRequests;
-                siteStats.successfulRequests += metric.successfulRequests;
-                siteStats.blockedRequests += metric.blockedRequests;
-                siteStats.totalResponseTime += metric.avgResponseTime * metric.totalRequests;
-                siteStats.responseCount += metric.totalRequests;
+        const [countGroups, timingGroups, overallAgg] = await Promise.all([
+            prisma.scrapeAttempt.groupBy({
+                by: ["competitorWebsiteId", "success", "protectionDetected"],
+                where: attemptsWhere,
+                _count: { _all: true },
+            }),
+            prisma.scrapeAttempt.groupBy({
+                by: ["competitorWebsiteId"],
+                where: attemptsWhere,
+                _avg: { responseTimeMs: true },
+                _max: { createdAt: true },
+            }),
+            prisma.scrapeAttempt.aggregate({
+                where: attemptsWhere,
+                _avg: { responseTimeMs: true },
+            }),
+        ]);
 
-                // Track the most recent timestamp
-                if (!siteStats.lastTimestamp || metric.timestamp > siteStats.lastTimestamp) {
-                    siteStats.lastTimestamp = metric.timestamp;
+        // Apply counts (success/block/challenge) per site
+        for (const g of countGroups) {
+            const baseUrl = siteIdToBaseUrl.get(g.competitorWebsiteId);
+            if (!baseUrl) continue;
+
+            const stats = siteMetricsMap.get(baseUrl);
+            if (!stats) continue;
+
+            const c = g._count._all;
+            stats.totalRequests += c;
+            if (g.success) stats.successfulRequests += c;
+
+            // "Blocked" is best approximated as protectionDetected=true.
+            if (g.protectionDetected) {
+                stats.blockedRequests += c;
+                stats.challengesDetected += c;
+                if (g.success) {
+                    // Approximation: protection detected + success => challenge likely passed.
+                    stats.challengesSolved += c;
                 }
             }
         }
 
-        // Group challenge attempts by site
-        const siteChallengesMap = new Map<string, {
-            detected: number;
-            solved: number;
-        }>();
+        // Apply timing + most recent activity timestamp
+        for (const t of timingGroups) {
+            const baseUrl = siteIdToBaseUrl.get(t.competitorWebsiteId);
+            if (!baseUrl) continue;
 
-        for (const site of siteUrls) {
-            siteChallengesMap.set(site, {
-                detected: 0,
-                solved: 0
-            });
-        }
+            const stats = siteMetricsMap.get(baseUrl);
+            if (!stats) continue;
 
-        for (const attempt of challengeAttempts) {
-            const challenges = siteChallengesMap.get(attempt.site);
-            if (challenges) {
-                challenges.detected++;
-                if (attempt.solved) {
-                    challenges.solved++;
-                }
+            stats.avgResponseTimeMs = Math.round(t._avg.responseTimeMs ?? 0);
+
+            const existingLast = stats.lastTimestamp ?? baseUrlToLastSyncAt.get(baseUrl) ?? null;
+            const attemptLast = t._max.createdAt ?? null;
+            if (!existingLast) {
+                stats.lastTimestamp = attemptLast;
+            } else if (attemptLast && attemptLast > existingLast) {
+                stats.lastTimestamp = attemptLast;
             }
         }
 
@@ -237,15 +250,16 @@ async function handleGET(request: NextRequest) {
                 status = 'healthy';
             }
 
-            const challenges = siteChallengesMap.get(site) || { detected: 0, solved: 0 };
-
             return {
                 domain: site,
                 successRate: Math.round(successRate * 10) / 10,
                 blockRate: Math.round(blockRate * 10) / 10,
                 lastSync: stats.lastTimestamp,
                 status,
-                challenges
+                challenges: {
+                    detected: stats.challengesDetected,
+                    solved: stats.challengesSolved,
+                },
             };
         });
 
@@ -259,12 +273,6 @@ async function handleGET(request: NextRequest) {
         const totalBlocked = Array.from(siteMetricsMap.values())
             .reduce((sum, stats) => sum + stats.blockedRequests, 0);
 
-        const totalResponseTime = Array.from(siteMetricsMap.values())
-            .reduce((sum, stats) => sum + stats.totalResponseTime, 0);
-
-        const totalResponseCount = Array.from(siteMetricsMap.values())
-            .reduce((sum, stats) => sum + stats.responseCount, 0);
-
         const overallSuccessRate = totalRequests > 0
             ? (totalSuccessful / totalRequests) * 100
             : 0;
@@ -273,15 +281,13 @@ async function handleGET(request: NextRequest) {
             ? (totalBlocked / totalRequests) * 100
             : 0;
 
-        const avgResponseTime = totalResponseCount > 0
-            ? totalResponseTime / totalResponseCount
-            : 0;
+        const avgResponseTime = Math.round(overallAgg._avg.responseTimeMs ?? 0);
 
         const metrics: TenantMetrics = {
             overallSuccessRate: Math.round(overallSuccessRate * 10) / 10,
             overallBlockRate: Math.round(overallBlockRate * 10) / 10,
             totalRequests,
-            avgResponseTime: Math.round(avgResponseTime),
+            avgResponseTime,
             sites: siteMetrics
         };
 
