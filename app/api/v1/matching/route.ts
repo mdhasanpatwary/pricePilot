@@ -11,6 +11,27 @@ import { sanitizeProductMatch } from "@/lib/middleware/sanitize-response";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
+function normalizeImageUrl(
+  imageUrl: unknown,
+  pageUrl: string | null | undefined,
+): string | undefined {
+  if (typeof imageUrl !== "string") return undefined;
+  const trimmed = imageUrl.trim();
+  if (!trimmed || trimmed.startsWith("data:")) return undefined;
+
+  // Handle protocol-relative URLs.
+  const normalized = trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
+
+  try {
+    if (pageUrl) {
+      return new URL(normalized, pageUrl).toString();
+    }
+    return new URL(normalized).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 async function handleGET(req: NextRequest) {
   const session = await getCachedSession();
 
@@ -79,7 +100,11 @@ async function handleGET(req: NextRequest) {
           sku: m.userProduct.sku,
           price: parseFloat(m.userProduct.currentPrice.toString()),
           url: m.userProduct.url,
-          image: (m.userProduct as any).imageUrl,
+          // Ensure relative image paths become absolute so sanitization doesn't strip them.
+          image: normalizeImageUrl(
+            (m.userProduct as any).imageUrl,
+            m.userProduct.url ?? m.userProduct.Site.baseUrl,
+          ),
           site: m.userProduct.Site.baseUrl,
         },
         competitor: {
@@ -88,7 +113,11 @@ async function handleGET(req: NextRequest) {
           sku: m.competitorProduct.sku,
           price: parseFloat(m.competitorProduct.currentPrice.toString()),
           url: m.competitorProduct.url || m.competitorProduct.Site.baseUrl,
-          image: (m.competitorProduct as any).imageUrl,
+          // Competitor images are commonly stored as relative paths.
+          image: normalizeImageUrl(
+            (m.competitorProduct as any).imageUrl,
+            m.competitorProduct.url ?? m.competitorProduct.Site.baseUrl,
+          ),
           site: m.competitorProduct.Site.baseUrl,
           siteName,
         },
