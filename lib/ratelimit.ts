@@ -22,13 +22,69 @@ import { securityMonitoringService } from "@/lib/services/monitoring/security-mo
  * 
  * If not configured, rate limiting falls back to in-memory storage (single instance only).
  */
-const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-    : undefined;
+const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
+const allowUpstashInDev = process.env.UPSTASH_RATE_LIMIT_IN_DEV === "true";
+
+let ratelimitDisabledUntilMs = 0;
+
+function isUpstashQuotaError(err: unknown): boolean {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : (() => {
+          try {
+            return JSON.stringify(err);
+          } catch {
+            return String(err);
+          }
+        })();
+  return msg.includes("max requests limit exceeded");
+}
+
+function shouldUseUpstashRateLimit(): boolean {
+  const hasUpstash =
+    !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!hasUpstash) return false;
+
+  if (process.env.NODE_ENV === "production") return true;
+  if (allowUpstashInDev) return true;
+
+  // Dev default: if we prefer local Redis, do not use Upstash (avoid quota burn).
+  return !preferLocalInDev;
+}
+
+const redis = shouldUseUpstashRateLimit()
+  ? new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  })
+  : undefined;
+
+type RateLimitResult = {
+  success: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+};
+
+type RateLimiterLike = {
+  limit: (identifier: string) => Promise<RateLimitResult>;
+};
+
+function createNoopLimiter(limit: number): RateLimiterLike {
+  return {
+    async limit() {
+      return {
+        success: true,
+        limit,
+        remaining: limit,
+        reset: Date.now() + 60_000,
+      };
+    },
+  };
+}
 
 /**
  * Rate limiter configurations for different endpoint types
@@ -54,52 +110,64 @@ const redis =
  */
 export const rateLimiters = {
   // Strict rate limit for authentication endpoints (prevent brute force)
-  auth: new Ratelimit({
-    redis: redis as any,
-    limiter: Ratelimit.slidingWindow(5, "15 m"), // 5 requests per 15 minutes
-    analytics: true,
-    prefix: "@upstash/ratelimit/auth",
-  }),
+  auth: redis
+    ? new Ratelimit({
+      redis: redis as any,
+      limiter: Ratelimit.slidingWindow(5, "15 m"), // 5 requests per 15 minutes
+      analytics: true,
+      prefix: "@upstash/ratelimit/auth",
+    })
+    : (createNoopLimiter(1_000_000) as any),
 
   // Moderate rate limit for general API endpoints
-  api: new Ratelimit({
-    redis: redis as any,
-    limiter: Ratelimit.slidingWindow(100, "1 m"), // 100 requests per minute
-    analytics: true,
-    prefix: "@upstash/ratelimit/api",
-  }),
+  api: redis
+    ? new Ratelimit({
+      redis: redis as any,
+      limiter: Ratelimit.slidingWindow(100, "1 m"), // 100 requests per minute
+      analytics: true,
+      prefix: "@upstash/ratelimit/api",
+    })
+    : (createNoopLimiter(1_000_000) as any),
 
   // Higher rate limit for read-only operations
-  read: new Ratelimit({
-    redis: redis as any,
-    limiter: Ratelimit.slidingWindow(200, "1 m"), // 200 requests per minute
-    analytics: true,
-    prefix: "@upstash/ratelimit/read",
-  }),
+  read: redis
+    ? new Ratelimit({
+      redis: redis as any,
+      limiter: Ratelimit.slidingWindow(200, "1 m"), // 200 requests per minute
+      analytics: true,
+      prefix: "@upstash/ratelimit/read",
+    })
+    : (createNoopLimiter(1_000_000) as any),
 
   // Lower rate limit for write operations (POST, PUT, DELETE)
-  write: new Ratelimit({
-    redis: redis as any,
-    limiter: Ratelimit.slidingWindow(30, "1 m"), // 30 requests per minute
-    analytics: true,
-    prefix: "@upstash/ratelimit/write",
-  }),
+  write: redis
+    ? new Ratelimit({
+      redis: redis as any,
+      limiter: Ratelimit.slidingWindow(30, "1 m"), // 30 requests per minute
+      analytics: true,
+      prefix: "@upstash/ratelimit/write",
+    })
+    : (createNoopLimiter(1_000_000) as any),
 
   // Very strict rate limit for sync operations (resource-intensive)
-  sync: new Ratelimit({
-    redis: redis as any,
-    limiter: Ratelimit.slidingWindow(5, "5 m"), // 5 requests per 5 minutes
-    analytics: true,
-    prefix: "@upstash/ratelimit/sync",
-  }),
+  sync: redis
+    ? new Ratelimit({
+      redis: redis as any,
+      limiter: Ratelimit.slidingWindow(5, "5 m"), // 5 requests per 5 minutes
+      analytics: true,
+      prefix: "@upstash/ratelimit/sync",
+    })
+    : (createNoopLimiter(1_000_000) as any),
 
   // Strict rate limit for import/export operations
-  importExport: new Ratelimit({
-    redis: redis as any,
-    limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
-    analytics: true,
-    prefix: "@upstash/ratelimit/import-export",
-  }),
+  importExport: redis
+    ? new Ratelimit({
+      redis: redis as any,
+      limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
+      analytics: true,
+      prefix: "@upstash/ratelimit/import-export",
+    })
+    : (createNoopLimiter(1_000_000) as any),
 } as const;
 
 /**
@@ -171,8 +239,8 @@ export async function checkRateLimit(
   remaining: number;
   reset: number;
 }> {
-  // If Redis is not configured, skip rate limiting (development mode)
-  if (!redis) {
+  // If Upstash is not configured or temporarily disabled, skip rate limiting (fail open).
+  if (!redis || ratelimitDisabledUntilMs > Date.now()) {
     return {
       success: true,
       limit: 1000,
@@ -181,14 +249,28 @@ export async function checkRateLimit(
     };
   }
 
-  const result = await limiter.limit(identifier);
+  try {
+    const result = await limiter.limit(identifier);
 
-  return {
-    success: result.success,
-    limit: result.limit,
-    remaining: result.remaining,
-    reset: result.reset,
-  };
+    return {
+      success: result.success,
+      limit: result.limit,
+      remaining: result.remaining,
+      reset: result.reset,
+    };
+  } catch (err) {
+    // Upstash quota exhausted: disable further checks for a while to avoid log spam.
+    if (isUpstashQuotaError(err)) {
+      ratelimitDisabledUntilMs = Date.now() + 60 * 60 * 1000;
+      console.warn("[RateLimit] Upstash quota exceeded; rate limiting disabled temporarily.");
+    }
+    return {
+      success: true,
+      limit: 1000,
+      remaining: 999,
+      reset: Date.now(),
+    };
+  }
 }
 
 /**

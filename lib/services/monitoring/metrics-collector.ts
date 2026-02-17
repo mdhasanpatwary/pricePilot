@@ -1,4 +1,6 @@
-import { Redis } from "@upstash/redis";
+import { Redis as UpstashRedis } from "@upstash/redis";
+import type { Redis as IORedis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 /**
  * Metrics Collector Service
@@ -15,6 +17,10 @@ import { Redis } from "@upstash/redis";
  *
  * @module lib/services/monitoring/metrics-collector
  */
+
+type RedisBackend =
+    | { kind: "upstash"; client: UpstashRedis }
+    | { kind: "ioredis"; client: IORedis };
 
 /**
  * Metric data point with timestamp and optional labels
@@ -66,19 +72,117 @@ export interface IMetricsCollector {
  * Redis-based Metrics Collector Implementation
  */
 export class MetricsCollector implements IMetricsCollector {
-    private redis: Redis | null;
+    private backend: RedisBackend | null;
+    private disabledUntilMs = 0;
     private readonly DETAILED_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
     private readonly AGGREGATED_TTL = 90 * 24 * 60 * 60; // 90 days in seconds
 
     constructor() {
-        // Initialize Redis client if configured
-        this.redis =
-            process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-                ? new Redis({
-                    url: process.env.UPSTASH_REDIS_REST_URL,
-                    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-                })
-                : null;
+        // In development, prefer local Redis (ioredis) to avoid burning Upstash quotas.
+        // You can force Upstash usage via MONITORING_FORCE_UPSTASH_REDIS=true.
+        this.backend = this.initBackend();
+    }
+
+    private initBackend(): RedisBackend | null {
+        const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
+        const forceUpstash = process.env.MONITORING_FORCE_UPSTASH_REDIS === "true";
+        const hasUpstash =
+            !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
+
+        if (process.env.NODE_ENV !== "production" && preferLocalInDev && !forceUpstash) {
+            return { kind: "ioredis", client: getRedisConnection() as any };
+        }
+
+        if (hasUpstash) {
+            return {
+                kind: "upstash",
+                client: new UpstashRedis({
+                    url: process.env.UPSTASH_REDIS_REST_URL!,
+                    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+                }),
+            };
+        }
+
+        // If no Upstash REST credentials, fall back to whatever REDIS_URL / local dev is configured to use.
+        // This relies on lib/queue/connection.ts to decide the effective redis URL.
+        return { kind: "ioredis", client: getRedisConnection() as any };
+    }
+
+    private isDisabled(): boolean {
+        return this.disabledUntilMs > Date.now();
+    }
+
+    private disableFor(ms: number, reason: string, error?: unknown): void {
+        this.disabledUntilMs = Date.now() + ms;
+        console.warn(
+            `[MetricsCollector] Disabled temporarily (${Math.round(ms / 1000)}s): ${reason}`,
+            error instanceof Error ? { message: error.message } : undefined,
+        );
+    }
+
+    private handleBackendError(error: unknown): void {
+        const msg =
+            error instanceof Error
+                ? error.message
+                : typeof error === "string"
+                    ? error
+                    : (() => {
+                        try {
+                            return JSON.stringify(error);
+                        } catch {
+                            return String(error);
+                        }
+                    })();
+
+        // Upstash quota exhausted: disable metrics until the next session/day.
+        if (msg.includes("max requests limit exceeded")) {
+            this.disableFor(60 * 60 * 1000, "Upstash quota exceeded", error);
+            return;
+        }
+
+        // Transient connection failures: short backoff.
+        if (
+            msg.includes("ECONNREFUSED") ||
+            msg.includes("ENOTFOUND") ||
+            msg.includes("ETIMEDOUT") ||
+            msg.includes("Connection is closed") ||
+            msg.includes("EPERM")
+        ) {
+            this.disableFor(30 * 1000, "Redis unavailable", error);
+            return;
+        }
+    }
+
+    private async zaddPoint(key: string, score: number, member: string): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        if (this.backend.kind === "upstash") {
+            await this.backend.client.zadd(key, { score, member });
+            return;
+        }
+
+        // ioredis signature: zadd key score member
+        await (this.backend.client as any).zadd(key, score, member);
+    }
+
+    private async expireKey(key: string, ttlSeconds: number): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+        await (this.backend.client as any).expire(key, ttlSeconds);
+    }
+
+    private async zrangeAll(key: string): Promise<any[]> {
+        if (!this.backend || this.isDisabled()) return [];
+        return await (this.backend.client as any).zrange(key, 0, -1);
+    }
+
+    private async keys(pattern: string): Promise<string[]> {
+        if (!this.backend || this.isDisabled()) return [];
+        return await (this.backend.client as any).keys(pattern);
+    }
+
+    private async exists(key: string): Promise<number> {
+        if (!this.backend || this.isDisabled()) return 0;
+        return await (this.backend.client as any).exists(key);
     }
 
     /**
@@ -93,7 +197,7 @@ export class MetricsCollector implements IMetricsCollector {
         duration: number,
         tenantId?: string
     ): Promise<void> {
-        if (!this.redis) return;
+        if (!this.backend || this.isDisabled()) return;
 
         const timestamp = Date.now();
         // Use normalized endpoint as identifier (replace / with :)
@@ -110,13 +214,10 @@ export class MetricsCollector implements IMetricsCollector {
         };
 
         try {
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: JSON.stringify(dataPoint),
-            });
-
-            await this.redis.expire(key, this.DETAILED_TTL);
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to record response time:", error);
         }
     }
@@ -133,7 +234,7 @@ export class MetricsCollector implements IMetricsCollector {
         errorType: string,
         tenantId?: string
     ): Promise<void> {
-        if (!this.redis) return;
+        if (!this.backend || this.isDisabled()) return;
 
         const timestamp = Date.now();
         const normalizedEndpoint = endpoint === '/' ? 'root' : endpoint.replace(/^\/|\/$/g, '').replace(/\//g, ':');
@@ -150,13 +251,10 @@ export class MetricsCollector implements IMetricsCollector {
         };
 
         try {
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: JSON.stringify(dataPoint),
-            });
-
-            await this.redis.expire(key, this.DETAILED_TTL);
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to record error:", error);
         }
     }
@@ -173,7 +271,7 @@ export class MetricsCollector implements IMetricsCollector {
         stage: 'QUEUE' | 'START' | 'PROGRESS' | 'STOP' | 'FAIL',
         metadata?: Record<string, any>
     ): Promise<void> {
-        if (!this.redis) return;
+        if (!this.backend || this.isDisabled()) return;
 
         const timestamp = Date.now();
         const key = this.buildKey("sync_lifecycle", siteId);
@@ -189,12 +287,10 @@ export class MetricsCollector implements IMetricsCollector {
         };
 
         try {
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: JSON.stringify(dataPoint)
-            });
-            await this.redis.expire(key, this.DETAILED_TTL);
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to record sync lifecycle:", error);
         }
     }
@@ -213,7 +309,7 @@ export class MetricsCollector implements IMetricsCollector {
         blocked: boolean,
         tenantId?: string
     ): Promise<void> {
-        if (!this.redis) return;
+        if (!this.backend || this.isDisabled()) return;
 
         const timestamp = Date.now();
 
@@ -243,18 +339,13 @@ export class MetricsCollector implements IMetricsCollector {
 
         try {
             await Promise.all([
-                this.redis.zadd(successKey, {
-                    score: timestamp,
-                    member: JSON.stringify(successDataPoint),
-                }),
-                this.redis.zadd(blockKey, {
-                    score: timestamp,
-                    member: JSON.stringify(blockDataPoint),
-                }),
-                this.redis.expire(successKey, this.DETAILED_TTL),
-                this.redis.expire(blockKey, this.DETAILED_TTL),
+                this.zaddPoint(successKey, timestamp, JSON.stringify(successDataPoint)),
+                this.zaddPoint(blockKey, timestamp, JSON.stringify(blockDataPoint)),
+                this.expireKey(successKey, this.DETAILED_TTL),
+                this.expireKey(blockKey, this.DETAILED_TTL),
             ]);
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to record scraping result:", error);
         }
     }
@@ -271,7 +362,7 @@ export class MetricsCollector implements IMetricsCollector {
         success: boolean,
         productCount: number
     ): Promise<void> {
-        if (!this.redis) return;
+        if (!this.backend || this.isDisabled()) return;
 
         const timestamp = Date.now();
         const key = this.buildKey("price_update", "all", tenantId);
@@ -287,13 +378,10 @@ export class MetricsCollector implements IMetricsCollector {
         };
 
         try {
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: JSON.stringify(dataPoint),
-            });
-
-            await this.redis.expire(key, this.DETAILED_TTL);
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to record price update:", error);
         }
     }
@@ -304,7 +392,7 @@ export class MetricsCollector implements IMetricsCollector {
      * @param ipAddress - IP address of failed authentication attempt
      */
     async recordAuthFailure(ipAddress: string): Promise<void> {
-        if (!this.redis) return;
+        if (!this.backend || this.isDisabled()) return;
 
         const timestamp = Date.now();
         const key = this.buildKey("auth_failure", ipAddress);
@@ -318,14 +406,11 @@ export class MetricsCollector implements IMetricsCollector {
         };
 
         try {
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: JSON.stringify(dataPoint),
-            });
-
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
             // Shorter TTL for auth failures (1 hour)
-            await this.redis.expire(key, 60 * 60);
+            await this.expireKey(key, 60 * 60);
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to record auth failure:", error);
         }
     }
@@ -343,7 +428,7 @@ export class MetricsCollector implements IMetricsCollector {
         timeWindow: number,
         tenantId?: string
     ): Promise<MetricData> {
-        if (!this.redis) {
+        if (!this.backend || this.isDisabled()) {
             return this.getEmptyMetricData(metricType, timeWindow);
         }
 
@@ -366,7 +451,7 @@ export class MetricsCollector implements IMetricsCollector {
 
             for (const key of keys) {
                 // Upstash Redis client may not expose zrangebyscore; retrieve full set and filter in-app
-                const members = await this.redis.zrange(key, 0, -1);
+                const members = await this.zrangeAll(key);
                 let parseErrors = 0;
 
                 for (const member of members) {
@@ -405,7 +490,7 @@ export class MetricsCollector implements IMetricsCollector {
             // Store aggregated TTL to keep longer-term aggregates if Redis is available
             try {
                 const aggKey = `metrics:aggregated:${metricType}:${tenantId ?? 'all'}`;
-                await this.redis.expire(aggKey, this.AGGREGATED_TTL);
+                await this.expireKey(aggKey, this.AGGREGATED_TTL);
             } catch (err) {
                 // Non-fatal - continue
             }
@@ -417,6 +502,7 @@ export class MetricsCollector implements IMetricsCollector {
                 aggregates,
             };
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to get metrics:", error);
             return this.getEmptyMetricData(metricType, timeWindow);
         }
@@ -456,7 +542,7 @@ export class MetricsCollector implements IMetricsCollector {
      * @returns Array of matching keys
      */
     private async getKeysMatchingPattern(pattern: string): Promise<string[]> {
-        if (!this.redis) return [];
+        if (!this.backend || this.isDisabled()) return [];
 
         try {
             // For now, we'll construct the exact key from the pattern
@@ -471,14 +557,15 @@ export class MetricsCollector implements IMetricsCollector {
             // But Upstash REST API supports 'keys' command.
 
             if (pattern.includes("*")) {
-                 return await this.redis.keys(pattern);
+                return await this.keys(pattern);
             }
 
             // Check if key exists
-            const exists = await this.redis.exists(key);
+            const exists = await this.exists(key);
 
             return exists ? [key] : [];
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to get keys matching pattern:", error);
             return [];
         }
@@ -539,7 +626,7 @@ export class MetricsCollector implements IMetricsCollector {
         timeWindow: number,
         tenantId?: string
     ): Promise<Record<string, MetricAggregates>> {
-        if (!this.redis) return {};
+        if (!this.backend || this.isDisabled()) return {};
 
         const now = Date.now();
         const startTime = now - timeWindow * 1000;
@@ -550,7 +637,7 @@ export class MetricsCollector implements IMetricsCollector {
             const endpointData: Record<string, MetricDataPoint[]> = {};
 
             for (const key of keys) {
-                const members = await this.redis.zrange(key, 0, -1);
+                const members = await this.zrangeAll(key);
                 for (const member of members) {
                     try {
                         const dataPoint = JSON.parse(member as string) as MetricDataPoint;
@@ -569,6 +656,7 @@ export class MetricsCollector implements IMetricsCollector {
             }
             return result;
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to get endpoint metrics:", error);
             return {};
         }
@@ -581,7 +669,7 @@ export class MetricsCollector implements IMetricsCollector {
         failed: number;
         avgDuration: number;
     }> {
-        if (!this.redis) return { queued: 0, active: 0, completed: 0, failed: 0, avgDuration: 0 };
+        if (!this.backend || this.isDisabled()) return { queued: 0, active: 0, completed: 0, failed: 0, avgDuration: 0 };
 
         const now = Date.now();
         const startTime = now - timeWindow * 1000;
@@ -601,7 +689,7 @@ export class MetricsCollector implements IMetricsCollector {
             const startTimes = new Map<string, number>();
 
             for (const key of keys) {
-                const members = await this.redis.zrange(key, 0, -1);
+                const members = await this.zrangeAll(key);
                 for (const member of members) {
                     try {
                         const dp = JSON.parse(member as string) as MetricDataPoint;
@@ -633,6 +721,7 @@ export class MetricsCollector implements IMetricsCollector {
 
             return { queued, active, completed, failed, avgDuration };
         } catch (error) {
+            this.handleBackendError(error);
             console.error("Failed to get sync metrics:", error);
             return { queued: 0, active: 0, completed: 0, failed: 0, avgDuration: 0 };
         }
