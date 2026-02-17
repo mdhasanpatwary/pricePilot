@@ -65,6 +65,13 @@ export class CacheLayer {
     private readonly CIRCUIT_RESET_TIMEOUT = 30000; // 30s
     private healthCheckInterval: NodeJS.Timeout | null = null;
 
+    private static getGlobalState() {
+        const globalState = globalThis as typeof globalThis & {
+            __ppCacheLayer?: CacheLayer;
+        };
+        return globalState;
+    }
+
     private constructor() {
         this.redis = getRedisConnection();
         // In test mode and Next.js build phase, avoid eager Redis connect/log noise.
@@ -284,9 +291,16 @@ export class CacheLayer {
     }
 
     static getInstance(): CacheLayer {
+        const globalState = CacheLayer.getGlobalState();
+        if (globalState.__ppCacheLayer) {
+            return globalState.__ppCacheLayer;
+        }
+
         if (!CacheLayer.instance) {
             CacheLayer.instance = new CacheLayer();
         }
+
+        globalState.__ppCacheLayer = CacheLayer.instance;
         return CacheLayer.instance;
     }
 
@@ -329,10 +343,13 @@ export class CacheLayer {
      * Reset singleton instance - for testing only
      */
     static resetInstance(): void {
-        if (CacheLayer.instance) {
-            CacheLayer.instance.cleanup();
-            CacheLayer.instance = null as any;
+        const globalState = CacheLayer.getGlobalState();
+        const instance = globalState.__ppCacheLayer ?? CacheLayer.instance;
+        if (instance) {
+            instance.cleanup();
         }
+        globalState.__ppCacheLayer = undefined;
+        CacheLayer.instance = null as any;
     }
 
     /**

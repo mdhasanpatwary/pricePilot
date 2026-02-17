@@ -11,6 +11,10 @@ async function handleGET(_req: NextRequest) {
   }
 
   const tenantId = session.user.tenantId;
+  if (!tenantId || typeof tenantId !== "string") {
+    // Defensive: avoid Prisma findUnique({ id: undefined }) when session token is malformed.
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const tenant = await getCachedTenant(tenantId);

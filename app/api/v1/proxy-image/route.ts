@@ -131,7 +131,12 @@ async function handleGET(req: NextRequest) {
 
         // 404 for remote images is common; keep logs compact to avoid noise.
         console.warn("Image proxy upstream 404", { targetUrl });
-        return new NextResponse("Image not found", { status: 404 });
+        return new NextResponse("Image not found", {
+          status: 404,
+          headers: {
+            "Cache-Control": "public, max-age=300",
+          },
+        });
       }
 
       console.warn("Image proxy upstream error", {

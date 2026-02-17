@@ -33,7 +33,8 @@ export class SessionManager {
      */
     static async invalidateSession(sessionToken: string): Promise<void> {
         try {
-            await prisma.session.delete({
+            // Idempotent: logout may be triggered multiple times or race with expiry cleanup.
+            await prisma.session.deleteMany({
                 where: { sessionToken },
             });
         } catch (error) {

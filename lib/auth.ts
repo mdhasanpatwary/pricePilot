@@ -149,6 +149,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.tenantId = user.tenantId;
         token.isSuperAdmin = user.isSuperAdmin;
+        (token as any).invalidated = false;
 
         // Generate a unique session ID for this login
         const sessionId = Math.random().toString(36).substring(2, 15);
@@ -170,7 +171,8 @@ export const authOptions: NextAuthOptions = {
             orderBy: { lastUsedAt: "asc" },
           });
           if (oldestSession) {
-            await (prisma as any).session.delete({
+            // Idempotent: avoid throwing if another request already deleted it.
+            await (prisma as any).session.deleteMany({
               where: { id: oldestSession.id },
             });
           }
@@ -200,8 +202,15 @@ export const authOptions: NextAuthOptions = {
 
       // Handle session updates (e.g., password change)
       if (trigger === 'update' && session?.invalidateSession) {
-        // Force logout by returning null
-        return null as any;
+        // Never return null: NextAuth JWT encode expects an object payload.
+        (token as any).invalidated = true;
+        delete (token as any).sessionId;
+        delete (token as any).tenantId;
+        delete (token as any).role;
+        delete (token as any).isSuperAdmin;
+        delete (token as any).id;
+        delete (token as any).sub;
+        return token;
       }
 
       // ON EVERY REQUEST: Verify session still exists in DB (revocation check)
@@ -212,20 +221,32 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (!sessionRecord) {
-          // Session was revoked! Force logout by returning empty token
-          return null as any;
+          // Session was revoked! Mark token invalidated (keep payload object).
+          (token as any).invalidated = true;
+          delete (token as any).sessionId;
+          delete (token as any).tenantId;
+          delete (token as any).role;
+          delete (token as any).isSuperAdmin;
+          delete (token as any).id;
+          delete (token as any).sub;
+          return token;
         }
 
         // Check if session has expired
         if (new Date(sessionRecord.expires) < new Date()) {
           // Session expired, delete it and force logout
-          await (prisma as any).session.delete({
+          await (prisma as any).session.deleteMany({
             where: { id: sessionRecord.id },
-          }).catch(() => {
-            // Ignore errors if already deleted
           });
           sessionLookupCache.delete(`session:${token.sessionId as string}`);
-          return null as any;
+          (token as any).invalidated = true;
+          delete (token as any).sessionId;
+          delete (token as any).tenantId;
+          delete (token as any).role;
+          delete (token as any).isSuperAdmin;
+          delete (token as any).id;
+          delete (token as any).sub;
+          return token;
         }
 
         // Update lastUsedAt once an hour to minimize DB writes
@@ -245,10 +266,26 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      // If the JWT was invalidated (revoked/expired), represent as unauthenticated.
+      if ((token as any)?.invalidated) {
+        (session as any).user = undefined;
+        return session;
+      }
+
       if (session.user && token) {
-        session.user.id = (token.id as string) || (token.sub as string);
+        const userId = (token.id as string) || (token.sub as string);
+        const tenantId = token.tenantId as any;
+
+        // Defensive: if critical fields are missing, treat as signed out to avoid
+        // downstream "tenantId: undefined" DB lookups.
+        if (!userId || !tenantId) {
+          (session as any).user = undefined;
+          return session;
+        }
+
+        session.user.id = userId;
         session.user.role = token.role;
-        session.user.tenantId = token.tenantId;
+        session.user.tenantId = tenantId;
         session.user.isSuperAdmin = token.isSuperAdmin;
         session.user.sessionId = token.sessionId;
       }

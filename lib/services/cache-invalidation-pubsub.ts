@@ -38,6 +38,13 @@ export class CacheInvalidationPubSub {
     private isPublisherReady: boolean = false;
     private isSubscriberReady: boolean = false;
 
+    private static getGlobalState() {
+        const globalState = globalThis as typeof globalThis & {
+            __ppCacheInvalidationPubSub?: CacheInvalidationPubSub;
+        };
+        return globalState;
+    }
+
     private constructor() {
         // Generate unique instance ID (use random for edge compatibility)
         this.instanceId = `instance-${Math.random().toString(36).substring(7)}-${Date.now()}`;
@@ -52,9 +59,16 @@ export class CacheInvalidationPubSub {
     }
 
     static getInstance(): CacheInvalidationPubSub {
+        const globalState = CacheInvalidationPubSub.getGlobalState();
+        if (globalState.__ppCacheInvalidationPubSub) {
+            return globalState.__ppCacheInvalidationPubSub;
+        }
+
         if (!CacheInvalidationPubSub.instance) {
             CacheInvalidationPubSub.instance = new CacheInvalidationPubSub();
         }
+
+        globalState.__ppCacheInvalidationPubSub = CacheInvalidationPubSub.instance;
         return CacheInvalidationPubSub.instance;
     }
 
@@ -324,10 +338,13 @@ export class CacheInvalidationPubSub {
      * Reset singleton instance - for testing only
      */
     static resetInstance(): void {
-        if (CacheInvalidationPubSub.instance) {
-            CacheInvalidationPubSub.instance.cleanup();
-            CacheInvalidationPubSub.instance = null as any;
+        const globalState = CacheInvalidationPubSub.getGlobalState();
+        const instance = globalState.__ppCacheInvalidationPubSub ?? CacheInvalidationPubSub.instance;
+        if (instance) {
+            instance.cleanup().catch(() => {});
         }
+        globalState.__ppCacheInvalidationPubSub = undefined;
+        CacheInvalidationPubSub.instance = null as any;
     }
 }
 
