@@ -188,10 +188,31 @@ export class DiscoveryService {
                     siteId: site.id,
                     url: result.url,
                     title: result.title,
+                    imageUrl: result.imageUrl,
+                    sku: result.sku ?? undefined,
+                    brand: result.brand ?? undefined,
+                    model: result.model ?? undefined,
                     currentPrice: result.price,
                     inStock: result.inStock,
                     currency: result.currency || "BDT",
                     lastCrawledAt: new Date(),
+                  }
+                });
+              } else {
+                // Keep competitor product records fresh, and backfill missing fields (imageUrl is
+                // critical for match-approval comparison UI).
+                await tx.product.update({
+                  where: { id: compProduct.id },
+                  data: {
+                    title: result.title,
+                    currentPrice: result.price,
+                    inStock: result.inStock,
+                    currency: result.currency || "BDT",
+                    lastCrawledAt: new Date(),
+                    ...(result.imageUrl ? { imageUrl: result.imageUrl } : {}),
+                    ...(result.sku ? { sku: result.sku } : {}),
+                    ...(result.brand ? { brand: result.brand } : {}),
+                    ...(result.model ? { model: result.model } : {}),
                   }
                 });
               }

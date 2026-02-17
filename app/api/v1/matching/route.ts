@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import axios from "axios";
 import {
   validateBody,
   validationErrorResponse,
@@ -30,6 +31,104 @@ function normalizeImageUrl(
   } catch {
     return undefined;
   }
+}
+
+const OG_IMAGE_CACHE_TTL_MS = Number.parseInt(
+  process.env.MATCH_OG_IMAGE_CACHE_TTL_MS || "600000",
+  10,
+);
+const MAX_OG_BACKFILL_PER_REQUEST = Number.parseInt(
+  process.env.MATCH_OG_BACKFILL_PER_REQUEST || "5",
+  10,
+);
+const OG_NEGATIVE_CACHE_MAX_ENTRIES = Number.parseInt(
+  process.env.MATCH_OG_NEGATIVE_CACHE_MAX_ENTRIES || "2000",
+  10,
+);
+
+const ogImageNegativeCache = new Map<string, number>(); // url -> expiresAt
+const ogImageInFlight = new Map<string, Promise<void>>(); // productId -> promise
+
+function extractOgImage(html: string): string | undefined {
+  const metaTags = html.match(/<meta\s+[^>]*>/gi);
+  if (!metaTags) return undefined;
+
+  for (const tag of metaTags) {
+    const lower = tag.toLowerCase();
+    const isOg =
+      lower.includes('property="og:image"') ||
+      lower.includes("property='og:image'") ||
+      lower.includes('name="twitter:image"') ||
+      lower.includes("name='twitter:image'");
+
+    if (!isOg) continue;
+
+    const contentMatch = tag.match(/content\s*=\s*["']([^"']+)["']/i);
+    if (contentMatch?.[1]) return contentMatch[1].trim();
+  }
+
+  return undefined;
+}
+
+function queueProductImageBackfillFromOgMeta(
+  productId: string,
+  pageUrl: string,
+): void {
+  if (!productId || !pageUrl) return;
+
+  const negativeUntil = ogImageNegativeCache.get(pageUrl);
+  if (negativeUntil && negativeUntil > Date.now()) return;
+
+  if (ogImageInFlight.has(productId)) return;
+
+  const task: Promise<void> = (async () => {
+    try {
+      const res = await axios.get(pageUrl, {
+        timeout: 7000,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        responseType: "text",
+        maxRedirects: 5,
+        validateStatus: (s) => s >= 200 && s < 400,
+      });
+
+      const html = typeof res.data === "string" ? res.data : "";
+      if (!html) {
+        ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+        return;
+      }
+
+      const raw = extractOgImage(html);
+      const normalized = normalizeImageUrl(raw, pageUrl);
+      if (!normalized) {
+        if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
+          const first = ogImageNegativeCache.keys().next().value;
+          if (first) ogImageNegativeCache.delete(first);
+        }
+        ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+        return;
+      }
+
+      // Only backfill when missing; don't overwrite existing imageUrl.
+      await prisma.product.updateMany({
+        where: { id: productId, imageUrl: null },
+        data: { imageUrl: normalized },
+      });
+    } catch {
+      if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
+        const first = ogImageNegativeCache.keys().next().value;
+        if (first) ogImageNegativeCache.delete(first);
+      }
+      ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+    } finally {
+      ogImageInFlight.delete(productId);
+    }
+  })();
+
+  ogImageInFlight.set(productId, task);
 }
 
 async function handleGET(req: NextRequest) {
@@ -127,6 +226,21 @@ async function handleGET(req: NextRequest) {
     // Sanitize product matches to prevent XSS attacks
     // Requirement 2.7.3: XSS prevention for competitor product data
     const sanitizedMatches = formattedMatches.map(sanitizeProductMatch);
+
+    // Best-effort backfill: some competitor products created by DiscoveryService may have
+    // missing imageUrl. Try to capture og:image asynchronously to improve UX on next refresh.
+    let enqueued = 0;
+    for (const m of formattedMatches) {
+      const competitorPageUrl = m.competitor?.url;
+      if (
+        enqueued < (Number.isFinite(MAX_OG_BACKFILL_PER_REQUEST) ? MAX_OG_BACKFILL_PER_REQUEST : 5) &&
+        !m.competitor?.image &&
+        competitorPageUrl
+      ) {
+        enqueued++;
+        queueProductImageBackfillFromOgMeta(m.competitor.id, competitorPageUrl);
+      }
+    }
 
     return NextResponse.json(sanitizedMatches);
   } catch (error) {
