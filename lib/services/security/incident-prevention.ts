@@ -16,10 +16,11 @@
  * @module lib/services/security/incident-prevention
  */
 
-import { Redis } from '@upstash/redis';
 import { logger } from '@/lib/logger';
 import { securityMonitoringService, SecurityEventContext } from '../monitoring/security-monitoring';
 import { prisma } from '@/lib/prisma';
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 /**
  * Threat level classification
@@ -101,13 +102,7 @@ export class IncidentPreventionService {
     };
 
     constructor() {
-        this.redis =
-            process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-                ? new Redis({
-                    url: process.env.UPSTASH_REDIS_REST_URL,
-                    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-                })
-                : null;
+        this.redis = getRedisConnection();
     }
 
     /**
@@ -542,10 +537,11 @@ export class IncidentPreventionService {
 
         try {
             const key = 'security:incidents:all';
-            await this.redis.zadd(key, {
-                score: incident.timestamp.getTime(),
-                member: JSON.stringify(incident),
-            });
+            await this.redis.zadd(
+                key,
+                incident.timestamp.getTime(),
+                JSON.stringify(incident)
+            );
 
             // Set TTL for incidents (90 days)
             await this.redis.expire(key, 90 * 24 * 60 * 60);

@@ -68,9 +68,6 @@ function isRedisStartupError(error: unknown): boolean {
   if (typeof directCode === "string" && codes.has(directCode)) return true;
   if (typeof nestedCode === "string" && codes.has(nestedCode)) return true;
 
-  // Upstash free-tier / quota related.
-  if (msg.includes("max requests limit exceeded")) return true;
-  if (msg.includes("ERR max requests limit exceeded")) return true;
   if (msg.includes("Redis connection failed after")) return true;
   if (msg.includes("Redis preflight failed")) return true;
   if (msg.includes("Connection is closed")) return true;
@@ -99,12 +96,6 @@ function resolveRedisUrlForWorker(): string {
   const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
   if (process.env.NODE_ENV !== "production" && preferLocalInDev) {
     return "redis://localhost:6379";
-  }
-
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    const restUrl = process.env.UPSTASH_REDIS_REST_URL.replace("https://", "").replace("http://", "");
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    return `rediss://default:${token}@${restUrl}:6379`;
   }
 
   return "redis://localhost:6379";
@@ -245,9 +236,9 @@ async function start() {
       process.exit(1);
     };
 
-    // Prevent redis startup failures from hard-crashing `yarn dev:full` in dev.
-    process.on("unhandledRejection", handleProcessError);
-    process.on("uncaughtException", handleProcessError);
+      // Prevent redis startup failures from hard-crashing `yarn dev:full` in dev.
+      process.on("unhandledRejection", handleProcessError);
+      process.on("uncaughtException", handleProcessError);
 
     const startWorkersOnce = async (): Promise<void> => {
       await preflightRedisConnectivity();
@@ -300,7 +291,7 @@ async function start() {
       await startWorkersOnce();
     } catch (error) {
       // In development, Redis is often optional. Keep the process alive so `dev:full`
-      // doesn't kill Next.js when Redis/Upstash is unavailable or quota-limited.
+      // doesn't kill Next.js when Redis is unavailable.
       if (process.env.NODE_ENV !== "production" && isRedisStartupError(error)) {
         const retryMs = Number.parseInt(process.env.WORKER_REDIS_RETRY_MS || "30000", 10);
         const intervalMs =
@@ -308,7 +299,7 @@ async function start() {
 
         console.warn("⚠️ Workers disabled: Redis unavailable (or quota exceeded).");
         console.warn(`   - Next.js will keep running. Worker will retry in ${Math.round(intervalMs / 1000)}s.`);
-        console.warn("   - Fix: start local Redis and set REDIS_URL, or wait for Upstash quota reset.");
+        console.warn("   - Fix: start Redis and set REDIS_URL.");
 
         // Retry in background with a quiet, single interval.
         const timer = setInterval(async () => {

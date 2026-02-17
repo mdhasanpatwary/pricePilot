@@ -5,7 +5,7 @@
  */
 
 import { config } from 'dotenv';
-import { Redis } from '@upstash/redis';
+import { Redis } from "ioredis";
 
 // Load environment variables
 config();
@@ -18,23 +18,18 @@ async function main() {
     // Step 1: Check environment variables
     console.log('📋 Step 1: Checking Environment Variables\n');
 
-    if (!process.env.UPSTASH_REDIS_REST_URL) {
-        console.log('❌ UPSTASH_REDIS_REST_URL is not set');
-        process.exit(1);
+    const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+    if (!process.env.REDIS_URL) {
+        console.log('⚠️  REDIS_URL is not set; defaulting to redis://localhost:6379');
+    } else {
+        console.log('✅ REDIS_URL:', process.env.REDIS_URL);
     }
-    console.log('✅ UPSTASH_REDIS_REST_URL:', process.env.UPSTASH_REDIS_REST_URL);
-
-    if (!process.env.UPSTASH_REDIS_REST_TOKEN) {
-        console.log('❌ UPSTASH_REDIS_REST_TOKEN is not set');
-        process.exit(1);
-    }
-    console.log('✅ UPSTASH_REDIS_REST_TOKEN: ****' + process.env.UPSTASH_REDIS_REST_TOKEN.slice(-10));
 
     // Step 2: Test connection
     console.log('\n🔌 Step 2: Testing Redis Connection\n');
 
     try {
-        const redis = Redis.fromEnv();
+        const redis = new Redis(redisUrl);
 
         // Test ping
         const pingStart = Date.now();
@@ -52,11 +47,12 @@ async function main() {
         const testKey = 'test:verify:' + Date.now();
         const testValue = { message: 'Hello Redis!', timestamp: new Date().toISOString() };
 
-        await redis.set(testKey, testValue, { ex: 60 });
+        await redis.set(testKey, JSON.stringify(testValue), "EX", 60);
         console.log('✅ Redis SET successful');
 
         // Test GET
-        const retrieved = await redis.get(testKey);
+        const retrievedRaw = await redis.get(testKey);
+        const retrieved = retrievedRaw ? JSON.parse(retrievedRaw) : null;
         if (JSON.stringify(retrieved) === JSON.stringify(testValue)) {
             console.log('✅ Redis GET successful');
         } else {
@@ -82,7 +78,7 @@ async function main() {
         // Write test
         const writeStart = Date.now();
         for (let i = 0; i < iterations; i++) {
-            await redis.set(`perf:test:${i}`, { value: i }, { ex: 60 });
+            await redis.set(`perf:test:${i}`, JSON.stringify({ value: i }), "EX", 60);
         }
         const writeTime = Date.now() - writeStart;
         const avgWriteTime = writeTime / iterations;
@@ -110,6 +106,8 @@ async function main() {
         await redis.del(...keys);
         console.log('✅ Cleanup successful');
 
+        await redis.quit();
+
         // Summary
         console.log('\n╔════════════════════════════════════════════════════════════╗');
         console.log('║                    ✅ ALL CHECKS PASSED                    ║');
@@ -121,18 +119,17 @@ async function main() {
         console.log(`  • Write Performance: ${avgWriteTime.toFixed(2)}ms avg`);
         console.log(`  • Read Performance: ${avgReadTime.toFixed(2)}ms avg`);
         console.log('\nNext Steps:');
-        console.log('  1. Configure memory limit (500MB) in Upstash dashboard');
-        console.log('  2. Set eviction policy to "allkeys-lru" in Upstash dashboard');
-        console.log('  3. Proceed to Task 2: Create enhanced cache service\n');
+        console.log('  1. Ensure Redis is enabled and reachable from your app/worker');
+        console.log('  2. Proceed to app/worker integration testing\n');
 
         process.exit(0);
 
     } catch (error: any) {
         console.log('\n❌ Redis connection failed:', error.message);
         console.log('\nTroubleshooting:');
-        console.log('  1. Verify UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in .env');
-        console.log('  2. Check Upstash dashboard for database status');
-        console.log('  3. Ensure your IP is not blocked\n');
+        console.log('  1. Verify REDIS_URL in .env');
+        console.log('  2. Ensure Redis is running and reachable');
+        console.log('  3. Check firewall/security group rules (VPS)\n');
         process.exit(1);
     }
 }

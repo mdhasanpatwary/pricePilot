@@ -18,11 +18,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from '@upstash/redis';
 import { alertRulesEvaluator } from '@/lib/services/monitoring/alert-rules-evaluator';
 import { alertDeduplicationManager } from '@/lib/services/monitoring/alert-deduplication';
 import { notificationRouter } from '@/lib/services/monitoring/notification-router';
 import { logger } from '@/lib/logger';
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 export const maxDuration = 300; // 5 minutes max duration for Vercel functions
 export const dynamic = 'force-dynamic';
@@ -56,12 +57,7 @@ export async function GET(req: NextRequest) {
 
     try {
         // Initialize Redis for distributed locking
-        const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-            ? new Redis({
-                url: process.env.UPSTASH_REDIS_REST_URL,
-                token: process.env.UPSTASH_REDIS_REST_TOKEN,
-            })
-            : null;
+        const redis = getRedisConnection();
 
         // Acquire distributed lock to prevent duplicate evaluations
         const lockAcquired = await acquireDistributedLock(redis);
@@ -277,10 +273,13 @@ async function acquireDistributedLock(redis: Redis | null): Promise<boolean> {
 
         // Try to acquire lock using SET NX with TTL
         const lockValue = `${Date.now()}-${Math.random()}`;
-        const result = await redis.set(LOCK_KEY, lockValue, {
-            nx: true, // Only set if key doesn't exist
-            ex: LOCK_TTL, // Expire after TTL seconds
-        });
+        const result = await redis.set(
+            LOCK_KEY,
+            lockValue,
+            "EX",
+            LOCK_TTL,
+            "NX",
+        );
 
         if (result === 'OK') {
             logger.info('[Cron] Distributed lock acquired', {

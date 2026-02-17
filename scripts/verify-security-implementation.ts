@@ -167,13 +167,12 @@ async function verifyEnvironmentConfiguration() {
     console.log('\n⚙️  Verifying Environment Configuration...\n');
 
     // Check Redis configuration
-    const hasRedis =
-        !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
+    const hasRedis = !!process.env.REDIS_URL;
     addResult(
         'Configuration',
         'Redis Configuration',
         hasRedis,
-        hasRedis ? 'Redis configured' : 'Redis not configured (security features limited)'
+        hasRedis ? 'Redis configured' : 'REDIS_URL not configured (security features limited)'
     );
 
     // Check encryption key

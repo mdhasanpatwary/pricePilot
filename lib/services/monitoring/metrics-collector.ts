@@ -1,4 +1,3 @@
-import { Redis as UpstashRedis } from "@upstash/redis";
 import type { Redis as IORedis } from "ioredis";
 import { getRedisConnection } from "@/lib/queue/connection";
 
@@ -19,7 +18,6 @@ import { getRedisConnection } from "@/lib/queue/connection";
  */
 
 type RedisBackend =
-    | { kind: "upstash"; client: UpstashRedis }
     | { kind: "ioredis"; client: IORedis };
 
 /**
@@ -78,33 +76,10 @@ export class MetricsCollector implements IMetricsCollector {
     private readonly AGGREGATED_TTL = 90 * 24 * 60 * 60; // 90 days in seconds
 
     constructor() {
-        // In development, prefer local Redis (ioredis) to avoid burning Upstash quotas.
-        // You can force Upstash usage via MONITORING_FORCE_UPSTASH_REDIS=true.
         this.backend = this.initBackend();
     }
 
     private initBackend(): RedisBackend | null {
-        const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
-        const forceUpstash = process.env.MONITORING_FORCE_UPSTASH_REDIS === "true";
-        const hasUpstash =
-            !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
-
-        if (process.env.NODE_ENV !== "production" && preferLocalInDev && !forceUpstash) {
-            return { kind: "ioredis", client: getRedisConnection() as any };
-        }
-
-        if (hasUpstash) {
-            return {
-                kind: "upstash",
-                client: new UpstashRedis({
-                    url: process.env.UPSTASH_REDIS_REST_URL!,
-                    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-                }),
-            };
-        }
-
-        // If no Upstash REST credentials, fall back to whatever REDIS_URL / local dev is configured to use.
-        // This relies on lib/queue/connection.ts to decide the effective redis URL.
         return { kind: "ioredis", client: getRedisConnection() as any };
     }
 
@@ -134,12 +109,6 @@ export class MetricsCollector implements IMetricsCollector {
                         }
                     })();
 
-        // Upstash quota exhausted: disable metrics until the next session/day.
-        if (msg.includes("max requests limit exceeded")) {
-            this.disableFor(60 * 60 * 1000, "Upstash quota exceeded", error);
-            return;
-        }
-
         // Transient connection failures: short backoff.
         if (
             msg.includes("ECONNREFUSED") ||
@@ -155,11 +124,6 @@ export class MetricsCollector implements IMetricsCollector {
 
     private async zaddPoint(key: string, score: number, member: string): Promise<void> {
         if (!this.backend || this.isDisabled()) return;
-
-        if (this.backend.kind === "upstash") {
-            await this.backend.client.zadd(key, { score, member });
-            return;
-        }
 
         // ioredis signature: zadd key score member
         await (this.backend.client as any).zadd(key, score, member);
@@ -450,7 +414,7 @@ export class MetricsCollector implements IMetricsCollector {
             const allDataPoints: MetricDataPoint[] = [];
 
             for (const key of keys) {
-                // Upstash Redis client may not expose zrangebyscore; retrieve full set and filter in-app
+                // Retrieve full set and filter in-app.
                 const members = await this.zrangeAll(key);
                 let parseErrors = 0;
 
@@ -458,7 +422,7 @@ export class MetricsCollector implements IMetricsCollector {
                     try {
                         let dataPoint: MetricDataPoint | null = null;
 
-                        // Upstash may return either raw JSON strings or already-deserialized objects.
+                        // Defensive parsing: members should be raw JSON strings.
                         if (typeof member === "string") {
                             dataPoint = JSON.parse(member) as MetricDataPoint;
                         } else if (member && typeof member === "object") {
@@ -533,9 +497,7 @@ export class MetricsCollector implements IMetricsCollector {
     }
 
     /**
-     * Get keys matching a pattern (simplified for Upstash)
-     *
-     * Note: Upstash Redis doesn't support SCAN, so we use a simplified approach
+     * Get keys matching a pattern.
      * In production, consider maintaining an index of metric keys
      *
      * @param pattern - Key pattern to match
@@ -552,9 +514,8 @@ export class MetricsCollector implements IMetricsCollector {
             // or maintain a set of known keys.
             // Given the limitations, we might just look for exact matches or assume the user asks specifically?
 
-            // NOTE: The previous implementation just replaced * with all, effectively disabling wildcard search.
-            // We should use KEYS if safe, or SCAN. Since this is "PricePilot" with Upstash, KEYS is acceptable for low volume.
-            // But Upstash REST API supports 'keys' command.
+            // NOTE: This uses KEYS() for wildcard patterns. If the keyspace grows large, consider an index/set of known keys
+            // or a SCAN-based approach.
 
             if (pattern.includes("*")) {
                 return await this.keys(pattern);

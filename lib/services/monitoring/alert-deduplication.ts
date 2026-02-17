@@ -16,10 +16,11 @@
  * @module lib/services/monitoring/alert-deduplication
  */
 
-import { Redis } from '@upstash/redis';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import type { TriggeredAlert } from './alert-rules-evaluator';
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 /**
  * Alert state enumeration
@@ -67,14 +68,8 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
         if (redis !== undefined) {
             this.redis = redis;
         } else {
-            // Initialize Redis client if configured
-            this.redis =
-                process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-                    ? new Redis({
-                        url: process.env.UPSTASH_REDIS_REST_URL,
-                        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-                    })
-                    : null;
+            // Local Redis (shared connection).
+            this.redis = getRedisConnection();
         }
     }
 

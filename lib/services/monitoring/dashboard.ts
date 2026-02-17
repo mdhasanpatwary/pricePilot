@@ -605,9 +605,8 @@ export class MonitoringDashboardService implements IMonitoringDashboardService {
             });
         }
 
-        // Redis Health (check if metrics collector is working)
-        const redisHealthy = process.env.UPSTASH_REDIS_REST_URL &&
-            process.env.UPSTASH_REDIS_REST_TOKEN;
+        // Redis Health
+        const redisHealthy = !!process.env.REDIS_URL;
 
         if (redisHealthy) {
             components.push({
@@ -619,7 +618,7 @@ export class MonitoringDashboardService implements IMonitoringDashboardService {
             components.push({
                 name: 'Redis',
                 status: 'degraded',
-                message: 'Not configured',
+                message: 'REDIS_URL not configured',
             });
         }
 

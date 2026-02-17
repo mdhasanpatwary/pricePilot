@@ -8,15 +8,10 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { Redis } from '@upstash/redis';
+import { getRedisConnection } from "@/lib/queue/connection";
 
-// Initialize Redis client for real-time counters
-const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-    : null;
+// Shared Redis connection for real-time counters.
+const redis = getRedisConnection();
 
 /**
  * Represents a single scrape metric to be recorded
@@ -217,8 +212,6 @@ export class MetricsCollector {
      * @param metric - The metric to update counters for
      */
     private async updateRedisCounters(metric: ScrapeMetric): Promise<void> {
-        if (!redis) return;
-
         const hour = new Date(metric.timestamp).toISOString().slice(0, 13); // YYYY-MM-DDTHH
         const keyPrefix = `metrics:${metric.tenantId}:${metric.competitorWebsiteId}:${hour}`;
 

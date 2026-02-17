@@ -128,9 +128,40 @@ async function handlePOST(req: NextRequest) {
     }
 
     const { anchorId, duplicateIds } = validation.data!;
+    const tenantId = session.user.tenantId;
+
+    if (!tenantId) {
+      return NextResponse.json({ error: "Tenant context not found" }, { status: 400 });
+    }
+
+    if (duplicateIds.includes(anchorId)) {
+      return NextResponse.json(
+        { error: "anchorId cannot be included in duplicateIds" },
+        { status: 400 },
+      );
+    }
 
     // Process in a transaction to ensure data integrity
     await prisma.$transaction(async (tx) => {
+      // Validate tenancy scope: all products must belong to the same tenant.
+      const anchor = await tx.product.findFirst({
+        where: { id: anchorId, tenantId },
+        select: { id: true },
+      });
+      if (!anchor) {
+        throw new Error("ANCHOR_NOT_FOUND");
+      }
+
+      const dupRows = await tx.product.findMany({
+        where: { id: { in: duplicateIds }, tenantId },
+        select: { id: true },
+      });
+      const dupIdSet = new Set(dupRows.map((r) => r.id));
+      const missing = duplicateIds.filter((id) => !dupIdSet.has(id));
+      if (missing.length > 0) {
+        throw new Error(`DUPLICATES_NOT_FOUND:${missing.slice(0, 10).join(",")}`);
+      }
+
       for (const dupId of duplicateIds) {
         // 1. Move Matches (Unified Tracking)
         await tx.productMatch.updateMany({
@@ -149,15 +180,26 @@ async function handlePOST(req: NextRequest) {
           data: { productId: anchorId }
         });
 
-        // 3. Delete Redundant Product
-        await tx.product.delete({
-          where: { id: dupId }
+        // 3. Delete redundant Product (idempotent; avoids P2025 if UI retries).
+        await tx.product.deleteMany({
+          where: { id: dupId, tenantId }
         });
       }
     });
 
     return NextResponse.json({ success: true, message: `${duplicateIds.length} items merged into master entry.` });
   } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "ANCHOR_NOT_FOUND") {
+        return NextResponse.json({ error: "Anchor product not found" }, { status: 404 });
+      }
+      if (error.message.startsWith("DUPLICATES_NOT_FOUND:")) {
+        return NextResponse.json(
+          { error: "One or more duplicate products were not found" },
+          { status: 404 },
+        );
+      }
+    }
     console.error("Merge error:", error);
     return NextResponse.json({ error: "Merge operation failed" }, { status: 500 });
   }

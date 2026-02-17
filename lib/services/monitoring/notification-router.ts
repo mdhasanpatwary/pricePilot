@@ -17,12 +17,13 @@
  * @module lib/services/monitoring/notification-router
  */
 
-import { Redis } from '@upstash/redis';
 import axios from 'axios';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { emailNotificationService } from './email-notification';
 import type { TriggeredAlert } from './alert-rules-evaluator';
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 /**
  * Notification result for a single channel
@@ -123,14 +124,7 @@ export class NotificationRouter implements INotificationRouter {
         if (redis !== undefined) {
             this.redis = redis;
         } else {
-            // Initialize Redis client if configured
-            this.redis =
-                process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-                    ? new Redis({
-                        url: process.env.UPSTASH_REDIS_REST_URL,
-                        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-                    })
-                    : null;
+            this.redis = getRedisConnection();
         }
     }
 

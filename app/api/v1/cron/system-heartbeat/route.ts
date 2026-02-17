@@ -134,12 +134,12 @@ async function performHealthChecks(): Promise<{
     }
 
     // Check Redis connectivity (if configured)
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    if (process.env.REDIS_URL) {
         checks.redis = { status: 'UP' };
     } else {
         checks.redis = {
             status: 'DEGRADED',
-            message: 'Redis not configured',
+            message: 'REDIS_URL not configured',
         };
     }
 

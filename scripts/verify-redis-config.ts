@@ -14,7 +14,7 @@
  */
 
 import { config } from 'dotenv';
-import { Redis } from '@upstash/redis';
+import { Redis } from "ioredis";
 import { getRedisConnection } from '@/lib/queue/connection';
 import { CacheService } from '@/lib/services/cache';
 import { CacheLayer } from '@/lib/services/cache-layer';
@@ -44,8 +44,7 @@ async function verifyEnvironmentVariables(): Promise<boolean> {
     console.log('\n📋 Step 1: Verifying Environment Variables\n');
 
     const requiredVars = [
-        'UPSTASH_REDIS_REST_URL',
-        'UPSTASH_REDIS_REST_TOKEN'
+        'REDIS_URL'
     ];
 
     let allPresent = true;
@@ -71,11 +70,12 @@ async function verifyEnvironmentVariables(): Promise<boolean> {
     return allPresent;
 }
 
-async function testUpstashRestAPI(): Promise<boolean> {
-    console.log('\n🔌 Step 2: Testing Upstash REST API Connection\n');
+async function testRedisUrlConnection(): Promise<boolean> {
+    console.log('\n🔌 Step 2: Testing Redis URL Connection\n');
 
     try {
-        const redis = Redis.fromEnv();
+        const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+        const redis = new Redis(redisUrl);
 
         // Test ping
         const pingStart = Date.now();
@@ -84,14 +84,14 @@ async function testUpstashRestAPI(): Promise<boolean> {
 
         if (pingResult === 'PONG') {
             logResult({
-                step: 'Upstash REST API Ping',
+                step: 'Redis URL Ping',
                 status: 'PASS',
                 message: 'Successfully connected to Redis',
                 details: { responseTime: `${pingTime}ms` }
             });
         } else {
             logResult({
-                step: 'Upstash REST API Ping',
+                step: 'Redis URL Ping',
                 status: 'FAIL',
                 message: 'Unexpected ping response',
                 details: { response: pingResult }
@@ -104,24 +104,25 @@ async function testUpstashRestAPI(): Promise<boolean> {
         const testValue = { message: 'Hello Redis!', timestamp: new Date().toISOString() };
 
         // Set
-        await redis.set(testKey, testValue, { ex: 60 });
+        await redis.set(testKey, JSON.stringify(testValue), 'EX', 60);
         logResult({
-            step: 'Upstash REST API Set',
+            step: 'Redis URL Set',
             status: 'PASS',
             message: 'Successfully set test value'
         });
 
         // Get
-        const retrieved = await redis.get(testKey);
+        const retrievedRaw = await redis.get(testKey);
+        const retrieved = retrievedRaw ? JSON.parse(retrievedRaw) : null;
         if (JSON.stringify(retrieved) === JSON.stringify(testValue)) {
             logResult({
-                step: 'Upstash REST API Get',
+                step: 'Redis URL Get',
                 status: 'PASS',
                 message: 'Successfully retrieved test value'
             });
         } else {
             logResult({
-                step: 'Upstash REST API Get',
+                step: 'Redis URL Get',
                 status: 'FAIL',
                 message: 'Retrieved value does not match',
                 details: { expected: testValue, received: retrieved }
@@ -134,23 +135,24 @@ async function testUpstashRestAPI(): Promise<boolean> {
         const afterDelete = await redis.get(testKey);
         if (afterDelete === null) {
             logResult({
-                step: 'Upstash REST API Delete',
+                step: 'Redis URL Delete',
                 status: 'PASS',
                 message: 'Successfully deleted test value'
             });
         } else {
             logResult({
-                step: 'Upstash REST API Delete',
+                step: 'Redis URL Delete',
                 status: 'FAIL',
                 message: 'Value still exists after delete'
             });
             return false;
         }
 
+        await redis.quit();
         return true;
     } catch (error: any) {
         logResult({
-            step: 'Upstash REST API Connection',
+            step: 'Redis URL Connection',
             status: 'FAIL',
             message: 'Failed to connect to Redis',
             details: { error: error.message }
@@ -412,7 +414,7 @@ async function checkRedisConfiguration(): Promise<void> {
                 status: 'WARN',
                 message: 'No memory limit set (unlimited)',
                 details: {
-                    recommendation: 'Set maxmemory to 500MB in Upstash dashboard',
+                    recommendation: 'Set maxmemory to ~500MB in your Redis configuration',
                     currentUsage: `${(usedMemory / 1024 / 1024).toFixed(2)} MB`
                 }
             });
@@ -456,7 +458,7 @@ async function checkRedisConfiguration(): Promise<void> {
                 details: {
                     current: maxMemoryPolicy,
                     recommended: 'allkeys-lru',
-                    note: 'Configure this in Upstash dashboard under Configuration'
+                    note: 'Configure this in your Redis configuration (e.g., redis.conf)'
                 }
             });
         }
@@ -492,13 +494,14 @@ async function performanceTest(): Promise<void> {
     console.log('\n⚡ Step 7: Performance Testing\n');
 
     try {
-        const redis = Redis.fromEnv();
+        const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+        const redis = new Redis(redisUrl);
         const iterations = 100;
 
         // Test write performance
         const writeStart = Date.now();
         for (let i = 0; i < iterations; i++) {
-            await redis.set(`perf:test:${i}`, { value: i }, { ex: 60 });
+            await redis.set(`perf:test:${i}`, JSON.stringify({ value: i }), "EX", 60);
         }
         const writeTime = Date.now() - writeStart;
         const avgWriteTime = writeTime / iterations;
@@ -539,6 +542,8 @@ async function performanceTest(): Promise<void> {
         const keys = Array.from({ length: iterations }, (_, i) => `perf:test:${i}`);
         await redis.del(...keys);
 
+        await redis.quit();
+
     } catch (error: any) {
         logResult({
             step: 'Performance Test',
@@ -558,11 +563,11 @@ async function main() {
     const envOk = await verifyEnvironmentVariables();
     if (!envOk) {
         console.log('\n❌ Environment variables are not configured correctly.');
-        console.log('Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in your .env file.');
+        console.log('Please set REDIS_URL in your .env file.');
         process.exit(1);
     }
 
-    await testUpstashRestAPI();
+    await testRedisUrlConnection();
     await testIORedisConnection();
     await testCacheService();
     await testCacheLayer();
@@ -593,8 +598,8 @@ async function main() {
     } else {
         console.log('✅ All checks PASSED! Redis is configured correctly.\n');
         console.log('Next steps:');
-        console.log('  1. Review memory limit and eviction policy in Upstash dashboard');
-        console.log('  2. Proceed to Task 2: Create enhanced cache service\n');
+        console.log('  1. Review memory limit and eviction policy in your Redis configuration');
+        console.log('  2. Proceed to app/worker integration testing\n');
         process.exit(0);
     }
 }

@@ -20,7 +20,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { Redis } from '@upstash/redis';
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 /**
  * System status types
@@ -87,14 +88,7 @@ export class UptimeTracker implements IUptimeTracker {
     private readonly HEARTBEAT_TTL = 300; // 5 minutes
 
     constructor() {
-        // Initialize Redis client if configured
-        this.redis =
-            process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-                ? new Redis({
-                    url: process.env.UPSTASH_REDIS_REST_URL,
-                    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-                })
-                : null;
+        this.redis = getRedisConnection();
     }
 
     /**

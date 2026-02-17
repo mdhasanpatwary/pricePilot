@@ -1,6 +1,7 @@
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
+import { getRedisConnection } from "@/lib/queue/connection";
+import type { RateLimiterLike } from "@/lib/redis/sliding-window-ratelimit";
+import { createSlidingWindowRateLimiter } from "@/lib/redis/sliding-window-ratelimit";
 
 /**
  * Rate limiting for documentation endpoints
@@ -14,48 +15,42 @@ import { NextRequest, NextResponse } from "next/server";
  * @module lib/documentation/rate-limit
  */
 
-const redis =
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-        ? new Redis({
-            url: process.env.UPSTASH_REDIS_REST_URL,
-            token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        })
-        : undefined;
+const redis = getRedisConnection();
 
 /**
  * Rate limiters for documentation endpoints
  */
 export const documentationRateLimiters = {
     // Tenant documentation: 100 requests/minute per IP
-    tenantDocs: new Ratelimit({
+    tenantDocs: createSlidingWindowRateLimiter({
         redis: redis as any,
-        limiter: Ratelimit.slidingWindow(100, "1 m"),
-        analytics: true,
-        prefix: "@upstash/ratelimit/docs/tenant",
+        prefix: "ratelimit:docs:tenant",
+        limit: 100,
+        windowMs: 60 * 1000,
     }),
 
     // Admin documentation: 1000 requests/hour per token (authenticated users)
-    adminDocs: new Ratelimit({
+    adminDocs: createSlidingWindowRateLimiter({
         redis: redis as any,
-        limiter: Ratelimit.slidingWindow(1000, "1 h"),
-        analytics: true,
-        prefix: "@upstash/ratelimit/docs/admin",
+        prefix: "ratelimit:docs:admin",
+        limit: 1000,
+        windowMs: 60 * 60 * 1000,
     }),
 
     // Search: 100 requests/minute per IP
-    search: new Ratelimit({
+    search: createSlidingWindowRateLimiter({
         redis: redis as any,
-        limiter: Ratelimit.slidingWindow(100, "1 m"),
-        analytics: true,
-        prefix: "@upstash/ratelimit/docs/search",
+        prefix: "ratelimit:docs:search",
+        limit: 100,
+        windowMs: 60 * 1000,
     }),
 
     // Feedback: 10 submissions/hour per user
-    feedback: new Ratelimit({
+    feedback: createSlidingWindowRateLimiter({
         redis: redis as any,
-        limiter: Ratelimit.slidingWindow(10, "1 h"),
-        analytics: true,
-        prefix: "@upstash/ratelimit/docs/feedback",
+        prefix: "ratelimit:docs:feedback",
+        limit: 10,
+        windowMs: 60 * 60 * 1000,
     }),
 } as const;
 
@@ -85,7 +80,7 @@ export function getDocumentationRateLimitIdentifier(
  * Check rate limit and return response if exceeded
  */
 export async function checkDocumentationRateLimit(
-    limiter: Ratelimit,
+    limiter: RateLimiterLike,
     identifier: string
 ): Promise<{
     success: boolean;
@@ -93,16 +88,6 @@ export async function checkDocumentationRateLimit(
     remaining: number;
     reset: number;
 }> {
-    // If Redis is not configured, skip rate limiting (development mode)
-    if (!redis) {
-        return {
-            success: true,
-            limit: 1000,
-            remaining: 999,
-            reset: Date.now(),
-        };
-    }
-
     const result = await limiter.limit(identifier);
 
     return {

@@ -155,6 +155,15 @@ export class CacheLayer {
 
         this.connectionPromise = (async () => {
             try {
+                // With ioredis + lazyConnect, calling `connect()` while already connecting/connected
+                // throws: "Redis is already connecting/connected". That is not an outage.
+                // Short-circuit based on status to avoid false "cache disabled" logs.
+                if (this.redis.status === "ready") {
+                    this.isRedisAvailable = true;
+                    this.recordSuccess();
+                    return;
+                }
+
                 // Set a timeout for connection check
                 const timeoutPromise = new Promise<void>((_, reject) => {
                     this.connectionCheckTimeout = setTimeout(() => {
@@ -162,14 +171,35 @@ export class CacheLayer {
                     }, 3000); // 3 second timeout
                 });
 
-                const connectPromise = this.redis.connect().then(() => {
-                    this.isRedisAvailable = true;
-                    this.recordSuccess();
-                    logger.info("[CacheLayer] Redis connection established");
-                    this.initializeStats();
-                });
+                const waitForReady = () =>
+                    new Promise<void>((resolve, reject) => {
+                        const onReady = () => {
+                            cleanup();
+                            resolve();
+                        };
+                        const onError = (err: unknown) => {
+                            cleanup();
+                            reject(err);
+                        };
+                        const cleanup = () => {
+                            this.redis.off("ready", onReady);
+                            this.redis.off("error", onError as any);
+                        };
+                        this.redis.on("ready", onReady);
+                        this.redis.on("error", onError as any);
+                    });
 
-                await Promise.race([connectPromise, timeoutPromise]);
+                const connectPromise =
+                    this.redis.status === "connecting" || this.redis.status === "reconnecting"
+                        ? waitForReady()
+                        : this.redis.connect();
+
+                await Promise.race([connectPromise as any, timeoutPromise]);
+
+                this.isRedisAvailable = true;
+                this.recordSuccess();
+                logger.info("[CacheLayer] Redis connection established");
+                this.initializeStats();
 
                 if (this.connectionCheckTimeout) {
                     clearTimeout(this.connectionCheckTimeout);

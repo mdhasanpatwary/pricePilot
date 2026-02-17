@@ -1,19 +1,14 @@
-import { Redis } from '@upstash/redis';
 import { logger } from "../logger";
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 export class CacheService {
   private redis: Redis | null = null;
   private static instance: CacheService;
 
   private constructor() {
-    // Try to initialize from environment variables automatically
-    try {
-        // This will look for UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
-        // or KV_REST_API_URL and KV_REST_API_TOKEN
-        this.redis = Redis.fromEnv();
-    } catch (e) {
-        logger.warn("[CacheService] Redis environment variables missing. Caching disabled.");
-    }
+    // Shared Redis connection (lazyConnect in lib/queue/connection.ts).
+    this.redis = getRedisConnection();
   }
 
   static getInstance(): CacheService {
@@ -26,8 +21,9 @@ export class CacheService {
   async get<T>(key: string): Promise<T | null> {
     if (!this.redis) return null;
     try {
-      const data = await this.redis.get<T>(key);
-      return data;
+      const raw = await this.redis.get(key);
+      if (raw == null) return null;
+      return JSON.parse(raw) as T;
     } catch (error) {
       // logger.error(`[CacheService] Get Error: ${key}`, { error });
       return null;
@@ -37,7 +33,7 @@ export class CacheService {
   async set(key: string, value: any, ttlSeconds: number = 3600): Promise<void> {
     if (!this.redis) return;
     try {
-      await this.redis.set(key, value, { ex: ttlSeconds });
+      await this.redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
     } catch (error) {
       logger.error(`[CacheService] Set Error: ${key}`, { error });
     }

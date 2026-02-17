@@ -695,8 +695,9 @@ export const evaluatePricingSchema = z.object({
 // ============================================================================
 
 export const mergeDuplicatesSchema = z.object({
-  anchorId: uuidSchema,
-  duplicateIds: z.array(uuidSchema).min(1, "At least one duplicate ID is required"),
+  // Products use CUIDs in most environments; allow both UUID and CUID.
+  anchorId: idSchema,
+  duplicateIds: z.array(idSchema).min(1, "At least one duplicate ID is required"),
 });
 
 // ============================================================================

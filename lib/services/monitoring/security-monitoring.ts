@@ -20,7 +20,8 @@
 
 import { metricsCollector } from './metrics-collector';
 import { logger } from '@/lib/logger';
-import { Redis } from '@upstash/redis';
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 /**
  * Security event types
@@ -96,14 +97,7 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
     private readonly CREDENTIAL_STUFFING_WINDOW = 10 * 60 * 1000; // 10 minutes
 
     constructor() {
-        // Initialize Redis client if configured
-        this.redis =
-            process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-                ? new Redis({
-                    url: process.env.UPSTASH_REDIS_REST_URL,
-                    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-                })
-                : null;
+        this.redis = getRedisConnection();
     }
 
     /**
@@ -174,9 +168,10 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
                 const timestamp = Date.now();
                 const key = `metrics:rate_limit_violation:${context.ipAddress}`;
 
-                await this.redis.zadd(key, {
-                    score: timestamp,
-                    member: JSON.stringify({
+                await this.redis.zadd(
+                    key,
+                    timestamp,
+                    JSON.stringify({
                         timestamp,
                         value: 1,
                         labels: {
@@ -184,8 +179,8 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
                             endpoint: context.endpoint,
                             userId: context.userId,
                         },
-                    }),
-                });
+                    })
+                );
 
                 await this.redis.expire(key, 60 * 60); // 1 hour TTL
             }
@@ -227,9 +222,10 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
                 const timestamp = Date.now();
                 const key = `metrics:unauthorized_access:all`;
 
-                await this.redis.zadd(key, {
-                    score: timestamp,
-                    member: JSON.stringify({
+                await this.redis.zadd(
+                    key,
+                    timestamp,
+                    JSON.stringify({
                         timestamp,
                         value: 1,
                         labels: {
@@ -238,8 +234,8 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
                             userId: context.userId,
                             statusCode: context.statusCode,
                         },
-                    }),
-                });
+                    })
+                );
 
                 await this.redis.expire(key, 60 * 60); // 1 hour TTL
             }
@@ -432,10 +428,7 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
             const key = 'security:events:all';
             const timestamp = event.timestamp.getTime();
 
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: JSON.stringify(event),
-            });
+            await this.redis.zadd(key, timestamp, JSON.stringify(event));
 
             // Set TTL for security events (7 days)
             await this.redis.expire(key, 7 * 24 * 60 * 60);
@@ -480,17 +473,18 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
                 const timestamp = Date.now();
                 const key = `metrics:suspicious_pattern:${context.ipAddress}`;
 
-                await this.redis.zadd(key, {
-                    score: timestamp,
-                    member: JSON.stringify({
+                await this.redis.zadd(
+                    key,
+                    timestamp,
+                    JSON.stringify({
                         timestamp,
                         value: 1,
                         labels: {
                             ipAddress: context.ipAddress,
                             patternType,
                         },
-                    }),
-                });
+                    })
+                );
 
                 await this.redis.expire(key, 60 * 60); // 1 hour TTL
             }
@@ -520,10 +514,7 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
             const key = `security:email_attempts:${ipAddress}`;
             const timestamp = Date.now();
 
-            await this.redis.zadd(key, {
-                score: timestamp,
-                member: email,
-            });
+            await this.redis.zadd(key, timestamp, email);
 
             // Set TTL for email attempts (10 minutes)
             await this.redis.expire(key, 10 * 60);
@@ -557,8 +548,9 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
 
             for (const email of emails) {
                 try {
-                    const score = await this.redis.zscore(key, email as string);
-                    if (score && score >= startTime && score <= now) {
+                    const scoreRaw = await this.redis.zscore(key, email as string);
+                    const score = scoreRaw == null ? null : Number(scoreRaw);
+                    if (score != null && Number.isFinite(score) && score >= startTime && score <= now) {
                         recentEmails.push(email as string);
                     }
                 } catch (err) {

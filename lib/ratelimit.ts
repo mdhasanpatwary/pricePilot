@@ -1,90 +1,25 @@
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import { NextResponse } from "next/server";
 import { securityMonitoringService } from "@/lib/services/monitoring/security-monitoring";
+import { getRedisConnection } from "@/lib/queue/connection";
+import type { RateLimiterLike } from "@/lib/redis/sliding-window-ratelimit";
+import { createSlidingWindowRateLimiter } from "@/lib/redis/sliding-window-ratelimit";
 
 /**
  * Rate limiting configuration for API routes
  * 
- * This module provides distributed rate limiting using Upstash Redis with sliding window algorithm.
- * In development or when Redis is not configured, it falls back to in-memory rate limiting.
+ * This module provides distributed rate limiting using Redis with a sliding window algorithm.
+ * If Redis is unavailable, it fails open (does not block requests).
  * 
  * @module lib/ratelimit
  * @see {@link https://docs.upstash.com/redis/features/ratelimiting|Upstash Rate Limiting}
  */
 
 /**
- * Redis client for distributed rate limiting
- * 
- * Initialized from environment variables:
- * - UPSTASH_REDIS_REST_URL: Redis instance URL
- * - UPSTASH_REDIS_REST_TOKEN: Authentication token
- * 
- * If not configured, rate limiting falls back to in-memory storage (single instance only).
+ * Redis client for distributed rate limiting.
  */
-const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
-const allowUpstashInDev = process.env.UPSTASH_RATE_LIMIT_IN_DEV === "true";
-
 let ratelimitDisabledUntilMs = 0;
 
-function isUpstashQuotaError(err: unknown): boolean {
-  const msg =
-    err instanceof Error
-      ? err.message
-      : typeof err === "string"
-        ? err
-        : (() => {
-          try {
-            return JSON.stringify(err);
-          } catch {
-            return String(err);
-          }
-        })();
-  return msg.includes("max requests limit exceeded");
-}
-
-function shouldUseUpstashRateLimit(): boolean {
-  const hasUpstash =
-    !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!hasUpstash) return false;
-
-  if (process.env.NODE_ENV === "production") return true;
-  if (allowUpstashInDev) return true;
-
-  // Dev default: if we prefer local Redis, do not use Upstash (avoid quota burn).
-  return !preferLocalInDev;
-}
-
-const redis = shouldUseUpstashRateLimit()
-  ? new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  })
-  : undefined;
-
-type RateLimitResult = {
-  success: boolean;
-  limit: number;
-  remaining: number;
-  reset: number;
-};
-
-type RateLimiterLike = {
-  limit: (identifier: string) => Promise<RateLimitResult>;
-};
-
-function createNoopLimiter(limit: number): RateLimiterLike {
-  return {
-    async limit() {
-      return {
-        success: true,
-        limit,
-        remaining: limit,
-        reset: Date.now() + 60_000,
-      };
-    },
-  };
-}
+const redis = getRedisConnection();
 
 /**
  * Rate limiter configurations for different endpoint types
@@ -110,64 +45,52 @@ function createNoopLimiter(limit: number): RateLimiterLike {
  */
 export const rateLimiters = {
   // Strict rate limit for authentication endpoints (prevent brute force)
-  auth: redis
-    ? new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(5, "15 m"), // 5 requests per 15 minutes
-      analytics: true,
-      prefix: "@upstash/ratelimit/auth",
-    })
-    : (createNoopLimiter(1_000_000) as any),
+  auth: createSlidingWindowRateLimiter({
+    redis: redis as any,
+    prefix: "ratelimit:auth",
+    limit: 5,
+    windowMs: 15 * 60 * 1000,
+  }),
 
   // Moderate rate limit for general API endpoints
-  api: redis
-    ? new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(100, "1 m"), // 100 requests per minute
-      analytics: true,
-      prefix: "@upstash/ratelimit/api",
-    })
-    : (createNoopLimiter(1_000_000) as any),
+  api: createSlidingWindowRateLimiter({
+    redis: redis as any,
+    prefix: "ratelimit:api",
+    limit: 100,
+    windowMs: 60 * 1000,
+  }),
 
   // Higher rate limit for read-only operations
-  read: redis
-    ? new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(200, "1 m"), // 200 requests per minute
-      analytics: true,
-      prefix: "@upstash/ratelimit/read",
-    })
-    : (createNoopLimiter(1_000_000) as any),
+  read: createSlidingWindowRateLimiter({
+    redis: redis as any,
+    prefix: "ratelimit:read",
+    limit: 200,
+    windowMs: 60 * 1000,
+  }),
 
   // Lower rate limit for write operations (POST, PUT, DELETE)
-  write: redis
-    ? new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(30, "1 m"), // 30 requests per minute
-      analytics: true,
-      prefix: "@upstash/ratelimit/write",
-    })
-    : (createNoopLimiter(1_000_000) as any),
+  write: createSlidingWindowRateLimiter({
+    redis: redis as any,
+    prefix: "ratelimit:write",
+    limit: 30,
+    windowMs: 60 * 1000,
+  }),
 
   // Very strict rate limit for sync operations (resource-intensive)
-  sync: redis
-    ? new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(5, "5 m"), // 5 requests per 5 minutes
-      analytics: true,
-      prefix: "@upstash/ratelimit/sync",
-    })
-    : (createNoopLimiter(1_000_000) as any),
+  sync: createSlidingWindowRateLimiter({
+    redis: redis as any,
+    prefix: "ratelimit:sync",
+    limit: 5,
+    windowMs: 5 * 60 * 1000,
+  }),
 
   // Strict rate limit for import/export operations
-  importExport: redis
-    ? new Ratelimit({
-      redis: redis as any,
-      limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
-      analytics: true,
-      prefix: "@upstash/ratelimit/import-export",
-    })
-    : (createNoopLimiter(1_000_000) as any),
+  importExport: createSlidingWindowRateLimiter({
+    redis: redis as any,
+    prefix: "ratelimit:import-export",
+    limit: 10,
+    windowMs: 60 * 1000,
+  }),
 } as const;
 
 /**
@@ -231,7 +154,7 @@ export function getRateLimitIdentifier(
  * ```
  */
 export async function checkRateLimit(
-  limiter: Ratelimit,
+  limiter: RateLimiterLike,
   identifier: string,
 ): Promise<{
   success: boolean;
@@ -239,8 +162,8 @@ export async function checkRateLimit(
   remaining: number;
   reset: number;
 }> {
-  // If Upstash is not configured or temporarily disabled, skip rate limiting (fail open).
-  if (!redis || ratelimitDisabledUntilMs > Date.now()) {
+  // If temporarily disabled, skip rate limiting (fail open).
+  if (ratelimitDisabledUntilMs > Date.now()) {
     return {
       success: true,
       limit: 1000,
@@ -258,12 +181,9 @@ export async function checkRateLimit(
       remaining: result.remaining,
       reset: result.reset,
     };
-  } catch (err) {
-    // Upstash quota exhausted: disable further checks for a while to avoid log spam.
-    if (isUpstashQuotaError(err)) {
-      ratelimitDisabledUntilMs = Date.now() + 60 * 60 * 1000;
-      console.warn("[RateLimit] Upstash quota exceeded; rate limiting disabled temporarily.");
-    }
+  } catch (_err) {
+    // Redis error: disable briefly to avoid spamming logs during outages.
+    ratelimitDisabledUntilMs = Date.now() + 30 * 1000;
     return {
       success: true,
       limit: 1000,

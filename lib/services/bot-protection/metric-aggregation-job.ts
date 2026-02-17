@@ -8,16 +8,10 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { Redis } from '@upstash/redis';
+import { getRedisConnection } from "@/lib/queue/connection";
 
-// Initialize Redis client for real-time counters
-const redis =
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-        ? new Redis({
-            url: process.env.UPSTASH_REDIS_REST_URL,
-            token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        })
-        : null;
+// Shared Redis connection for real-time counters.
+const redis = getRedisConnection();
 
 /**
  * Run hourly metric aggregation
@@ -189,10 +183,6 @@ export async function updateRealTimeCounters(
     strategy: string,
     responseTime: number
 ): Promise<void> {
-    if (!redis) {
-        return; // Redis not configured, skip real-time counters
-    }
-
     try {
         const now = new Date();
         const hour = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
@@ -248,42 +238,46 @@ export async function getRealTimeMetrics(
     protectionTypeCounts: Record<string, number>;
     strategyCounts: Record<string, number>;
 } | null> {
-    if (!redis) {
-        return null; // Redis not configured
-    }
-
     try {
         const now = new Date();
         const hour = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
         const keyPrefix = `metrics:${tenantId}:${competitorWebsiteId}:${hour}`;
 
         // Get counters
-        const total = (await redis.get(`${keyPrefix}:total`)) as number | null;
-        if (!total) {
+        const totalRaw = await redis.get(`${keyPrefix}:total`);
+        if (!totalRaw) {
             return null; // No data for this hour
         }
+        const total = Number(totalRaw) || 0;
 
-        const success = ((await redis.get(`${keyPrefix}:success`)) as number | null) || 0;
-        const failed = ((await redis.get(`${keyPrefix}:failed`)) as number | null) || 0;
+        const success = Number(await redis.get(`${keyPrefix}:success`)) || 0;
+        const failed = Number(await redis.get(`${keyPrefix}:failed`)) || 0;
 
         // Get response times and calculate average
-        const responseTimes = ((await redis.lrange(
+        const responseTimesRaw = await redis.lrange(
             `${keyPrefix}:response_times`,
             0,
             -1
-        )) as number[]) || [];
+        );
+        const responseTimes = responseTimesRaw
+            .map((v) => Number(v))
+            .filter((n) => Number.isFinite(n));
         const avgResponseTime =
             responseTimes.length > 0
                 ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
                 : 0;
 
         // Get protection type counts
-        const protectionTypeCounts =
-            ((await redis.hgetall(`${keyPrefix}:protection_types`)) as Record<string, number>) || {};
+        const protectionTypeCountsRaw = await redis.hgetall(`${keyPrefix}:protection_types`);
+        const protectionTypeCounts: Record<string, number> = Object.fromEntries(
+            Object.entries(protectionTypeCountsRaw).map(([k, v]) => [k, Number(v) || 0])
+        );
 
         // Get strategy counts
-        const strategyCounts =
-            ((await redis.hgetall(`${keyPrefix}:strategies`)) as Record<string, number>) || {};
+        const strategyCountsRaw = await redis.hgetall(`${keyPrefix}:strategies`);
+        const strategyCounts: Record<string, number> = Object.fromEntries(
+            Object.entries(strategyCountsRaw).map(([k, v]) => [k, Number(v) || 0])
+        );
 
         return {
             totalAttempts: total,

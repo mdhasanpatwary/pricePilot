@@ -1,26 +1,22 @@
 import { Redis } from "ioredis";
 
-// Support both direct REDIS_URL and Upstash REST credentials
+// Redis connection URL resolution (local Redis recommended for VPS deployments).
 const getRedisUrl = () => {
   if (process.env.REDIS_URL) {
     return process.env.REDIS_URL;
   }
 
   // In local development, prefer a local Redis if the user hasn't explicitly set REDIS_URL.
-  // This avoids burning Upstash free-tier request quotas during dev sessions.
-  // Set REDIS_PREFER_LOCAL_IN_DEV=false to force the Upstash connection in development.
+  // Set REDIS_PREFER_LOCAL_IN_DEV=false to disable the default.
   const preferLocalInDev = process.env.REDIS_PREFER_LOCAL_IN_DEV !== "false";
   if (process.env.NODE_ENV !== "production" && preferLocalInDev) {
     return "redis://localhost:6379";
   }
 
-  // If using Upstash, construct the connection URL
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    // Extract host from REST URL (e.g., https://harmless-macaque-50376.upstash.io -> harmless-macaque-50376.upstash.io)
-    const restUrl = process.env.UPSTASH_REDIS_REST_URL.replace('https://', '').replace('http://', '');
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    // Upstash uses rediss:// (SSL) with password authentication
-    return `rediss://default:${token}@${restUrl}:6379`;
+  if (process.env.NODE_ENV === "production") {
+    console.warn(
+      "[Redis] REDIS_URL is not set in production. Defaulting to redis://localhost:6379",
+    );
   }
 
   return "redis://localhost:6379";
@@ -94,9 +90,9 @@ export const getRedisConnection = () => {
       if (err.code === "ECONNREFUSED") {
         console.error("❌ Redis connection refused. Is Redis running?");
       } else if (err.code === "ENOTFOUND") {
-        console.error("❌ Redis host not found. Check REDIS_URL or UPSTASH_REDIS_REST_URL.");
+        console.error("❌ Redis host not found. Check REDIS_URL.");
       } else if (err.message.includes("WRONGPASS") || err.message.includes("NOAUTH")) {
-        console.error("❌ Redis authentication failed. Check UPSTASH_REDIS_REST_TOKEN.");
+        console.error("❌ Redis authentication failed. Check REDIS_URL credentials.");
       } else {
         console.error("❌ Redis error:", err.message);
       }

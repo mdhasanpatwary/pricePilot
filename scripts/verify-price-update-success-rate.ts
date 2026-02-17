@@ -165,8 +165,7 @@ async function verifyEnvironmentVariables() {
 
     const requiredVars = [
         "CRON_SECRET",
-        "UPSTASH_REDIS_REST_URL",
-        "UPSTASH_REDIS_REST_TOKEN",
+        "REDIS_URL",
     ];
 
     for (const varName of requiredVars) {
