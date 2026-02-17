@@ -1,3 +1,5 @@
+export type SiteSearchAdapterKey = 'startech' | 'ryans';
+
 export interface SiteProfile {
   strategy: 'light-js' | 'full-js' | 'html-only';
   selectors: {
@@ -31,6 +33,7 @@ export interface SiteProfile {
     enabled: boolean;
     startUrl?: string;
   };
+  searchAdapter?: SiteSearchAdapterKey;
 }
 
 export const SITE_PROFILES: Record<string, SiteProfile> = {
@@ -41,6 +44,7 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       price: ['.p-item-price', '.price-new', '.price'],
       stock: ['.stock-status', '.text-discontinued']
     },
+    searchAdapter: 'startech',
     waitTime: 2000,
     cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.95,
@@ -53,6 +57,20 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       price: ['.special-price', '.price'],
       stock: ['.availability']
     },
+    searchAdapter: 'ryans',
+    waitTime: 4000, // Heavier site
+    cacheTime: 86400, // 24 hours - Requirement 2.9.4
+    successRate: 0.88,
+    retryCount: 3
+  },
+  'ryanscomputers.com': {
+    strategy: 'full-js',
+    selectors: {
+      title: ['h1.product-name', '.product-title'],
+      price: ['.special-price', '.price', '.rp-product-price'],
+      stock: ['.availability']
+    },
+    searchAdapter: 'ryans',
     waitTime: 4000, // Heavier site
     cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.88,

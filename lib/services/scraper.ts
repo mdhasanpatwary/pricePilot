@@ -3,7 +3,7 @@ import { logger } from "../logger";
 import { BrowserPool } from "./browser-pool";
 import { prisma } from "@/lib/prisma";
 import { TECH_BRANDS } from "../data/brands";
-import { siteProfileManager } from "../config/site-profiles";
+import { siteProfileManager, type SiteSearchAdapterKey } from "../config/site-profiles";
 import { CacheService } from "./cache";
 import { TechProductValidator } from "./validation";
 import { HumanSimulation } from "./human-simulation";
@@ -123,6 +123,8 @@ const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
 const USER_AGENTS = getAllUserAgents();
 
 export class ScraperService {
+  private static readonly NO_RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
+  private static readonly noResultQueryCache = new Map<string, number>();
   private static appliedAntiBotProfiles: Map<string, 'cloudflare' | 'perimeterx' | 'datadome'> = new Map();
   private static appliedNoProxySafeProfiles: Set<string> = new Set();
   private browserPool: BrowserPool;
@@ -256,6 +258,40 @@ export class ScraperService {
     }
 
     return null;
+  }
+
+  private getNoResultCacheKey(hostname: string, query: string): string {
+    return `${hostname.toLowerCase()}::${query.trim().toLowerCase()}`;
+  }
+
+  private isKnownNoResultQuery(hostname: string, query: string): boolean {
+    const key = this.getNoResultCacheKey(hostname, query);
+    const lastSeenAt = ScraperService.noResultQueryCache.get(key);
+    if (!lastSeenAt) return false;
+
+    const age = Date.now() - lastSeenAt;
+    if (age > ScraperService.NO_RESULT_CACHE_TTL_MS) {
+      ScraperService.noResultQueryCache.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+
+  private rememberNoResultQuery(hostname: string, query: string): void {
+    if (!query.trim()) return;
+    const key = this.getNoResultCacheKey(hostname, query);
+    ScraperService.noResultQueryCache.set(key, Date.now());
+  }
+
+  private isStartechFallbackEnabled(): boolean {
+    const raw = (process.env.SCRAPER_STARTECH_FALLBACK || "true").trim().toLowerCase();
+    return raw !== "false" && raw !== "0" && raw !== "off";
+  }
+
+  private isRyansFallbackEnabled(): boolean {
+    const raw = (process.env.SCRAPER_RYANS_FALLBACK || "true").trim().toLowerCase();
+    return raw !== "false" && raw !== "0" && raw !== "off";
   }
 
   private async resolveCaptchaRuntimeConfig(): Promise<{ enabled: boolean; apiKey: string; timeout: number }> {
@@ -3064,6 +3100,7 @@ export class ScraperService {
     query: string,
     siteId?: string,
     attempt = 0,
+    visitedQueries?: Set<string>,
   ): Promise<ScrapedProduct | null> {
     await this.init();
     const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
@@ -3095,12 +3132,33 @@ export class ScraperService {
 
       // 1. Sanitize query
       const cleanQuery = this.sanitizeQuery(actualQuery);
+      const normalizedQuery = cleanQuery.toLowerCase().replace(/\s+/g, " ").trim();
       logger.info(
         `[ScraperService] Original query: "${query}" -> Sanitized: "${cleanQuery}"`,
       );
+      if (!normalizedQuery) {
+        logger.warn("[ScraperService] Empty query after sanitization, skipping search.");
+        return null;
+      }
 
       // 2. Resolve Search Strategy
       const hostname = new URL(baseUrl).hostname.toLowerCase();
+      if (this.isKnownNoResultQuery(hostname, normalizedQuery)) {
+        logger.info(
+          `[ScraperService] Skipping known no-result query (cached): "${cleanQuery}" on ${hostname}`,
+        );
+        return null;
+      }
+
+      const seen = visitedQueries ?? new Set<string>();
+      if (seen.has(normalizedQuery)) {
+        logger.info(
+          `[ScraperService] Skipping duplicate query variant in same attempt chain: "${cleanQuery}"`,
+        );
+        return null;
+      }
+      seen.add(normalizedQuery);
+
       const profile = siteProfileManager.getProfile(hostname);
       let isAdvancedProtectedSite = false;
 
@@ -3221,6 +3279,9 @@ export class ScraperService {
       try {
         const resultLinkSelectors = [
           ".p-item a[href]",
+          ".p-item-name a[href]",
+          ".product-name a[href]",
+          ".product-title a[href]",
           ".product-thumb a[href]",
           ".product-box a[href]",
           ".product-item a[href]",
@@ -3242,69 +3303,142 @@ export class ScraperService {
         await page.waitForTimeout(4000);
       }
 
-      // 2.5 Enhanced Human Simulation for Search Page
-      logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
+      // Quick signal check before expensive simulation. When a page clearly has no results,
+      // skip synthetic interactions and proceed to fallback logic immediately.
+      let likelyNoResults = false;
+      let searchDiagnostics: any = null;
+      try {
+        searchDiagnostics = await page.evaluate(() => {
+          const count = (sel: string) => document.querySelectorAll(sel).length;
+          const text = (document.body?.innerText || "").toLowerCase();
+          const hasNoResultsText =
+            text.includes("no results") ||
+            text.includes("no product") ||
+            text.includes("not found") ||
+            text.includes("0 results");
 
-      const searchBehavior = strictSearchMode
-        ? {
-          initialPause: [280, 700] as const,
-          betweenPause: [180, 480] as const,
-          reviewPause: [450, 1200] as const,
-          hoverPause: [220, 520] as const,
-        }
-        : {
-          initialPause: [120, 300] as const,
-          betweenPause: [80, 200] as const,
-          reviewPause: [200, 500] as const,
-          hoverPause: [120, 240] as const,
-        };
+          const productContainerSignals =
+            count(".p-item a[href]") +
+            count(".p-item-name a[href]") +
+            count(".product-name a[href]") +
+            count(".product-title a[href]") +
+            count(".product-thumb a[href]") +
+            count(".product-box a[href]") +
+            count(".product-item a[href]") +
+            count(".product-list a[href]") +
+            count(".search-result a[href]");
 
-      // Keep interactions human-like while adapting to stricter sites.
-      await HumanSimulation.randomPause(searchBehavior.initialPause[0], searchBehavior.initialPause[1]);
+          return {
+            title: document.title,
+            href: window.location.href,
+            counts: {
+              pItemLinks: count(".p-item a[href]"),
+              pItemNameLinks: count(".p-item-name a[href]"),
+              productNameLinks: count(".product-name a[href]"),
+              productTitleLinks: count(".product-title a[href]"),
+              productThumbLinks: count(".product-thumb a[href]"),
+              productBoxLinks: count(".product-box a[href]"),
+              productItemLinks: count(".product-item a[href]"),
+              productListLinks: count(".product-list a[href]"),
+              searchResultLinks: count(".search-result a[href]"),
+              productUrlLinks: count('a[href*="/product/"]'),
+              allAnchors: count("a[href]"),
+            },
+            productContainerSignals,
+            hasNoResultsText,
+          };
+        });
+      } catch {
+        // Ignore diagnostics failures - scraping should continue.
+      }
 
-      // Simulate natural mouse movement
-      await HumanSimulation.simulateMouseMove(page);
+      likelyNoResults = Boolean(
+        searchDiagnostics?.hasNoResultsText &&
+        (searchDiagnostics?.productContainerSignals ?? 0) === 0 &&
+        (searchDiagnostics?.counts?.productUrlLinks ?? 0) <= 2,
+      );
 
-      // Random pause between actions
-      await HumanSimulation.randomPause(searchBehavior.betweenPause[0], searchBehavior.betweenPause[1]);
+      if (!likelyNoResults) {
+        // 2.5 Enhanced Human Simulation for Search Page
+        logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
 
-      // Simulate scrolling to view results
-      await HumanSimulation.simulateScroll(page);
-
-      // Random pause to simulate reading/reviewing results
-      await HumanSimulation.randomPause(searchBehavior.reviewPause[0], searchBehavior.reviewPause[1]);
-
-      // Simulate hovering over product items (if they exist)
-      const productSelectors = [
-        '.product-thumb a',
-        '.p-item a',
-        '.product-box a',
-        '.card a',
-        '.product-item a'
-      ];
-
-      for (const selector of productSelectors) {
-        const elements = await page.$$(selector);
-        if (elements.length > 0) {
-          // Hover over a single random product item
-          const hoverCount = 1;
-          for (let i = 0; i < hoverCount; i++) {
-            const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
-            try {
-              const element = elements[randomIndex];
-              await element.scrollIntoViewIfNeeded().catch(() => undefined);
-              await element.hover({ timeout: 1000 }).catch(() => undefined);
-              await HumanSimulation.randomPause(searchBehavior.hoverPause[0], searchBehavior.hoverPause[1]);
-            } catch (e) {
-              // Continue if hover fails
-            }
+        const searchBehavior = strictSearchMode
+          ? {
+            initialPause: [280, 700] as const,
+            betweenPause: [180, 480] as const,
+            reviewPause: [450, 1200] as const,
+            hoverPause: [220, 520] as const,
           }
-          break; // Found products, no need to try other selectors
+          : {
+            initialPause: [120, 300] as const,
+            betweenPause: [80, 200] as const,
+            reviewPause: [200, 500] as const,
+            hoverPause: [120, 240] as const,
+          };
+
+        // Keep interactions human-like while adapting to stricter sites.
+        await HumanSimulation.randomPause(searchBehavior.initialPause[0], searchBehavior.initialPause[1]);
+
+        // Simulate natural mouse movement
+        await HumanSimulation.simulateMouseMove(page);
+
+        // Random pause between actions
+        await HumanSimulation.randomPause(searchBehavior.betweenPause[0], searchBehavior.betweenPause[1]);
+
+        // Simulate scrolling to view results
+        await HumanSimulation.simulateScroll(page);
+
+        // Random pause to simulate reading/reviewing results
+        await HumanSimulation.randomPause(searchBehavior.reviewPause[0], searchBehavior.reviewPause[1]);
+
+        // Simulate hovering over product items (if they exist)
+        const productSelectors = [
+          '.product-thumb a',
+          '.p-item a',
+          '.p-item-name a',
+          '.product-name a',
+          '.product-title a',
+          '.product-box a',
+          '.card a',
+          '.product-item a'
+        ];
+
+        for (const selector of productSelectors) {
+          const elements = await page.$$(selector);
+          if (elements.length > 0) {
+            // Hover over a single random product item
+            const hoverCount = 1;
+            for (let i = 0; i < hoverCount; i++) {
+              const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
+              try {
+                const element = elements[randomIndex];
+                await element.scrollIntoViewIfNeeded().catch(() => undefined);
+                await element.hover({ timeout: 1000 }).catch(() => undefined);
+                await HumanSimulation.randomPause(searchBehavior.hoverPause[0], searchBehavior.hoverPause[1]);
+              } catch {
+                // Continue if hover fails
+              }
+            }
+            break; // Found products, no need to try other selectors
+          }
         }
+      } else {
+        logger.info(
+          `[ScraperService] Skipping enhanced human simulation due to likely no-results page for "${cleanQuery}"`,
+        );
       }
 
       // 3. Look for links that might be products (heuristics)
       let productLink = await this.evaluateProductLink(page, cleanQuery);
+
+      if (!productLink) {
+        productLink = await this.evaluateAdapterProductLink(
+          page,
+          cleanQuery,
+          hostname,
+          profile.searchAdapter,
+        );
+      }
 
       if (productLink) {
         logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
@@ -3312,38 +3446,51 @@ export class ScraperService {
         // Lightweight diagnostics to distinguish "true no results" vs DOM/selector/scoring mismatch.
         // This avoids dumping full HTML but gives enough signal to debug intermittent failures.
         try {
-          const diag = await page.evaluate(() => {
-            const count = (sel: string) => document.querySelectorAll(sel).length;
-            const text = (document.body?.innerText || "").toLowerCase();
-            const hasNoResultsText =
-              text.includes("no results") ||
-              text.includes("no product") ||
-              text.includes("not found") ||
-              text.includes("0 results");
+          if (!searchDiagnostics) {
+            searchDiagnostics = await page.evaluate(() => {
+              const count = (sel: string) => document.querySelectorAll(sel).length;
+              const text = (document.body?.innerText || "").toLowerCase();
+              const hasNoResultsText =
+                text.includes("no results") ||
+                text.includes("no product") ||
+                text.includes("not found") ||
+                text.includes("0 results");
 
-            const productHrefSample = Array.from(document.querySelectorAll('a[href*="/product/"]'))
-              .map((a) => (a as HTMLAnchorElement).href)
-              .filter(Boolean)
-              .slice(0, 3);
+              const productHrefSample = Array.from(document.querySelectorAll('a[href*="/product/"]'))
+                .map((a) => (a as HTMLAnchorElement).href)
+                .filter(Boolean)
+                .slice(0, 3);
 
-            return {
-              title: document.title,
-              href: window.location.href,
-              counts: {
-                pItemLinks: count(".p-item a[href]"),
-                productThumbLinks: count(".product-thumb a[href]"),
-                productBoxLinks: count(".product-box a[href]"),
-                productItemLinks: count(".product-item a[href]"),
-                productListLinks: count(".product-list a[href]"),
-                searchResultLinks: count(".search-result a[href]"),
-                productUrlLinks: count('a[href*="/product/"]'),
-                allAnchors: count("a[href]"),
-              },
-              hasNoResultsText,
-              productHrefSample,
-            };
-          });
-          logger.warn("[ScraperService] Search diagnostics", { diag });
+              return {
+                title: document.title,
+                href: window.location.href,
+                counts: {
+                  pItemLinks: count(".p-item a[href]"),
+                  pItemNameLinks: count(".p-item-name a[href]"),
+                  productNameLinks: count(".product-name a[href]"),
+                  productTitleLinks: count(".product-title a[href]"),
+                  productThumbLinks: count(".product-thumb a[href]"),
+                  productBoxLinks: count(".product-box a[href]"),
+                  productItemLinks: count(".product-item a[href]"),
+                  productListLinks: count(".product-list a[href]"),
+                  searchResultLinks: count(".search-result a[href]"),
+                  productUrlLinks: count('a[href*="/product/"]'),
+                  allAnchors: count("a[href]"),
+                },
+                hasNoResultsText,
+                productHrefSample,
+              };
+            });
+          } else if (!searchDiagnostics.productHrefSample) {
+            const productHrefSample = await page.evaluate(() =>
+              Array.from(document.querySelectorAll('a[href*="/product/"]'))
+                .map((a) => (a as HTMLAnchorElement).href)
+                .filter(Boolean)
+                .slice(0, 3),
+            );
+            searchDiagnostics.productHrefSample = productHrefSample;
+          }
+          logger.warn("[ScraperService] Search diagnostics", { diag: searchDiagnostics });
         } catch {
           // Non-fatal
         }
@@ -3373,7 +3520,8 @@ export class ScraperService {
       }
 
       // Fallback Strategy: Query Simplification + Model/SKU targeting
-      if (attempt < 2) {
+      const maxFallbackDepth = likelyNoResults ? 1 : 2;
+      if (attempt < maxFallbackDepth) {
         const stopWords = new Set([
           "with",
           "graphics",
@@ -3426,6 +3574,7 @@ export class ScraperService {
             )
           : [];
 
+        const fallbackLimit = likelyNoResults ? 2 : 4;
         const fallbackQueries = Array.from(
           new Set(
             [
@@ -3434,22 +3583,26 @@ export class ScraperService {
               ...modelVariants,
             ].filter(Boolean),
           ),
-        ).slice(0, 4); // cap retries to avoid extra load
+        ).slice(0, fallbackLimit); // cap retries to avoid extra load
 
         if (fallbackQueries.length > 0) {
           logger.info(`[ScraperService] 🔄 No results. Trying fallback queries...`, {
             attempt,
             fallbackQueries,
+            likelyNoResults,
           });
 
           for (const fq of fallbackQueries) {
             if (fq === cleanQuery) continue;
-            const result = await this.searchAndScrape(baseUrl, fq, siteId, attempt + 1);
+            const result = await this.searchAndScrape(baseUrl, fq, siteId, attempt + 1, seen);
             if (result) return result;
           }
         }
       }
 
+      if (likelyNoResults || attempt > 0) {
+        this.rememberNoResultQuery(hostname, normalizedQuery);
+      }
       logger.error(`[ScraperService] ❌ All strategies exhausted for: "${cleanQuery}"`);
       return null;
     } catch (error) {
@@ -3687,6 +3840,237 @@ export class ScraperService {
       return candidates.length > 0 ? candidates[0].href : null;
 
     }, { q: query, brands: TECH_BRANDS });
+  }
+
+  private async evaluateAdapterProductLink(
+    page: Page,
+    query: string,
+    hostname: string,
+    adapter?: SiteSearchAdapterKey,
+  ): Promise<string | null> {
+    if (!adapter) return null;
+
+    const handlers: Record<SiteSearchAdapterKey, () => Promise<string | null>> = {
+      startech: () => this.evaluateStartechProductLink(page, query, hostname),
+      ryans: () => this.evaluateRyansProductLink(page, query, hostname),
+    };
+
+    const handler = handlers[adapter];
+    if (!handler) return null;
+
+    logger.info(`[ScraperService] Trying search adapter "${adapter}" for ${hostname}`);
+    return await handler();
+  }
+
+  /**
+   * Startech adapter fallback when weighted scoring returns null.
+   */
+  private async evaluateStartechProductLink(
+    page: Page,
+    query: string,
+    hostname: string,
+  ): Promise<string | null> {
+    if (!hostname.includes("startech.com.bd")) return null;
+    if (!this.isStartechFallbackEnabled()) return null;
+
+    return await page.evaluate(({ q }) => {
+      const normalize = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const queryTokens = normalize(q).split(" ").filter((t) => t.length >= 2);
+      const modelTokens = queryTokens.filter((t) => /[a-z]/.test(t) && /\d/.test(t));
+
+      const scoreHref = (href: string, text: string) => {
+        const normalizedText = normalize(`${text} ${href}`);
+        const normalizedHref = href.toLowerCase();
+        let score = 0;
+
+        if (normalizedHref.includes("/product/")) score += 20;
+        if (normalizedHref.includes("/item/")) score += 10;
+        if (normalizedHref.includes("/search") || normalizedHref.includes("manufacturer")) score -= 50;
+
+        for (const token of queryTokens) {
+          if (normalizedText.includes(token)) score += 8;
+        }
+        for (const token of modelTokens) {
+          if (normalizedText.includes(token)) score += 14;
+        }
+
+        return score;
+      };
+
+      const candidates: Array<{ href: string; score: number }> = [];
+      const candidateSelectors = [
+        ".p-item-name a[href]",
+        ".product-name a[href]",
+        ".product-title a[href]",
+        ".p-item a[href]",
+        ".product-item a[href]",
+        ".product-thumb a[href]",
+        "main a[href]",
+      ];
+
+      for (const selector of candidateSelectors) {
+        const links = Array.from(document.querySelectorAll(selector)) as HTMLAnchorElement[];
+        for (const link of links) {
+          const href = link.href;
+          const text = (link.textContent || link.getAttribute("title") || link.getAttribute("aria-label") || "").trim();
+          if (!href || href.startsWith("javascript:") || href.includes("#")) continue;
+          if (href.includes("/product/search") || href.includes("/product/manufacturer")) continue;
+          const score = scoreHref(href, text);
+          if (score > 14) candidates.push({ href, score });
+        }
+      }
+
+      // JSON-LD fallback
+      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+      for (const script of scripts) {
+        const raw = script.textContent || "";
+        if (!raw.trim()) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          const stack = [...items];
+          while (stack.length > 0) {
+            const node = stack.pop() as any;
+            if (!node) continue;
+            if (Array.isArray(node)) {
+              stack.push(...node);
+              continue;
+            }
+            if (typeof node === "object") {
+              if (node.url && typeof node.url === "string") {
+                const href = node.url;
+                if (!href.includes("/product/search") && !href.includes("/product/manufacturer")) {
+                  const score = scoreHref(href, `${node.name || ""}`);
+                  if (score > 14) candidates.push({ href, score: score + 6 });
+                }
+              }
+              for (const value of Object.values(node)) {
+                if (value && typeof value === "object") stack.push(value);
+              }
+            }
+          }
+        } catch {
+          // ignore malformed JSON-LD
+        }
+      }
+
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => b.score - a.score);
+      return candidates[0].href || null;
+    }, { q: query });
+  }
+
+  /**
+   * Ryans adapter fallback when weighted scoring returns null.
+   */
+  private async evaluateRyansProductLink(
+    page: Page,
+    query: string,
+    hostname: string,
+  ): Promise<string | null> {
+    if (!hostname.includes("ryans.com") && !hostname.includes("ryanscomputers.com")) return null;
+    if (!this.isRyansFallbackEnabled()) return null;
+
+    return await page.evaluate(({ q }) => {
+      const normalize = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const queryTokens = normalize(q).split(" ").filter((t) => t.length >= 2);
+      const modelTokens = queryTokens.filter((t) => /[a-z]/.test(t) && /\d/.test(t));
+
+      const scoreHref = (href: string, text: string) => {
+        const normalizedText = normalize(`${text} ${href}`);
+        const normalizedHref = href.toLowerCase();
+        let score = 0;
+
+        if (normalizedHref.includes("/item/")) score += 20;
+        if (normalizedHref.includes("/product/")) score += 14;
+        if (normalizedHref.includes("/search") || normalizedHref.includes("brand") || normalizedHref.includes("category")) {
+          score -= 40;
+        }
+
+        for (const token of queryTokens) {
+          if (normalizedText.includes(token)) score += 7;
+        }
+        for (const token of modelTokens) {
+          if (normalizedText.includes(token)) score += 12;
+        }
+
+        return score;
+      };
+
+      const candidates: Array<{ href: string; score: number }> = [];
+      const candidateSelectors = [
+        ".product-content a[href]",
+        ".product-info a[href]",
+        ".item-name a[href]",
+        ".product-title a[href]",
+        ".product-thumb a[href]",
+        ".card-body a[href]",
+        "main a[href*='/item/']",
+        "main a[href*='/product/']",
+      ];
+
+      for (const selector of candidateSelectors) {
+        const links = Array.from(document.querySelectorAll(selector)) as HTMLAnchorElement[];
+        for (const link of links) {
+          const href = link.href;
+          const text = (link.textContent || link.getAttribute("title") || link.getAttribute("aria-label") || "").trim();
+          if (!href || href.startsWith("javascript:") || href.includes("#")) continue;
+          if (href.includes("/search") || href.includes("/brand") || href.includes("/category")) continue;
+          const score = scoreHref(href, text);
+          if (score > 12) candidates.push({ href, score });
+        }
+      }
+
+      // JSON-LD fallback
+      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+      for (const script of scripts) {
+        const raw = script.textContent || "";
+        if (!raw.trim()) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          const stack = [...items];
+          while (stack.length > 0) {
+            const node = stack.pop() as any;
+            if (!node) continue;
+            if (Array.isArray(node)) {
+              stack.push(...node);
+              continue;
+            }
+            if (typeof node === "object") {
+              if (node.url && typeof node.url === "string") {
+                const href = node.url;
+                if (!href.includes("/search") && !href.includes("/brand") && !href.includes("/category")) {
+                  const score = scoreHref(href, `${node.name || ""}`);
+                  if (score > 12) candidates.push({ href, score: score + 6 });
+                }
+              }
+              for (const value of Object.values(node)) {
+                if (value && typeof value === "object") stack.push(value);
+              }
+            }
+          }
+        } catch {
+          // ignore malformed JSON-LD
+        }
+      }
+
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => b.score - a.score);
+      return candidates[0].href || null;
+    }, { q: query });
   }
 
   // Helper to handle the magic retry suffix transparently if needed,
