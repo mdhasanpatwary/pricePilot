@@ -645,25 +645,47 @@ export class ScrapeOrchestrator {
                     break;
                 }
 
-                // Select retry strategy
-                const failureContext: FailureContext = {
-                    ...strategyContext,
-                    currentAttempt: attemptNumber + 1,
-                    lastProtectionType: attemptResult.protectionType || ProtectionType.UNKNOWN,
-                    lastStrategy: currentStrategy,
-                };
+                // Failure-aware retry logic:
+                // - Bot protection: let StrategySelector escalate
+                // - Parse/structure: keep strategy (avoid burning proxy/stealth when it won't help)
+                // - Network/timeout: allow StrategySelector to escalate later if repeated
+                const isBotFailure =
+                    attemptResult.failureType === ScrapeFailureType.BOT_BLOCKED ||
+                    Boolean(attemptResult.protectionDetected);
+                const isParseFailure =
+                    attemptResult.failureType === ScrapeFailureType.PARSE_FAILED ||
+                    attemptResult.failureType === ScrapeFailureType.STRUCTURE_CHANGED ||
+                    attemptResult.failureType === ScrapeFailureType.PRICE_ZERO;
 
-                const retryStrategy = this.strategySelector.selectRetryStrategy(failureContext);
+                if (isBotFailure || !isParseFailure) {
+                    const failureContext: FailureContext = {
+                        ...strategyContext,
+                        currentAttempt: attemptNumber + 1,
+                        lastProtectionType: attemptResult.protectionType || ProtectionType.UNKNOWN,
+                        lastStrategy: currentStrategy,
+                    };
 
-                if (!retryStrategy) {
-                    logger.warn('[ScrapeOrchestrator] No retry strategy available', {
-                        lastProtectionType: attemptResult.protectionType,
-                        attemptNumber,
-                    });
-                    break;
+                    const retryStrategy = this.strategySelector.selectRetryStrategy(failureContext);
+
+                    if (!retryStrategy) {
+                        logger.warn('[ScrapeOrchestrator] No retry strategy available', {
+                            lastProtectionType: attemptResult.protectionType,
+                            attemptNumber,
+                        });
+                        break;
+                    }
+
+                    currentStrategy = retryStrategy;
                 }
 
-                currentStrategy = retryStrategy;
+                // Exponential backoff + jitter per failure type before next attempt.
+                const delayMs = this.computeRetryDelayMs({
+                    failureType: attemptResult.failureType || ScrapeFailureType.PARSE_FAILED,
+                    attemptNumber,
+                    protectionDetected: Boolean(attemptResult.protectionDetected),
+                });
+                await this.sleep(delayMs);
+
                 attemptNumber++;
 
                 logger.info('[ScrapeOrchestrator] Retrying with new strategy', {
@@ -707,6 +729,13 @@ export class ScrapeOrchestrator {
                 if (attemptNumber >= siteConfig.maxRetries) {
                     break;
                 }
+
+                const delayMs = this.computeRetryDelayMs({
+                    failureType,
+                    attemptNumber,
+                    protectionDetected: false,
+                });
+                await this.sleep(delayMs);
 
                 attemptNumber++;
             }
@@ -1232,6 +1261,61 @@ export class ScrapeOrchestrator {
         }
 
         return ScrapeFailureType.PARSE_FAILED;
+    }
+
+    private computeRetryDelayMs(params: {
+        failureType: ScrapeFailureType;
+        attemptNumber: number;
+        protectionDetected: boolean;
+    }): number {
+        // attemptNumber is 1-based.
+        const attemptIndex = Math.max(params.attemptNumber - 1, 0);
+
+        let baseMs = 500;
+        let maxMs = 15000;
+        let jitterPct = 0.25; // +/-25%
+
+        switch (params.failureType) {
+            case ScrapeFailureType.NAVIGATION_FAILED:
+                baseMs = 700;
+                maxMs = 12000;
+                jitterPct = 0.35;
+                break;
+            case ScrapeFailureType.TIMEOUT:
+                baseMs = 1500;
+                maxMs = 20000;
+                jitterPct = 0.35;
+                break;
+            case ScrapeFailureType.PARSE_FAILED:
+            case ScrapeFailureType.STRUCTURE_CHANGED:
+            case ScrapeFailureType.PRICE_ZERO:
+                baseMs = 300;
+                maxMs = 3000;
+                jitterPct = 0.2;
+                break;
+            case ScrapeFailureType.BOT_BLOCKED:
+                baseMs = 4000;
+                maxMs = 60000;
+                jitterPct = 0.4;
+                break;
+            default:
+                baseMs = 800;
+                maxMs = 15000;
+                jitterPct = 0.25;
+        }
+
+        // Exponential backoff
+        const raw = baseMs * Math.pow(2, attemptIndex);
+        const capped = Math.min(raw, maxMs);
+
+        // Jitter
+        const jitter = 1 + (Math.random() * 2 - 1) * jitterPct;
+        return Math.max(0, Math.floor(capped * jitter));
+    }
+
+    private async sleep(ms: number): Promise<void> {
+        if (!ms || ms <= 0) return;
+        await new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     /**
