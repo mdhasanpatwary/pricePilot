@@ -586,6 +586,7 @@ export class ScrapeOrchestrator {
         const domainRisk = await this.loadDomainRiskProfile(request.competitorWebsiteId, request.url);
         let anyProxyUsed = false;
         const effectiveMaxRetries = domainRisk.needsManualReview ? 1 : siteConfig.maxRetries;
+        const proxyStickySessionKey = `${domainRisk.domain}:${request.competitorProductId}`;
 
         // Retry loop
         while (attemptNumber <= effectiveMaxRetries) {
@@ -611,6 +612,7 @@ export class ScrapeOrchestrator {
                         previousAttempt: lastAttemptResult,
                         consecutiveTimeouts,
                         excludedProxyIds: Array.from(excludedProxyIds),
+                        stickySessionKey: proxyStickySessionKey,
                     }
                 );
                 lastAttemptResult = attemptResult;
@@ -729,6 +731,20 @@ export class ScrapeOrchestrator {
                     )
                 ) {
                     excludedProxyIds.add(attemptResult.proxyId);
+                    this.proxyManager.invalidateStickySession(
+                        proxyStickySessionKey,
+                        attemptResult.proxyId,
+                        attemptResult.failureType || `status:${attemptResult.statusCode || 'unknown'}`
+                    );
+                    logger.warn('[ScrapeOrchestrator] Proxy rotation scheduled after block-like failure', {
+                        competitorWebsiteId: request.competitorWebsiteId,
+                        attemptNumber,
+                        retryCount: Math.max(attemptNumber - 1, 0),
+                        proxyId: attemptResult.proxyId,
+                        failureType: attemptResult.failureType,
+                        statusCode: attemptResult.statusCode,
+                        reason: attemptResult.errorMessage,
+                    });
                 }
 
                 if (attemptResult.failureType === ScrapeFailureType.TIMEOUT) {
@@ -900,8 +916,29 @@ export class ScrapeOrchestrator {
             proxy = useProxy
                 ? await this.proxyManager.getProxy(request.competitorWebsiteId, {
                     excludeProxyIds: executionContext.excludedProxyIds,
+                    domain: executionContext.domainRisk.domain,
+                    stickySessionKey: executionContext.stickySessionKey,
+                    requireResidential: this.isMediumOrHighProtectionLevel(executionContext.domainRisk.protectionLevel),
+                    retryCount: Math.max(executionContext.attemptNumber - 1, 0),
+                    blockReason:
+                        executionContext.previousAttempt?.failureType ||
+                        (executionContext.previousAttempt?.statusCode
+                            ? `status:${executionContext.previousAttempt.statusCode}`
+                            : undefined),
                 })
                 : null;
+
+            if (proxy) {
+                logger.info('[ScrapeOrchestrator] Using proxy for attempt', {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    attemptNumber: executionContext.attemptNumber,
+                    retryCount: Math.max(executionContext.attemptNumber - 1, 0),
+                    proxyId: proxy.id,
+                    proxyProvider: proxy.provider,
+                    proxyRegion: proxy.region,
+                    domain: executionContext.domainRisk.domain,
+                });
+            }
 
             // Get cookies
             const cookies = await this.sessionManager.getCookies(request.competitorWebsiteId);
@@ -2297,4 +2334,5 @@ interface AttemptExecutionContext {
     previousAttempt?: AttemptResult;
     consecutiveTimeouts: number;
     excludedProxyIds: string[];
+    stickySessionKey: string;
 }

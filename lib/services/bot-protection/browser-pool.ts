@@ -333,6 +333,15 @@ export class BrowserPool {
             hasTouch: config.viewport.isMobile,
         };
 
+        // Keep proxy at both launch and context levels for compatibility across environments.
+        if (config.proxy) {
+            contextOptions.proxy = {
+                server: `${config.proxy.protocol}://${config.proxy.host}:${config.proxy.port}`,
+                username: config.proxy.username,
+                password: config.proxy.password,
+            };
+        }
+
         const context = await browser.newContext(contextOptions);
 
         // Create instance

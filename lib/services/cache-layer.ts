@@ -1,7 +1,7 @@
-import { Redis } from "ioredis";
-import { getRedisConnection } from "@/lib/queue/connection";
+import type { Redis } from "ioredis";
+import { getRedisConnection } from "@/lib/redis";
 import { logger } from "@/lib/logger";
-import { cacheInvalidationPubSub, InvalidationEvent } from "./cache-invalidation-pubsub";
+import { getCacheInvalidationPubSub, InvalidationEvent } from "./cache-invalidation-pubsub";
 
 const IS_NEXT_BUILD_PHASE = process.env.NEXT_PHASE === "phase-production-build";
 
@@ -98,11 +98,12 @@ export class CacheLayer {
 
         this.pubSubInitPromise = (async () => {
         try {
+            const pubSub = getCacheInvalidationPubSub();
             // Initialize pub/sub service
-            await cacheInvalidationPubSub.initialize();
+            await pubSub.initialize();
 
             // Register callback to handle invalidation events from other instances
-            this.unregisterInvalidationHandler = cacheInvalidationPubSub.onInvalidation(async (event: InvalidationEvent) => {
+            this.unregisterInvalidationHandler = pubSub.onInvalidation(async (event: InvalidationEvent) => {
                 await this.handleRemoteInvalidation(event);
             });
 
@@ -328,6 +329,7 @@ export class CacheLayer {
 
         if (!CacheLayer.instance) {
             CacheLayer.instance = new CacheLayer();
+            logger.info("[CacheLayer] Singleton instance created", { pid: process.pid });
         }
 
         globalState.__ppCacheLayer = CacheLayer.instance;
@@ -350,7 +352,7 @@ export class CacheLayer {
 
         // Cleanup pub/sub
         if (process.env.NODE_ENV !== "test") {
-            await cacheInvalidationPubSub.cleanup();
+            await getCacheInvalidationPubSub().cleanup();
         }
 
         if (this.redis && this.redis.status !== 'end') {
@@ -492,7 +494,7 @@ export class CacheLayer {
             const tenantIdMatch = pattern.match(/^([^:]+):/);
             const tenantId = tenantIdMatch ? tenantIdMatch[1] : undefined;
 
-            await cacheInvalidationPubSub.publishInvalidation(pattern, tenantId);
+            await getCacheInvalidationPubSub().publishInvalidation(pattern, tenantId);
 
             logger.info("[CacheLayer] Invalidated cache entries", {
                 pattern,

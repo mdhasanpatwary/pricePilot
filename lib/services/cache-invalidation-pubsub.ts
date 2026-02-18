@@ -1,5 +1,5 @@
-import { Redis } from "ioredis";
-import { getRedisConnection } from "@/lib/queue/connection";
+import type { Redis } from "ioredis";
+import { getRedisProcessInstanceId, getRedisPublisher, getRedisSubscriber } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 
 /**
@@ -37,6 +37,7 @@ export class CacheInvalidationPubSub {
     private isSubscribed: boolean = false;
     private isPublisherReady: boolean = false;
     private isSubscriberReady: boolean = false;
+    private initializePromise: Promise<void> | null = null;
 
     private static getGlobalState() {
         const globalState = globalThis as typeof globalThis & {
@@ -46,16 +47,18 @@ export class CacheInvalidationPubSub {
     }
 
     private constructor() {
-        // Generate unique instance ID (use random for edge compatibility)
-        this.instanceId = `instance-${Math.random().toString(36).substring(7)}-${Date.now()}`;
+        this.instanceId = getRedisProcessInstanceId();
 
-        // Create separate connections for publisher and subscriber
-        // Redis pub/sub requires dedicated connections
-        this.publisher = getRedisConnection();
-        this.subscriber = getRedisConnection().duplicate();
+        // Use process-level singleton clients for pub/sub roles.
+        this.publisher = getRedisPublisher();
+        this.subscriber = getRedisSubscriber();
 
         this.setupPublisher();
         this.setupSubscriber();
+        logger.info("[CacheInvalidationPubSub] Singleton instance created", {
+            instanceId: this.instanceId,
+            pid: process.pid
+        });
     }
 
     static getInstance(): CacheInvalidationPubSub {
@@ -139,12 +142,18 @@ export class CacheInvalidationPubSub {
      */
     async initialize(): Promise<void> {
         if (this.isSubscribed) {
-            logger.warn("[CacheInvalidationPubSub] Already subscribed", {
+            logger.debug("[CacheInvalidationPubSub] Already subscribed", {
                 instanceId: this.instanceId
             });
             return;
         }
 
+        if (this.initializePromise) {
+            await this.initializePromise;
+            return;
+        }
+
+        this.initializePromise = (async () => {
         try {
             // Connect subscriber if not already connected
             if (this.subscriber.status !== "ready" && this.subscriber.status !== "connecting") {
@@ -178,7 +187,12 @@ export class CacheInvalidationPubSub {
                 error
             });
             throw error;
+        } finally {
+            this.initializePromise = null;
         }
+        })();
+
+        await this.initializePromise;
     }
 
     /**
@@ -348,5 +362,15 @@ export class CacheInvalidationPubSub {
     }
 }
 
-// Export singleton instance
-export const cacheInvalidationPubSub = CacheInvalidationPubSub.getInstance();
+export function getCacheInvalidationPubSub(): CacheInvalidationPubSub {
+    return CacheInvalidationPubSub.getInstance();
+}
+
+// Lazy proxy to avoid import-time side effects in App Router module loading.
+export const cacheInvalidationPubSub = new Proxy({} as CacheInvalidationPubSub, {
+    get(_target, property) {
+        const instance = CacheInvalidationPubSub.getInstance();
+        const value = (instance as any)[property];
+        return typeof value === "function" ? value.bind(instance) : value;
+    },
+});

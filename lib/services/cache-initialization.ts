@@ -1,4 +1,4 @@
-import { cacheInvalidationPubSub } from "./cache-invalidation-pubsub";
+import { getCacheInvalidationPubSub } from "./cache-invalidation-pubsub";
 import { getCacheLayer } from "./cache-layer";
 import { logger } from "@/lib/logger";
 
@@ -29,14 +29,15 @@ export async function initializeDistributedCache(): Promise<void> {
 
     globalState.__ppDistributedCacheInitPromise = (async () => {
     try {
+        const pubSub = getCacheInvalidationPubSub();
         logger.info("[CacheInitialization] Initializing distributed cache...");
 
         // Initialize pub/sub for distributed invalidation
-        await cacheInvalidationPubSub.initialize();
+        await pubSub.initialize();
 
         logger.info("[CacheInitialization] Distributed cache initialized successfully", {
-            instanceId: cacheInvalidationPubSub.getInstanceId(),
-            pubSubReady: cacheInvalidationPubSub.isReady()
+            instanceId: pubSub.getInstanceId(),
+            pubSubReady: pubSub.isReady()
         });
         globalState.__ppDistributedCacheInitialized = true;
     } catch (error) {
@@ -63,9 +64,10 @@ export async function cleanupDistributedCache(): Promise<void> {
     try {
         logger.info("[CacheInitialization] Cleaning up distributed cache...");
         const cacheLayer = getCacheLayer();
+        const pubSub = getCacheInvalidationPubSub();
 
         await Promise.all([
-            cacheInvalidationPubSub.cleanup(),
+            pubSub.cleanup(),
             cacheLayer.cleanup()
         ]);
 
