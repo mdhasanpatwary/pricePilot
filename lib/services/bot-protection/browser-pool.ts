@@ -24,6 +24,8 @@ interface BrowserInstance {
     inUse: boolean;
     /** Configuration used to launch this browser */
     config: BrowserScrapeConfig;
+    /** Whether instance has been invalidated (closed/removed) */
+    invalidated: boolean;
 }
 
 /**
@@ -75,6 +77,7 @@ export class BrowserPool {
     private instances: BrowserInstance[] = [];
     private config: BrowserPoolConfig;
     private cleanupInterval: NodeJS.Timeout | null = null;
+    private pendingCreates: Map<string, Promise<BrowserInstance>> = new Map();
 
     /**
      * Create a new browser pool
@@ -107,9 +110,26 @@ export class BrowserPool {
         // Try to find an available instance with matching configuration
         let instance = this.findAvailableInstance(config);
 
-        // If no available instance and pool not full, create new one
-        if (!instance && this.instances.length < this.config.maxConcurrent) {
-            instance = await this.createInstance(config);
+        // If we already have a matching instance (even if currently in use),
+        // wait for it instead of creating a second instance for the same domain.
+        if (!instance) {
+            const anyMatch = this.findAnyMatchingInstance(config);
+            if (anyMatch) {
+                instance = await this.waitForAvailableInstance(config);
+            } else if (this.instances.length < this.config.maxConcurrent) {
+                // Prevent concurrent callers from creating multiple instances for the same config key.
+                const key = this.getConfigKey(config);
+                const pending = this.pendingCreates.get(key);
+                if (pending) {
+                    instance = await pending;
+                } else {
+                    const createPromise = this.createInstance(config).finally(() => {
+                        this.pendingCreates.delete(key);
+                    });
+                    this.pendingCreates.set(key, createPromise);
+                    instance = await createPromise;
+                }
+            }
         }
 
         // If still no instance, wait for one to become available
@@ -145,6 +165,47 @@ export class BrowserPool {
     }
 
     /**
+     * Invalidate a context (and its browser) and remove from pool.
+     *
+     * Used when we detect a hard failure (browser crash) or clear bot block (403/429),
+     * so the next acquire gets a fresh context.
+     */
+    async invalidate(context: BrowserContext): Promise<void> {
+        const instance = this.instances.find((i) => i.context === context);
+        if (!instance) return;
+
+        instance.invalidated = true;
+        instance.inUse = false;
+
+        try {
+            await instance.context.close();
+        } catch (error) {
+            // Ignore close errors
+        }
+
+        try {
+            await instance.browser.close();
+        } catch (error) {
+            // Ignore close errors
+        }
+
+        const index = this.instances.indexOf(instance);
+        if (index > -1) {
+            this.instances.splice(index, 1);
+        }
+    }
+
+    async invalidateByDomainKey(domainKey: string): Promise<void> {
+        const contextsToInvalidate = this.instances
+            .filter((i) => !i.invalidated && this.getDomainKey(i.config) === domainKey)
+            .map((i) => i.context);
+
+        for (const ctx of contextsToInvalidate) {
+            await this.invalidate(ctx);
+        }
+    }
+
+    /**
      * Find an available instance with matching configuration
      * 
      * @param config - Browser scrape configuration
@@ -153,10 +214,25 @@ export class BrowserPool {
     private findAvailableInstance(config: BrowserScrapeConfig): BrowserInstance | null {
         return this.instances.find(
             (instance) =>
+                !instance.invalidated &&
                 !instance.inUse &&
                 instance.requestCount < this.config.maxRequestsPerBrowser &&
                 this.configMatches(instance.config, config)
         ) || null;
+    }
+
+    /**
+     * Find any matching instance (available or in use).
+     *
+     * Why: enforce "one context per domain" by waiting instead of creating
+     * additional instances for the same domain key.
+     */
+    private findAnyMatchingInstance(config: BrowserScrapeConfig): BrowserInstance | null {
+        return (
+            this.instances.find(
+                (instance) => !instance.invalidated && this.configMatches(instance.config, config)
+            ) || null
+        );
     }
 
     /**
@@ -167,6 +243,13 @@ export class BrowserPool {
      * @returns True if configurations match
      */
     private configMatches(config1: BrowserScrapeConfig, config2: BrowserScrapeConfig): boolean {
+        const domain1 = this.getDomainKey(config1);
+        const domain2 = this.getDomainKey(config2);
+        if (domain1 !== domain2) return false;
+
+        // Keep UA stable within a domain context; mixing UAs inside one context is inconsistent.
+        if (config1.userAgent !== config2.userAgent) return false;
+
         // Match on proxy configuration
         const proxy1 = config1.proxy;
         const proxy2 = config2.proxy;
@@ -181,6 +264,24 @@ export class BrowserPool {
 
         // Both must have no proxy to match
         return !proxy1 && !proxy2;
+    }
+
+    private getDomainKey(config: BrowserScrapeConfig): string {
+        if (config.domainKey) return config.domainKey;
+        try {
+            return new URL(config.url).hostname;
+        } catch {
+            return '';
+        }
+    }
+
+    private getConfigKey(config: BrowserScrapeConfig): string {
+        const domain = this.getDomainKey(config);
+        const ua = config.userAgent || '';
+        const proxy = config.proxy
+            ? `${config.proxy.protocol}://${config.proxy.host}:${config.proxy.port}`
+            : 'no-proxy';
+        return `${domain}|${proxy}|${ua}`;
     }
 
     /**
@@ -237,6 +338,7 @@ export class BrowserPool {
             lastUsed: new Date(),
             inUse: false,
             config,
+            invalidated: false,
         };
 
         this.instances.push(instance);
@@ -270,6 +372,10 @@ export class BrowserPool {
     private scheduleRestart(instance: BrowserInstance): void {
         // Wait for instance to be released
         const checkInterval = setInterval(async () => {
+            if (instance.invalidated) {
+                clearInterval(checkInterval);
+                return;
+            }
             if (!instance.inUse) {
                 clearInterval(checkInterval);
                 await this.restartInstance(instance);
@@ -284,6 +390,8 @@ export class BrowserPool {
      */
     private async restartInstance(instance: BrowserInstance): Promise<void> {
         try {
+            if (instance.invalidated) return;
+
             // Close context and browser
             await instance.context.close();
             await instance.browser.close();
@@ -318,7 +426,7 @@ export class BrowserPool {
 
         for (const instance of this.instances) {
             // Skip instances in use
-            if (instance.inUse) {
+            if (instance.inUse || instance.invalidated) {
                 continue;
             }
 

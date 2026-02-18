@@ -16,6 +16,13 @@ import { BrowserPool } from './browser-pool';
 export interface BrowserScrapeConfig {
     /** Target URL to scrape */
     url: string;
+    /**
+     * Domain-level key used for browser context reuse.
+     *
+     * Why: we want one browser context per domain per job (and only recreate on crash/block),
+     * so callers should pass a stable hostname here. Pool may derive from `url` if omitted.
+     */
+    domainKey?: string;
     /** Optional proxy configuration */
     proxy?: ProxyConfig;
     /** User-Agent header value */
@@ -131,6 +138,7 @@ export class HeadlessBrowserScraper {
         let page: Page | null = null;
         let context: BrowserContext | null = null;
         let usingPool = false;
+        let statusCodeForInvalidation: number | null = null;
 
         try {
             // Get browser context from pool or create new one
@@ -194,6 +202,8 @@ export class HeadlessBrowserScraper {
                 throw new Error('Failed to load page');
             }
 
+            statusCodeForInvalidation = response.status();
+
             // Wait for selector if specified
             if (config.waitForSelector) {
                 await page.waitForSelector(config.waitForSelector, {
@@ -237,9 +247,14 @@ export class HeadlessBrowserScraper {
             // Close page
             await page.close();
 
-            // Release context back to pool if using pool
+            // Release/invalidate context back to pool if using pool.
+            // Policy: reuse per-domain context; recreate only on clear crash/block.
             if (usingPool && context) {
-                await this.browserPool.release(context);
+                if (statusCodeForInvalidation === 403 || statusCodeForInvalidation === 429) {
+                    await this.browserPool.invalidate(context);
+                } else {
+                    await this.browserPool.release(context);
+                }
             }
 
             return {
@@ -263,12 +278,25 @@ export class HeadlessBrowserScraper {
                 }
             }
 
-            // Release context back to pool if using pool
+            // Release/invalidate context back to pool if using pool.
+            // Invalidate on "target closed"/browser crash to force clean context next time.
             if (usingPool && context) {
+                const msg = error instanceof Error ? error.message : String(error);
+                const lower = (msg || '').toLowerCase();
+                const looksLikeCrash =
+                    lower.includes('target closed') ||
+                    lower.includes('browser has disconnected') ||
+                    lower.includes('has been closed') ||
+                    lower.includes('crashed');
+
                 try {
-                    await this.browserPool.release(context);
+                    if (looksLikeCrash) {
+                        await this.browserPool.invalidate(context);
+                    } else {
+                        await this.browserPool.release(context);
+                    }
                 } catch (releaseError) {
-                    // Ignore release errors
+                    // Ignore pool errors
                 }
             }
 
@@ -616,5 +644,10 @@ export class HeadlessBrowserScraper {
             return this.browserPool.getStats();
         }
         return null;
+    }
+
+    async invalidateDomainContext(domainKey: string): Promise<void> {
+        if (!this.usePool) return;
+        await this.browserPool.invalidateByDomainKey(domainKey);
     }
 }

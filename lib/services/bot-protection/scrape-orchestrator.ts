@@ -747,7 +747,10 @@ export class ScrapeOrchestrator {
         siteConfig: SiteConfiguration,
         strategy: ScrapingStrategy
     ): Promise<AttemptResult> {
-        const userAgent = this.userAgentPool.getRandomUserAgent();
+        const domainKey = this.getDomainKey(request.url, request.competitorWebsiteId);
+        const userAgent = this.isHttpStrategy(strategy)
+            ? this.userAgentPool.getRandomUserAgent()
+            : this.userAgentPool.getStickyUserAgent(domainKey);
         let proxy: Proxy | null = null;
 
         try {
@@ -898,6 +901,7 @@ export class ScrapeOrchestrator {
         userAgent: string,
         cookies: any[]
     ): Promise<AttemptResult> {
+        const domainKey = this.getDomainKey(request.url, request.competitorWebsiteId);
         // Generate headers
         const headers = generateHeaders({
             userAgent,
@@ -908,6 +912,7 @@ export class ScrapeOrchestrator {
         // Build browser scrape config
         const browserConfig: BrowserScrapeConfig = {
             url: request.url,
+            domainKey,
             proxy: proxy ? {
                 host: proxy.host,
                 port: proxy.port,
@@ -997,6 +1002,8 @@ export class ScrapeOrchestrator {
         // Detect bot protection
         const detection = this.detectionEngine.analyzeResponse(httpResponse);
 
+        const domainKey = this.getDomainKey(httpResponse.finalUrl || request.url, request.competitorWebsiteId);
+
         // Best-effort platform detection (OpenCart) to enable optimized defaults.
         // Never block scraping on detection/DB issues.
         try {
@@ -1026,6 +1033,18 @@ export class ScrapeOrchestrator {
 
         // If protection detected, return failure
         if (detection.protectionDetected) {
+            // Rotate sticky UA for next attempt on this domain.
+            this.userAgentPool.invalidateStickyUserAgent(domainKey);
+            // Recreate browser context for this domain (best-effort).
+            try {
+                await this.browserScraper.invalidateDomainContext(domainKey);
+            } catch (error) {
+                logger.debug('[ScrapeOrchestrator] Failed to invalidate browser context after block detection', {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    domainKey,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
             return {
                 success: false,
                 protectionDetected: true,
@@ -1081,6 +1100,14 @@ export class ScrapeOrchestrator {
             userAgent,
             responseSizeBytes: response.body.length,
         };
+    }
+
+    private getDomainKey(url: string, fallback: string): string {
+        try {
+            return new URL(url).hostname;
+        } catch {
+            return fallback;
+        }
     }
 
     private classifyExtractionFailure(extraction: ExtractionResult, statusCode: number): ScrapeFailureType {

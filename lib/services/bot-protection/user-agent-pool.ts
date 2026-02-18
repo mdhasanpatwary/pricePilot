@@ -122,6 +122,7 @@ export class UserAgentPool {
     private desktopAgents: string[];
     private mobileAgents: string[];
     private lastUsedIndex: Map<UserAgentType, number>;
+    private stickyAgents: Map<string, string>;
 
     constructor() {
         this.desktopAgents = [...DESKTOP_USER_AGENTS];
@@ -130,6 +131,7 @@ export class UserAgentPool {
             ['desktop', -1],
             ['mobile', -1],
         ]);
+        this.stickyAgents = new Map();
     }
 
     /**
@@ -160,6 +162,25 @@ export class UserAgentPool {
 
         this.lastUsedIndex.set(type, nextIndex);
         return agents[nextIndex];
+    }
+
+    /**
+     * Get a sticky user agent for a stable key (e.g., per-domain per job).
+     *
+     * Why: browser contexts are reused per domain, and mixing multiple UAs inside
+     * a single context is inconsistent and can increase detection.
+     */
+    getStickyUserAgent(key: string, type: UserAgentType = 'desktop'): string {
+        const existing = this.stickyAgents.get(key);
+        if (existing) return existing;
+
+        const ua = this.getRandomUserAgent(type);
+        this.stickyAgents.set(key, ua);
+        return ua;
+    }
+
+    invalidateStickyUserAgent(key: string): void {
+        this.stickyAgents.delete(key);
     }
 
     /**
@@ -194,6 +215,7 @@ export class UserAgentPool {
         this.mobileAgents = this.shuffleArray(this.mobileAgents);
         this.lastUsedIndex.set('desktop', -1);
         this.lastUsedIndex.set('mobile', -1);
+        this.stickyAgents.clear();
     }
 
     /**
