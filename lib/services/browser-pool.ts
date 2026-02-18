@@ -1,4 +1,4 @@
-import { chromium as playwrightChromium, Browser, BrowserContext } from "playwright";
+import { chromium as playwrightChromium, Browser, BrowserContext, Page } from "playwright";
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { logger } from "../logger";
@@ -9,6 +9,33 @@ interface PooledContext {
   inUse: boolean;
   createdAt: Date;
   lastUsedAt: Date;
+  key: string;
+}
+
+interface DomainSession {
+  domain: string;
+  browser: Browser | null;
+  contexts: Map<string, PooledContext>;
+  createdAt: Date;
+  lastUsedAt: Date;
+  initPromise: Promise<void> | null;
+}
+
+interface StealthOptions {
+  canvas?: boolean;
+  webgl?: boolean;
+  audio?: boolean;
+  fonts?: boolean;
+  webrtc?: boolean;
+  timezone?: boolean;
+  locale?: boolean;
+  battery?: boolean;
+}
+
+interface ContextOptions {
+  userAgent?: string;
+  proxy?: { server: string };
+  stealthOptions?: StealthOptions;
 }
 
 // Get user agents from centralized configuration
@@ -22,49 +49,50 @@ const VIEWPORTS = [
 ];
 
 const TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Paris',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Australia/Sydney',
+  "America/New_York",
+  "America/Chicago",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Australia/Sydney",
 ];
 
 const LOCALES = [
-  'en-US',
-  'en-GB',
-  'en-CA',
-  'en-AU',
-  'fr-FR',
-  'de-DE',
-  'es-ES',
-  'ja-JP',
+  "en-US",
+  "en-GB",
+  "en-CA",
+  "en-AU",
+  "fr-FR",
+  "de-DE",
+  "es-ES",
+  "ja-JP",
 ];
 
-interface StealthOptions {
-  canvas?: boolean;
-  webgl?: boolean;
-  audio?: boolean;
-  fonts?: boolean;
-  webrtc?: boolean;
-  timezone?: boolean;
-  locale?: boolean;
-  battery?: boolean;
-}
+const globalForBrowserPool = globalThis as typeof globalThis & {
+  __pricepilotBrowserPool?: BrowserPool;
+};
 
 /**
  * Browser Pool Manager
- * Manages a pool of browser contexts to prevent memory leaks and improve performance
+ * Domain-scoped lifecycle:
+ * - one Browser per domain
+ * - reusable Context pool per domain
+ * - bounded context limits + cleanup
  */
 export class BrowserPool {
   private static instance: BrowserPool | null = null;
-  private browser: Browser | null = null;
-  private contexts: Map<string, PooledContext> = new Map();
+
+  private domainSessions: Map<string, DomainSession> = new Map();
+  private contextIndex: Map<BrowserContext, { domain: string; key: string }> = new Map();
+
   private maxContexts: number = 10;
+  private maxContextsPerDomain: number = 4;
   private contextTimeout: number = 5 * 60 * 1000; // 5 minutes
+  private browserIdleTimeout: number = 15 * 60 * 1000; // 15 minutes
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private stealthConfigured = false;
 
   private constructor() {
     // Private constructor for singleton
@@ -75,87 +103,38 @@ export class BrowserPool {
    */
   static getInstance(): BrowserPool {
     if (!BrowserPool.instance) {
-      BrowserPool.instance = new BrowserPool();
+      BrowserPool.instance = globalForBrowserPool.__pricepilotBrowserPool ?? new BrowserPool();
+      globalForBrowserPool.__pricepilotBrowserPool = BrowserPool.instance;
     }
     return BrowserPool.instance;
   }
 
   /**
    * Shutdown the singleton pool (best-effort).
-   *
-   * Used by dev scripts/workers to ensure Playwright processes don't linger
-   * after SIGINT/SIGTERM.
    */
   static async shutdown(): Promise<void> {
-    if (!BrowserPool.instance) return;
-    await BrowserPool.instance.close();
+    if (!BrowserPool.instance && !globalForBrowserPool.__pricepilotBrowserPool) return;
+    const instance = BrowserPool.instance ?? globalForBrowserPool.__pricepilotBrowserPool;
+    if (!instance) return;
+    await instance.close();
   }
 
   /**
    * Initialize the browser pool
    */
   async init(maxContexts: number = 10) {
-    if (this.browser) {
-      logger.info("[BrowserPool] Already initialized");
-      return;
-    }
+    this.maxContexts = Math.max(1, maxContexts);
+    this.maxContextsPerDomain = Math.max(1, Math.min(5, Math.floor(this.maxContexts / 2) || 1));
 
-    this.maxContexts = maxContexts;
-
-    try {
-      // Try to use playwright-extra with stealth plugin
-      chromium.use(StealthPlugin());
-
-      this.browser = await chromium.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--disable-blink-features=AutomationControlled",
-          "--ignore-certificate-errors",
-          "--no-first-run",
-          "--no-service-autorun",
-          "--password-store=basic",
-          "--disable-infobars",
-          "--window-position=0,0",
-          "--disable-extensions",
-        ],
-      });
-
-      logger.info(`[BrowserPool] Initialized with playwright-extra stealth (max ${maxContexts} contexts)`);
-    } catch (error) {
-      // Fallback to basic stealth if playwright-extra fails
-      logger.warn("[BrowserPool] Failed to initialize with playwright-extra, falling back to basic stealth", { error });
-
-      this.browser = await playwrightChromium.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--disable-blink-features=AutomationControlled",
-          "--ignore-certificate-errors",
-          "--no-first-run",
-          "--no-service-autorun",
-          "--password-store=basic",
-          "--disable-infobars",
-          "--window-position=0,0",
-          "--disable-extensions",
-        ],
-      });
-
-      logger.info(`[BrowserPool] Initialized with basic stealth (max ${maxContexts} contexts)`);
-    }
-
-    // Start cleanup interval
     this.startCleanup();
+    logger.info("[BrowserPool] Initialized domain-aware pool", {
+      maxContexts: this.maxContexts,
+      maxContextsPerDomain: this.maxContextsPerDomain,
+    });
   }
 
   /**
-   * Acquire a browser context from the pool
+   * Backward-compatible API used by scraper service.
    */
   async acquireContext(
     userAgent?: string,
@@ -163,51 +142,302 @@ export class BrowserPool {
     stealthOptions?: StealthOptions,
     hostname?: string,
   ): Promise<BrowserContext> {
-    if (!this.browser) {
-      await this.init();
+    const domain = this.normalizeDomain(hostname);
+    return this.getContext(domain, { userAgent, proxy, stealthOptions });
+  }
+
+  /**
+   * New domain-first API.
+   */
+  async getContext(domain: string, options: ContextOptions = {}): Promise<BrowserContext> {
+    if (this.domainSessions.size === 0 && !this.cleanupInterval) {
+      await this.init(this.maxContexts);
     }
 
-    // Try to find an available context with matching config
-    const contextKey = this.getContextKey(userAgent, proxy, hostname);
-    const pooled = this.contexts.get(contextKey);
+    const normalizedDomain = this.normalizeDomain(domain);
+    const session = await this.ensureDomainSession(normalizedDomain);
+    session.lastUsedAt = new Date();
+
+    const contextKey = this.getContextKey(options.userAgent, options.proxy);
+    const pooled = session.contexts.get(contextKey);
 
     if (pooled && !pooled.inUse) {
-      // Check if context is still valid before reusing
-      try {
-        // Try to get pages to verify context is still open
-        const pages = pooled.context.pages();
-        // Also verify the browser is still connected
-        if (pages && this.browser && this.browser.isConnected()) {
-          pooled.inUse = true;
-          pooled.lastUsedAt = new Date();
-          logger.info(`[BrowserPool] Reusing context: ${contextKey}`);
-          return pooled.context;
-        } else {
-          // Context or browser is not valid
-          logger.warn(`[BrowserPool] Context ${contextKey} is invalid (browser disconnected or no pages), removing from pool`);
-          this.contexts.delete(contextKey);
-        }
-      } catch (error) {
-        // Context is closed, remove it from pool
-        logger.warn(`[BrowserPool] Context ${contextKey} was closed, removing from pool`);
-        this.contexts.delete(contextKey);
+      const isValid = await this.isContextValid(pooled.context, session.browser);
+      if (isValid) {
+        pooled.inUse = true;
+        pooled.lastUsedAt = new Date();
+        logger.info("[BrowserPool] Context reused", {
+          domain: normalizedDomain,
+          contextKey,
+          totalDomainContexts: session.contexts.size,
+        });
+        return pooled.context;
       }
+
+      await this.removeContext(normalizedDomain, contextKey, pooled, "invalid_stale");
     }
 
-    // Check if we've hit the pool limit
-    if (this.contexts.size >= this.maxContexts) {
-      // Try to evict an unused context
-      const evicted = await this.evictOldestUnusedContext();
+    const domainLimitReached = session.contexts.size >= this.maxContextsPerDomain;
+    const globalLimitReached = this.getTotalContexts() >= this.maxContexts;
+
+    if (domainLimitReached || globalLimitReached) {
+      const evicted = domainLimitReached
+        ? await this.evictOldestUnusedContext(normalizedDomain)
+        : await this.evictOldestUnusedContext();
+
       if (!evicted) {
-        logger.warn(
-          "[BrowserPool] Pool limit reached, waiting for available context",
-        );
-        // Wait for a context to become available
-        return this.waitForAvailableContext(userAgent, proxy, stealthOptions, hostname);
+        logger.warn("[BrowserPool] Context pool is saturated, waiting for available context", {
+          domain: normalizedDomain,
+          domainContexts: session.contexts.size,
+          totalContexts: this.getTotalContexts(),
+          maxContexts: this.maxContexts,
+          maxContextsPerDomain: this.maxContextsPerDomain,
+        });
+        return this.waitForAvailableContext(normalizedDomain, contextKey);
       }
     }
 
-    // Default stealth options - all enabled by default
+    const context = await this.createContext(session, options);
+
+    const pooledContext: PooledContext = {
+      context,
+      inUse: true,
+      createdAt: new Date(),
+      lastUsedAt: new Date(),
+      key: contextKey,
+    };
+
+    session.contexts.set(contextKey, pooledContext);
+    this.contextIndex.set(context, { domain: normalizedDomain, key: contextKey });
+
+    logger.info("[BrowserPool] Context created", {
+      domain: normalizedDomain,
+      contextKey,
+      totalDomainContexts: session.contexts.size,
+      totalContexts: this.getTotalContexts(),
+    });
+
+    return context;
+  }
+
+  /**
+   * Release by BrowserContext (backward-compatible) or by domain.
+   */
+  async releaseContext(target: BrowserContext | string): Promise<void> {
+    if (typeof target === "string") {
+      await this.releaseContextByDomain(this.normalizeDomain(target));
+      return;
+    }
+
+    const index = this.contextIndex.get(target);
+    if (!index) {
+      logger.warn("[BrowserPool] releaseContext called for unknown context");
+      return;
+    }
+
+    const session = this.domainSessions.get(index.domain);
+    if (!session) return;
+
+    const pooled = session.contexts.get(index.key);
+    if (!pooled) return;
+
+    await this.releaseSingleContext(index.domain, index.key, pooled);
+  }
+
+  /**
+   * Optional helper for safe page reuse.
+   * If an about:blank page exists, reuse it; otherwise create a new page.
+   */
+  async getPage(domain: string, options: ContextOptions = {}): Promise<{ context: BrowserContext; page: Page }> {
+    const context = await this.getContext(domain, options);
+    const reusable = context
+      .pages()
+      .find((page) => !page.isClosed() && page.url() === "about:blank");
+
+    if (reusable) {
+      return { context, page: reusable };
+    }
+
+    const page = await context.newPage();
+    return { context, page };
+  }
+
+  /**
+   * Release page + context safely.
+   */
+  async releasePage(domain: string, page: Page, context: BrowserContext): Promise<void> {
+    try {
+      if (!page.isClosed()) {
+        await page.goto("about:blank", { waitUntil: "domcontentloaded", timeout: 5000 }).catch(() => undefined);
+      }
+    } catch {
+      // Ignore page reset failures and continue release
+    }
+
+    await this.releaseContext(context);
+    logger.info("[BrowserPool] Page released", { domain: this.normalizeDomain(domain) });
+  }
+
+  /**
+   * Get pool statistics
+   */
+  getStats() {
+    let total = 0;
+    let inUse = 0;
+
+    for (const session of this.domainSessions.values()) {
+      total += session.contexts.size;
+      inUse += Array.from(session.contexts.values()).filter((c) => c.inUse).length;
+    }
+
+    return {
+      total,
+      inUse,
+      available: total - inUse,
+      maxContexts: this.maxContexts,
+      domains: this.domainSessions.size,
+      maxContextsPerDomain: this.maxContextsPerDomain,
+    };
+  }
+
+  /**
+   * Close all contexts and browsers.
+   */
+  async close() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    const closeTasks: Promise<void>[] = [];
+
+    for (const [domain, session] of this.domainSessions.entries()) {
+      for (const [key, pooled] of session.contexts.entries()) {
+        closeTasks.push(
+          pooled.context.close().catch((error) => {
+            logger.error("[BrowserPool] Failed to close context during shutdown", { domain, key, error });
+          }),
+        );
+      }
+
+      if (session.browser) {
+        closeTasks.push(
+          session.browser.close().catch((error) => {
+            logger.error("[BrowserPool] Failed to close browser during shutdown", { domain, error });
+          }),
+        );
+      }
+    }
+
+    await Promise.allSettled(closeTasks);
+
+    this.domainSessions.clear();
+    this.contextIndex.clear();
+
+    BrowserPool.instance = null;
+    globalForBrowserPool.__pricepilotBrowserPool = undefined;
+
+    logger.info("[BrowserPool] Pool shutdown complete");
+  }
+
+  private async ensureDomainSession(domain: string): Promise<DomainSession> {
+    let session = this.domainSessions.get(domain);
+
+    if (!session) {
+      session = {
+        domain,
+        browser: null,
+        contexts: new Map(),
+        createdAt: new Date(),
+        lastUsedAt: new Date(),
+        initPromise: null,
+      };
+      this.domainSessions.set(domain, session);
+    }
+
+    if (session.browser && session.browser.isConnected()) {
+      return session;
+    }
+
+    if (session.initPromise) {
+      await session.initPromise;
+      if (session.browser && session.browser.isConnected()) {
+        return session;
+      }
+    }
+
+    session.initPromise = this.createBrowserForDomain(session).finally(() => {
+      session!.initPromise = null;
+    });
+
+    await session.initPromise;
+    return session;
+  }
+
+  private async createBrowserForDomain(session: DomainSession): Promise<void> {
+    if (!this.stealthConfigured) {
+      chromium.use(StealthPlugin());
+      this.stealthConfigured = true;
+    }
+
+    try {
+      session.browser = await chromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-blink-features=AutomationControlled",
+          "--ignore-certificate-errors",
+          "--no-first-run",
+          "--no-service-autorun",
+          "--password-store=basic",
+          "--disable-infobars",
+          "--window-position=0,0",
+          "--disable-extensions",
+        ],
+      });
+
+      logger.info("[BrowserPool] Browser created with playwright-extra stealth", {
+        domain: session.domain,
+      });
+      return;
+    } catch (error) {
+      logger.warn("[BrowserPool] Stealth browser init failed, falling back to playwright chromium", {
+        domain: session.domain,
+        error,
+      });
+    }
+
+    session.browser = await playwrightChromium.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-blink-features=AutomationControlled",
+        "--ignore-certificate-errors",
+        "--no-first-run",
+        "--no-service-autorun",
+        "--password-store=basic",
+        "--disable-infobars",
+        "--window-position=0,0",
+        "--disable-extensions",
+      ],
+    });
+
+    logger.info("[BrowserPool] Browser created with playwright chromium", {
+      domain: session.domain,
+    });
+  }
+
+  private async createContext(session: DomainSession, options: ContextOptions): Promise<BrowserContext> {
+    if (!session.browser || !session.browser.isConnected()) {
+      throw new Error(`Browser is not available for domain ${session.domain}`);
+    }
+
     const stealth: StealthOptions = {
       canvas: true,
       webgl: true,
@@ -217,410 +447,397 @@ export class BrowserPool {
       timezone: true,
       locale: true,
       battery: true,
-      ...stealthOptions,
+      ...options.stealthOptions,
     };
 
-    // Randomize Fingerprints
-    const selectedUA = userAgent || USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    const selectedUA = options.userAgent || USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
     const viewport = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)];
     const deviceScaleFactor = Math.random() > 0.5 ? 2 : 1;
     const isWin = selectedUA.includes("Windows");
-    const platform = isWin ? "Win32" : (selectedUA.includes("Mac") ? "MacIntel" : "Linux x86_64");
+    const platform = isWin ? "Win32" : selectedUA.includes("Mac") ? "MacIntel" : "Linux x86_64";
 
-    // Randomize timezone and locale if enabled
-    const timezone = stealth.timezone ? TIMEZONES[Math.floor(Math.random() * TIMEZONES.length)] : 'Asia/Dhaka';
-    const locale = stealth.locale ? LOCALES[Math.floor(Math.random() * LOCALES.length)] : 'en-US';
+    const timezone = stealth.timezone
+      ? TIMEZONES[Math.floor(Math.random() * TIMEZONES.length)]
+      : "Asia/Dhaka";
+    const locale = stealth.locale
+      ? LOCALES[Math.floor(Math.random() * LOCALES.length)]
+      : "en-US";
 
-    // Create new context with realistic fingerprints
-    const context = await this.browser!.newContext({
+    const context = await session.browser.newContext({
       userAgent: selectedUA,
-      proxy,
+      proxy: options.proxy,
       viewport,
       deviceScaleFactor,
       hasTouch: false,
       locale,
       timezoneId: timezone,
       extraHTTPHeaders: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': `${locale},${locale.split('-')[0]};q=0.9`,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': isWin ? '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"' : '"Not A(Brand";v="99", "Chromium";v="121"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': isWin ? '"Windows"' : (platform.includes("Mac") ? '"macOS"' : '"Linux"'),
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-      }
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": `${locale},${locale.split("-")[0]};q=0.9`,
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        "Sec-Ch-Ua": isWin
+          ? '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"'
+          : '"Not A(Brand";v="99", "Chromium";v="121"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": isWin ? '"Windows"' : platform.includes("Mac") ? '"macOS"' : '"Linux"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+      },
     });
 
-    // Advanced Stealth Init Scripts
-    await context.addInitScript(({ plat, stealthOpts }: { plat: string, stealthOpts: StealthOptions }) => {
-      // 1. Mask Webdriver
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    await context.addInitScript(
+      ({ plat, stealthOpts }: { plat: string; stealthOpts: StealthOptions }) => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+        Object.defineProperty(navigator, "platform", { get: () => plat });
+        Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
 
-      // 2. Mask Platform
-      Object.defineProperty(navigator, 'platform', { get: () => plat });
+        if (stealthOpts.canvas) {
+          const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+          const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
 
-      // 3. Mask Plugins
-      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+          const addNoise = (data: Uint8ClampedArray) => {
+            const noise = Math.random() * 0.1;
+            for (let i = 0; i < data.length; i += 4) {
+              data[i] = Math.min(255, data[i] + Math.floor(noise * 10));
+              data[i + 1] = Math.min(255, data[i + 1] + Math.floor(noise * 10));
+              data[i + 2] = Math.min(255, data[i + 2] + Math.floor(noise * 10));
+            }
+          };
 
-      // 4. Canvas fingerprinting protection
-      if (stealthOpts.canvas) {
-        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        // const originalToBlob = HTMLCanvasElement.prototype.toBlob; // Reserved for future use
-        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+          HTMLCanvasElement.prototype.toDataURL = function (...args: any[]) {
+            const canvasCtx = this.getContext("2d");
+            if (canvasCtx) {
+              const imageData = canvasCtx.getImageData(0, 0, this.width, this.height);
+              addNoise(imageData.data);
+              canvasCtx.putImageData(imageData, 0, 0);
+            }
+            return originalToDataURL.apply(this, args as [type?: string, quality?: number]);
+          };
 
-        // Add noise to canvas data
-        const addNoise = (data: Uint8ClampedArray) => {
-          const noise = Math.random() * 0.1;
-          for (let i = 0; i < data.length; i += 4) {
-            data[i] = Math.min(255, data[i] + Math.floor(noise * 10));
-            data[i + 1] = Math.min(255, data[i + 1] + Math.floor(noise * 10));
-            data[i + 2] = Math.min(255, data[i + 2] + Math.floor(noise * 10));
-          }
-        };
-
-        HTMLCanvasElement.prototype.toDataURL = function (...args: any[]) {
-          const context = this.getContext('2d');
-          if (context) {
-            const imageData = context.getImageData(0, 0, this.width, this.height);
+          CanvasRenderingContext2D.prototype.getImageData = function (...args: any[]) {
+            const imageData = originalGetImageData.apply(this, args as [
+              sx: number,
+              sy: number,
+              sw: number,
+              sh: number,
+              settings?: ImageDataSettings,
+            ]);
             addNoise(imageData.data);
-            context.putImageData(imageData, 0, 0);
-          }
-          return originalToDataURL.apply(this, args as [type?: string, quality?: number]);
-        };
-
-        CanvasRenderingContext2D.prototype.getImageData = function (...args: any[]) {
-          const imageData = originalGetImageData.apply(this, args as [sx: number, sy: number, sw: number, sh: number, settings?: ImageDataSettings]);
-          addNoise(imageData.data);
-          return imageData;
-        };
-      }
-
-      // 5. WebGL Vendor/Renderer masking
-      if (stealthOpts.webgl) {
-        const getParameter = HTMLCanvasElement.prototype.getContext;
-        (HTMLCanvasElement.prototype as any).getContext = function (type: any, attributes: any) {
-          const context = getParameter.apply(this, [type, attributes]);
-          if (type === 'webgl' || type === 'experimental-webgl' || type === 'webgl2') {
-            const originalGetParameter = (context as any).getParameter;
-            (context as any).getParameter = function (parameter: any) {
-              // UNMASKED_VENDOR_WEBGL
-              if (parameter === 37445) return 'Google Inc. (Intel)';
-              // UNMASKED_RENDERER_WEBGL
-              if (parameter === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics (0x00009BC4) Direct3D11 vs_5_0 ps_5_0, D3D11)';
-              return originalGetParameter.apply(this, [parameter]);
-            };
-          }
-          return context;
-        };
-      }
-
-      // 6. Audio context fingerprinting protection
-      if (stealthOpts.audio) {
-        const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-        if (AudioContext) {
-          const originalCreateOscillator = AudioContext.prototype.createOscillator;
-          AudioContext.prototype.createOscillator = function () {
-            const oscillator = originalCreateOscillator.apply(this, arguments);
-            const originalStart = oscillator.start;
-            oscillator.start = function (...args: any[]) {
-              // Add slight randomization to audio timing
-              const noise = Math.random() * 0.0001;
-              if (args[0] !== undefined) {
-                args[0] = args[0] + noise;
-              }
-              return originalStart.apply(this, args);
-            };
-            return oscillator;
-          };
-        }
-      }
-
-      // 7. Font fingerprinting protection
-      if (stealthOpts.fonts) {
-        // Mask font enumeration by returning consistent font list
-        const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
-        const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
-
-        if (originalOffsetWidth && originalOffsetHeight) {
-          Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-            get: function () {
-              const width = originalOffsetWidth.get?.call(this);
-              // Add small random variation to prevent font-based fingerprinting
-              return width ? width + (Math.random() - 0.5) * 0.01 : width;
-            }
-          });
-
-          Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-            get: function () {
-              const height = originalOffsetHeight.get?.call(this);
-              return height ? height + (Math.random() - 0.5) * 0.01 : height;
-            }
-          });
-        }
-      }
-
-      // 8. WebRTC leak prevention
-      if (stealthOpts.webrtc) {
-        if (navigator.mediaDevices) {
-          (navigator.mediaDevices as any).getUserMedia = function () {
-            return Promise.reject(new Error('Permission denied'));
+            return imageData;
           };
         }
 
-        // Block RTCPeerConnection
-        (window as any).RTCPeerConnection = undefined;
-        (window as any).webkitRTCPeerConnection = undefined;
-        (window as any).mozRTCPeerConnection = undefined;
-      }
-
-      // 9. Battery API masking
-      if (stealthOpts.battery) {
-        if ('getBattery' in navigator) {
-          (navigator as any).getBattery = () => Promise.resolve({
-            charging: true,
-            chargingTime: 0,
-            dischargingTime: Infinity,
-            level: 1,
-            addEventListener: () => { },
-            removeEventListener: () => { },
-            dispatchEvent: () => true,
-          });
+        if (stealthOpts.webgl) {
+          const originalGetContext = HTMLCanvasElement.prototype.getContext;
+          (HTMLCanvasElement.prototype as any).getContext = function (type: any, attributes: any) {
+            const canvasCtx = originalGetContext.apply(this, [type, attributes]);
+            if (type === "webgl" || type === "experimental-webgl" || type === "webgl2") {
+              const originalGetParameter = (canvasCtx as any).getParameter;
+              (canvasCtx as any).getParameter = function (parameter: any) {
+                if (parameter === 37445) return "Google Inc. (Intel)";
+                if (parameter === 37446)
+                  return "ANGLE (Intel, Intel(R) UHD Graphics (0x00009BC4) Direct3D11 vs_5_0 ps_5_0, D3D11)";
+                return originalGetParameter.apply(this, [parameter]);
+              };
+            }
+            return canvasCtx;
+          };
         }
-      }
 
-      // 10. Chrome runtime masking
-      (window as any).chrome = {
-        runtime: {},
-        loadTimes: function () { },
-        csi: function () { },
-        app: {}
-      };
+        if (stealthOpts.audio) {
+          const AudioContextCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextCtor) {
+            const originalCreateOscillator = AudioContextCtor.prototype.createOscillator;
+            AudioContextCtor.prototype.createOscillator = function () {
+              const oscillator = originalCreateOscillator.apply(this, arguments as any);
+              const originalStart = oscillator.start;
+              oscillator.start = function (...args: any[]) {
+                const noise = Math.random() * 0.0001;
+                if (args[0] !== undefined) args[0] = args[0] + noise;
+                return originalStart.apply(this, args);
+              };
+              return oscillator;
+            };
+          }
+        }
 
-      // 11. Permissions masking
-      const originalQuery = window.navigator.permissions.query;
-      (window.navigator.permissions as any).query = (parameters: any) => (
-        parameters.name === 'notifications' ?
-          Promise.resolve({ state: Notification.permission }) :
-          originalQuery(parameters)
-      );
+        if (stealthOpts.fonts) {
+          const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
+          const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
 
-    }, { plat: platform, stealthOpts: stealth });
+          if (originalOffsetWidth && originalOffsetHeight) {
+            Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+              get: function () {
+                const width = originalOffsetWidth.get?.call(this);
+                return width ? width + (Math.random() - 0.5) * 0.01 : width;
+              },
+            });
 
-    const pooledContext: PooledContext = {
-      context,
-      inUse: true,
-      createdAt: new Date(),
-      lastUsedAt: new Date(),
-    };
+            Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+              get: function () {
+                const height = originalOffsetHeight.get?.call(this);
+                return height ? height + (Math.random() - 0.5) * 0.01 : height;
+              },
+            });
+          }
+        }
 
-    this.contexts.set(contextKey, pooledContext);
-    logger.info(
-      `[BrowserPool] Created new context for ${hostname || 'generic'}: ${contextKey} (${this.contexts.size}/${this.maxContexts})`,
+        if (stealthOpts.webrtc) {
+          if (navigator.mediaDevices) {
+            (navigator.mediaDevices as any).getUserMedia = function () {
+              return Promise.reject(new Error("Permission denied"));
+            };
+          }
+
+          (window as any).RTCPeerConnection = undefined;
+          (window as any).webkitRTCPeerConnection = undefined;
+          (window as any).mozRTCPeerConnection = undefined;
+        }
+
+        if (stealthOpts.battery && "getBattery" in navigator) {
+          (navigator as any).getBattery = () =>
+            Promise.resolve({
+              charging: true,
+              chargingTime: 0,
+              dischargingTime: Infinity,
+              level: 1,
+              addEventListener: () => {
+                return;
+              },
+              removeEventListener: () => {
+                return;
+              },
+              dispatchEvent: () => true,
+            });
+        }
+
+        (window as any).chrome = {
+          runtime: {},
+          loadTimes: function () {
+            return;
+          },
+          csi: function () {
+            return;
+          },
+          app: {},
+        };
+
+        const originalQuery = window.navigator.permissions.query;
+        (window.navigator.permissions as any).query = (parameters: any) =>
+          parameters.name === "notifications"
+            ? Promise.resolve({ state: Notification.permission })
+            : originalQuery(parameters);
+      },
+      { plat: platform, stealthOpts: stealth },
     );
 
     return context;
   }
 
-  /**
-   * Release a browser context back to the pool
-   */
-  async releaseContext(context: BrowserContext) {
-    for (const [key, pooled] of this.contexts.entries()) {
-      if (pooled.context === context) {
-        // Close all pages in the context before releasing
-        try {
-          const pages = context.pages();
-          for (const page of pages) {
-            await page.close().catch(() => { });
-          }
-        } catch (error) {
-          logger.warn(`[BrowserPool] Failed to close pages for context ${key}:`, { error });
-        }
+  private async releaseContextByDomain(domain: string): Promise<void> {
+    const session = this.domainSessions.get(domain);
+    if (!session) return;
 
-        pooled.inUse = false;
-        pooled.lastUsedAt = new Date();
-        logger.info(`[BrowserPool] Released context: ${key}`);
-        return;
+    const releasable = Array.from(session.contexts.entries())
+      .filter(([, pooled]) => pooled.inUse)
+      .sort((a, b) => b[1].lastUsedAt.getTime() - a[1].lastUsedAt.getTime())[0];
+
+    if (!releasable) return;
+
+    const [key, pooled] = releasable;
+    await this.releaseSingleContext(domain, key, pooled);
+  }
+
+  private async releaseSingleContext(domain: string, key: string, pooled: PooledContext): Promise<void> {
+    try {
+      const pages = pooled.context.pages();
+      for (const page of pages) {
+        try {
+          if (page.isClosed()) continue;
+          if (page.url() === "about:blank") continue;
+          await page.close({ runBeforeUnload: false }).catch(() => undefined);
+        } catch {
+          // ignore page close issues during release
+        }
       }
+    } catch (error) {
+      logger.warn("[BrowserPool] Failed to cleanup pages during context release", { domain, key, error });
+    }
+
+    pooled.inUse = false;
+    pooled.lastUsedAt = new Date();
+
+    logger.info("[BrowserPool] Context released", {
+      domain,
+      contextKey: key,
+    });
+  }
+
+  private async isContextValid(context: BrowserContext, browser: Browser | null): Promise<boolean> {
+    try {
+      if (!browser || !browser.isConnected()) return false;
+      context.pages();
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  /**
-   * Generate a unique key for context configuration
-   */
-  private getContextKey(
-    userAgent?: string,
-    proxy?: { server: string },
-    hostname?: string,
-  ): string {
-    const ua = userAgent || "default";
-    const proxyServer = proxy?.server || "none";
-    const host = hostname || "generic";
-    return `${host}_${ua.substring(0, 10)}_${proxyServer}`;
+  private normalizeDomain(domain?: string): string {
+    const normalized = (domain || "generic").trim().toLowerCase();
+    return normalized || "generic";
   }
 
-  /**
-   * Wait for an available context
-   */
-  private async waitForAvailableContext(
-    userAgent?: string,
-    proxy?: { server: string },
-    _stealthOptions?: StealthOptions,
-    hostname?: string,
-  ): Promise<BrowserContext> {
+  private getContextKey(userAgent?: string, proxy?: { server: string }): string {
+    const ua = userAgent || "default";
+    const proxyServer = proxy?.server || "none";
+    return `${ua.substring(0, 16)}_${proxyServer}`;
+  }
+
+  private getTotalContexts(): number {
+    let total = 0;
+    for (const session of this.domainSessions.values()) {
+      total += session.contexts.size;
+    }
+    return total;
+  }
+
+  private async waitForAvailableContext(domain: string, preferredKey: string): Promise<BrowserContext> {
     return new Promise((resolve) => {
       const checkInterval = setInterval(async () => {
-        const contextKey = this.getContextKey(userAgent, proxy, hostname);
-        const pooled = this.contexts.get(contextKey);
-
-        if (pooled && !pooled.inUse) {
+        const session = this.domainSessions.get(domain);
+        if (!session) {
           clearInterval(checkInterval);
-          pooled.inUse = true;
-          pooled.lastUsedAt = new Date();
-          resolve(pooled.context);
-        } else {
-          // Check if any context is available
-          for (const [, ctx] of this.contexts.entries()) {
-            if (!ctx.inUse) {
-              clearInterval(checkInterval);
-              ctx.inUse = true;
-              ctx.lastUsedAt = new Date();
-              resolve(ctx.context);
-              return;
-            }
+          resolve(await this.getContext(domain));
+          return;
+        }
+
+        const preferred = session.contexts.get(preferredKey);
+        if (preferred && !preferred.inUse) {
+          preferred.inUse = true;
+          preferred.lastUsedAt = new Date();
+          clearInterval(checkInterval);
+          logger.info("[BrowserPool] Context reused after wait", { domain, contextKey: preferredKey });
+          resolve(preferred.context);
+          return;
+        }
+
+        for (const [key, pooled] of session.contexts.entries()) {
+          if (!pooled.inUse) {
+            pooled.inUse = true;
+            pooled.lastUsedAt = new Date();
+            clearInterval(checkInterval);
+            logger.info("[BrowserPool] Context reused after wait", { domain, contextKey: key });
+            resolve(pooled.context);
+            return;
           }
         }
       }, 100);
     });
   }
 
-  /**
-   * Evict the oldest unused context
-   */
-  private async evictOldestUnusedContext(): Promise<boolean> {
-    let oldestKey: string | null = null;
-    let oldestTime = Date.now();
+  private async evictOldestUnusedContext(preferredDomain?: string): Promise<boolean> {
+    let selected: { domain: string; key: string; pooled: PooledContext } | null = null;
 
-    for (const [key, pooled] of this.contexts.entries()) {
-      if (!pooled.inUse && pooled.lastUsedAt.getTime() < oldestTime) {
-        oldestKey = key;
-        oldestTime = pooled.lastUsedAt.getTime();
+    const sessions = preferredDomain
+      ? [[preferredDomain, this.domainSessions.get(preferredDomain)] as const]
+      : (Array.from(this.domainSessions.entries()) as Array<[string, DomainSession]>);
+
+    for (const [domain, maybeSession] of sessions) {
+      const session = maybeSession;
+      if (!session) continue;
+
+      for (const [key, pooled] of session.contexts.entries()) {
+        if (pooled.inUse) continue;
+
+        if (!selected || pooled.lastUsedAt.getTime() < selected.pooled.lastUsedAt.getTime()) {
+          selected = { domain, key, pooled };
+        }
       }
     }
 
-    if (oldestKey) {
-      const pooled = this.contexts.get(oldestKey)!;
-      try {
-        await pooled.context.close();
-        this.contexts.delete(oldestKey);
-        logger.info(`[BrowserPool] Evicted context: ${oldestKey}`);
-      } catch (error) {
-        logger.error(`[BrowserPool] Failed to evict context ${oldestKey}:`, { error });
-        // Force remove from pool even if close failed
-        this.contexts.delete(oldestKey);
-      }
-      return true;
-    }
+    if (!selected) return false;
 
-    return false;
+    await this.removeContext(selected.domain, selected.key, selected.pooled, "evicted");
+    return true;
   }
 
-  /**
-   * Start periodic cleanup of stale contexts
-   */
+  private async removeContext(
+    domain: string,
+    key: string,
+    pooled: PooledContext,
+    reason: "evicted" | "stale" | "invalid_stale",
+  ): Promise<void> {
+    try {
+      await pooled.context.close();
+    } catch (error) {
+      logger.warn("[BrowserPool] Failed to close context during removal", { domain, key, reason, error });
+    }
+
+    const session = this.domainSessions.get(domain);
+    if (session) {
+      session.contexts.delete(key);
+      this.contextIndex.delete(pooled.context);
+    }
+
+    logger.info("[BrowserPool] Context removed", {
+      domain,
+      contextKey: key,
+      reason,
+    });
+  }
+
   private startCleanup() {
     if (this.cleanupInterval) return;
 
     this.cleanupInterval = setInterval(async () => {
       const now = Date.now();
-      const toRemove: string[] = [];
+      const staleContextTasks: Array<Promise<void>> = [];
+      const idleDomains: string[] = [];
 
-      for (const [key, pooled] of this.contexts.entries()) {
-        if (
-          !pooled.inUse &&
-          now - pooled.lastUsedAt.getTime() > this.contextTimeout
-        ) {
-          toRemove.push(key);
-        }
-      }
-
-      for (const key of toRemove) {
-        const pooled = this.contexts.get(key)!;
-        try {
-          await pooled.context.close();
-          this.contexts.delete(key);
-          logger.info(`[BrowserPool] Cleaned up stale context: ${key}`);
-        } catch (error) {
-          logger.error(`[BrowserPool] Failed to close context ${key}:`, { error });
-          // Force remove from pool even if close failed to prevent memory leak
-          this.contexts.delete(key);
-        }
-      }
-
-      if (toRemove.length > 0) {
-        logger.info(
-          `[BrowserPool] Cleanup completed: removed ${toRemove.length} stale contexts`,
+      for (const [domain, session] of this.domainSessions.entries()) {
+        session.lastUsedAt = new Date(
+          Math.max(
+            session.lastUsedAt.getTime(),
+            ...Array.from(session.contexts.values()).map((c) => c.lastUsedAt.getTime()),
+            session.createdAt.getTime(),
+          ),
         );
+
+        for (const [key, pooled] of session.contexts.entries()) {
+          if (!pooled.inUse && now - pooled.lastUsedAt.getTime() > this.contextTimeout) {
+            staleContextTasks.push(this.removeContext(domain, key, pooled, "stale"));
+          }
+        }
+
+        if (session.contexts.size === 0 && now - session.lastUsedAt.getTime() > this.browserIdleTimeout) {
+          idleDomains.push(domain);
+        }
       }
-    }, 60000); // Run every minute
-  }
 
-  /**
-   * Get pool statistics
-   */
-  getStats() {
-    const total = this.contexts.size;
-    const inUse = Array.from(this.contexts.values()).filter(
-      (c) => c.inUse,
-    ).length;
-    const available = total - inUse;
+      await Promise.allSettled(staleContextTasks);
 
-    return {
-      total,
-      inUse,
-      available,
-      maxContexts: this.maxContexts,
-    };
-  }
+      for (const domain of idleDomains) {
+        const session = this.domainSessions.get(domain);
+        if (!session) continue;
+        if (session.contexts.size > 0) continue;
 
-  /**
-   * Close all contexts and the browser
-   */
-  async close() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
+        if (session.browser) {
+          try {
+            await session.browser.close();
+            logger.info("[BrowserPool] Idle domain browser closed", { domain });
+          } catch (error) {
+            logger.warn("[BrowserPool] Failed closing idle domain browser", { domain, error });
+          }
+        }
 
-    const closePromises: Promise<void>[] = [];
-    for (const [key, pooled] of this.contexts.entries()) {
-      closePromises.push(
-        pooled.context.close().catch((error) => {
-          logger.error(`[BrowserPool] Failed to close context ${key}:`, { error });
-        })
-      );
-    }
-
-    // Wait for all contexts to close (or fail) before proceeding
-    await Promise.allSettled(closePromises);
-    this.contexts.clear();
-
-    if (this.browser) {
-      try {
-        await this.browser.close();
-        this.browser = null;
-        logger.info("[BrowserPool] Browser closed");
-      } catch (error) {
-        logger.error("[BrowserPool] Failed to close browser:", { error });
-        this.browser = null; // Force null even if close failed
+        this.domainSessions.delete(domain);
       }
-    }
-
-    BrowserPool.instance = null;
+    }, 60000);
   }
 }

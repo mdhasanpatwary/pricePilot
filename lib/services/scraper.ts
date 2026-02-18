@@ -3333,6 +3333,108 @@ export class ScraperService {
     return cleaned;
   }
 
+  private extractModelToken(query: string): string | null {
+    const tokens = query
+      .split(/\s+/)
+      .map((t) => t.replace(/[^\w.-]/g, ""))
+      .filter(Boolean);
+
+    const modelCandidates = tokens.filter((token) => {
+      const hasLetter = /[a-z]/i.test(token);
+      const hasDigit = /\d/.test(token);
+      if (!hasLetter || !hasDigit) return false;
+      if (token.length < 4 || token.length > 24) return false;
+      return true;
+    });
+
+    if (modelCandidates.length === 0) return null;
+    modelCandidates.sort((a, b) => b.length - a.length);
+    return modelCandidates[0];
+  }
+
+  private extractBrandToken(query: string): string | null {
+    const normalized = query.toLowerCase();
+    for (const [, brand] of Object.entries(TECH_BRANDS)) {
+      const aliasHit = brand.aliases.find((alias) => normalized.includes(alias.toLowerCase()));
+      if (aliasHit) return aliasHit;
+    }
+    const firstWord = query.split(/\s+/).find(Boolean) || "";
+    return firstWord.length >= 2 ? firstWord : null;
+  }
+
+  private extractSizeToken(query: string): string | null {
+    const match = query.match(/\b(\d{2,3})(?:\s?(?:\"|inch|in|cm))?\b/i);
+    if (!match) return null;
+    const value = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(value) || value < 10 || value > 120) return null;
+    return match[1];
+  }
+
+  private buildIntelligentFallbackQueries(cleanQuery: string): {
+    queries: string[];
+    modelToken?: string;
+    brandToken?: string;
+    sizeToken?: string;
+    usedModelStrategy: boolean;
+  } {
+    const modelToken = this.extractModelToken(cleanQuery) || undefined;
+    const brandToken = this.extractBrandToken(cleanQuery) || undefined;
+    const sizeToken = this.extractSizeToken(cleanQuery) || undefined;
+
+    if (modelToken) {
+      const queries = Array.from(
+        new Set(
+          [
+            modelToken,
+            brandToken ? `${brandToken} ${modelToken}` : "",
+          ].filter(Boolean),
+        ),
+      ).slice(0, 2); // model-only primary, brand+model secondary
+
+      return {
+        queries,
+        modelToken,
+        brandToken,
+        sizeToken,
+        usedModelStrategy: true,
+      };
+    }
+
+    // Generic fallback only when model extraction fails.
+    const stopWords = new Set([
+      "with",
+      "graphics",
+      "processor",
+      "edition",
+      "gaming",
+      "desktop",
+      "casing",
+      "monitor",
+      "series",
+      "feature",
+      "rgb",
+      "tower",
+      "color",
+      "function",
+      "multi",
+      "inch",
+      "usb",
+      "wireless",
+      "bluetooth",
+    ]);
+    const words = cleanQuery.split(/\s+/).filter(Boolean);
+    const coreWords = words.filter((w) => !stopWords.has(w.toLowerCase()) && w.length > 2);
+    const generic = coreWords.slice(0, 4).join(" ").trim();
+
+    return {
+      queries: generic && generic !== cleanQuery ? [generic] : [],
+      modelToken: undefined,
+      brandToken,
+      sizeToken,
+      usedModelStrategy: false,
+    };
+  }
+
   /**
    * Attempt to find and scrape a product on a site using a search query
    */
@@ -3691,7 +3793,13 @@ export class ScraperService {
           );
         }
 
-        let productLink = await this.evaluateProductLink(page, cleanQuery);
+        const tokenPlan = this.buildIntelligentFallbackQueries(cleanQuery);
+        const weightedTokens = {
+          model: tokenPlan.modelToken || undefined,
+          brand: tokenPlan.brandToken || undefined,
+          size: tokenPlan.sizeToken || undefined,
+        };
+        let productLink = await this.evaluateProductLink(page, cleanQuery, weightedTokens);
 
         if (!productLink) {
           productLink = await this.evaluateAdapterProductLink(
@@ -3790,77 +3898,20 @@ export class ScraperService {
         }
       }
 
-      // Fallback Strategy: Query Simplification + Model/SKU targeting
-      const maxFallbackDepth = likelyNoResults ? 1 : 2;
+      // Intelligent fallback strategy (model-first). Keep attempt volume low.
+      const maxFallbackDepth = 1;
       if (attempt < maxFallbackDepth) {
-        const stopWords = new Set([
-          "with",
-          "graphics",
-          "processor",
-          "edition",
-          "gaming",
-          "desktop",
-          "casing",
-          "monitor",
-          "series",
-          "feature",
-          "rgb",
-          "tower",
-          "color",
-          "function",
-          "multi",
-          "inch",
-          "usb",
-          "wireless",
-          "bluetooth",
-        ]);
-
-        const words = cleanQuery.split(/\s+/).filter(Boolean);
-        const coreWords = words.filter(
-          (w) => !stopWords.has(w.toLowerCase()) && w.length > 2,
-        );
-
-        const smartQuery = coreWords.slice(0, 4).join(" ").trim();
-
-        const modelTokens = words
-          .map((w) => w.replace(/[^\w.-]/g, ""))
-          .filter((w) => /[a-z]/i.test(w) && /\d/.test(w) && w.length >= 3)
-          .sort((a, b) => b.length - a.length);
-
-        const bestModel = modelTokens[0] || "";
-        const brandToken = words[0] || "";
-
-        const modelVariants = bestModel
-          ? Array.from(
-              new Set(
-                [
-                  bestModel,
-                  bestModel.replace(/-/g, " "),
-                  bestModel.replace(/-/g, ""),
-                  bestModel.replace(/[^a-z0-9]/gi, ""),
-                ]
-                  .map((s) => s.replace(/\s+/g, " ").trim())
-                  .filter(Boolean),
-              ),
-            )
-          : [];
-
-        const fallbackLimit = likelyNoResults ? 2 : 4;
-        const fallbackQueries = Array.from(
-          new Set(
-            [
-              smartQuery && smartQuery !== cleanQuery ? smartQuery : "",
-              ...(brandToken && bestModel ? [`${brandToken} ${bestModel}`] : []),
-              ...modelVariants,
-            ].filter(Boolean),
-          ),
-        ).slice(0, fallbackLimit); // cap retries to avoid extra load
+        const fallbackPlan = this.buildIntelligentFallbackQueries(cleanQuery);
+        const fallbackQueries = fallbackPlan.queries.slice(0, 2); // do not increase request volume
 
         if (fallbackQueries.length > 0) {
-          logger.info(`[ScraperService] 🔄 No results. Trying fallback queries...`, {
+          logger.info(`[ScraperService] 🔄 No results. Trying intelligent fallback queries...`, {
             attempt,
             fallbackQueries,
             likelyNoResults,
+            usedModelStrategy: fallbackPlan.usedModelStrategy,
+            modelToken: fallbackPlan.modelToken,
+            brandToken: fallbackPlan.brandToken,
           });
 
           for (const fq of fallbackQueries) {
@@ -3903,9 +3954,13 @@ export class ScraperService {
   /**
    * Helper to identify product links on a results page using Weighted Scoring
    */
-  private async evaluateProductLink(page: Page, query?: string): Promise<string | null> {
+  private async evaluateProductLink(
+    page: Page,
+    query?: string,
+    weightedTokens?: { model?: string; brand?: string; size?: string },
+  ): Promise<string | null> {
     // Pass TECH_BRANDS to the browser context
-    return await page.evaluate(({ q, brands }) => {
+    return await page.evaluate(({ q, brands, wt }) => {
       const candidates: Array<{
         href: string;
         text: string;
@@ -3917,6 +3972,39 @@ export class ScraperService {
 
       // Helper to normalize text
       const clean = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const normalizeTokens = (str: string) =>
+        str
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .split(" ")
+          .filter(Boolean);
+      const diceCoefficient = (a: string, b: string) => {
+        const sa = a.toLowerCase().replace(/\s+/g, " ").trim();
+        const sb = b.toLowerCase().replace(/\s+/g, " ").trim();
+        if (!sa || !sb) return 0;
+        if (sa === sb) return 1;
+        if (sa.length < 2 || sb.length < 2) return 0;
+        const bigrams = (s: string) => {
+          const out: string[] = [];
+          for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2));
+          return out;
+        };
+        const aBi = bigrams(sa);
+        const bBi = bigrams(sb);
+        const bMap = new Map<string, number>();
+        for (const bi of bBi) bMap.set(bi, (bMap.get(bi) || 0) + 1);
+        let overlap = 0;
+        for (const bi of aBi) {
+          const c = bMap.get(bi) || 0;
+          if (c > 0) {
+            overlap += 1;
+            bMap.set(bi, c - 1);
+          }
+        }
+        return (2 * overlap) / (aBi.length + bBi.length);
+      };
 
       links.forEach((a, index) => {
         const href = a.href.toLowerCase();
@@ -4047,6 +4135,53 @@ export class ScraperService {
           }
         }
 
+        // Token-priority weighted scoring: model > brand > size.
+        const weightedModel = (wt?.model || "").toLowerCase();
+        const weightedBrand = (wt?.brand || "").toLowerCase();
+        const weightedSize = (wt?.size || "").toLowerCase();
+        const normalizedTextAndHref = `${lowerText} ${href}`;
+        const tokenized = normalizeTokens(normalizedTextAndHref);
+        if (weightedModel) {
+          const modelCompact = weightedModel.replace(/[^a-z0-9]/g, "");
+          const targetCompact = normalizedTextAndHref.replace(/[^a-z0-9]/g, "");
+          if (targetCompact.includes(modelCompact)) {
+            score += 40;
+            reasons.push("Model Match");
+          } else {
+            const fuzzyModel = diceCoefficient(clean(normalizedTextAndHref), clean(weightedModel));
+            if (fuzzyModel >= 0.72) {
+              score += 16;
+              reasons.push(`Model Fuzzy ${Math.round(fuzzyModel * 100)}%`);
+            } else {
+              score -= 35;
+              reasons.push("Model Missing");
+            }
+          }
+        }
+
+        if (weightedBrand) {
+          const brandCompact = weightedBrand.replace(/[^a-z0-9]/g, "");
+          const targetCompact = normalizedTextAndHref.replace(/[^a-z0-9]/g, "");
+          if (targetCompact.includes(brandCompact)) {
+            score += 14;
+            reasons.push("Brand Match");
+          } else {
+            const fuzzyBrand = diceCoefficient(clean(normalizedTextAndHref), clean(weightedBrand));
+            if (fuzzyBrand >= 0.68) {
+              score += 6;
+              reasons.push(`Brand Fuzzy ${Math.round(fuzzyBrand * 100)}%`);
+            }
+          }
+        }
+
+        if (weightedSize) {
+          const sizeMatch = tokenized.some((t) => t === weightedSize || t === `${weightedSize}inch` || t === `${weightedSize}in`);
+          if (sizeMatch) {
+            score += 8;
+            reasons.push("Size Match");
+          }
+        }
+
         // 4. URL Structure Score (20% Weight)
         const isProductUrl =
           href.includes("/product/") ||
@@ -4110,7 +4245,7 @@ export class ScraperService {
       // Return top candidate or null
       return candidates.length > 0 ? candidates[0].href : null;
 
-    }, { q: query, brands: TECH_BRANDS });
+    }, { q: query, brands: TECH_BRANDS, wt: weightedTokens || {} });
   }
 
   private async evaluateAdapterProductLink(
