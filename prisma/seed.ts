@@ -1,5 +1,15 @@
 const { prisma } = require("../lib/prisma");
 const bcrypt = require("bcryptjs");
+const { EncryptionService } = require("../lib/services/encryption/encryption-service");
+const { KeyManager } = require("../lib/services/encryption/key-manager");
+
+if (!process.env.ENCRYPTION_MASTER_KEY) {
+  throw new Error(
+    "ENCRYPTION_MASTER_KEY environment variable is required for seeding (prevents plaintext token storage)."
+  );
+}
+
+const encryptionService = new EncryptionService(new KeyManager());
 
 async function main() {
   console.log("Seeding database for E2E tests...");
@@ -41,7 +51,7 @@ async function main() {
       type: "USER",
       platform: "OPENCART",
       baseUrl: "https://test-store.com",
-      apiToken: "test-token",
+      apiToken: encryptionService.encrypt("test-token"),
     },
   });
 

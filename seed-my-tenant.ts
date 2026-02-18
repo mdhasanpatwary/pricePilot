@@ -1,4 +1,5 @@
 import { prisma } from "./lib/prisma";
+import { WebsiteService } from "./lib/services/website-service";
 
 async function seedMyTenant() {
   const tenantId = "53bcc3ed-3da5-42b8-80c9-dec4012e3d1a";
@@ -6,14 +7,12 @@ async function seedMyTenant() {
   console.log("Seeding products for your tenant...\n");
 
   // 1. Create User Site (Your Store)
-  const userSite = await prisma.site.create({
-    data: {
-      tenantId,
-      type: "USER",
-      platform: "OPENCART",
-      baseUrl: "https://mystore.com",
-      apiToken: "my-api-token",
-    },
+  const userSite = await WebsiteService.createWebsite({
+    tenantId,
+    type: "USER",
+    platform: "OPENCART",
+    baseUrl: "https://mystore.com",
+    apiToken: "my-api-token",
   });
   console.log("✓ Created user site");
 

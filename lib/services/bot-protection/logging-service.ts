@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { ScrapeFailureType } from '@prisma/client';
 
 /**
  * Scrape attempt log entry
@@ -25,6 +26,7 @@ export interface ScrapeAttemptLog {
     success: boolean;
     protectionDetected: boolean;
     protectionType?: string;
+    failureType?: ScrapeFailureType;
     statusCode?: number;
     responseTimeMs?: number;
     responseSizeBytes?: number;
@@ -56,6 +58,7 @@ export interface LogQuery {
     competitorWebsiteId?: string;
     competitorProductId?: string;
     protectionType?: string;
+    failureType?: ScrapeFailureType;
     strategy?: string;
     startDate?: Date;
     endDate?: Date;
@@ -100,6 +103,35 @@ export interface DetectionQuery {
  */
 export class LoggingService {
     private readonly MAX_RESPONSE_SAMPLE_SIZE = 1024; // 1KB
+    private isMissingColumnError(error: unknown): boolean {
+        const msg = error instanceof Error ? error.message : String(error);
+        return msg.includes('does not exist in the current database') || msg.includes('The column `(not available)` does not exist');
+    }
+
+    private scrapeAttemptSelect(includeFailureType: boolean) {
+        return {
+            id: true,
+            tenantId: true,
+            competitorProductId: true,
+            competitorWebsiteId: true,
+            url: true,
+            strategy: true,
+            proxyId: true,
+            userAgent: true,
+            success: true,
+            protectionDetected: true,
+            protectionType: true,
+            ...(includeFailureType ? { failureType: true } : {}),
+            statusCode: true,
+            responseTimeMs: true,
+            responseSizeBytes: true,
+            responseSample: true,
+            screenshotUrl: true,
+            errorMessage: true,
+            attemptNumber: true,
+            createdAt: true,
+        } as const;
+    }
 
     /**
      * Log a scrape attempt
@@ -127,6 +159,7 @@ export class LoggingService {
                 success: log.success,
                 protectionDetected: log.protectionDetected,
                 protectionType: log.protectionType,
+                failureType: log.failureType,
                 statusCode: log.statusCode,
                 responseTimeMs: log.responseTimeMs,
                 responseSizeBytes: log.responseSizeBytes,
@@ -206,6 +239,10 @@ export class LoggingService {
             where.protectionType = query.protectionType;
         }
 
+        if (query.failureType) {
+            where.failureType = query.failureType;
+        }
+
         if (query.strategy) {
             where.strategy = query.strategy;
         }
@@ -229,7 +266,21 @@ export class LoggingService {
         }
 
         // Get total count for pagination
-        const total = await prisma.scrapeAttempt.count({ where });
+        let total = 0;
+        try {
+            total = await prisma.scrapeAttempt.count({ where });
+        } catch (error) {
+            if (!this.isMissingColumnError(error)) throw error;
+
+            // If the caller asked to filter by failureType but the DB isn't migrated yet,
+            // fail explicitly rather than silently ignoring the filter.
+            if (query.failureType) {
+                throw new Error('SCHEMA_OUT_OF_DATE: ScrapeAttempt.failureType column is missing');
+            }
+
+            const { failureType: _ft, ...rest } = where as any;
+            total = await prisma.scrapeAttempt.count({ where: rest as Prisma.ScrapeAttemptWhereInput });
+        }
 
         // Determine order by
         const orderBy = query.orderBy || 'createdAt';
@@ -239,14 +290,39 @@ export class LoggingService {
         const limit = query.limit || 100;
         const offset = query.offset || 0;
 
-        const logs = await prisma.scrapeAttempt.findMany({
-            where,
-            orderBy: {
-                [orderBy]: orderDirection,
-            },
-            take: limit,
-            skip: offset,
-        });
+        let logs: any[] = [];
+        try {
+            logs = await prisma.scrapeAttempt.findMany({
+                where,
+                select: this.scrapeAttemptSelect(true),
+                orderBy: {
+                    [orderBy]: orderDirection,
+                },
+                take: limit,
+                skip: offset,
+            });
+        } catch (error) {
+            if (!this.isMissingColumnError(error)) throw error;
+
+            if (query.failureType) {
+                throw new Error('SCHEMA_OUT_OF_DATE: ScrapeAttempt.failureType column is missing');
+            }
+
+            // DB schema not migrated yet (failureType column missing): retry selecting only legacy columns.
+            logs = await prisma.scrapeAttempt.findMany({
+                where: (() => {
+                    // If caller passed failureType but column doesn't exist, avoid Prisma referencing it.
+                    const { failureType: _ft, ...rest } = where as any;
+                    return rest as Prisma.ScrapeAttemptWhereInput;
+                })(),
+                select: this.scrapeAttemptSelect(false),
+                orderBy: {
+                    [orderBy]: orderDirection,
+                },
+                take: limit,
+                skip: offset,
+            });
+        }
 
         const mappedLogs = logs.map((log) => ({
             id: log.id,
@@ -260,6 +336,7 @@ export class LoggingService {
             success: log.success,
             protectionDetected: log.protectionDetected,
             protectionType: log.protectionType || undefined,
+            failureType: log.failureType || undefined,
             statusCode: log.statusCode || undefined,
             responseTimeMs: log.responseTimeMs || undefined,
             responseSizeBytes: log.responseSizeBytes || undefined,
@@ -419,9 +496,19 @@ export class LoggingService {
      * @returns Scrape attempt log or null if not found
      */
     async getScrapeAttemptById(id: string): Promise<ScrapeAttemptLog | null> {
-        const log = await prisma.scrapeAttempt.findUnique({
-            where: { id },
-        });
+        let log: any | null = null;
+        try {
+            log = await prisma.scrapeAttempt.findUnique({
+                where: { id },
+                select: this.scrapeAttemptSelect(true),
+            });
+        } catch (error) {
+            if (!this.isMissingColumnError(error)) throw error;
+            log = await prisma.scrapeAttempt.findUnique({
+                where: { id },
+                select: this.scrapeAttemptSelect(false),
+            });
+        }
 
         if (!log) {
             return null;
@@ -439,6 +526,7 @@ export class LoggingService {
             success: log.success,
             protectionDetected: log.protectionDetected,
             protectionType: log.protectionType || undefined,
+            failureType: log.failureType || undefined,
             statusCode: log.statusCode || undefined,
             responseTimeMs: log.responseTimeMs || undefined,
             responseSizeBytes: log.responseSizeBytes || undefined,
@@ -488,15 +576,31 @@ export class LoggingService {
         competitorWebsiteId: string,
         limit: number = 50
     ): Promise<ScrapeAttemptLog[]> {
-        const logs = await prisma.scrapeAttempt.findMany({
-            where: {
-                competitorWebsiteId,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-            take: limit,
-        });
+        let logs: any[] = [];
+        try {
+            logs = await prisma.scrapeAttempt.findMany({
+                where: {
+                    competitorWebsiteId,
+                },
+                select: this.scrapeAttemptSelect(true),
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                take: limit,
+            });
+        } catch (error) {
+            if (!this.isMissingColumnError(error)) throw error;
+            logs = await prisma.scrapeAttempt.findMany({
+                where: {
+                    competitorWebsiteId,
+                },
+                select: this.scrapeAttemptSelect(false),
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                take: limit,
+            });
+        }
 
         return logs.map((log) => ({
             id: log.id,
@@ -510,6 +614,7 @@ export class LoggingService {
             success: log.success,
             protectionDetected: log.protectionDetected,
             protectionType: log.protectionType || undefined,
+            failureType: log.failureType || undefined,
             statusCode: log.statusCode || undefined,
             responseTimeMs: log.responseTimeMs || undefined,
             responseSizeBytes: log.responseSizeBytes || undefined,

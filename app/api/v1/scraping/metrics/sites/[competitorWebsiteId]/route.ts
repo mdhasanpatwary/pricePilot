@@ -100,24 +100,54 @@ export async function GET(
         const startDate = getStartDateForWindow(timeWindow);
 
         // Get all attempts for this site in the time window
-        const attempts = await prisma.scrapeAttempt.findMany({
-            where: {
-                competitorWebsiteId,
-                createdAt: {
-                    gte: startDate,
+        let attempts: any[] = [];
+
+        try {
+            attempts = await prisma.scrapeAttempt.findMany({
+                where: {
+                    competitorWebsiteId,
+                    createdAt: {
+                        gte: startDate,
+                    },
                 },
-            },
-            select: {
-                success: true,
-                protectionType: true,
-                strategy: true,
-                responseTimeMs: true,
-                createdAt: true,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
+                select: {
+                    success: true,
+                    protectionType: true,
+                    failureType: true,
+                    strategy: true,
+                    responseTimeMs: true,
+                    createdAt: true,
+                },
+                orderBy: {
+                    createdAt: 'desc',
+                },
+            });
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            if (!msg.includes('does not exist in the current database') && !msg.includes('The column `(not available)` does not exist')) {
+                throw error;
+            }
+
+            // Schema not migrated yet: query without failureType.
+            attempts = await prisma.scrapeAttempt.findMany({
+                where: {
+                    competitorWebsiteId,
+                    createdAt: {
+                        gte: startDate,
+                    },
+                },
+                select: {
+                    success: true,
+                    protectionType: true,
+                    strategy: true,
+                    responseTimeMs: true,
+                    createdAt: true,
+                } as any,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+            });
+        }
 
         const totalAttempts = attempts.length;
         const successfulAttempts = attempts.filter((a) => a.success).length;
@@ -141,6 +171,14 @@ export async function GET(
         const strategyBreakdown: Record<string, number> = {};
         attempts.forEach((attempt) => {
             strategyBreakdown[attempt.strategy] = (strategyBreakdown[attempt.strategy] || 0) + 1;
+        });
+
+        // Build failure type breakdown (failures only)
+        const failureTypeBreakdown: Record<string, number> = {};
+        attempts.forEach((attempt) => {
+            if (attempt.success) return;
+            const ft = attempt.failureType || 'PARSE_FAILED';
+            failureTypeBreakdown[ft] = (failureTypeBreakdown[ft] || 0) + 1;
         });
 
         // Find last success and failure
@@ -190,6 +228,7 @@ export async function GET(
                     },
                     breakdowns: {
                         protectionTypes: protectionTypeBreakdown,
+                        failureTypes: failureTypeBreakdown,
                         strategies: strategyBreakdown,
                     },
                     trends: {

@@ -10,6 +10,7 @@
 
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
+import { ScrapeFailureType } from '@prisma/client';
 import { DetectionEngine, ProtectionType, HttpResponse } from './detection-engine';
 import { ProxyManager, Proxy } from './proxy-manager';
 import { RateLimiter } from './rate-limiter';
@@ -37,6 +38,7 @@ import { APICache, apiCache } from '../api-detection/api-cache';
 import { APIExtractor } from '../api-detection/api-extractor';
 import type { APIPattern, Product as APIProduct } from '@/lib/types/api-detection';
 import { ConcurrencyLimiter } from '../concurrency-limiter';
+import { StrategyPerformanceService } from './strategy-performance-service';
 
 /**
  * Scrape request interface
@@ -109,6 +111,11 @@ export class ScrapeOrchestrator {
             maxConcurrency: 10,
             initialConcurrency: 3
         });
+    }
+
+    private isMissingColumnError(error: unknown): boolean {
+        const msg = error instanceof Error ? error.message : String(error);
+        return msg.includes('does not exist in the current database') || msg.includes('The column `(not available)` does not exist');
     }
 
     /**
@@ -286,6 +293,23 @@ export class ScrapeOrchestrator {
 
                         const responseTime = Date.now() - startTime;
 
+                        // Log API attempt (structured, stored in ScrapeAttempt)
+                        await this.logScrapeAttempt(
+                            request,
+                            {
+                                success: true,
+                                price: matchedProduct.price,
+                                currency: matchedProduct.currency,
+                                protectionDetected: false,
+                                userAgent: 'api',
+                                statusCode: 200,
+                                responseTimeMs: responseTime,
+                                responseSizeBytes: undefined,
+                            },
+                            'api',
+                            0
+                        );
+
                         result = {
                             success: true,
                             price: matchedProduct.price,
@@ -305,14 +329,55 @@ export class ScrapeOrchestrator {
                             productsFound: products.length,
                         });
 
+                        // Log API attempt failure (SEARCH_EMPTY / PRICE_ZERO)
+                        const failureType = matchedProduct && matchedProduct.price === 0
+                            ? ScrapeFailureType.PRICE_ZERO
+                            : ScrapeFailureType.SEARCH_EMPTY;
+                        await this.logScrapeAttempt(
+                            request,
+                            {
+                                success: false,
+                                protectionDetected: false,
+                                failureType,
+                                userAgent: 'api',
+                                statusCode: 200,
+                                responseTimeMs: Date.now() - startTime,
+                                responseSizeBytes: undefined,
+                                errorMessage: matchedProduct
+                                    ? 'API matched product but price was 0'
+                                    : 'No matching product found in API response',
+                            },
+                            'api',
+                            0
+                        );
+
                         // Update cache metrics as failure
                         await this.apiCache.updateMetrics(request.competitorWebsiteId, false);
                     }
                 } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                    const failureType = this.classifyExceptionFailureType(errorMessage);
                     logger.error('[ScrapeOrchestrator] API extraction failed', {
                         competitorProductId: request.competitorProductId,
-                        error: error instanceof Error ? error.message : 'Unknown error',
+                        failureType,
+                        error: errorMessage,
                     });
+
+                    await this.logScrapeAttempt(
+                        request,
+                        {
+                            success: false,
+                            protectionDetected: false,
+                            failureType,
+                            userAgent: 'api',
+                            statusCode: undefined,
+                            responseTimeMs: Date.now() - startTime,
+                            responseSizeBytes: undefined,
+                            errorMessage,
+                        },
+                        'api',
+                        0
+                    );
 
                     // Update cache metrics as failure
                     await this.apiCache.updateMetrics(request.competitorWebsiteId, false);
@@ -331,6 +396,24 @@ export class ScrapeOrchestrator {
 
                 // Load site configuration
                 const siteConfig = await this.loadSiteConfiguration(request.competitorWebsiteId);
+
+                // Prefer the best-performing strategy (if known) for the first attempt.
+                // This is a best-effort lookup and must not block scraping.
+                try {
+                    const ranked = await StrategyPerformanceService.getRankedStrategies({
+                        tenantId: request.tenantId,
+                        competitorWebsiteId: request.competitorWebsiteId,
+                        limit: 5,
+                    });
+                    if (ranked.length > 0) {
+                        siteConfig.preferredStrategy = ranked[0];
+                    }
+                } catch (error) {
+                    logger.warn('[ScrapeOrchestrator] Failed to load strategy rankings', {
+                        competitorWebsiteId: request.competitorWebsiteId,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
 
                 // Initialize strategy context
                 const strategyContext: StrategyContext = {
@@ -586,12 +669,31 @@ export class ScrapeOrchestrator {
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                 lastErrorMessage = errorMessage;
+                const failureType = this.classifyExceptionFailureType(errorMessage);
 
                 logger.error('[ScrapeOrchestrator] Attempt failed with error', {
                     attemptNumber,
                     strategy: currentStrategy,
+                    failureType,
                     error: errorMessage,
                 });
+
+                await this.logScrapeAttempt(
+                    request,
+                    {
+                        success: false,
+                        protectionDetected: false,
+                        failureType,
+                        proxyId: undefined,
+                        userAgent: 'unknown',
+                        statusCode: undefined,
+                        responseTimeMs: 0,
+                        responseSizeBytes: 0,
+                        errorMessage,
+                    },
+                    currentStrategy,
+                    attemptNumber
+                );
 
                 // Record failure
                 await this.rateLimiter.recordFailure(request.competitorWebsiteId);
@@ -644,22 +746,47 @@ export class ScrapeOrchestrator {
         siteConfig: SiteConfiguration,
         strategy: ScrapingStrategy
     ): Promise<AttemptResult> {
-        // Get proxy if strategy requires it
-        const proxy = this.shouldUseProxy(strategy)
-            ? await this.proxyManager.getProxy(request.competitorWebsiteId)
-            : null;
-
-        // Get user agent
         const userAgent = this.userAgentPool.getRandomUserAgent();
+        let proxy: Proxy | null = null;
 
-        // Get cookies
-        const cookies = await this.sessionManager.getCookies(request.competitorWebsiteId);
+        try {
+            // Get proxy if strategy requires it
+            proxy = this.shouldUseProxy(strategy)
+                ? await this.proxyManager.getProxy(request.competitorWebsiteId)
+                : null;
 
-        // Execute based on strategy
-        if (this.isHttpStrategy(strategy)) {
-            return this.executeHttpScrape(request, siteConfig, proxy, userAgent, cookies);
-        } else {
-            return this.executeBrowserScrape(request, siteConfig, strategy, proxy, userAgent, cookies);
+            // Get cookies
+            const cookies = await this.sessionManager.getCookies(request.competitorWebsiteId);
+
+            // Execute based on strategy
+            if (this.isHttpStrategy(strategy)) {
+                return this.executeHttpScrape(request, siteConfig, proxy, userAgent, cookies);
+            } else {
+                return this.executeBrowserScrape(request, siteConfig, strategy, proxy, userAgent, cookies);
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const failureType = this.classifyExceptionFailureType(errorMessage);
+
+            logger.error('[ScrapeOrchestrator] Failed before executing scrape strategy', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                url: request.url,
+                strategy,
+                failureType,
+                error: errorMessage,
+            });
+
+            return {
+                success: false,
+                protectionDetected: false,
+                failureType,
+                proxyId: proxy?.id,
+                errorMessage,
+                statusCode: undefined,
+                responseTimeMs: 0,
+                userAgent,
+                responseSizeBytes: 0,
+            };
         }
     }
 
@@ -705,7 +832,32 @@ export class ScrapeOrchestrator {
         };
 
         // Execute scrape
-        const response: ScrapeResponse = await this.httpScraper.scrape(scrapeConfig);
+        let response: ScrapeResponse;
+        try {
+            response = await this.httpScraper.scrape(scrapeConfig);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const failureType = this.classifyExceptionFailureType(errorMessage);
+
+            logger.error('[ScrapeOrchestrator] HTTP scrape threw error', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                url: request.url,
+                failureType,
+                error: errorMessage,
+            });
+
+            return {
+                success: false,
+                protectionDetected: false,
+                failureType,
+                proxyId: proxy?.id,
+                errorMessage,
+                statusCode: undefined,
+                responseTimeMs: 0,
+                userAgent,
+                responseSizeBytes: 0,
+            };
+        }
 
         // Store cookies
         if (response.headers['set-cookie']) {
@@ -777,7 +929,34 @@ export class ScrapeOrchestrator {
         };
 
         // Execute browser scrape
-        const response: BrowserScrapeResponse = await this.browserScraper.scrape(browserConfig);
+        let response: BrowserScrapeResponse;
+        try {
+            response = await this.browserScraper.scrape(browserConfig);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const failureType = this.classifyExceptionFailureType(errorMessage);
+
+            logger.error('[ScrapeOrchestrator] Browser scrape threw error', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                url: request.url,
+                strategy,
+                failureType,
+                error: errorMessage,
+            });
+
+            return {
+                success: false,
+                protectionDetected: false,
+                failureType,
+                proxyId: proxy?.id,
+                screenshot: undefined,
+                errorMessage,
+                statusCode: undefined,
+                responseTimeMs: 0,
+                userAgent,
+                responseSizeBytes: 0,
+            };
+        }
 
         // Store cookies from browser context
         // Note: Browser cookies are handled by Playwright context
@@ -823,6 +1002,7 @@ export class ScrapeOrchestrator {
                 success: false,
                 protectionDetected: true,
                 protectionType: detection.protectionType,
+                failureType: ScrapeFailureType.BOT_BLOCKED,
                 proxyId,
                 screenshot,
                 errorMessage: detection.reasoning,
@@ -856,17 +1036,71 @@ export class ScrapeOrchestrator {
         }
 
         // Extraction failed
+        const failureType = this.classifyExtractionFailure(extraction, response.statusCode);
+        const errorMessage = extraction.error
+            ? `Failed to extract price: ${extraction.error}`
+            : 'Failed to extract price from response';
+
         return {
             success: false,
             protectionDetected: false,
+            failureType,
             proxyId,
             screenshot,
-            errorMessage: 'Failed to extract price from response',
+            errorMessage,
             statusCode: response.statusCode,
             responseTimeMs: response.responseTime,
             userAgent,
             responseSizeBytes: response.body.length,
         };
+    }
+
+    private classifyExtractionFailure(extraction: ExtractionResult, statusCode: number): ScrapeFailureType {
+        // Non-OK responses are navigation issues unless we explicitly detected bot protection earlier.
+        if (statusCode >= 400) {
+            if (statusCode === 403 || statusCode === 429) return ScrapeFailureType.BOT_BLOCKED;
+            if (statusCode === 408) return ScrapeFailureType.TIMEOUT;
+            return ScrapeFailureType.NAVIGATION_FAILED;
+        }
+
+        // DataExtractor now returns structured error messages for parse/validation failures.
+        const err = (extraction.error || '').toLowerCase();
+
+        if (err.includes('parsed to 0')) return ScrapeFailureType.PRICE_ZERO;
+        if (err.includes('failed to parse')) return ScrapeFailureType.PARSE_FAILED;
+        if (err.includes('failed validation')) return ScrapeFailureType.PARSE_FAILED;
+        if (err.includes('no price found')) return ScrapeFailureType.STRUCTURE_CHANGED;
+
+        // Default: structure changed is the safest classification when selectors produced no valid price.
+        return ScrapeFailureType.STRUCTURE_CHANGED;
+    }
+
+    private classifyExceptionFailureType(errorMessage: string): ScrapeFailureType {
+        const msg = (errorMessage || '').toLowerCase();
+
+        if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('time out')) {
+            return ScrapeFailureType.TIMEOUT;
+        }
+
+        // If upstream code marks blocks explicitly, honor it.
+        if (msg.includes('blocked') || msg.includes('captcha') || msg.includes('cloudflare')) {
+            return ScrapeFailureType.BOT_BLOCKED;
+        }
+
+        if (
+            msg.includes('econnrefused') ||
+            msg.includes('enotfound') ||
+            msg.includes('eai_again') ||
+            msg.includes('econnreset') ||
+            msg.includes('connection refused') ||
+            msg.includes('net::err') ||
+            msg.includes('failed to fetch') ||
+            msg.includes('dns')
+        ) {
+            return ScrapeFailureType.NAVIGATION_FAILED;
+        }
+
+        return ScrapeFailureType.PARSE_FAILED;
     }
 
     /**
@@ -986,29 +1220,46 @@ export class ScrapeOrchestrator {
     private async logScrapeAttempt(
         request: ScrapeRequest,
         result: AttemptResult,
-        strategy: ScrapingStrategy,
+        strategy: string,
         attemptNumber: number
     ): Promise<void> {
         try {
-            const scrapeAttempt = await prisma.scrapeAttempt.create({
-                data: {
-                    tenantId: request.tenantId,
-                    competitorProductId: request.competitorProductId,
-                    competitorWebsiteId: request.competitorWebsiteId,
-                    url: request.url,
-                    strategy: strategy,
-                    proxyId: result.proxyId,
-                    userAgent: result.userAgent,
-                    success: result.success,
-                    protectionDetected: result.protectionDetected,
-                    protectionType: result.protectionType,
-                    statusCode: result.statusCode,
-                    responseTimeMs: result.responseTimeMs,
-                    responseSizeBytes: result.responseSizeBytes,
-                    errorMessage: result.errorMessage,
-                    attemptNumber: attemptNumber,
-                },
-            });
+            const baseData = {
+                tenantId: request.tenantId,
+                competitorProductId: request.competitorProductId,
+                competitorWebsiteId: request.competitorWebsiteId,
+                url: request.url,
+                strategy: strategy,
+                proxyId: result.proxyId,
+                userAgent: result.userAgent,
+                success: result.success,
+                protectionDetected: result.protectionDetected,
+                protectionType: result.protectionType,
+                statusCode: result.statusCode,
+                responseTimeMs: result.responseTimeMs,
+                responseSizeBytes: result.responseSizeBytes,
+                errorMessage: result.errorMessage,
+                attemptNumber: attemptNumber,
+            } as const;
+
+            let scrapeAttempt: { id: string };
+            try {
+                scrapeAttempt = await prisma.scrapeAttempt.create({
+                    data: {
+                        ...baseData,
+                        failureType: result.failureType,
+                    },
+                    select: { id: true },
+                });
+            } catch (error) {
+                if (!this.isMissingColumnError(error)) throw error;
+
+                // DB schema not migrated yet: retry without failureType to avoid crashing.
+                scrapeAttempt = await prisma.scrapeAttempt.create({
+                    data: baseData,
+                    select: { id: true },
+                });
+            }
 
             if (result.protectionDetected && result.protectionType) {
                 await prisma.protectionDetection.create({
@@ -1282,11 +1533,12 @@ interface AttemptResult {
     currency?: string;
     protectionDetected: boolean;
     protectionType?: ProtectionType;
+    failureType?: ScrapeFailureType;
     proxyId?: string;
     screenshot?: Buffer;
     errorMessage?: string;
-    statusCode: number;
-    responseTimeMs: number;
+    statusCode?: number;
+    responseTimeMs?: number;
     userAgent: string;
-    responseSizeBytes: number;
+    responseSizeBytes?: number;
 }

@@ -9,7 +9,6 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import { createInstrumentedPrismaClient } from './middleware/query-performance-tracker';
-import { applyEncryptionMiddleware } from './database/prisma-encryption-middleware';
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -40,13 +39,6 @@ const basePrisma = new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'production' ? ['error'] : ['query'],
     errorFormat: 'pretty',
-});
-
-// Apply encryption middleware
-applyEncryptionMiddleware(basePrisma, {
-    enabled: true,
-    verbose: process.env.NODE_ENV !== 'production',
-    throwOnDecryptionError: true,
 });
 
 // Create instrumented client with performance tracking

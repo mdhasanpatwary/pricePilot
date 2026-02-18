@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { getRedisConnection } from "@/lib/queue/connection";
+import { StrategyPerformanceService } from "./strategy-performance-service";
 
 // Shared Redis connection for real-time counters.
 const redis = getRedisConnection();
@@ -82,22 +83,50 @@ async function aggregateForSite(
     endTime.setHours(endTime.getHours() + 1);
 
     // Get all attempts for this site in this hour
-    const attempts = await prisma.scrapeAttempt.findMany({
-        where: {
-            tenantId,
-            competitorWebsiteId,
-            createdAt: {
-                gte: startTime,
-                lt: endTime,
+    let attempts: any[] = [];
+
+    try {
+        attempts = await prisma.scrapeAttempt.findMany({
+            where: {
+                tenantId,
+                competitorWebsiteId,
+                createdAt: {
+                    gte: startTime,
+                    lt: endTime,
+                },
             },
-        },
-        select: {
-            success: true,
-            protectionType: true,
-            strategy: true,
-            responseTimeMs: true,
-        },
-    });
+            select: {
+                success: true,
+                protectionType: true,
+                failureType: true,
+                strategy: true,
+                responseTimeMs: true,
+            },
+        });
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!msg.includes('does not exist in the current database') && !msg.includes('The column `(not available)` does not exist')) {
+            throw error;
+        }
+
+        // Schema not migrated yet: query without failureType.
+        attempts = await prisma.scrapeAttempt.findMany({
+            where: {
+                tenantId,
+                competitorWebsiteId,
+                createdAt: {
+                    gte: startTime,
+                    lt: endTime,
+                },
+            },
+            select: {
+                success: true,
+                protectionType: true,
+                strategy: true,
+                responseTimeMs: true,
+            } as any,
+        });
+    }
 
     if (attempts.length === 0) {
         return; // No attempts to aggregate
@@ -127,6 +156,14 @@ async function aggregateForSite(
         strategyCounts[attempt.strategy] = (strategyCounts[attempt.strategy] || 0) + 1;
     });
 
+    // Build failure type breakdown (failures only)
+    const failureTypeCounts: Record<string, number> = {};
+    attempts.forEach((attempt) => {
+        if (attempt.success) return;
+        const ft = attempt.failureType || 'PARSE_FAILED';
+        failureTypeCounts[ft] = (failureTypeCounts[ft] || 0) + 1;
+    });
+
     // Store in database (upsert to handle re-runs)
     await prisma.scrapingMetric.upsert({
         where: {
@@ -146,6 +183,7 @@ async function aggregateForSite(
             avgResponseTimeMs,
             protectionTypeCounts,
             strategyCounts,
+            failureTypeCounts,
         },
         update: {
             totalAttempts,
@@ -154,12 +192,21 @@ async function aggregateForSite(
             avgResponseTimeMs,
             protectionTypeCounts,
             strategyCounts,
+            failureTypeCounts,
         },
     });
 
     console.log(
         `Aggregated ${totalAttempts} attempts for site ${competitorWebsiteId} at ${hourTimestamp.toISOString()}`
     );
+
+    // Refresh strategy performance rollups used for ranking strategies.
+    // Keep this bounded to a recent window to avoid unbounded scans.
+    await StrategyPerformanceService.refreshForSite({
+        tenantId,
+        competitorWebsiteId,
+        windowHours: StrategyPerformanceService.DEFAULT_WINDOW_HOURS,
+    });
 }
 
 /**

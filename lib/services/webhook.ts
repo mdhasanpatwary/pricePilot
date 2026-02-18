@@ -3,6 +3,11 @@ import axios from "axios";
 import crypto from "crypto";
 import { withRetry, RetryPresets } from "@/lib/utils/retry";
 import { logger } from "@/lib/logger";
+import {
+  decryptForUse,
+  encryptForStorage,
+  isEncryptedString,
+} from "@/lib/services/encryption/field-encryption";
 
 export class WebhookService {
   /**
@@ -27,7 +32,11 @@ export class WebhookService {
    * Webhooks are retried up to 3 times with exponential backoff
    * to handle transient network failures and temporary service unavailability.
    */
-  private static async sendWebhook(webhook: { url: string; secret: string | null }, event: string, payload: unknown) {
+  private static async sendWebhook(
+    webhook: { id: string; url: string; secret: string | null },
+    event: string,
+    payload: unknown
+  ) {
     const timestamp = Math.floor(Date.now() / 1000);
     const body = JSON.stringify({
       id: crypto.randomUUID(),
@@ -42,9 +51,39 @@ export class WebhookService {
       "X-PricePilot-Timestamp": timestamp.toString(),
     };
 
+    let secretForUse: string | null = null;
     if (webhook.secret) {
+      // Best-effort migration: if a plaintext secret exists, encrypt it so we don't keep storing plaintext.
+      if (!isEncryptedString(webhook.secret)) {
+        try {
+          const encrypted = encryptForStorage(webhook.secret);
+          await prisma.webhook.update({
+            where: { id: webhook.id },
+            data: { secret: encrypted },
+          });
+          logger.info(`[WebhookService] Migrated plaintext webhook secret to encrypted (webhookId=${webhook.id})`);
+        } catch (error) {
+          // If encryption isn't configured we still allow sending; we just can't migrate.
+          logger.warn(`[WebhookService] Failed to migrate webhook secret (webhookId=${webhook.id})`, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      try {
+        secretForUse = decryptForUse(webhook.secret);
+      } catch (error) {
+        // Don't send an invalid signature if we can't decrypt.
+        logger.error(`[WebhookService] Failed to decrypt webhook secret (webhookId=${webhook.id})`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        secretForUse = null;
+      }
+    }
+
+    if (secretForUse) {
       const signature = crypto
-        .createHmac("sha256", webhook.secret)
+        .createHmac("sha256", secretForUse)
         .update(`${timestamp}.${body}`)
         .digest("hex");
       headers["X-PricePilot-Signature"] = signature;

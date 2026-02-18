@@ -90,6 +90,31 @@ export interface FailureContext extends StrategyContext {
  * site configuration, history, and failure types.
  */
 export class StrategySelector {
+    private normalizePreferredStrategy(
+        preferred: ScrapingStrategy,
+        config: SiteConfiguration
+    ): ScrapingStrategy {
+        // If the site requires JS, avoid HTTP-only strategies.
+        if (config.requiresJavaScript) {
+            if (
+                preferred === ScrapingStrategy.HTTP_CLIENT ||
+                preferred === ScrapingStrategy.HTTP_WITH_PROXY
+            ) {
+                return config.proxyRequired
+                    ? ScrapingStrategy.HEADLESS_WITH_PROXY
+                    : ScrapingStrategy.HEADLESS_BROWSER;
+            }
+        }
+
+        // If proxy is required, avoid non-proxy strategies.
+        if (config.proxyRequired) {
+            if (preferred === ScrapingStrategy.HTTP_CLIENT) return ScrapingStrategy.HTTP_WITH_PROXY;
+            if (preferred === ScrapingStrategy.HEADLESS_BROWSER) return ScrapingStrategy.HEADLESS_WITH_PROXY;
+        }
+
+        return preferred;
+    }
+
     /**
      * Select strategy for a scrape attempt
      * 
@@ -110,7 +135,7 @@ export class StrategySelector {
 
         // First attempt: use configured preferred strategy
         if (context.currentAttempt === 1) {
-            const strategy = context.siteConfig.preferredStrategy;
+            const strategy = this.normalizePreferredStrategy(context.siteConfig.preferredStrategy, context.siteConfig);
             logger.info('[StrategySelector] First attempt, using preferred strategy', {
                 strategy,
                 competitorWebsiteId: context.competitorWebsiteId,

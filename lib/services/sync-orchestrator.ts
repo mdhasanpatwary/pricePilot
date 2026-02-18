@@ -1,4 +1,5 @@
 import { ScraperService, ScrapeBlockError } from "./scraper";
+import { detectPriceAnomaly } from "./price-anomaly";
 import { RulesEngine } from "./rules-engine";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
@@ -556,6 +557,44 @@ export class SyncOrchestrator {
             const oldPrice = parseFloat(product.currentPrice.toString());
             const oldStock = product.inStock;
 
+            const anomaly = detectPriceAnomaly({
+              newPrice: result.price,
+              oldPrice,
+              inStock: result.inStock,
+              explicitOos: (result as any).explicitOos,
+              currency: (result as any).currency,
+            });
+
+            if (anomaly.flagged) {
+              await withDbRetry(() => prisma.product.update({
+                where: { id: product.id },
+                data: {
+                  priceAnomalyActive: true,
+                  priceAnomalyDetectedAt: new Date(),
+                  priceAnomalyData: anomaly,
+                  lastCrawledAt: new Date(),
+                } as any,
+              }), { operationName: 'FlagPriceAnomaly' });
+
+              await scrapeLogger.log({
+                siteId,
+                message: `🚨 ANOMALY [${processed}/${matchedProducts.length}] ${product.title.substring(0, 40)}... old=৳${oldPrice} new=৳${result.price} reasons=${anomaly.reasons.join(",")}`,
+                level: "WARNING",
+              });
+
+              continue;
+            } else if ((product as any).priceAnomalyActive) {
+              // Clear anomaly flag when we see a normal price again.
+              await withDbRetry(() => prisma.product.update({
+                where: { id: product.id },
+                data: {
+                  priceAnomalyActive: false,
+                  priceAnomalyDetectedAt: null,
+                  priceAnomalyData: null,
+                } as any,
+              }), { operationName: 'ClearPriceAnomaly' });
+            }
+
             await withDbRetry(() => prisma.product.update({
               where: { id: product.id },
               data: {
@@ -633,6 +672,44 @@ export class SyncOrchestrator {
               message: `${errorReason} [${processed}/${matchedProducts.length}] ${product?.title?.substring(0, 40) || "Unknown"}`,
               level: "WARNING",
             });
+
+            // Price=0 anomaly unless explicitly OOS: flag on the product record for visibility.
+            if (
+              promiseResult.status === "fulfilled" &&
+              promiseResult.value?.result &&
+              promiseResult.value.result.price === 0
+            ) {
+              const res = promiseResult.value.result;
+              const explicitOos = !!(res as any).explicitOos;
+              const anomaly = detectPriceAnomaly({
+                newPrice: 0,
+                oldPrice: product ? parseFloat(product.currentPrice.toString()) : null,
+                inStock: !!res.inStock,
+                explicitOos,
+                currency: (res as any).currency,
+              });
+
+              if (anomaly.flagged && product?.id) {
+                await withDbRetry(() => prisma.product.update({
+                  where: { id: product.id },
+                  data: {
+                    priceAnomalyActive: true,
+                    priceAnomalyDetectedAt: new Date(),
+                    priceAnomalyData: anomaly,
+                    lastCrawledAt: new Date(),
+                  } as any,
+                }), { operationName: 'FlagPriceZeroAnomaly' });
+              } else if (explicitOos && product?.id) {
+                // Explicit OOS with missing price: keep last price, but update stock state.
+                await withDbRetry(() => prisma.product.update({
+                  where: { id: product.id },
+                  data: {
+                    inStock: false,
+                    lastCrawledAt: new Date(),
+                  } as any,
+                }), { operationName: 'MarkOosWithMissingPrice' });
+              }
+            }
 
             // Advanced Block Detection
             if (promiseResult.status === "rejected" && !isGoldenRule) {

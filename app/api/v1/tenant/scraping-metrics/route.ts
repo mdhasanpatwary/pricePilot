@@ -11,6 +11,7 @@ interface TenantSiteMetrics {
     blockRate: number;
     lastSync: Date | null;
     status: 'healthy' | 'degraded' | 'critical';
+    failureCounts: Record<string, number>;
     challenges: {
         detected: number;
         solved: number;
@@ -155,6 +156,7 @@ async function handleGET(request: NextRequest) {
             avgResponseTimeMs: number;
             challengesDetected: number;
             challengesSolved: number;
+            failureTypeCounts: Record<string, number>;
         }>();
 
         // Initialize map with all tenant sites
@@ -167,6 +169,7 @@ async function handleGET(request: NextRequest) {
                 avgResponseTimeMs: 0,
                 challengesDetected: 0,
                 challengesSolved: 0,
+                failureTypeCounts: {},
             });
         }
 
@@ -230,6 +233,35 @@ async function handleGET(request: NextRequest) {
             }
         }
 
+        // Apply failure-type counts per site (if DB schema supports failureType)
+        try {
+            const failureGroups = await prisma.scrapeAttempt.groupBy({
+                by: ["competitorWebsiteId", "failureType"],
+                where: {
+                    ...attemptsWhere,
+                    success: false,
+                },
+                _count: { _all: true },
+            });
+
+            for (const g of failureGroups) {
+                const baseUrl = siteIdToBaseUrl.get(g.competitorWebsiteId);
+                if (!baseUrl) continue;
+
+                const stats = siteMetricsMap.get(baseUrl);
+                if (!stats) continue;
+
+                const ft = g.failureType || 'PARSE_FAILED';
+                stats.failureTypeCounts[ft] = (stats.failureTypeCounts[ft] || 0) + g._count._all;
+            }
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            // Schema not migrated yet: omit failureCounts rather than crashing the endpoint.
+            if (!msg.includes('does not exist in the current database') && !msg.includes('The column `(not available)` does not exist')) {
+                throw error;
+            }
+        }
+
         // Calculate per-site metrics with status
         const siteMetrics: TenantSiteMetrics[] = Array.from(siteMetricsMap.entries()).map(([site, stats]) => {
             const successRate = stats.totalRequests > 0
@@ -256,6 +288,7 @@ async function handleGET(request: NextRequest) {
                 blockRate: Math.round(blockRate * 10) / 10,
                 lastSync: stats.lastTimestamp,
                 status,
+                failureCounts: stats.failureTypeCounts,
                 challenges: {
                     detected: stats.challengesDetected,
                     solved: stats.challengesSolved,

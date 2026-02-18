@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { encryptForStorage } from "@/lib/services/encryption/field-encryption";
 
 function hasProxyAdminAccess(session: any): boolean {
     const role = String(session?.user?.role || '').toUpperCase();
@@ -196,7 +197,33 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create proxy (password should be encrypted in production)
+        let passwordEncrypted: string | undefined = undefined;
+        if (password !== undefined) {
+            // Hard-fail if encryption isn't configured; never store plaintext silently.
+            try {
+                passwordEncrypted = encryptForStorage(password);
+            } catch (error) {
+                logger.error('Proxy password encryption failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                    host,
+                    port,
+                    provider,
+                });
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: 'ENCRYPTION_ERROR',
+                            message: 'Encryption is not configured',
+                        },
+                        meta: { requestId: crypto.randomUUID(), timestamp: new Date().toISOString() },
+                    },
+                    { status: 500 }
+                );
+            }
+        }
+
+        // Create proxy
         const proxy = await prisma.proxy.create({
             data: {
                 provider,
@@ -204,7 +231,7 @@ export async function POST(request: NextRequest) {
                 port,
                 protocol,
                 username,
-                passwordEncrypted: password, // TODO: Encrypt password
+                passwordEncrypted,
                 region,
                 status: 'active',
             },

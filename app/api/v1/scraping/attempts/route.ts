@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LoggingService } from '@/lib/services/bot-protection/logging-service';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { scrapeFailureTypeSchema } from "@/lib/validation/schemas";
 
 const loggingService = new LoggingService();
 
@@ -52,6 +53,27 @@ export async function GET(request: NextRequest) {
         const competitorProductId = searchParams.get('competitorProductId') || undefined;
         const protectionType = searchParams.get('protectionType') || undefined;
         const strategy = searchParams.get('strategy') || undefined;
+        const failureTypeParam = searchParams.get('failureType')?.trim() || undefined;
+
+        const failureType = failureTypeParam
+            ? (() => {
+                const parsed = scrapeFailureTypeSchema.safeParse(failureTypeParam);
+                return parsed.success ? parsed.data : null;
+            })()
+            : undefined;
+
+        if (failureTypeParam && failureType === null) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'INVALID_FAILURE_TYPE',
+                        message: `Invalid failureType. Must be one of: ${scrapeFailureTypeSchema.options.join(', ')}`,
+                    },
+                },
+                { status: 400 }
+            );
+        }
 
         // Parse boolean parameters
         const successParam = searchParams.get('success');
@@ -166,21 +188,41 @@ export async function GET(request: NextRequest) {
         }
 
         // Query logs
-        const result = await loggingService.queryLogs({
-            tenantId,
-            competitorWebsiteId,
-            competitorProductId,
-            protectionType,
-            strategy,
-            success,
-            protectionDetected,
-            startDate,
-            endDate,
-            limit,
-            offset,
-            orderBy,
-            orderDirection,
-        });
+        let result;
+        try {
+            result = await loggingService.queryLogs({
+                tenantId,
+                competitorWebsiteId,
+                competitorProductId,
+                protectionType,
+                failureType: failureType || undefined,
+                strategy,
+                success,
+                protectionDetected,
+                startDate,
+                endDate,
+                limit,
+                offset,
+                orderBy,
+                orderDirection,
+            });
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            if (msg.includes('SCHEMA_OUT_OF_DATE: ScrapeAttempt.failureType column is missing')) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: 'SCHEMA_OUT_OF_DATE',
+                            message: 'Database schema is missing ScrapeAttempt.failureType. Apply the Prisma migration before using failureType filtering.',
+                            details: 'Your DATABASE_URL currently points at a Neon pooler host (-pooler). Prisma migrations/db push typically require a direct (non-pooler) connection URL.',
+                        },
+                    },
+                    { status: 409 }
+                );
+            }
+            throw error;
+        }
 
         return NextResponse.json(
             {

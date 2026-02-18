@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { WebsiteService } from "@/lib/services/website-service";
 
 async function handlePOST() {
   try {
@@ -15,15 +16,16 @@ async function handlePOST() {
     const results = [];
 
     // 1. Create User Site (Your Store)
-    const userSite = await prisma.site.create({
-      data: {
+    const userSite = await WebsiteService.createWebsite(
+      {
         tenantId,
         type: "USER",
         platform: "OPENCART",
         baseUrl: "https://mystore.com",
         apiToken: "my-api-token",
       },
-    });
+      session.user.id
+    );
     results.push("✓ Created user site");
 
     // 2. Create Competitor Sites

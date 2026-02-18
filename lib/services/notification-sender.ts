@@ -3,6 +3,11 @@ import axios from "axios";
 import { prisma } from "@/lib/prisma";
 import { logger } from "../logger";
 import { withRetry, RetryPresets } from "@/lib/utils/retry";
+import {
+  decryptForUse,
+  encryptForStorage,
+  isEncryptedString,
+} from "@/lib/services/encryption/field-encryption";
 
 export class NotificationSender {
   private static async getConfigs() {
@@ -227,9 +232,31 @@ export class NotificationSender {
             "X-PricePilot-Event": payload.type || "notification",
           };
 
-          // Basic security if secret provided
+          // Basic security if secret provided (stored encrypted at rest)
           if (webhook.secret) {
-            headers["X-PricePilot-Secret"] = webhook.secret;
+            if (!isEncryptedString(webhook.secret)) {
+              try {
+                const encrypted = encryptForStorage(webhook.secret);
+                await prisma.webhook.update({
+                  where: { id: webhook.id },
+                  data: { secret: encrypted },
+                });
+                logger.info(`[NotificationSender] Migrated plaintext webhook secret to encrypted (webhookId=${webhook.id})`);
+              } catch (error) {
+                logger.warn(`[NotificationSender] Failed to migrate webhook secret (webhookId=${webhook.id})`, {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+
+            try {
+              headers["X-PricePilot-Secret"] = decryptForUse(webhook.secret);
+            } catch (error) {
+              // Don't send the header if we can't decrypt.
+              logger.error(`[NotificationSender] Failed to decrypt webhook secret (webhookId=${webhook.id})`, {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
           }
 
           // Use retry logic for webhook delivery

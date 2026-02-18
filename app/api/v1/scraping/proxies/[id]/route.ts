@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { encryptForStorage } from "@/lib/services/encryption/field-encryption";
 
 function hasProxyAdminAccess(session: any): boolean {
     const role = String(session?.user?.role || '').toUpperCase();
@@ -236,7 +237,28 @@ export async function PUT(
         if (port !== undefined) updateData.port = port;
         if (protocol !== undefined) updateData.protocol = protocol;
         if (username !== undefined) updateData.username = username;
-        if (password !== undefined) updateData.passwordEncrypted = password; // TODO: Encrypt password
+        if (password !== undefined) {
+            // Hard-fail if encryption isn't configured; never store plaintext silently.
+            try {
+                updateData.passwordEncrypted = encryptForStorage(password);
+            } catch (error) {
+                logger.error('Proxy password encryption failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                    proxyId: id,
+                });
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: {
+                            code: 'ENCRYPTION_ERROR',
+                            message: 'Encryption is not configured',
+                        },
+                        meta: { requestId: crypto.randomUUID(), timestamp: new Date().toISOString() },
+                    },
+                    { status: 500 }
+                );
+            }
+        }
         if (region !== undefined) updateData.region = region;
         if (status !== undefined) updateData.status = status;
 

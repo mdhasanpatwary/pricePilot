@@ -72,7 +72,11 @@ export class DataExtractor {
         // Load HTML with cheerio
         const $ = cheerio.load(html);
 
-        // Try each CSS selector in priority order
+        // Track invalid candidates while still allowing later layers (JSON-LD / hydration / regex)
+        // to succeed. Only return parse failure after all layers fail.
+        let invalidCandidate: { rawValue: string; selectorUsed: string; parsedPrice: number | null } | null = null;
+        let invalidRegexCandidate: { rawValue: string; selectorUsed: string; parsedPrice: number | null } | null = null;
+
         for (let i = 0; i < selectors.priceSelectors.length; i++) {
             const selector = selectors.priceSelectors[i];
 
@@ -80,7 +84,13 @@ export class DataExtractor {
                 const element = $(selector);
 
                 if (element.length > 0) {
-                    const rawValue = element.first().text().trim();
+                    const first = element.first();
+                    const rawValue = (
+                        first.attr('content') ||
+                        first.attr('value') ||
+                        first.attr('data-price') ||
+                        first.text()
+                    ).trim();
 
                     if (rawValue) {
                         const price = this.parsePrice(rawValue);
@@ -112,12 +122,33 @@ export class DataExtractor {
                                 confidence
                             };
                         }
+
+                        // Selector matched but price couldn't be used: keep first candidate for structured error.
+                        if (!invalidCandidate) {
+                            invalidCandidate = {
+                                rawValue,
+                                selectorUsed: selector,
+                                parsedPrice: price,
+                            };
+                        }
                     }
                 }
             } catch (error) {
                 // Continue to next selector if this one fails
                 continue;
             }
+        }
+
+        // Layer 2: JSON-LD structured data
+        const jsonLd = this.extractFromJsonLd($);
+        if (jsonLd) {
+            return jsonLd;
+        }
+
+        // Layer 3: hydration state (Next.js __NEXT_DATA__)
+        const hydration = this.extractFromHydrationState($);
+        if (hydration) {
+            return hydration;
         }
 
         // Try fallback regex if all selectors failed
@@ -145,10 +176,44 @@ export class DataExtractor {
                             confidence
                         };
                     }
+
+                    if (!invalidRegexCandidate) {
+                        invalidRegexCandidate = {
+                            rawValue,
+                            selectorUsed: 'regex',
+                            parsedPrice: price,
+                        };
+                    }
                 }
             } catch (error) {
                 // Regex failed, fall through to failure
             }
+        }
+
+        // Layer 4: generic currency+number regex fallback (conservative)
+        const genericRegexResult = this.extractFromGenericCurrencyRegex(html);
+        if (genericRegexResult) {
+            return genericRegexResult;
+        }
+
+        // If we saw at least one price-like value but it failed parse/validation, return that context now.
+        const bestInvalid = invalidCandidate || invalidRegexCandidate;
+        if (bestInvalid) {
+            const confidence = this.calculateExtractionConfidence(0, 0, bestInvalid.selectorUsed === 'regex' ? 'regex' : 'selector');
+            const error =
+                bestInvalid.parsedPrice === 0
+                    ? 'Price parsed to 0'
+                    : bestInvalid.parsedPrice === null
+                        ? 'Failed to parse price'
+                        : 'Price failed validation';
+
+            return {
+                success: false,
+                confidence,
+                error,
+                rawValue: bestInvalid.rawValue,
+                selectorUsed: bestInvalid.selectorUsed,
+            };
         }
 
         return {
@@ -156,6 +221,145 @@ export class DataExtractor {
             confidence: 0,
             error: 'No price found with configured selectors'
         };
+    }
+
+    private extractFromJsonLd($: cheerio.CheerioAPI): ExtractionResult | null {
+        const scripts = $('script[type="application/ld+json"]').toArray();
+        for (const script of scripts) {
+            const text = $(script).text();
+            if (!text || !text.trim()) continue;
+
+            try {
+                const parsed = JSON.parse(text);
+                const nodes: any[] = [];
+
+                if (Array.isArray(parsed)) nodes.push(...parsed);
+                else if (parsed && typeof parsed === 'object') nodes.push(parsed);
+
+                // Expand @graph if present
+                const expanded: any[] = [];
+                for (const n of nodes) {
+                    if (n && typeof n === 'object' && Array.isArray(n['@graph'])) {
+                        expanded.push(...n['@graph']);
+                    } else {
+                        expanded.push(n);
+                    }
+                }
+
+                for (const node of expanded) {
+                    const type = node?.['@type'];
+                    const isProduct =
+                        type === 'Product' ||
+                        (Array.isArray(type) && type.includes('Product')) ||
+                        (typeof type === 'string' && type.toLowerCase().includes('product'));
+                    if (!isProduct) continue;
+
+                    const offers = node.offers;
+                    const offer = Array.isArray(offers) ? offers[0] : offers;
+                    const rawPrice = offer?.price ?? offer?.lowPrice ?? offer?.highPrice;
+                    const rawCurrency = offer?.priceCurrency;
+
+                    const price = rawPrice !== undefined ? this.parsePrice(String(rawPrice)) : null;
+                    if (price !== null && this.validatePrice(price)) {
+                        const currency = rawCurrency ? String(rawCurrency) : undefined;
+                        const confidence = this.calculateExtractionConfidence(price, 0, 'selector');
+                        return {
+                            success: true,
+                            price,
+                            currency,
+                            rawValue: String(rawPrice),
+                            selectorUsed: 'jsonld',
+                            confidence,
+                        };
+                    }
+                }
+            } catch {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    private extractFromHydrationState($: cheerio.CheerioAPI): ExtractionResult | null {
+        const nextData = $('#__NEXT_DATA__').text();
+        if (!nextData || !nextData.trim()) return null;
+
+        try {
+            const root = JSON.parse(nextData);
+            const candidates: number[] = [];
+
+            const pushCandidate = (v: unknown) => {
+                if (v === null || v === undefined) return;
+                const price = typeof v === 'number' ? v : this.parsePrice(String(v));
+                if (price !== null && this.validatePrice(price)) {
+                    candidates.push(price);
+                }
+            };
+
+            const visit = (node: unknown, depth: number, budget: { n: number }) => {
+                if (depth <= 0 || budget.n <= 0) return;
+                budget.n--;
+
+                if (Array.isArray(node)) {
+                    for (const item of node) visit(item, depth - 1, budget);
+                    return;
+                }
+
+                if (!node || typeof node !== 'object') return;
+
+                for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+                    const key = k.toLowerCase();
+                    if (key.includes('price') || key.includes('amount')) {
+                        pushCandidate(v);
+                    }
+                    if (typeof v === 'object' && v !== null) {
+                        visit(v, depth - 1, budget);
+                    }
+                }
+            };
+
+            visit(root, 6, { n: 4000 });
+
+            if (candidates.length === 0) return null;
+            candidates.sort((a, b) => a - b);
+            const price = candidates[0];
+            const confidence = this.calculateExtractionConfidence(price, 0, 'selector');
+            return {
+                success: true,
+                price,
+                currency: undefined,
+                rawValue: String(price),
+                selectorUsed: 'hydration',
+                confidence,
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    private extractFromGenericCurrencyRegex(html: string): ExtractionResult | null {
+        // Very conservative: require a currency symbol/code near the number.
+        const regex = /(?:৳|BDT|USD|EUR|GBP|\$|€|£)\s*([0-9]{1,3}(?:[,\s][0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/i;
+        const match = html.match(regex);
+        if (!match) return null;
+
+        const rawValue = match[0];
+        const price = this.parsePrice(rawValue);
+        if (price !== null && this.validatePrice(price)) {
+            const currency = this.extractCurrency(rawValue) || (rawValue.toUpperCase().includes('BDT') ? 'BDT' : undefined);
+            const confidence = this.calculateExtractionConfidence(price, 0, 'regex');
+            return {
+                success: true,
+                price,
+                currency,
+                rawValue,
+                selectorUsed: 'generic_regex',
+                confidence,
+            };
+        }
+
+        return null;
     }
 
     /**

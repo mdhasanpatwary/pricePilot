@@ -10,6 +10,7 @@
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { ScrapeOrchestrator, ScrapeRequest, ScrapeResult } from './scrape-orchestrator';
+import { detectPriceAnomaly } from '../price-anomaly';
 
 /**
  * ScraperAdapter class
@@ -154,6 +155,11 @@ export class ScraperAdapter {
         result: ScrapeResult
     ): Promise<void> {
         try {
+            const existing = await prisma.product.findUnique({
+                where: { id: competitorProductId },
+                select: { currentPrice: true, inStock: true, currency: true, priceAnomalyActive: true },
+            });
+
             const updateData: any = {
                 lastCrawledAt: result.timestamp,
                 updatedAt: new Date(),
@@ -161,8 +167,39 @@ export class ScraperAdapter {
 
             // Update price if successful
             if (result.success && result.price) {
+                const oldPrice = existing?.currentPrice ? parseFloat(existing.currentPrice.toString()) : null;
+                const anomaly = detectPriceAnomaly({
+                    newPrice: result.price,
+                    oldPrice,
+                    inStock: true,
+                    explicitOos: false,
+                    currency: result.currency || existing?.currency || null,
+                });
+
+                if (anomaly.flagged) {
+                    updateData.priceAnomalyActive = true;
+                    updateData.priceAnomalyDetectedAt = new Date();
+                    updateData.priceAnomalyData = anomaly;
+
+                    logger.warn('[ScraperAdapter] Price anomaly detected, skipping price save', {
+                        competitorProductId,
+                        oldPrice,
+                        newPrice: result.price,
+                        reasons: anomaly.reasons,
+                    });
+
+                    await prisma.product.update({
+                        where: { id: competitorProductId },
+                        data: updateData,
+                    });
+                    return;
+                }
+
                 updateData.currentPrice = result.price;
                 updateData.currency = result.currency || 'USD';
+                updateData.priceAnomalyActive = false;
+                updateData.priceAnomalyDetectedAt = null;
+                updateData.priceAnomalyData = null;
 
                 // Create price history entry
                 await prisma.priceHistory.create({

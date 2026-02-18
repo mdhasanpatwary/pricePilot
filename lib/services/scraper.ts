@@ -30,6 +30,7 @@ interface ScrapedProduct {
   model?: string;
   url: string;
   inStock: boolean;
+  explicitOos?: boolean;
   imageUrl?: string;
   specifications?: Record<string, string>;
 }
@@ -2785,6 +2786,13 @@ export class ScraperService {
     page: Page,
   ): Promise<Omit<ScrapedProduct, "url"> | null> {
     try {
+      const parseFirstNumericPrice = (raw: string): number => {
+        const match = raw.replace(/,/g, "").match(/\d+(\.\d+)?/);
+        if (!match) return 0;
+        const n = parseFloat(match[0]);
+        return Number.isFinite(n) ? n : 0;
+      };
+
       const data = await page.evaluate(() => {
         // Common title selectors
         const titleSelectors = [
@@ -2976,48 +2984,21 @@ export class ScraperService {
       // Extract numeric price from text
       let price = 0;
       if (data.priceText) {
-        const priceMatch = data.priceText.replace(/,/g, '').match(/\d+\.?\d*/);
-        if (priceMatch) {
-          price = parseFloat(priceMatch[0]);
-        }
+        price = parseFirstNumericPrice(data.priceText);
       }
 
       // If price is 0 but product exists, check stock status
       if (price === 0 && data.title) {
         logger.warn(`[ScraperService] Price = 0 detected on first attempt. Stock status: "${data.stockText}"`);
 
-        // Retry with alternative price extraction methods
-        const fallbackPrice = await page.evaluate(() => {
-          // Fallback selectors for price extraction
-          const fallbackSelectors = [
-            'meta[property="product:price:amount"]',
-            'meta[property="og:price:amount"]',
-            '[data-price]',
-            '.sale-price',
-            '.offer-price',
-            '.discounted-price',
-          ];
+        const recovered = await this.recoverMissingPrice(page);
 
-          for (const selector of fallbackSelectors) {
-            const element = document.querySelector(selector);
-            if (element) {
-              const priceText = element.getAttribute('content') || element.textContent || '';
-              const match = priceText.replace(/,/g, '').match(/\d+\.?\d*/);
-              if (match) {
-                const extractedPrice = parseFloat(match[0]);
-                if (extractedPrice > 0) return extractedPrice;
-              }
-            }
-          }
-          return 0;
-        }).catch(() => 0);
-
-        if (fallbackPrice > 0) {
-          price = fallbackPrice;
-          logger.info(`[ScraperService] ✅ Fallback extraction succeeded: ${price}`);
-        } else {
-          // Mark as parse failure
-          logger.error(`[ScraperService] ❌ Price extraction failed after retry - marking as PARSE_FAILED`);
+        if (recovered > 0) {
+          price = recovered;
+          logger.info(`[ScraperService] ✅ Layered price recovery succeeded: ${price}`);
+        } else if (!data.isComingSoon && !data.isPreOrder && !data.isOos) {
+          // Only treat as parse failure after layered extraction attempts.
+          logger.error(`[ScraperService] ❌ Price still missing after layered extraction - marking as PARSE_FAILED`);
         }
 
         if (data.isComingSoon) {
@@ -3036,11 +3017,225 @@ export class ScraperService {
         brand: data.brand || undefined,
         model: data.model || undefined,
         inStock: !data.isOos && price > 0,
+        explicitOos: data.isOos || data.isComingSoon || data.isPreOrder,
         imageUrl: data.imageUrl,
       };
     } catch (error) {
       return null;
     }
+  }
+
+  /**
+   * When a valid product page is detected but price is 0, do layered recovery:
+   * 1) wait for network idle / late hydration
+   * 2) re-check JSON-LD + OG
+   * 3) check common DOM/meta selectors
+   * 4) check common hydration blobs (e.g. Next.js __NEXT_DATA__)
+   *
+   * Returns a positive price or 0 if not recovered.
+   */
+  private async recoverMissingPrice(page: Page): Promise<number> {
+    // 1) Wait for late JS injection if possible (React hydration, etc.)
+    try {
+      const anyPage: any = page as any;
+      if (typeof anyPage.waitForNetworkIdle === "function") {
+        await anyPage.waitForNetworkIdle({ idleTime: 500, timeout: 8000 });
+      } else {
+        await page.waitForTimeout(800);
+      }
+    } catch {
+      // Ignore: some sites keep long-polling connections alive.
+    }
+
+    const priceSelectorsToWatch = [
+      '[itemprop="price"]',
+      ".price",
+      ".product-price",
+      ".current-price",
+      "span.price",
+      ".price-value",
+      ".p-item-price",
+      ".special-price",
+      ".rp-product-price",
+      ".actual-price",
+      ".price-new",
+      ".regular-price",
+      "#price-special",
+      ".main-price",
+      'meta[property="product:price:amount"]',
+      'meta[property="og:price:amount"]',
+      'meta[name="price"]',
+      'meta[itemprop="price"]',
+      '[data-price]',
+      '[data-testid*="price"]',
+      '[class*="price"]',
+      ".sale-price",
+      ".offer-price",
+      ".discounted-price",
+    ];
+
+    try {
+      await page.waitForFunction(
+        (selectors: string[]) => {
+          const parse = (t: string) => {
+            const m = t.replace(/,/g, "").match(/\d+(\.\d+)?/);
+            if (!m) return 0;
+            const n = parseFloat(m[0]);
+            return Number.isFinite(n) ? n : 0;
+          };
+
+          for (const selector of selectors) {
+            const el = document.querySelector(selector);
+            if (!el) continue;
+            const raw =
+              (el as HTMLElement).getAttribute?.("content") ||
+              (el as HTMLElement).getAttribute?.("data-price") ||
+              (el as HTMLElement).textContent ||
+              "";
+            if (parse(raw) > 0) return true;
+          }
+          return false;
+        },
+        priceSelectorsToWatch,
+        { timeout: 6000, polling: 250 },
+      );
+    } catch {
+      // Ignore timeout: we'll still try fallbacks below.
+    }
+
+    // 2) Retry structured data after waiting (can appear after hydration on some sites).
+    const jsonLd = await this.extractFromJsonLd(page);
+    if (jsonLd?.price && jsonLd.price > 0) return jsonLd.price;
+
+    const og = await this.extractFromOpenGraph(page);
+    if (og?.price && og.price > 0) return og.price;
+
+    // 3) DOM/meta fallbacks (including itemprop content attrs and data-price)
+    const domMetaPrice = await page.evaluate(() => {
+      const selectors = [
+        'meta[property="product:price:amount"]',
+        'meta[property="og:price:amount"]',
+        'meta[name="price"]',
+        'meta[itemprop="price"]',
+        '[itemprop="price"]',
+        '[data-price]',
+        ".sale-price",
+        ".offer-price",
+        ".discounted-price",
+        ".special-price",
+        ".current-price",
+        ".price",
+        ".product-price",
+        "span.price",
+      ];
+
+      const parse = (t: string) => {
+        const m = t.replace(/,/g, "").match(/\d+(\.\d+)?/);
+        if (!m) return 0;
+        const n = parseFloat(m[0]);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      for (const selector of selectors) {
+        const el = document.querySelector(selector) as HTMLElement | null;
+        if (!el) continue;
+        const raw =
+          el.getAttribute("content") ||
+          el.getAttribute("data-price") ||
+          el.textContent ||
+          "";
+        const p = parse(raw);
+        if (p > 0) return p;
+      }
+
+      return 0;
+    }).catch(() => 0);
+
+    if (domMetaPrice > 0) return domMetaPrice;
+
+    // 4) Hydration blob fallbacks (Next.js __NEXT_DATA__ and common global states)
+    const hydrationPrice = await page.evaluate(() => {
+      const parse = (v: unknown): number => {
+        if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+        if (typeof v !== "string") return 0;
+        const m = v.replace(/,/g, "").match(/\d+(\.\d+)?/);
+        if (!m) return 0;
+        const n = parseFloat(m[0]);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+        !!v && typeof v === "object" && !Array.isArray(v);
+
+      const candidates: number[] = [];
+
+      const scan = (node: unknown, depth: number, budget: { nodes: number }) => {
+        if (depth <= 0 || budget.nodes <= 0) return;
+        budget.nodes--;
+
+        if (Array.isArray(node)) {
+          for (const item of node) scan(item, depth - 1, budget);
+          return;
+        }
+
+        if (!isPlainObject(node)) return;
+
+        for (const [k, v] of Object.entries(node)) {
+          const key = k.toLowerCase();
+          if (key.includes("price")) {
+            const p = parse(v);
+            if (p > 0) candidates.push(p);
+          }
+
+          if (key === "offers") {
+            scan(v, depth - 1, budget);
+            continue;
+          }
+
+          if (isPlainObject(v) || Array.isArray(v)) {
+            scan(v, depth - 1, budget);
+          }
+        }
+      };
+
+      // Next.js: <script id="__NEXT_DATA__">JSON</script>
+      const nextDataScript = document.querySelector("#__NEXT_DATA__") as HTMLScriptElement | null;
+      if (nextDataScript?.textContent) {
+        try {
+          const parsed = JSON.parse(nextDataScript.textContent);
+          scan(parsed, 6, { nodes: 4000 });
+        } catch {
+          // ignore
+        }
+      }
+
+      // Common global states (best-effort; not always present)
+      const globals: unknown[] = [];
+      const w = window as any;
+      if (w.__INITIAL_STATE__) globals.push(w.__INITIAL_STATE__);
+      if (w.__APOLLO_STATE__) globals.push(w.__APOLLO_STATE__);
+      if (w.__NUXT__) globals.push(w.__NUXT__);
+      if (w.__STATE__) globals.push(w.__STATE__);
+
+      for (const g of globals) {
+        try {
+          scan(g, 5, { nodes: 3000 });
+        } catch {
+          // ignore
+        }
+      }
+
+      // If we found multiple candidates, prefer the smallest plausible price to reduce false positives
+      // (e.g., avoid huge bundle totals or unrelated "compare at" prices).
+      const plausible = candidates.filter((p) => p > 0 && p < 10000000);
+      if (plausible.length === 0) return 0;
+      plausible.sort((a, b) => a - b);
+      return plausible[0];
+    }).catch(() => 0);
+
+    if (hydrationPrice > 0) return hydrationPrice;
+
+    return 0;
   }
 
   /**

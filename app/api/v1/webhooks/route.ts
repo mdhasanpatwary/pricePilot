@@ -10,6 +10,7 @@ import {
   createWebhookSchema,
   uuidSchema,
 } from "@/lib/validation";
+import { encryptForStorage } from "@/lib/services/encryption/field-encryption";
 
 async function handleGET(_req: NextRequest) {
   const session = await getCachedSession();
@@ -25,7 +26,12 @@ async function handleGET(_req: NextRequest) {
       where: { tenantId },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json(webhooks);
+    // Never return the stored secret (encrypted or plaintext) back to clients.
+    const redacted = webhooks.map((w) => ({
+      ...w,
+      secret: w.secret ? "***" : null,
+    }));
+    return NextResponse.json(redacted);
   } catch (error) {
     console.error("Failed to fetch webhooks:", error);
     return NextResponse.json(
@@ -51,17 +57,35 @@ async function handlePOST(req: NextRequest) {
       return validationErrorResponse(validation);
     }
 
-    const { url, secret } = validation.data!;
+    const { url, secret, isActive } = validation.data!;
+
+    let secretEncrypted: string | null = null;
+    if (secret) {
+      // Hard-fail if encryption isn't configured; never store plaintext silently.
+      try {
+        secretEncrypted = encryptForStorage(secret);
+      } catch (error) {
+        console.error("Failed to encrypt webhook secret:", error);
+        return NextResponse.json(
+          { error: "Encryption is not configured" },
+          { status: 500 },
+        );
+      }
+    }
 
     const webhook = await prisma.webhook.create({
       data: {
         tenantId,
         url,
-        secret,
+        secret: secretEncrypted,
+        isActive,
       },
     });
 
-    return NextResponse.json(webhook);
+    return NextResponse.json({
+      ...webhook,
+      secret: webhook.secret ? "***" : null,
+    });
   } catch (error) {
     console.error("Failed to create webhook:", error);
     return NextResponse.json(

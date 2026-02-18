@@ -820,6 +820,19 @@ const scrapingStrategyEnum = z.enum([
 ]);
 
 /**
+ * Scrape failure type classification
+ */
+export const scrapeFailureTypeSchema = z.enum([
+  "NAVIGATION_FAILED",
+  "BOT_BLOCKED",
+  "SEARCH_EMPTY",
+  "STRUCTURE_CHANGED",
+  "PARSE_FAILED",
+  "PRICE_ZERO",
+  "TIMEOUT",
+]);
+
+/**
  * CSS selector validation - basic syntax check
  */
 const cssSelectorSchema = z

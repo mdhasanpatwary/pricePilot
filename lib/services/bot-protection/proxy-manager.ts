@@ -9,6 +9,11 @@
 
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import {
+  decryptForUse,
+  encryptForStorage,
+  isEncryptedString,
+} from '@/lib/services/encryption/field-encryption';
 
 /**
  * Proxy configuration interface
@@ -79,6 +84,39 @@ export class ProxyManager {
           const siteTotal = (siteHealth?.successCount || 0) + (siteHealth?.failureCount || 0);
           const siteSuccessRate = siteTotal > 0 ? (siteHealth?.successCount || 0) / siteTotal : 0.5;
 
+          let password: string | undefined = undefined;
+          if (proxyRecord.passwordEncrypted) {
+            if (!isEncryptedString(proxyRecord.passwordEncrypted)) {
+              try {
+                const encrypted = encryptForStorage(proxyRecord.passwordEncrypted);
+                void prisma.proxy
+                  .update({
+                    where: { id: proxyRecord.id },
+                    data: { passwordEncrypted: encrypted },
+                  })
+                  .catch((e) => {
+                    logger.warn(`[ProxyManager] Failed to persist proxy password migration (proxyId=${proxyRecord.id})`, {
+                      error: e instanceof Error ? e.message : String(e),
+                    });
+                  });
+                logger.info(`[ProxyManager] Migrated plaintext proxy password to encrypted (proxyId=${proxyRecord.id})`);
+              } catch (error) {
+                logger.warn(`[ProxyManager] Failed to migrate proxy password (proxyId=${proxyRecord.id})`, {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+
+            try {
+              password = decryptForUse(proxyRecord.passwordEncrypted);
+            } catch (error) {
+              logger.error(`[ProxyManager] Failed to decrypt proxy password (proxyId=${proxyRecord.id})`, {
+                error: error instanceof Error ? error.message : String(error),
+              });
+              password = undefined;
+            }
+          }
+
           return {
             proxy: {
               id: proxyRecord.id,
@@ -86,7 +124,7 @@ export class ProxyManager {
               port: proxyRecord.port,
               protocol: proxyRecord.protocol as 'http' | 'https' | 'socks5',
               username: proxyRecord.username || undefined,
-              password: proxyRecord.passwordEncrypted || undefined,
+              password,
               provider: proxyRecord.provider,
               region: proxyRecord.region || undefined,
             },
