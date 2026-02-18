@@ -1,7 +1,8 @@
 import { Worker, Job } from "bullmq";
 import { getRedisConnection } from "./connection";
-import { QUEUE_NAMES, SyncJobData, NotificationJobData } from "./types";
+import { QUEUE_NAMES, SyncJobData, NotificationJobData, ScrapeJobData } from "./types";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
+import { ScrapeJobProcessor } from "@/lib/services/scheduling/scrape-job-processor";
 
 // Processor for Sync Jobs
 const syncProcessor = async (job: Job<SyncJobData>) => {
@@ -118,6 +119,16 @@ export const createWorkers = () => {
       ? computedSyncConcurrency
       : Math.min(computedSyncConcurrency, safeDevSyncCap);
 
+  // Global cap for scraping workers. This applies to the scrape worker directly,
+  // and also caps sync worker concurrency to avoid oversubscription on small hosts.
+  const maxGlobalWorkers = Number(process.env.MAX_GLOBAL_WORKERS || 0);
+  const globalCap =
+    Number.isFinite(maxGlobalWorkers) && maxGlobalWorkers > 0
+      ? Math.floor(maxGlobalWorkers)
+      : null;
+
+  const cappedSyncConcurrency = globalCap ? Math.min(syncConcurrency, globalCap) : syncConcurrency;
+
   // 2. Notification Worker: I/O intensive, lightweight.
   //    - Rule: 5 tasks per CPU core.
   const notificationConcurrency = Number(
@@ -126,8 +137,24 @@ export const createWorkers = () => {
 
   const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
     connection: getRedisConnection() as any,
-    concurrency: syncConcurrency,
+    concurrency: cappedSyncConcurrency,
     lockDuration: 3600000, // 1 hour - ensures long-running discovery of 200+ products doesn't trigger a stall retry
+  });
+
+  const computedScrapeConcurrency = Math.max(1, Math.min(cpus, Math.floor(cpus * 0.75)));
+  const configuredScrapeConcurrency = Number(process.env.SCRAPE_CONCURRENCY || 0);
+  const scrapeConcurrencyUncapped =
+    configuredScrapeConcurrency > 0 ? configuredScrapeConcurrency : computedScrapeConcurrency;
+  const scrapeConcurrency = globalCap ? Math.min(scrapeConcurrencyUncapped, globalCap) : scrapeConcurrencyUncapped;
+
+  const scrapeProcessor = async (job: Job<ScrapeJobData>) => {
+    await ScrapeJobProcessor.process(job);
+  };
+
+  const scrapeWorker = new Worker(QUEUE_NAMES.SCRAPE, scrapeProcessor, {
+    connection: getRedisConnection() as any,
+    concurrency: scrapeConcurrency,
+    lockDuration: 10 * 60 * 1000,
   });
 
   const notificationWorker = new Worker(
@@ -140,7 +167,8 @@ export const createWorkers = () => {
   );
 
   // Attach concurrency for logging purposes in scripts
-  (syncWorker as any).concurrencyValue = syncConcurrency;
+  (syncWorker as any).concurrencyValue = cappedSyncConcurrency;
+  (scrapeWorker as any).concurrencyValue = scrapeConcurrency;
   (notificationWorker as any).concurrencyValue = notificationConcurrency;
 
   syncWorker.on("completed", (job) => {
@@ -151,5 +179,13 @@ export const createWorkers = () => {
     console.error(`[Worker] Sync Job ${job?.id} failed: ${err.message}`);
   });
 
-  return { syncWorker, notificationWorker };
+  scrapeWorker.on("completed", (job) => {
+    console.log(`[Worker] Scrape Job ${job.id} completed!`);
+  });
+
+  scrapeWorker.on("failed", (job, err) => {
+    console.error(`[Worker] Scrape Job ${job?.id} failed: ${err.message}`);
+  });
+
+  return { syncWorker, scrapeWorker, notificationWorker };
 };

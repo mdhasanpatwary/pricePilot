@@ -702,6 +702,12 @@ model Product {
   currentPrice                                           Decimal                 @db.Decimal(10, 2)
   currency                                               String                  @default("USD")
   lastCrawledAt                                          DateTime?
+  nextScrapeAt                                           DateTime?
+  lastScrapeAttemptAt                                    DateTime?
+  lastScrapeSucceededAt                                  DateTime?
+  lastScrapeFailedAt                                     DateTime?
+  consecutiveScrapeFailures                               Int                     @default(0)
+  businessPriority                                       Int                     @default(0)
   inStock                                                Boolean                 @default(true)
   stockLevel                                             Int?
   createdAt                                              DateTime                @default(now())
@@ -733,6 +739,7 @@ model Product {
   matchesAsUser                                          ProductMatch[]          @relation("ProductMatch_userProductIdToProduct")
   ScrapeAttempt                                          ScrapeAttempt[]
   ScrapeRetry                                            ScrapeRetry[]
+  ProductVolatility                                      ProductVolatility?
 
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
   @@index([siteId])
@@ -744,6 +751,21 @@ model Product {
   @@index([sku])
   @@index([siteId, url])
   @@index([updatedAt])
+  @@index([nextScrapeAt])
+}
+
+model ProductVolatility {
+  id                   String   @id @default(cuid())
+  productId            String   @unique
+  volatilityScore      Float    @default(0)
+  lastPriceChangeAt    DateTime?
+  priceChangeCount30d  Int      @default(0)
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  Product              Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([volatilityScore])
+  @@index([lastPriceChangeAt])
 }
 
 model ProductMatch {

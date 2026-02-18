@@ -6,6 +6,7 @@ import { QUEUE_NAMES } from "./types";
 const globalForQueues = global as unknown as {
   syncQueue?: Queue;
   notificationQueue?: Queue;
+  scrapeQueue?: Queue;
 };
 
 /**
@@ -64,12 +65,38 @@ export const getNotificationQueue = () => {
 };
 
 /**
+ * Lazy-initialized Scrape Queue (product-level scraping)
+ */
+export const getScrapeQueue = () => {
+  if (globalForQueues.scrapeQueue) return globalForQueues.scrapeQueue;
+
+  const queue = new Queue(QUEUE_NAMES.SCRAPE, {
+    connection: getRedisConnection() as any,
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnFail: {
+        count: 2000,
+        age: 7 * 24 * 3600,
+      },
+      // Scrape jobs are long-lived (we reschedule via moveToDelayed),
+      // so completion cleanup isn't relied upon.
+    },
+  });
+
+  if (process.env.NODE_ENV !== "production") {
+    globalForQueues.scrapeQueue = queue;
+  }
+  return queue;
+};
+
+/**
  * Schedules internal system tasks (maintenance, crons)
  * This should be called once during application/worker startup.
  */
 export async function scheduleSystemTasks() {
   console.log("📅 Scheduling system maintenance tasks...");
   const syncQueue = getSyncQueue();
+  const scrapeQueue = getScrapeQueue();
   await syncQueue.add(
     "INTERNAL_MAINTENANCE",
     { type: "MAINTENANCE" },
@@ -80,6 +107,18 @@ export async function scheduleSystemTasks() {
       jobId: "system-maintenance", // Unique ID ensures only one instance is scheduled
     },
   );
+
+  // Keep scrape queue hydrated with product jobs (best-effort).
+  await scrapeQueue.add(
+    "SCRAPE_SEED",
+    { type: "SEED" },
+    {
+      repeat: {
+        pattern: "*/10 * * * *", // every 10 minutes
+      },
+      jobId: "scrape-seed",
+    },
+  );
   console.log("✅ System maintenance tasks scheduled.");
 }
 
@@ -87,3 +126,4 @@ export async function scheduleSystemTasks() {
 // Use getSyncQueue() and getNotificationQueue() instead.
 export const syncQueue = null as any;
 export const notificationQueue = null as any;
+export const scrapeQueue = null as any;

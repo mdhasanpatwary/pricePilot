@@ -223,6 +223,7 @@ async function start() {
 
     let started = false;
     let syncWorker: any = null;
+    let scrapeWorker: any = null;
     let notificationWorker: any = null;
     let degraded = false;
 
@@ -250,6 +251,7 @@ async function start() {
 
       const created = createWorkers();
       syncWorker = created.syncWorker as any;
+      scrapeWorker = (created as any).scrapeWorker as any;
       notificationWorker = created.notificationWorker as any;
 
       // Schedule internal crons/maintenance only once on worker start.
@@ -269,6 +271,11 @@ async function start() {
       console.log(
         `   - Sync Queue (Concurrency: ${(syncWorker as any).concurrencyValue})`,
       );
+      if (scrapeWorker) {
+        console.log(
+          `   - Scrape Queue (Concurrency: ${(scrapeWorker as any).concurrencyValue})`,
+        );
+      }
       console.log(
         `   - Notification Queue (Concurrency: ${(notificationWorker as any).concurrencyValue})`,
       );
@@ -281,6 +288,9 @@ async function start() {
       console.log("🛑 Shutting down workers...");
       try {
         if (syncWorker) await syncWorker.close();
+      } catch { }
+      try {
+        if (scrapeWorker) await scrapeWorker.close();
       } catch { }
       try {
         if (notificationWorker) await notificationWorker.close();
