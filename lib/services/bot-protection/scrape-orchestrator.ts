@@ -1050,6 +1050,8 @@ export class ScrapeOrchestrator {
         let structureFingerprintChanged = false;
         let structureFingerprintPrevious: string | null = null;
         let structureFingerprintCurrent: string | null = null;
+        let structureFingerprintDriftScore: number | null = null;
+        let structureFingerprintDriftThreshold: number | null = null;
         try {
             const fp = await DomainFingerprintService.detectAndUpdate({
                 domain: normalizedDomain,
@@ -1059,6 +1061,8 @@ export class ScrapeOrchestrator {
             structureFingerprintChanged = fp.changed;
             structureFingerprintPrevious = fp.previousHash;
             structureFingerprintCurrent = fp.currentHash;
+            structureFingerprintDriftScore = fp.driftScore;
+            structureFingerprintDriftThreshold = fp.driftThreshold;
 
             if (structureFingerprintChanged) {
                 const lastAlertAtMs = fp.lastAlertAt?.getTime() ?? 0;
@@ -1078,6 +1082,8 @@ export class ScrapeOrchestrator {
                                 domain: normalizedDomain,
                                 previousHash: structureFingerprintPrevious,
                                 currentHash: structureFingerprintCurrent,
+                                driftScore: structureFingerprintDriftScore,
+                                driftThreshold: structureFingerprintDriftThreshold,
                             },
                         },
                     });

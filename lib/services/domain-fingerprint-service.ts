@@ -33,8 +33,47 @@ function safeLower(html: string): string {
 }
 
 export class DomainFingerprintService {
+  static readonly DEFAULT_DRIFT_THRESHOLD = 0.35;
+
   static normalizeDomain(domain: string): string {
     return (domain || '').trim().toLowerCase().replace(/^www\./, '');
+  }
+
+  static computeDriftScore(prev: DomainFingerprintMetrics, next: DomainFingerprintMetrics): number {
+    const ratioDelta = (a: number, b: number): number => {
+      const denom = Math.max(1, Math.abs(a), Math.abs(b));
+      return Math.min(1, Math.abs(a - b) / denom);
+    };
+
+    // Weighted, coarse score in [0,1]. Prefer stability: changes in a single noisy signal
+    // shouldn't immediately trigger STRUCTURE_CHANGED.
+    let score = 0;
+    let weightSum = 0;
+
+    const add = (w: number, v: number) => {
+      weightSum += w;
+      score += w * Math.max(0, Math.min(1, v));
+    };
+
+    // DOM structure signals
+    add(0.25, ratioDelta(prev.anchorCount, next.anchorCount));
+    add(0.25, ratioDelta(prev.productContainerSignals, next.productContainerSignals));
+    add(0.15, prev.hasProductSchema === next.hasProductSchema ? 0 : 1);
+
+    // Title signals
+    add(0.10, prev.title.separator === next.title.separator ? 0 : 1);
+    add(0.05, ratioDelta(prev.title.length, next.title.length));
+
+    // Script/platform signals
+    add(0.20, ratioDelta(prev.scripts.scriptTagCount, next.scripts.scriptTagCount));
+    add(0.05, prev.scripts.hasNextData === next.scripts.hasNextData ? 0 : 1);
+    add(0.05, prev.scripts.hasJsonLd === next.scripts.hasJsonLd ? 0 : 1);
+    add(0.05, prev.scripts.hasShopify === next.scripts.hasShopify ? 0 : 1);
+    add(0.05, prev.scripts.hasWooCommerce === next.scripts.hasWooCommerce ? 0 : 1);
+    add(0.05, prev.scripts.hasOpenCartRoute === next.scripts.hasOpenCartRoute ? 0 : 1);
+
+    if (weightSum <= 0) return 0;
+    return Math.max(0, Math.min(1, score / weightSum));
   }
 
   static compute(html: string): { hash: string; metrics: DomainFingerprintMetrics } {
@@ -99,27 +138,38 @@ export class DomainFingerprintService {
     domain: string;
     html: string;
     now?: Date;
+    driftThreshold?: number;
   }): Promise<{
     changed: boolean;
     previousHash: string | null;
     currentHash: string;
+    driftScore: number;
+    driftThreshold: number;
     metrics: DomainFingerprintMetrics;
     lastAlertAt: Date | null;
   }> {
     const domain = this.normalizeDomain(params.domain);
     const now = params.now ?? new Date();
+    const driftThreshold =
+      typeof params.driftThreshold === 'number' && Number.isFinite(params.driftThreshold)
+        ? Math.max(0, Math.min(1, params.driftThreshold))
+        : this.DEFAULT_DRIFT_THRESHOLD;
     const { hash: currentHash, metrics } = this.compute(params.html);
 
     const existing = await prisma.domainFingerprint.findUnique({
       where: { domain },
       select: {
         fingerprintHash: true,
+        fingerprint: true,
         lastAlertAt: true,
       },
     });
 
     const previousHash = existing?.fingerprintHash ?? null;
-    const changed = Boolean(previousHash && previousHash !== currentHash);
+    const previousMetrics = (existing?.fingerprint as DomainFingerprintMetrics | null) ?? null;
+    const driftScore =
+      previousMetrics ? this.computeDriftScore(previousMetrics, metrics) : 0;
+    const changed = Boolean(previousHash && previousHash !== currentHash && driftScore >= driftThreshold);
 
     if (!existing) {
       await prisma.domainFingerprint.create({
@@ -130,23 +180,18 @@ export class DomainFingerprintService {
           lastSeenAt: now,
         },
       });
-    } else if (changed) {
+    } else {
+      // Always update the stored fingerprint/hash to keep the baseline current,
+      // but only increment change counters when the drift score crosses the threshold.
       await prisma.domainFingerprint.update({
         where: { domain },
         data: {
           fingerprintHash: currentHash,
           fingerprint: metrics,
           lastSeenAt: now,
-          lastChangedAt: now,
-          changeCount: { increment: 1 },
-        },
-      });
-    } else {
-      await prisma.domainFingerprint.update({
-        where: { domain },
-        data: {
-          lastSeenAt: now,
-          fingerprint: metrics,
+          ...(changed
+            ? { lastChangedAt: now, changeCount: { increment: 1 } }
+            : {}),
         },
       });
     }
@@ -155,6 +200,8 @@ export class DomainFingerprintService {
       changed,
       previousHash,
       currentHash,
+      driftScore,
+      driftThreshold,
       metrics,
       lastAlertAt: existing?.lastAlertAt ?? null,
     };
@@ -168,4 +215,3 @@ export class DomainFingerprintService {
     });
   }
 }
-
