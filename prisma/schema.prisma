@@ -1225,6 +1225,22 @@ model DomainProfile {
   @@index([protectionLevel])
 }
 
+model DomainSearchPattern {
+  id           String   @id @default(cuid())
+  domain       String
+  pattern      String
+  successCount Int      @default(0)
+  failureCount Int      @default(0)
+  successRate  Float    @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([domain, pattern])
+  @@index([domain])
+  @@index([successRate])
+}
+
 model StrategyPerformance {
   id                 String   @id @default(cuid())
   tenantId           String

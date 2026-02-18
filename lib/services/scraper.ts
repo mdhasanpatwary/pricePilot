@@ -21,6 +21,7 @@ import { sessionTracker } from "./session-tracker";
 import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
 import { SystemConfigService } from "@/lib/config";
 import { detectOpenCartFromUrlAndHtml } from "./platform-detector";
+import { SearchPatternLearningService } from "./search-pattern-learning-service";
 
 interface ScrapedProduct {
   title: string;
@@ -3406,8 +3407,39 @@ export class ScraperService {
       const strategyKey = Object.keys(SEARCH_STRATEGIES).find((domain) =>
         hostname.includes(domain),
       );
-      let searchUrl: string | null = null;
-      let usedCustomPattern = false;
+      const strategyPatternTemplate: Record<string, string> = {
+        "startech.com.bd": "/product/search?search={query}",
+        "ryans.com": "/search?q={query}",
+        "ryanscomputers.com": "/search?q={query}",
+        "techlandbd.com": "/search/advance/product/result/{query}",
+        "techland.com.bd": "/search/advance/product/result/{query}",
+      };
+      const defaultPatternTemplate = "/search?q={query}";
+
+      const commonFallbackTemplates: string[] = [
+        "/search?search={query}",
+        "/search?keyword={query}",
+        "/search?query={query}",
+        "/search?term={query}",
+        "/product/search?search={query}",
+        "/index.php?route=product/search&search={query}",
+      ];
+
+      const buildSearchUrlFromTemplate = (pattern: string): string => {
+        const p = (pattern || "").trim();
+        let baseUrlToUse = baseUrl.replace(/\/$/, "");
+        if (p.startsWith("http")) {
+          baseUrlToUse = "";
+        }
+
+        const encodedQuery = encodeURIComponent(cleanQuery).replace(/%20/g, "+");
+        if (p.includes("{query}")) return (baseUrlToUse + p).replace("{query}", encodedQuery);
+        if (p.includes("{q}")) return (baseUrlToUse + p).replace("{q}", encodedQuery);
+        return baseUrlToUse + p + encodeURIComponent(cleanQuery);
+      };
+
+      let explicitPattern: string | null = null;
+      let learnedPattern: string | null = null;
 
       // Try to find a custom search pattern from the database if siteId is present
       if (siteId) {
@@ -3419,40 +3451,55 @@ export class ScraperService {
         isAdvancedProtectedSite = Boolean(site?.isAdvancedProtected);
 
         if (site?.searchQueryPattern) {
-          const pattern = site.searchQueryPattern;
-
-          // If the pattern itself is a full URL, use it as base. Otherwise, append to baseUrl.
-          let baseUrlToUse = baseUrl.replace(/\/$/, "");
-          if (pattern.startsWith("http")) {
-            // If pattern is absolute, we ignore the passed baseUrl for the search part
-            // but we still need to process the query replacement.
-            baseUrlToUse = "";
-          }
-
-          // Standard placeholder replacement: {query} or {q}
-          if (pattern.includes("{query}")) {
-            searchUrl = (baseUrlToUse + pattern).replace(
-              "{query}",
-              encodeURIComponent(cleanQuery).replace(/%20/g, "+"),
-            );
-          } else if (pattern.includes("{q}")) {
-            searchUrl = (baseUrlToUse + pattern).replace(
-              "{q}",
-              encodeURIComponent(cleanQuery).replace(/%20/g, "+"),
-            );
-          } else {
-            // Fallback: If no placeholder, just append query (rare)
-            searchUrl = baseUrlToUse + pattern + encodeURIComponent(cleanQuery);
-          }
-          usedCustomPattern = true;
+          explicitPattern = site.searchQueryPattern;
         }
       }
 
-      if (!searchUrl) {
-        const buildUrl = strategyKey
-          ? SEARCH_STRATEGIES[strategyKey]
-          : DEFAULT_STRATEGY;
-        searchUrl = buildUrl(baseUrl, cleanQuery);
+      const normalizedDomain = SearchPatternLearningService.normalizeDomain(hostname);
+      if (!explicitPattern) {
+        try {
+          learnedPattern = await SearchPatternLearningService.getBestPatternForDomain(normalizedDomain);
+        } catch {
+          learnedPattern = null;
+        }
+      }
+
+      const searchCandidates: Array<{
+        searchUrl: string;
+        patternForLearning: string;
+        label: string;
+      }> = [];
+
+      const usedTemplates = new Set<string>();
+      const pushCandidate = (patternForLearning: string, searchUrl: string, label: string) => {
+        const key = (patternForLearning || "").trim();
+        if (!key || usedTemplates.has(key)) return;
+        usedTemplates.add(key);
+        searchCandidates.push({ searchUrl, patternForLearning: key, label });
+      };
+
+      if (explicitPattern) {
+        pushCandidate(explicitPattern, buildSearchUrlFromTemplate(explicitPattern), "Database Pattern");
+      } else {
+        if (learnedPattern) {
+          pushCandidate(learnedPattern, buildSearchUrlFromTemplate(learnedPattern), "Learned Pattern");
+        }
+
+        if (strategyKey) {
+          const template = strategyPatternTemplate[strategyKey] || strategyPatternTemplate[Object.keys(strategyPatternTemplate).find(k => strategyKey.includes(k)) || ""];
+          pushCandidate(
+            template || defaultPatternTemplate,
+            SEARCH_STRATEGIES[strategyKey](baseUrl, cleanQuery),
+            template ? "Built-in Pattern" : "Built-in Strategy",
+          );
+        }
+
+        pushCandidate(defaultPatternTemplate, DEFAULT_STRATEGY(baseUrl, cleanQuery), "Default Pattern");
+
+        for (const template of commonFallbackTemplates) {
+          if (searchCandidates.length >= 4) break;
+          pushCandidate(template, buildSearchUrlFromTemplate(template), "Common Pattern");
+        }
       }
 
       if (isAdvancedProtectedSite) {
@@ -3460,195 +3507,172 @@ export class ScraperService {
         // aggressively inflating adaptive delay on every request.
         this.hardenProtectionForDomain(hostname, "CLOUDFLARE", false);
       }
-
-      logger.info(
-        `[ScraperService] Searching: ${searchUrl} (Strategy: ${usedCustomPattern ? "Database Pattern" : (strategyKey || "Default")})`,
-      );
-      // await log removed to avoid duplication with DiscoveryService
-
       const strictSearchMode = isAdvancedProtectedSite || Boolean(
         profile.adaptiveDelay?.enabled || profile.sessionWarmup?.enabled
       );
 
-      if (strictSearchMode) {
-        const adaptiveDelay = siteProfileManager.getAdaptiveDelay(hostname);
-        const preNavigateDelay = Math.min(Math.max(adaptiveDelay, 1200), 12000);
-        await page.waitForTimeout(preNavigateDelay + Math.floor(Math.random() * 400));
-      } else {
-        // Add small random delay before navigation (more human-like)
-        await page.waitForTimeout(Math.random() * 1000 + 500); // 500-1500ms
-      }
-
-      // Ryans/Startech are heavy on JS, use networkidle if possible or longer wait
-      const response = await page.goto(searchUrl, {
-        waitUntil: "domcontentloaded",
-        timeout: 30000,
-      });
-
-      // --- NEW: Security Pre-check ---
-      const securityInfo = await this.analyzeSecurity(page, response);
-      if (securityInfo.isBlocked) {
-        this.hardenProtectionForDomain(hostname, securityInfo.provider);
-        const msg = `🛡️[Scraper] Blocked by ${securityInfo.provider} at ${hostname} `;
-        logger.warn(`[ScraperService] ${msg} `);
-        // await log removed to avoid duplication with DiscoveryService
-
-        // Try to wait for Cloudflare challenge before throwing error
-        if (securityInfo.provider === "CLOUDFLARE") {
-          const challengeWaitMs = strictSearchMode ? 12000 : 8000;
-          logger.info("[ScraperService] Waiting for Cloudflare challenge to complete...");
-          await page.waitForTimeout(challengeWaitMs);
-
-          // Check if challenge was solved
-          const recheckSecurity = await this.analyzeSecurity(page, response);
-          if (!recheckSecurity.isBlocked) {
-            this.relaxProtectionForDomain(hostname);
-            logger.info("[ScraperService] ✅ Cloudflare challenge passed!");
-          } else {
-            // Still blocked, throw error
-            throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
-          }
-        } else if (securityInfo.isAdvanced) {
-          throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
-        }
-      }
-
-      // Wait for results to render (critical for CSR sites like Ryans/Startech).
-      // NOTE: Avoid generic selectors (like ".card") because they can exist before product results mount,
-      // causing us to evaluate links too early and incorrectly conclude "no results".
-      try {
-        const resultLinkSelectors = [
-          ".p-item a[href]",
-          ".p-item-name a[href]",
-          ".product-name a[href]",
-          ".product-title a[href]",
-          ".product-thumb a[href]",
-          ".product-box a[href]",
-          ".product-item a[href]",
-          ".product-list a[href]",
-          ".search-result a[href]",
-        ];
-
-        await page.waitForFunction(
-          (selectors: string[]) =>
-            Array.isArray(selectors) &&
-            selectors.some(
-              (sel) => document.querySelectorAll(sel).length > 0,
-            ),
-          resultLinkSelectors,
-          { timeout: 8000 },
-        );
-      } catch (_e) {
-        // Fallback to static wait if product links don't show up.
-        await page.waitForTimeout(4000);
-      }
-
-      // Quick signal check before expensive simulation. When a page clearly has no results,
-      // skip synthetic interactions and proceed to fallback logic immediately.
       let likelyNoResults = false;
       let searchDiagnostics: any = null;
-      try {
-        searchDiagnostics = await page.evaluate(() => {
-          const count = (sel: string) => document.querySelectorAll(sel).length;
-          const text = (document.body?.innerText || "").toLowerCase();
-          const hasNoResultsText =
-            text.includes("no results") ||
-            text.includes("no product") ||
-            text.includes("not found") ||
-            text.includes("0 results");
 
-          const productContainerSignals =
-            count(".p-item a[href]") +
-            count(".p-item-name a[href]") +
-            count(".product-name a[href]") +
-            count(".product-title a[href]") +
-            count(".product-thumb a[href]") +
-            count(".product-box a[href]") +
-            count(".product-item a[href]") +
-            count(".product-list a[href]") +
-            count(".search-result a[href]");
+      for (const candidate of searchCandidates) {
+        const searchUrl = candidate.searchUrl;
 
-          return {
-            title: document.title,
-            href: window.location.href,
-            counts: {
-              pItemLinks: count(".p-item a[href]"),
-              pItemNameLinks: count(".p-item-name a[href]"),
-              productNameLinks: count(".product-name a[href]"),
-              productTitleLinks: count(".product-title a[href]"),
-              productThumbLinks: count(".product-thumb a[href]"),
-              productBoxLinks: count(".product-box a[href]"),
-              productItemLinks: count(".product-item a[href]"),
-              productListLinks: count(".product-list a[href]"),
-              searchResultLinks: count(".search-result a[href]"),
-              productUrlLinks: count('a[href*="/product/"]'),
-              allAnchors: count("a[href]"),
-            },
-            productContainerSignals,
-            hasNoResultsText,
-          };
+        logger.info(
+          `[ScraperService] Searching: ${searchUrl} (Strategy: ${candidate.label})`,
+        );
+
+        if (strictSearchMode) {
+          const adaptiveDelay = siteProfileManager.getAdaptiveDelay(hostname);
+          const preNavigateDelay = Math.min(Math.max(adaptiveDelay, 1200), 12000);
+          await page.waitForTimeout(preNavigateDelay + Math.floor(Math.random() * 400));
+        } else {
+          await page.waitForTimeout(Math.random() * 1000 + 500);
+        }
+
+        const response = await page.goto(searchUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30000,
         });
-      } catch {
-        // Ignore diagnostics failures - scraping should continue.
-      }
 
-      likelyNoResults = Boolean(
-        searchDiagnostics?.hasNoResultsText &&
-        (searchDiagnostics?.productContainerSignals ?? 0) === 0 &&
-        (searchDiagnostics?.counts?.productUrlLinks ?? 0) <= 2,
-      );
+        const securityInfo = await this.analyzeSecurity(page, response);
+        if (securityInfo.isBlocked) {
+          this.hardenProtectionForDomain(hostname, securityInfo.provider);
+          const msg = `🛡️[Scraper] Blocked by ${securityInfo.provider} at ${hostname} `;
+          logger.warn(`[ScraperService] ${msg} `);
 
-      if (!likelyNoResults) {
-        // 2.5 Enhanced Human Simulation for Search Page
-        logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
+          if (securityInfo.provider === "CLOUDFLARE") {
+            const challengeWaitMs = strictSearchMode ? 12000 : 8000;
+            logger.info("[ScraperService] Waiting for Cloudflare challenge to complete...");
+            await page.waitForTimeout(challengeWaitMs);
 
-        const searchBehavior = strictSearchMode
-          ? {
-            initialPause: [280, 700] as const,
-            betweenPause: [180, 480] as const,
-            reviewPause: [450, 1200] as const,
-            hoverPause: [220, 520] as const,
+            const recheckSecurity = await this.analyzeSecurity(page, response);
+            if (!recheckSecurity.isBlocked) {
+              this.relaxProtectionForDomain(hostname);
+              logger.info("[ScraperService] ✅ Cloudflare challenge passed!");
+            } else {
+              throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
+            }
+          } else if (securityInfo.isAdvanced) {
+            throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
           }
-          : {
-            initialPause: [120, 300] as const,
-            betweenPause: [80, 200] as const,
-            reviewPause: [200, 500] as const,
-            hoverPause: [120, 240] as const,
-          };
+        }
 
-        // Keep interactions human-like while adapting to stricter sites.
-        await HumanSimulation.randomPause(searchBehavior.initialPause[0], searchBehavior.initialPause[1]);
+        try {
+          const resultLinkSelectors = [
+            ".p-item a[href]",
+            ".p-item-name a[href]",
+            ".product-name a[href]",
+            ".product-title a[href]",
+            ".product-thumb a[href]",
+            ".product-box a[href]",
+            ".product-item a[href]",
+            ".product-list a[href]",
+            ".search-result a[href]",
+          ];
 
-        // Simulate natural mouse movement
-        await HumanSimulation.simulateMouseMove(page);
+          await page.waitForFunction(
+            (selectors: string[]) =>
+              Array.isArray(selectors) &&
+              selectors.some(
+                (sel) => document.querySelectorAll(sel).length > 0,
+              ),
+            resultLinkSelectors,
+            { timeout: 8000 },
+          );
+        } catch (_e) {
+          await page.waitForTimeout(4000);
+        }
 
-        // Random pause between actions
-        await HumanSimulation.randomPause(searchBehavior.betweenPause[0], searchBehavior.betweenPause[1]);
+        likelyNoResults = false;
+        searchDiagnostics = null;
+        try {
+          searchDiagnostics = await page.evaluate(() => {
+            const count = (sel: string) => document.querySelectorAll(sel).length;
+            const text = (document.body?.innerText || "").toLowerCase();
+            const hasNoResultsText =
+              text.includes("no results") ||
+              text.includes("no product") ||
+              text.includes("not found") ||
+              text.includes("0 results");
 
-        // Simulate scrolling to view results
-        await HumanSimulation.simulateScroll(page);
+            const productContainerSignals =
+              count(".p-item a[href]") +
+              count(".p-item-name a[href]") +
+              count(".product-name a[href]") +
+              count(".product-title a[href]") +
+              count(".product-thumb a[href]") +
+              count(".product-box a[href]") +
+              count(".product-item a[href]") +
+              count(".product-list a[href]") +
+              count(".search-result a[href]");
 
-        // Random pause to simulate reading/reviewing results
-        await HumanSimulation.randomPause(searchBehavior.reviewPause[0], searchBehavior.reviewPause[1]);
+            return {
+              title: document.title,
+              href: window.location.href,
+              counts: {
+                pItemLinks: count(".p-item a[href]"),
+                pItemNameLinks: count(".p-item-name a[href]"),
+                productNameLinks: count(".product-name a[href]"),
+                productTitleLinks: count(".product-title a[href]"),
+                productThumbLinks: count(".product-thumb a[href]"),
+                productBoxLinks: count(".product-box a[href]"),
+                productItemLinks: count(".product-item a[href]"),
+                productListLinks: count(".product-list a[href]"),
+                searchResultLinks: count(".search-result a[href]"),
+                productUrlLinks: count('a[href*="/product/"]'),
+                allAnchors: count("a[href]"),
+              },
+              productContainerSignals,
+              hasNoResultsText,
+            };
+          });
+        } catch {
+          // Ignore diagnostics failures
+        }
 
-        // Simulate hovering over product items (if they exist)
-        const productSelectors = [
-          '.product-thumb a',
-          '.p-item a',
-          '.p-item-name a',
-          '.product-name a',
-          '.product-title a',
-          '.product-box a',
-          '.card a',
-          '.product-item a'
-        ];
+        likelyNoResults = Boolean(
+          searchDiagnostics?.hasNoResultsText &&
+          (searchDiagnostics?.productContainerSignals ?? 0) === 0 &&
+          (searchDiagnostics?.counts?.productUrlLinks ?? 0) <= 2,
+        );
 
-        for (const selector of productSelectors) {
-          const elements = await page.$$(selector);
-          if (elements.length > 0) {
-            // Hover over a single random product item
-            const hoverCount = 1;
-            for (let i = 0; i < hoverCount; i++) {
+        if (!likelyNoResults) {
+          logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
+
+          const searchBehavior = strictSearchMode
+            ? {
+              initialPause: [280, 700] as const,
+              betweenPause: [180, 480] as const,
+              reviewPause: [450, 1200] as const,
+              hoverPause: [220, 520] as const,
+            }
+            : {
+              initialPause: [120, 300] as const,
+              betweenPause: [80, 200] as const,
+              reviewPause: [200, 500] as const,
+              hoverPause: [120, 240] as const,
+            };
+
+          await HumanSimulation.randomPause(searchBehavior.initialPause[0], searchBehavior.initialPause[1]);
+          await HumanSimulation.simulateMouseMove(page);
+          await HumanSimulation.randomPause(searchBehavior.betweenPause[0], searchBehavior.betweenPause[1]);
+          await HumanSimulation.simulateScroll(page);
+          await HumanSimulation.randomPause(searchBehavior.reviewPause[0], searchBehavior.reviewPause[1]);
+
+          const productSelectors = [
+            '.product-thumb a',
+            '.p-item a',
+            '.p-item-name a',
+            '.product-name a',
+            '.product-title a',
+            '.product-box a',
+            '.card a',
+            '.product-item a'
+          ];
+
+          for (const selector of productSelectors) {
+            const elements = await page.$$(selector);
+            if (elements.length > 0) {
               const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
               try {
                 const element = elements[randomIndex];
@@ -3656,35 +3680,59 @@ export class ScraperService {
                 await element.hover({ timeout: 1000 }).catch(() => undefined);
                 await HumanSimulation.randomPause(searchBehavior.hoverPause[0], searchBehavior.hoverPause[1]);
               } catch {
-                // Continue if hover fails
+                // Ignore hover failures
               }
+              break;
             }
-            break; // Found products, no need to try other selectors
           }
+        } else {
+          logger.info(
+            `[ScraperService] Skipping enhanced human simulation due to likely no-results page for "${cleanQuery}"`,
+          );
         }
-      } else {
-        logger.info(
-          `[ScraperService] Skipping enhanced human simulation due to likely no-results page for "${cleanQuery}"`,
-        );
-      }
 
-      // 3. Look for links that might be products (heuristics)
-      let productLink = await this.evaluateProductLink(page, cleanQuery);
+        let productLink = await this.evaluateProductLink(page, cleanQuery);
 
-      if (!productLink) {
-        productLink = await this.evaluateAdapterProductLink(
-          page,
-          cleanQuery,
-          hostname,
-          profile.searchAdapter,
-        );
-      }
+        if (!productLink) {
+          productLink = await this.evaluateAdapterProductLink(
+            page,
+            cleanQuery,
+            hostname,
+            profile.searchAdapter,
+          );
+        }
 
-      if (productLink) {
-        logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
-      } else {
-        // Lightweight diagnostics to distinguish "true no results" vs DOM/selector/scoring mismatch.
-        // This avoids dumping full HTML but gives enough signal to debug intermittent failures.
+        try {
+          await SearchPatternLearningService.recordAttempt({
+            domain: normalizedDomain,
+            pattern: candidate.patternForLearning,
+            success: Boolean(productLink),
+          });
+        } catch {
+          // Best-effort; ignore DB errors so discovery doesn't break.
+        }
+
+        if (productLink) {
+          logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
+          logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink} `);
+
+          try {
+            const linkElement = await page.$(`a[href="${productLink}"]`);
+            const hasBox = linkElement ? await linkElement.boundingBox().catch(() => null) : null;
+            if (linkElement && hasBox) {
+              await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
+              await HumanSimulation.randomPause(100, 220);
+            }
+          } catch {
+            // ignore
+          }
+
+          this.relaxProtectionForDomain(hostname);
+          return await this.scrapeProductPage(productLink, {
+            isAdvancedProtected: isAdvancedProtectedSite,
+          });
+        }
+
         try {
           if (!searchDiagnostics) {
             searchDiagnostics = await page.evaluate(() => {
@@ -3723,7 +3771,7 @@ export class ScraperService {
             });
           } else if (!searchDiagnostics.productHrefSample) {
             const productHrefSample = await page.evaluate(() =>
-              Array.from(document.querySelectorAll('a[href*="/product/"]'))
+              Array.from(document.querySelectorAll('a[href*=\"/product/\"]'))
                 .map((a) => (a as HTMLAnchorElement).href)
                 .filter(Boolean)
                 .slice(0, 3),
@@ -3734,29 +3782,12 @@ export class ScraperService {
         } catch {
           // Non-fatal
         }
+
         logger.warn(`[ScraperService] ⚠️ Direct search returned no results for: "${cleanQuery}"`);
-      }
 
-      if (productLink) {
-        logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink} `);
-
-        // Simulate hovering over the product link before navigating
-        // This makes the behavior more human-like
-        try {
-          const linkElement = await page.$(`a[href="${productLink}"]`);
-          const hasBox = linkElement ? await linkElement.boundingBox().catch(() => null) : null;
-          if (linkElement && hasBox) {
-            await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
-            await HumanSimulation.randomPause(100, 220);
-          }
-        } catch (e) {
-          // Continue even if hover fails
+        if (likelyNoResults) {
+          break;
         }
-
-        this.relaxProtectionForDomain(hostname);
-        return await this.scrapeProductPage(productLink, {
-          isAdvancedProtected: isAdvancedProtectedSite,
-        });
       }
 
       // Fallback Strategy: Query Simplification + Model/SKU targeting
