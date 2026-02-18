@@ -1241,6 +1241,23 @@ model DomainSearchPattern {
   @@index([successRate])
 }
 
+model DomainFingerprint {
+  id              String   @id @default(cuid())
+  domain          String   @unique
+  fingerprintHash String
+  fingerprint     Json
+  changeCount     Int      @default(0)
+  lastSeenAt      DateTime @default(now())
+  lastChangedAt   DateTime?
+  lastAlertAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([domain])
+  @@index([fingerprintHash])
+  @@index([lastChangedAt])
+}
+
 model StrategyPerformance {
   id                 String   @id @default(cuid())
   tenantId           String

@@ -40,6 +40,7 @@ import type { APIPattern, Product as APIProduct } from '@/lib/types/api-detectio
 import { ConcurrencyLimiter } from '../concurrency-limiter';
 import { StrategyPerformanceService } from './strategy-performance-service';
 import { detectOpenCartFromUrlAndHtml } from '@/lib/services/platform-detector';
+import { DomainFingerprintService } from '@/lib/services/domain-fingerprint-service';
 
 /**
  * Scrape request interface
@@ -1003,6 +1004,55 @@ export class ScrapeOrchestrator {
         const detection = this.detectionEngine.analyzeResponse(httpResponse);
 
         const domainKey = this.getDomainKey(httpResponse.finalUrl || request.url, request.competitorWebsiteId);
+        const normalizedDomain = domainKey.toLowerCase().replace(/^www\./, '');
+
+        // Domain fingerprinting for automatic structure-change detection (best-effort).
+        // Never block scraping on fingerprint/DB issues.
+        let structureFingerprintChanged = false;
+        let structureFingerprintPrevious: string | null = null;
+        let structureFingerprintCurrent: string | null = null;
+        try {
+            const fp = await DomainFingerprintService.detectAndUpdate({
+                domain: normalizedDomain,
+                html: response.body,
+            });
+
+            structureFingerprintChanged = fp.changed;
+            structureFingerprintPrevious = fp.previousHash;
+            structureFingerprintCurrent = fp.currentHash;
+
+            if (structureFingerprintChanged) {
+                const lastAlertAtMs = fp.lastAlertAt?.getTime() ?? 0;
+                const nowMs = Date.now();
+                const alertCooldownMs = 6 * 60 * 60 * 1000; // 6h
+
+                if (nowMs - lastAlertAtMs > alertCooldownMs) {
+                    await prisma.scrapingAlert.create({
+                        data: {
+                            tenantId: request.tenantId,
+                            competitorWebsiteId: request.competitorWebsiteId,
+                            severity: 'WARNING',
+                            type: 'STRUCTURE_FINGERPRINT_CHANGED',
+                            title: `Structure changed: ${normalizedDomain}`,
+                            message: 'Page structure fingerprint changed for this domain. Selectors or extraction logic may need updates.',
+                            metadata: {
+                                domain: normalizedDomain,
+                                previousHash: structureFingerprintPrevious,
+                                currentHash: structureFingerprintCurrent,
+                            },
+                        },
+                    });
+
+                    await DomainFingerprintService.markAlerted(normalizedDomain);
+                }
+            }
+        } catch (error) {
+            logger.debug('[ScrapeOrchestrator] Domain fingerprinting failed', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                domainKey: normalizedDomain,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
 
         // Best-effort platform detection (OpenCart) to enable optimized defaults.
         // Never block scraping on detection/DB issues.
@@ -1083,10 +1133,21 @@ export class ScrapeOrchestrator {
         }
 
         // Extraction failed
-        const failureType = this.classifyExtractionFailure(extraction, response.statusCode);
-        const errorMessage = extraction.error
+        let failureType = this.classifyExtractionFailure(extraction, response.statusCode);
+        let errorMessage = extraction.error
             ? `Failed to extract price: ${extraction.error}`
             : 'Failed to extract price from response';
+
+        // If the domain fingerprint changed and we didn't hit a network/navigation failure,
+        // treat this as a likely structure change.
+        if (
+            structureFingerprintChanged &&
+            response.statusCode < 400 &&
+            (failureType === ScrapeFailureType.PARSE_FAILED || failureType === ScrapeFailureType.STRUCTURE_CHANGED)
+        ) {
+            failureType = ScrapeFailureType.STRUCTURE_CHANGED;
+            errorMessage = `${errorMessage} (structure fingerprint changed)`;
+        }
 
         return {
             success: false,
