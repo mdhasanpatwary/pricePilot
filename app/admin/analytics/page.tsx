@@ -2,7 +2,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Database, Shield, TrendingUp, Server, BarChart3, Globe } from "lucide-react";
+import { Database, Shield, TrendingUp, Server, BarChart3, Globe, DollarSign } from "lucide-react";
 import MetricsDashboard from "@/components/admin/metrics-dashboard";
 
 // Import analytics page components
@@ -11,6 +11,7 @@ import { ProxyHealthContent } from "./proxy-health-content";
 import { ChallengeStatsContent } from "./challenge-stats-content";
 import { ScrapingMetricsContent } from "./scraping-metrics-content";
 import { DomainHealthContent } from "./domain-health-content";
+import { ScrapeCostContent } from "./scrape-cost-content";
 
 export default function AnalyticsHubPage() {
     const searchParams = useSearchParams();
@@ -32,7 +33,7 @@ export default function AnalyticsHubPage() {
             </div>
 
             <Tabs value={tabParam} onValueChange={handleTabChange} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 lg:w-auto lg:inline-grid">
+                <TabsList className="grid w-full grid-cols-3 lg:grid-cols-7 lg:w-auto lg:inline-grid">
                     <TabsTrigger value="dashboard" className="flex items-center gap-2">
                         <BarChart3 className="w-4 h-4" />
                         <span className="hidden sm:inline">Dashboard</span>
@@ -52,6 +53,11 @@ export default function AnalyticsHubPage() {
                         <Globe className="w-4 h-4" />
                         <span className="hidden sm:inline">Domain Health</span>
                         <span className="sm:hidden">Domains</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="cost" className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4" />
+                        <span className="hidden sm:inline">Scrape Cost</span>
+                        <span className="sm:hidden">Cost</span>
                     </TabsTrigger>
                     <TabsTrigger value="proxies" className="flex items-center gap-2">
                         <Server className="w-4 h-4" />
@@ -79,6 +85,10 @@ export default function AnalyticsHubPage() {
 
                 <TabsContent value="domains" className="space-y-6">
                     <DomainHealthContent />
+                </TabsContent>
+
+                <TabsContent value="cost" className="space-y-6">
+                    <ScrapeCostContent />
                 </TabsContent>
 
                 <TabsContent value="proxies" className="space-y-6">

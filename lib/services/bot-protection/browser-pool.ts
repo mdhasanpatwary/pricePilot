@@ -138,9 +138,14 @@ export class BrowserPool {
         }
 
         // Mark instance as in use
+        const contextCreated = instance.requestCount === 0;
         instance.inUse = true;
         instance.lastUsed = new Date();
         instance.requestCount++;
+
+        // Tag the context so callers can record whether this request caused a new context to be used.
+        // This is used for scrape cost metrics (context creation rate).
+        (instance.context as any).__pp_contextCreatedForRequest = contextCreated;
 
         // Check if instance needs restart
         if (instance.requestCount >= this.config.maxRequestsPerBrowser) {

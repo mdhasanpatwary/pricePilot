@@ -1151,6 +1151,7 @@ export class ScrapeOrchestrator {
                 protectionType,
                 failureType: ScrapeFailureType.BOT_BLOCKED,
                 proxyId,
+                contextCreated: (response as any).contextCreated,
                 screenshot,
                 errorMessage: reasoning,
                 statusCode: response.statusCode,
@@ -1174,6 +1175,7 @@ export class ScrapeOrchestrator {
                 currency: extraction.currency,
                 protectionDetected: false,
                 proxyId,
+                contextCreated: (response as any).contextCreated,
                 screenshot,
                 statusCode: response.statusCode,
                 responseTimeMs: response.responseTime,
@@ -1204,6 +1206,7 @@ export class ScrapeOrchestrator {
             protectionDetected: false,
             failureType,
             proxyId,
+            contextCreated: (response as any).contextCreated,
             screenshot,
             errorMessage,
             statusCode: response.statusCode,
@@ -1503,6 +1506,25 @@ export class ScrapeOrchestrator {
                 strategy: strategy,
                 proxyId: result.proxyId,
                 userAgent: result.userAgent,
+                contextCreated: result.contextCreated ?? false,
+                success: result.success,
+                protectionDetected: result.protectionDetected,
+                protectionType: result.protectionType,
+                statusCode: result.statusCode,
+                responseTimeMs: result.responseTimeMs,
+                responseSizeBytes: result.responseSizeBytes,
+                errorMessage: result.errorMessage,
+                attemptNumber: attemptNumber,
+            } as const;
+
+            const legacyData = {
+                tenantId: request.tenantId,
+                competitorProductId: request.competitorProductId,
+                competitorWebsiteId: request.competitorWebsiteId,
+                url: request.url,
+                strategy: strategy,
+                proxyId: result.proxyId,
+                userAgent: result.userAgent,
                 success: result.success,
                 protectionDetected: result.protectionDetected,
                 protectionType: result.protectionType,
@@ -1525,11 +1547,21 @@ export class ScrapeOrchestrator {
             } catch (error) {
                 if (!this.isMissingColumnError(error)) throw error;
 
-                // DB schema not migrated yet: retry without failureType to avoid crashing.
-                scrapeAttempt = await prisma.scrapeAttempt.create({
-                    data: baseData,
-                    select: { id: true },
-                });
+                // DB schema not migrated yet: retry without failureType first.
+                try {
+                    scrapeAttempt = await prisma.scrapeAttempt.create({
+                        data: baseData,
+                        select: { id: true },
+                    });
+                } catch (error2) {
+                    if (!this.isMissingColumnError(error2)) throw error2;
+
+                    // Still missing (e.g., contextCreated column): fall back to legacy columns only.
+                    scrapeAttempt = await prisma.scrapeAttempt.create({
+                        data: legacyData,
+                        select: { id: true },
+                    });
+                }
             }
 
             if (result.protectionDetected && result.protectionType) {
@@ -1806,6 +1838,7 @@ interface AttemptResult {
     protectionType?: ProtectionType;
     failureType?: ScrapeFailureType;
     proxyId?: string;
+    contextCreated?: boolean;
     screenshot?: Buffer;
     errorMessage?: string;
     statusCode?: number;

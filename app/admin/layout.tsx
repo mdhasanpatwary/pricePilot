@@ -29,6 +29,7 @@ import {
   BarChart3,
   Gauge,
   Globe,
+  DollarSign,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -65,6 +66,7 @@ const adminMenuItems = [
       { label: "Scraper Status", href: "/admin/analytics?tab=overview", icon: Database },
       { label: "Scraping Metrics", href: "/admin/analytics?tab=metrics", icon: Activity },
       { label: "Domain Health", href: "/admin/analytics?tab=domains", icon: Globe },
+      { label: "Scrape Cost", href: "/admin/analytics?tab=cost", icon: DollarSign },
       { label: "Proxy Health", href: "/admin/analytics?tab=proxies", icon: Server },
       { label: "Challenge Stats", href: "/admin/analytics?tab=challenges", icon: ShieldCheck },
     ],

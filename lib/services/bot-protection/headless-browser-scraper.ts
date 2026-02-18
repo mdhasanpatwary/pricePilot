@@ -97,6 +97,8 @@ export interface BrowserScrapeResponse {
     consoleLogs: string[];
     /** Network requests made during page load */
     networkRequests: NetworkRequest[];
+    /** Whether this scrape used a newly created browser context (first use after creation) */
+    contextCreated?: boolean;
 }
 
 /**
@@ -139,12 +141,14 @@ export class HeadlessBrowserScraper {
         let context: BrowserContext | null = null;
         let usingPool = false;
         let statusCodeForInvalidation: number | null = null;
+        let contextCreated: boolean | undefined = undefined;
 
         try {
             // Get browser context from pool or create new one
             if (this.usePool) {
                 context = await this.browserPool.acquire(config);
                 usingPool = true;
+                contextCreated = (context as any).__pp_contextCreatedForRequest === true;
             } else {
                 // Launch browser if not already running
                 if (!this.browser) {
@@ -267,6 +271,7 @@ export class HeadlessBrowserScraper {
                 screenshot,
                 consoleLogs,
                 networkRequests,
+                contextCreated,
             };
         } catch (error) {
             // Close page if it was created

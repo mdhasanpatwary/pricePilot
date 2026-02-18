@@ -958,6 +958,7 @@ model ScrapeAttempt {
   strategy            String
   proxyId             String?
   userAgent           String
+  contextCreated      Boolean               @default(false)
   success             Boolean
   protectionDetected  Boolean               @default(false)
   protectionType      String?
