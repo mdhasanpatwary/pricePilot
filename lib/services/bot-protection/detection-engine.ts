@@ -26,6 +26,8 @@ export enum ProtectionType {
  * HTTP response data for analysis
  */
 export interface HttpResponse {
+    /** Original request URL (before redirects). Used for redirect heuristics. */
+    requestUrl?: string;
     statusCode: number;
     headers: Record<string, string>;
     body: string;
@@ -42,10 +44,12 @@ export interface ProtectionIndicators {
     hasExpectedContent: boolean;
     hasCaptchaKeywords: boolean;
     isRedirected: boolean;
+    isSuspiciousRedirect: boolean;
     responseTime: number;
     priceValue?: number;
     contentLength: number;
     hasJavaScriptChallenge: boolean;
+    hasCloudflareIndicators: boolean;
     errorMessages: string[];
 }
 
@@ -93,6 +97,20 @@ export class DetectionEngine {
         'just a moment',
         'enable javascript',
         'javascript is required',
+    ];
+
+    // Suspicious redirect path patterns (same-domain redirects can still be blocks)
+    private static readonly SUSPICIOUS_REDIRECT_PATH_PATTERNS = [
+        '/login',
+        '/signin',
+        '/sign-in',
+        '/account/login',
+        '/customer/account/login',
+        '/captcha',
+        '/challenge',
+        '/verify',
+        '/access-denied',
+        '/forbidden',
     ];
 
     // IP block error messages
@@ -193,8 +211,12 @@ export class DetectionEngine {
             pattern => bodyLower.includes(pattern)
         );
 
-        // Check for redirect to different domain (Requirement 1.4)
-        const isRedirected = this.isRedirectToDifferentDomain(
+        // Cloudflare indicators from headers (works even if body is minimized)
+        const hasCloudflareIndicators = this.hasCloudflareIndicators(response.headers);
+
+        // Check for redirect patterns (Requirement 1.4)
+        const { isRedirected, isSuspiciousRedirect } = this.analyzeRedirect(
+            response.requestUrl,
             response.finalUrl,
             response.redirectUrl
         );
@@ -213,10 +235,12 @@ export class DetectionEngine {
             hasExpectedContent,
             hasCaptchaKeywords,
             isRedirected,
+            isSuspiciousRedirect,
             responseTime: response.responseTime,
             priceValue,
             contentLength,
             hasJavaScriptChallenge,
+            hasCloudflareIndicators,
             errorMessages,
         };
     }
@@ -234,20 +258,17 @@ export class DetectionEngine {
             return ProtectionType.CAPTCHA;
         }
 
-        // Priority 2: IP block detection (Requirement 1.1)
-        if (indicators.statusCode === 403 || indicators.statusCode === 401) {
-            // Check for IP block error messages
-            const hasIpBlockMessage = indicators.errorMessages.some(msg =>
-                DetectionEngine.IP_BLOCK_MESSAGES.some(pattern => msg.includes(pattern))
-            );
-            if (hasIpBlockMessage) {
-                return ProtectionType.IP_BLOCK;
-            }
-            // Default 403 to IP block
-            return ProtectionType.IP_BLOCK;
+        // Priority 2: JavaScript challenge (often Cloudflare)
+        if (indicators.hasJavaScriptChallenge || indicators.hasCloudflareIndicators) {
+            return ProtectionType.JAVASCRIPT_CHALLENGE;
         }
 
-        // Priority 3: Rate limit detection (Requirement 1.1)
+        // Priority 3: Suspicious redirects (same-domain redirect blocks)
+        if (indicators.isSuspiciousRedirect) {
+            return ProtectionType.REDIRECT_BLOCK;
+        }
+
+        // Priority 4: Rate limit detection (Requirement 1.1)
         if (indicators.statusCode === 429) {
             return ProtectionType.RATE_LIMIT;
         }
@@ -260,27 +281,29 @@ export class DetectionEngine {
             return ProtectionType.RATE_LIMIT;
         }
 
-        // Priority 4: JavaScript challenge (common with Cloudflare)
-        if (indicators.hasJavaScriptChallenge) {
-            return ProtectionType.JAVASCRIPT_CHALLENGE;
+        // Priority 5: IP block detection (Requirement 1.1)
+        if (indicators.statusCode === 403 || indicators.statusCode === 401) {
+            const hasIpBlockMessage = indicators.errorMessages.some(msg =>
+                DetectionEngine.IP_BLOCK_MESSAGES.some(pattern => msg.includes(pattern))
+            );
+            if (hasIpBlockMessage) return ProtectionType.IP_BLOCK;
+            return ProtectionType.IP_BLOCK;
         }
 
-        // Priority 5: Redirect block detection (Requirement 1.4)
-        if (indicators.isRedirected) {
-            return ProtectionType.REDIRECT_BLOCK;
-        }
+        // Priority 6: Redirect block detection (Requirement 1.4)
+        if (indicators.isRedirected) return ProtectionType.REDIRECT_BLOCK;
 
-        // Priority 6: Delayed response detection (Requirement 1.5)
+        // Priority 7: Delayed response detection (Requirement 1.5)
         if (indicators.responseTime > DetectionEngine.TIMEOUT_THRESHOLD) {
             return ProtectionType.DELAYED_RESPONSE;
         }
 
-        // Priority 7: Empty response detection (Requirement 1.5)
+        // Priority 8: Empty response detection (Requirement 1.5)
         if (indicators.contentLength < DetectionEngine.MIN_CONTENT_LENGTH) {
             return ProtectionType.EMPTY_RESPONSE;
         }
 
-        // Priority 8: Fake data detection (Requirement 1.6)
+        // Priority 9: Fake data detection (Requirement 1.6)
         if (indicators.priceValue !== undefined) {
             if (this.isFakePrice(indicators.priceValue)) {
                 return ProtectionType.FAKE_DATA;
@@ -370,28 +393,67 @@ export class DetectionEngine {
         return Math.round(confidence);
     }
 
-    /**
-     * Check if a redirect is to a different domain
-     * 
-     * @param finalUrl - Final URL after redirects
-     * @param redirectUrl - Redirect URL
-     * @returns True if redirected to different domain
-     */
-    private isRedirectToDifferentDomain(
+    private analyzeRedirect(
+        requestUrl?: string,
         finalUrl?: string,
         redirectUrl?: string
-    ): boolean {
-        if (!finalUrl || !redirectUrl) {
-            return false;
-        }
+    ): { isRedirected: boolean; isSuspiciousRedirect: boolean } {
+        // "redirectUrl" is optional; some strategies only report finalUrl.
+        const from = requestUrl || undefined;
+        const to = finalUrl || redirectUrl || undefined;
+
+        if (!from || !to) return { isRedirected: false, isSuspiciousRedirect: false };
 
         try {
-            const finalDomain = new URL(finalUrl).hostname;
-            const redirectDomain = new URL(redirectUrl).hostname;
-            return finalDomain !== redirectDomain;
+            const fromUrl = new URL(from);
+            const toUrl = new URL(to);
+
+            const isRedirected = fromUrl.toString() !== toUrl.toString();
+            const domainChanged = fromUrl.hostname !== toUrl.hostname;
+
+            // If domain changed, treat as redirect (and potentially suspicious).
+            if (domainChanged) {
+                return { isRedirected, isSuspiciousRedirect: true };
+            }
+
+            // Same-domain suspicious redirects: login/captcha/challenge, or forced home redirect.
+            const toPath = (toUrl.pathname || '/').toLowerCase();
+            const fromPath = (fromUrl.pathname || '/').toLowerCase();
+
+            const matchesSuspiciousPath = DetectionEngine.SUSPICIOUS_REDIRECT_PATH_PATTERNS.some((p) =>
+                toPath === p || toPath.startsWith(`${p}/`)
+            );
+
+            const forcedHomeRedirect =
+                fromPath !== '/' &&
+                (toPath === '/' || toPath === '/home' || toPath === '/index.php') &&
+                // Avoid flagging legitimate canonicalization (e.g. trailing slash)
+                !fromPath.startsWith('/home');
+
+            return {
+                isRedirected,
+                isSuspiciousRedirect: Boolean(isRedirected && (matchesSuspiciousPath || forcedHomeRedirect)),
+            };
         } catch {
-            return false;
+            return { isRedirected: false, isSuspiciousRedirect: false };
         }
+    }
+
+    private hasCloudflareIndicators(headers: Record<string, string>): boolean {
+        const h = headers || {};
+
+        // Normalize keys to lowercase.
+        const keys = Object.keys(h).map((k) => k.toLowerCase());
+        const server = (h['server'] || h['Server'] || '').toLowerCase();
+
+        if (server.includes('cloudflare')) return true;
+
+        // Common Cloudflare headers
+        if (keys.includes('cf-ray')) return true;
+        if (keys.includes('cf-cache-status')) return true;
+        if (keys.some((k) => k.startsWith('cf-'))) return true;
+
+        return false;
     }
 
     /**
@@ -501,8 +563,16 @@ export class DetectionEngine {
             list.push('JavaScript challenge detected');
         }
 
+        if (indicators.hasCloudflareIndicators) {
+            list.push('Cloudflare headers detected');
+        }
+
         if (indicators.isRedirected) {
             list.push('Redirected to different domain');
+        }
+
+        if (indicators.isSuspiciousRedirect) {
+            list.push('Suspicious redirect detected');
         }
 
         if (indicators.responseTime > DetectionEngine.TIMEOUT_THRESHOLD) {
@@ -566,10 +636,17 @@ export class DetectionEngine {
 
             case ProtectionType.JAVASCRIPT_CHALLENGE:
                 reasons.push('JavaScript challenge detected (likely Cloudflare or similar).');
+                if (indicators.hasCloudflareIndicators) {
+                    reasons.push('Cloudflare headers present.');
+                }
                 break;
 
             case ProtectionType.REDIRECT_BLOCK:
-                reasons.push('Request was redirected to a different domain, indicating blocking.');
+                if (indicators.isSuspiciousRedirect) {
+                    reasons.push('Suspicious redirect detected (login/captcha/home redirect).');
+                } else {
+                    reasons.push('Request was redirected, indicating blocking.');
+                }
                 break;
 
             case ProtectionType.DELAYED_RESPONSE:

@@ -40,6 +40,7 @@ import type { APIPattern, Product as APIProduct } from '@/lib/types/api-detectio
 import { ConcurrencyLimiter } from '../concurrency-limiter';
 import { StrategyPerformanceService } from './strategy-performance-service';
 import { detectOpenCartFromUrlAndHtml } from '@/lib/services/platform-detector';
+import { StatusSpikeTracker } from './status-spike-tracker';
 import { DomainFingerprintService } from '@/lib/services/domain-fingerprint-service';
 
 /**
@@ -94,6 +95,7 @@ export class ScrapeOrchestrator {
     private apiCache: APICache;
     private apiExtractor: APIExtractor;
     private concurrencyLimiter: ConcurrencyLimiter;
+    private statusSpikeTracker: StatusSpikeTracker;
 
     constructor() {
         this.detectionEngine = new DetectionEngine();
@@ -113,6 +115,7 @@ export class ScrapeOrchestrator {
             maxConcurrency: 10,
             initialConcurrency: 3
         });
+        this.statusSpikeTracker = new StatusSpikeTracker();
     }
 
     private isMissingColumnError(error: unknown): boolean {
@@ -992,6 +995,7 @@ export class ScrapeOrchestrator {
     ): Promise<AttemptResult> {
         // Convert response to HttpResponse for detection
         const httpResponse: HttpResponse = {
+            requestUrl: request.url,
             statusCode: response.statusCode,
             headers: response.headers,
             body: response.body,
@@ -1000,8 +1004,14 @@ export class ScrapeOrchestrator {
             finalUrl: response.finalUrl,
         };
 
+        // Track 401/403 spikes to detect burst blocks and escalate strategy faster.
+        this.statusSpikeTracker.recordStatus(request.competitorWebsiteId, httpResponse.statusCode);
+
         // Detect bot protection
         const detection = this.detectionEngine.analyzeResponse(httpResponse);
+        const has403Spike =
+            (httpResponse.statusCode === 401 || httpResponse.statusCode === 403) &&
+            this.statusSpikeTracker.is403Spike(request.competitorWebsiteId);
 
         const domainKey = this.getDomainKey(httpResponse.finalUrl || request.url, request.competitorWebsiteId);
         const normalizedDomain = domainKey.toLowerCase().replace(/^www\./, '');
@@ -1082,7 +1092,12 @@ export class ScrapeOrchestrator {
         }
 
         // If protection detected, return failure
-        if (detection.protectionDetected) {
+        if (detection.protectionDetected || has403Spike) {
+            const protectionType = detection.protectionType || ProtectionType.IP_BLOCK;
+            const reasoning = has403Spike
+                ? `${detection.reasoning} 403 spike detected for this site.`
+                : detection.reasoning;
+
             // Rotate sticky UA for next attempt on this domain.
             this.userAgentPool.invalidateStickyUserAgent(domainKey);
             // Recreate browser context for this domain (best-effort).
@@ -1098,11 +1113,11 @@ export class ScrapeOrchestrator {
             return {
                 success: false,
                 protectionDetected: true,
-                protectionType: detection.protectionType,
+                protectionType,
                 failureType: ScrapeFailureType.BOT_BLOCKED,
                 proxyId,
                 screenshot,
-                errorMessage: detection.reasoning,
+                errorMessage: reasoning,
                 statusCode: response.statusCode,
                 responseTimeMs: response.responseTime,
                 userAgent,
