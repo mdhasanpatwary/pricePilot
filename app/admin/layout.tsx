@@ -28,6 +28,7 @@ import {
   Server,
   BarChart3,
   Gauge,
+  Globe,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -63,6 +64,7 @@ const adminMenuItems = [
       { label: "Dashboard", href: "/admin/analytics?tab=dashboard", icon: BarChart3 },
       { label: "Scraper Status", href: "/admin/analytics?tab=overview", icon: Database },
       { label: "Scraping Metrics", href: "/admin/analytics?tab=metrics", icon: Activity },
+      { label: "Domain Health", href: "/admin/analytics?tab=domains", icon: Globe },
       { label: "Proxy Health", href: "/admin/analytics?tab=proxies", icon: Server },
       { label: "Challenge Stats", href: "/admin/analytics?tab=challenges", icon: ShieldCheck },
     ],
