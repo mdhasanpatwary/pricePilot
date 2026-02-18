@@ -1481,9 +1481,10 @@ export class ScraperService {
         // Ignore platform detection errors; scraping must proceed.
       }
 
-      // 5. Enhanced Human Simulation (heavy) only for full-js profiles.
+      // 5. Enhanced Human Simulation (heavy)
+      // Only enable when bot detection/challenge was detected for this attempt.
       const effectiveProfile = siteProfileManager.getProfile(hostname);
-      if (effectiveProfile.strategy === "full-js") {
+      if (effectiveProfile.strategy === "full-js" && wasChallenged) {
         logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
 
         await HumanSimulation.randomPause(300, 800);
@@ -1495,7 +1496,7 @@ export class ScraperService {
         await HumanSimulation.randomPause(400, 1000);
       } else {
         logger.debug(
-          `[ScraperService] Skipping enhanced human simulation for ${hostname} (strategy=${effectiveProfile.strategy})`,
+          `[ScraperService] Skipping enhanced human simulation for ${hostname} (strategy=${effectiveProfile.strategy}, challenged=${wasChallenged})`,
         );
       }
 
@@ -2205,9 +2206,10 @@ export class ScraperService {
         // Ignore platform detection errors; scraping must proceed.
       }
 
-      // 5. Enhanced Human Simulation (heavy) only for full-js profiles.
+      // 5. Enhanced Human Simulation (heavy)
+      // Only enable when bot detection/challenge was detected for this attempt.
       const effectiveProfile = siteProfileManager.getProfile(hostname);
-      if (effectiveProfile.strategy === "full-js") {
+      if (effectiveProfile.strategy === "full-js" && wasChallenged) {
         logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
 
         await HumanSimulation.randomPause(300, 800);
@@ -2219,7 +2221,7 @@ export class ScraperService {
         await HumanSimulation.randomPause(400, 1000);
       } else {
         logger.debug(
-          `[ScraperService] Skipping enhanced human simulation for ${hostname} (strategy=${effectiveProfile.strategy})`,
+          `[ScraperService] Skipping enhanced human simulation for ${hostname} (strategy=${effectiveProfile.strategy}, challenged=${wasChallenged})`,
         );
       }
 
