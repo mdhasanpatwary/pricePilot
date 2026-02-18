@@ -10,7 +10,7 @@
 
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
-import { ScrapeFailureType, PlatformType } from '@prisma/client';
+import { ScrapeFailureType, PlatformType, ScrapeExecutionStatus } from '@prisma/client';
 import { DetectionEngine, ProtectionType, HttpResponse } from './detection-engine';
 import { ProxyManager, Proxy } from './proxy-manager';
 import { RateLimiter } from './rate-limiter';
@@ -60,6 +60,7 @@ export interface ScrapeRequest {
  */
 export interface ScrapeResult {
     success: boolean;
+    scrapeStatus: ScrapeExecutionStatus;
     price?: number;
     currency?: string;
     protectionDetected: boolean;
@@ -73,6 +74,7 @@ export interface ScrapeResult {
     method?: 'api' | 'html'; // Extraction method used
     apiPattern?: Partial<APIPattern>; // API pattern used (if any)
     detectionTime?: number; // Time spent on API detection
+    proxyUsed?: boolean;
 }
 
 /**
@@ -158,7 +160,7 @@ export class ScrapeOrchestrator {
         // Requirement: 6.4
         await this.concurrencyLimiter.acquireSlot(request.competitorWebsiteId);
 
-        let result: ScrapeResult;
+        let result: ScrapeResult | null = null;
 
         try {
             // Step 1: Check cache for API pattern (unless forced detection)
@@ -303,6 +305,7 @@ export class ScrapeOrchestrator {
                             request,
                             {
                                 success: true,
+                                scrapeStatus: ScrapeExecutionStatus.SUCCESS,
                                 price: matchedProduct.price,
                                 currency: matchedProduct.currency,
                                 protectionDetected: false,
@@ -317,6 +320,7 @@ export class ScrapeOrchestrator {
 
                         result = {
                             success: true,
+                            scrapeStatus: ScrapeExecutionStatus.SUCCESS,
                             price: matchedProduct.price,
                             currency: matchedProduct.currency,
                             protectionDetected: false,
@@ -327,6 +331,7 @@ export class ScrapeOrchestrator {
                             method: 'api',
                             apiPattern,
                             detectionTime: detectionTime > 0 ? detectionTime : undefined,
+                            proxyUsed: false,
                         };
                     } else {
                         logger.warn('[ScrapeOrchestrator] No matching product found in API response', {
@@ -342,6 +347,7 @@ export class ScrapeOrchestrator {
                             request,
                             {
                                 success: false,
+                                scrapeStatus: ScrapeExecutionStatus.FAILED,
                                 protectionDetected: false,
                                 failureType,
                                 userAgent: 'api',
@@ -372,6 +378,7 @@ export class ScrapeOrchestrator {
                         request,
                         {
                             success: false,
+                            scrapeStatus: ScrapeExecutionStatus.FAILED,
                             protectionDetected: false,
                             failureType,
                             userAgent: 'api',
@@ -474,6 +481,7 @@ export class ScrapeOrchestrator {
 
             result = {
                 success: false,
+                scrapeStatus: ScrapeExecutionStatus.FAILED,
                 protectionDetected: false,
                 attempts: 1,
                 finalStrategy: ScrapingStrategy.HTTP_CLIENT,
@@ -481,21 +489,38 @@ export class ScrapeOrchestrator {
                 timestamp,
                 errorMessage,
                 method: 'html',
+                proxyUsed: false,
             };
         } finally {
             // Record result and adjust concurrency
             // Requirement: 6.6
             this.concurrencyLimiter.recordResult(
                 request.competitorWebsiteId,
-                result!.success,
-                result!.protectionDetected,
+                Boolean(result?.success),
+                Boolean(result?.protectionDetected),
                 Date.now() - startTime
             );
 
             this.concurrencyLimiter.releaseSlot(request.competitorWebsiteId);
+
+            if (result) {
+                await this.updateDomainFailureEscalation(request, result);
+                await this.recordScrapeCostMetric(request, result);
+            }
         }
 
-        return result;
+        return result || {
+            success: false,
+            scrapeStatus: ScrapeExecutionStatus.FAILED,
+            protectionDetected: false,
+            attempts: 1,
+            finalStrategy: ScrapingStrategy.HTTP_CLIENT,
+            responseTime: Date.now() - startTime,
+            timestamp,
+            errorMessage: 'Scrape result unavailable',
+            method: 'html',
+            proxyUsed: false,
+        };
     }
 
     /**
@@ -546,12 +571,14 @@ export class ScrapeOrchestrator {
         let consecutiveTimeouts = 0;
         const excludedProxyIds = new Set<string>();
         const domainRisk = await this.loadDomainRiskProfile(request.competitorWebsiteId, request.url);
+        let anyProxyUsed = false;
+        const effectiveMaxRetries = domainRisk.needsManualReview ? 1 : siteConfig.maxRetries;
 
         // Retry loop
-        while (attemptNumber <= siteConfig.maxRetries) {
+        while (attemptNumber <= effectiveMaxRetries) {
             logger.info('[ScrapeOrchestrator] Executing attempt', {
                 attemptNumber,
-                maxRetries: siteConfig.maxRetries,
+                maxRetries: effectiveMaxRetries,
                 strategy: currentStrategy,
                 competitorWebsiteId: request.competitorWebsiteId,
             });
@@ -574,6 +601,7 @@ export class ScrapeOrchestrator {
                     }
                 );
                 lastAttemptResult = attemptResult;
+                anyProxyUsed = anyProxyUsed || Boolean(attemptResult.proxyId);
 
                 // Log attempt
                 await this.logScrapeAttempt(request, attemptResult, currentStrategy, attemptNumber);
@@ -627,6 +655,7 @@ export class ScrapeOrchestrator {
 
                     return {
                         success: true,
+                        scrapeStatus: attemptResult.scrapeStatus || ScrapeExecutionStatus.SUCCESS,
                         price: attemptResult.price,
                         currency: attemptResult.currency,
                         protectionDetected: attemptResult.protectionDetected,
@@ -636,6 +665,7 @@ export class ScrapeOrchestrator {
                         responseTime: 0, // Will be set by caller
                         timestamp: new Date(),
                         screenshot: attemptResult.screenshot,
+                        proxyUsed: anyProxyUsed,
                     };
                 }
 
@@ -692,10 +722,10 @@ export class ScrapeOrchestrator {
                 }
 
                 // Check if we should retry
-                if (attemptNumber >= siteConfig.maxRetries) {
+                if (attemptNumber >= effectiveMaxRetries) {
                     logger.warn('[ScrapeOrchestrator] Max retries reached', {
                         attemptNumber,
-                        maxRetries: siteConfig.maxRetries,
+                        maxRetries: effectiveMaxRetries,
                     });
                     break;
                 }
@@ -764,6 +794,7 @@ export class ScrapeOrchestrator {
                     request,
                     {
                         success: false,
+                        scrapeStatus: ScrapeExecutionStatus.FAILED,
                         protectionDetected: false,
                         failureType,
                         proxyId: undefined,
@@ -781,7 +812,7 @@ export class ScrapeOrchestrator {
                 await this.rateLimiter.recordFailure(request.competitorWebsiteId);
 
                 // Check if we should retry
-                if (attemptNumber >= siteConfig.maxRetries) {
+                if (attemptNumber >= effectiveMaxRetries) {
                     break;
                 }
 
@@ -811,6 +842,7 @@ export class ScrapeOrchestrator {
 
         return {
             success: false,
+            scrapeStatus: lastAttemptResult?.scrapeStatus || ScrapeExecutionStatus.FAILED,
             protectionDetected: lastProtectionType !== undefined,
             protectionType: lastProtectionType,
             attempts: attemptNumber,
@@ -819,6 +851,7 @@ export class ScrapeOrchestrator {
             timestamp: new Date(),
             errorMessage: lastErrorMessage || 'All retry attempts failed',
             screenshot: lastScreenshot,
+            proxyUsed: anyProxyUsed,
         };
     }
 
@@ -874,6 +907,7 @@ export class ScrapeOrchestrator {
 
             return {
                 success: false,
+                scrapeStatus: ScrapeExecutionStatus.FAILED,
                 protectionDetected: false,
                 failureType,
                 proxyId: proxy?.id,
@@ -944,6 +978,7 @@ export class ScrapeOrchestrator {
 
             return {
                 success: false,
+                scrapeStatus: ScrapeExecutionStatus.FAILED,
                 protectionDetected: false,
                 failureType,
                 proxyId: proxy?.id,
@@ -1050,6 +1085,7 @@ export class ScrapeOrchestrator {
 
             return {
                 success: false,
+                scrapeStatus: ScrapeExecutionStatus.FAILED,
                 protectionDetected: false,
                 failureType,
                 proxyId: proxy?.id,
@@ -1212,6 +1248,7 @@ export class ScrapeOrchestrator {
             }
             return {
                 success: false,
+                scrapeStatus: ScrapeExecutionStatus.FAILED,
                 protectionDetected: true,
                 protectionType,
                 failureType: ScrapeFailureType.BOT_BLOCKED,
@@ -1236,6 +1273,7 @@ export class ScrapeOrchestrator {
         if (extraction.success && extraction.price) {
             return {
                 success: true,
+                scrapeStatus: ScrapeExecutionStatus.SUCCESS,
                 price: extraction.price,
                 currency: extraction.currency,
                 protectionDetected: false,
@@ -1266,8 +1304,10 @@ export class ScrapeOrchestrator {
             errorMessage = `${errorMessage} (structure fingerprint changed)`;
         }
 
+        const partial = this.isLikelyProductPage(response.body, response.finalUrl || request.url);
         return {
             success: false,
+            scrapeStatus: partial ? ScrapeExecutionStatus.PARTIAL : ScrapeExecutionStatus.FAILED,
             protectionDetected: false,
             failureType,
             proxyId,
@@ -1286,6 +1326,28 @@ export class ScrapeOrchestrator {
             return new URL(url).hostname;
         } catch {
             return fallback;
+        }
+    }
+
+    private isLikelyProductPage(html: string, url: string): boolean {
+        const body = (html || '').toLowerCase();
+        const markers = [
+            'itemtype="http://schema.org/product"',
+            'itemtype="https://schema.org/product"',
+            '"@type":"product"',
+            'property="og:type" content="product"',
+            'add to cart',
+            'buy now',
+            'product-detail',
+            'product-title',
+        ];
+        if (markers.some((m) => body.includes(m))) return true;
+
+        try {
+            const parsed = new URL(url);
+            return /product|item|sku|p\//i.test(parsed.pathname);
+        } catch {
+            return false;
         }
     }
 
@@ -1312,6 +1374,7 @@ export class ScrapeOrchestrator {
                 select: {
                     platformType: true,
                     protectionLevel: true,
+                    needsManualReview: true,
                 },
             });
 
@@ -1319,12 +1382,14 @@ export class ScrapeOrchestrator {
                 domain,
                 platformType: domainProfile?.platformType || PlatformType.GENERIC,
                 protectionLevel: domainProfile?.protectionLevel || 'UNKNOWN',
+                needsManualReview: domainProfile?.needsManualReview || false,
             };
         } catch {
             return {
                 domain,
                 platformType: PlatformType.GENERIC,
                 protectionLevel: 'UNKNOWN',
+                needsManualReview: false,
             };
         }
     }
@@ -1339,6 +1404,82 @@ export class ScrapeOrchestrator {
         if (failureType === ScrapeFailureType.BOT_BLOCKED) return 'BOT_BLOCKED';
         if (failureType === ScrapeFailureType.TIMEOUT) return 'TIMEOUT';
         return 'OTHER';
+    }
+
+    private async updateDomainFailureEscalation(
+        request: ScrapeRequest,
+        result: ScrapeResult
+    ): Promise<void> {
+        try {
+            const domain = this.getDomainKey(request.url, request.competitorWebsiteId);
+            const existing = await prisma.domainProfile.findUnique({
+                where: { domain },
+                select: { consecutiveFailures: true },
+            });
+
+            const currentFailures = existing?.consecutiveFailures || 0;
+            const nextFailures = result.success ? 0 : currentFailures + 1;
+            const needsManualReview = nextFailures >= 10;
+
+            await prisma.domainProfile.upsert({
+                where: { domain },
+                create: {
+                    domain,
+                    consecutiveFailures: nextFailures,
+                    needsManualReview,
+                    lastFailureAt: result.success ? null : new Date(),
+                },
+                update: {
+                    consecutiveFailures: nextFailures,
+                    needsManualReview,
+                    lastFailureAt: result.success ? null : new Date(),
+                },
+            });
+        } catch (error) {
+            logger.debug('[ScrapeOrchestrator] Failed to update domain failure escalation', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    private async recordScrapeCostMetric(
+        request: ScrapeRequest,
+        result: ScrapeResult
+    ): Promise<void> {
+        try {
+            const retryCount = Math.max((result.attempts || 1) - 1, 0);
+            const proxyUsed = Boolean(result.proxyUsed);
+            const baseCost =
+                result.responseTime / 1000 +
+                retryCount * 0.5 +
+                (proxyUsed ? 1.5 : 0);
+
+            const costPerValidScrape = result.scrapeStatus === ScrapeExecutionStatus.SUCCESS
+                ? baseCost
+                : null;
+
+            await prisma.scrapeCostMetric.create({
+                data: {
+                    tenantId: request.tenantId,
+                    competitorProductId: request.competitorProductId,
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    executionTimeMs: result.responseTime,
+                    retryCount,
+                    proxyUsed,
+                    finalSuccess: result.success,
+                    scrapeStatus: result.scrapeStatus,
+                    costPerValidScrape,
+                },
+            });
+        } catch (error) {
+            if (!this.isMissingColumnError(error)) {
+                logger.debug('[ScrapeOrchestrator] Failed to write scrape cost metric', {
+                    competitorWebsiteId: request.competitorWebsiteId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
     }
 
     private classifyExtractionFailure(extraction: ExtractionResult, statusCode: number): ScrapeFailureType {
@@ -1678,6 +1819,7 @@ export class ScrapeOrchestrator {
         attemptNumber: number
     ): Promise<void> {
         try {
+            const scrapeStatus = result.scrapeStatus || (result.success ? ScrapeExecutionStatus.SUCCESS : ScrapeExecutionStatus.FAILED);
             const baseData = {
                 tenantId: request.tenantId,
                 competitorProductId: request.competitorProductId,
@@ -1688,6 +1830,7 @@ export class ScrapeOrchestrator {
                 userAgent: result.userAgent,
                 contextCreated: result.contextCreated ?? false,
                 success: result.success,
+                scrapeStatus,
                 protectionDetected: result.protectionDetected,
                 protectionType: result.protectionType,
                 statusCode: result.statusCode,
@@ -2012,6 +2155,7 @@ export class ScrapeOrchestrator {
  */
 interface AttemptResult {
     success: boolean;
+    scrapeStatus?: ScrapeExecutionStatus;
     price?: number;
     currency?: string;
     protectionDetected: boolean;
@@ -2031,6 +2175,7 @@ interface DomainRiskProfile {
     domain: string;
     platformType: PlatformType;
     protectionLevel: string;
+    needsManualReview: boolean;
 }
 
 interface AttemptExecutionContext {

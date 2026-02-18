@@ -696,6 +696,8 @@ model Product {
   externalId                                             String?
   sku                                                    String?
   url                                                    String?
+  canonicalUrl                                           String?
+  normalizedSlug                                         String?
   title                                                  String
   brand                                                  String?
   model                                                  String?
@@ -738,8 +740,10 @@ model Product {
   matchesAsCompetitor                                    ProductMatch[]          @relation("ProductMatch_competitorProductIdToProduct")
   matchesAsUser                                          ProductMatch[]          @relation("ProductMatch_userProductIdToProduct")
   ScrapeAttempt                                          ScrapeAttempt[]
+  ScrapeCostMetric                                       ScrapeCostMetric[]
   ScrapeRetry                                            ScrapeRetry[]
   ProductVolatility                                      ProductVolatility?
+  ScrapePriceAnomaly                                     ScrapePriceAnomaly[]
 
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
   @@index([siteId])
@@ -749,6 +753,8 @@ model Product {
   @@index([tenantId, currentPrice])
   @@index([priceAnomalyActive])
   @@index([sku])
+  @@index([siteId, canonicalUrl])
+  @@index([siteId, normalizedSlug])
   @@index([siteId, url])
   @@index([updatedAt])
   @@index([nextScrapeAt])
@@ -1002,6 +1008,7 @@ model ScrapeAttempt {
   userAgent           String
   contextCreated      Boolean               @default(false)
   success             Boolean
+  scrapeStatus        ScrapeExecutionStatus @default(FAILED)
   protectionDetected  Boolean               @default(false)
   protectionType      String?
   failureType         ScrapeFailureType?
@@ -1023,9 +1030,53 @@ model ScrapeAttempt {
   @@index([createdAt])
   @@index([protectionDetected, protectionType])
   @@index([success])
+  @@index([scrapeStatus])
   @@index([failureType])
   @@index([competitorWebsiteId, failureType])
   @@index([tenantId])
+}
+
+model ScrapePriceAnomaly {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  competitorProductId String
+  competitorWebsiteId String
+  detectedPrice       Decimal  @db.Decimal(10, 2)
+  currency            String   @default("USD")
+  reasons             Json
+  details             Json?
+  status              String   @default("PENDING_VERIFICATION")
+  reviewNotes         String?
+  resolvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  Product             Product  @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([competitorProductId, createdAt])
+  @@index([competitorWebsiteId, status])
+  @@index([status, createdAt])
+  @@index([tenantId, status])
+}
+
+model ScrapeCostMetric {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  competitorProductId String
+  competitorWebsiteId String
+  executionTimeMs     Int
+  retryCount          Int      @default(0)
+  proxyUsed           Boolean  @default(false)
+  finalSuccess        Boolean
+  scrapeStatus        ScrapeExecutionStatus
+  costPerValidScrape  Float?
+  createdAt           DateTime @default(now())
+  Product             Product  @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+
+  @@index([competitorWebsiteId, createdAt])
+  @@index([createdAt])
+  @@index([tenantId, createdAt])
 }
 
 model ScrapeRetry {
@@ -1222,6 +1273,8 @@ model Site {
   Product             Product[]
   ProxySiteHealth     ProxySiteHealth[]
   ScrapeAttempt       ScrapeAttempt[]
+  ScrapeCostMetric    ScrapeCostMetric[]
+  ScrapePriceAnomaly  ScrapePriceAnomaly[]
   ScrapeRetry         ScrapeRetry[]
   ScrapingAlert       ScrapingAlert[]
   ScrapingConfig      ScrapingConfig?
@@ -1261,11 +1314,15 @@ model DomainProfile {
   avgSuccessRate  Float         @default(0)
   blockRate       Float         @default(0)
   avgResponseTime Float         @default(0)
+  needsManualReview Boolean     @default(false)
+  consecutiveFailures Int       @default(0)
+  lastFailureAt   DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([platformType])
   @@index([protectionLevel])
+  @@index([needsManualReview])
 }
 
 model DomainSearchPattern {
@@ -1674,6 +1731,13 @@ enum ScrapeFailureType {
   PARSE_FAILED
   PRICE_ZERO
   TIMEOUT
+}
+
+enum ScrapeExecutionStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+  ANOMALY
 }
 
 model ApiDetectionMetric {

@@ -4,6 +4,12 @@ import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { withDbRetry } from "@/lib/utils/db-retry";
 import { SystemConfigService } from "@/lib/config";
+import {
+  extractSlugFromUrl,
+  normalizeCanonicalUrl,
+  normalizeProductSlug,
+  normalizeSku,
+} from "@/lib/services/product-dedup";
 
 function sanitizeQueueSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -175,10 +181,24 @@ export class DiscoveryService {
 
             // Atomic creation with duplicate check
             await withDbRetry(() => prisma.$transaction(async (tx) => {
-              // But better yet: if result.price is valid, we create the product.
-              // If the competitor product already exists with the same URL, we should reuse it.
+              const canonicalUrl = normalizeCanonicalUrl(result.url);
+              const normalizedSku = normalizeSku(result.sku);
+              const normalizedSlug = extractSlugFromUrl(result.url) || normalizeProductSlug(result.title);
+
+              // Dedup chain:
+              // 1) canonical URL
+              // 2) normalized SKU
+              // 3) normalized slug fallback
               let compProduct = await tx.product.findFirst({
-                where: { url: result.url, siteId: site.id }
+                where: {
+                  siteId: site.id,
+                  OR: [
+                    ...(canonicalUrl ? [{ canonicalUrl }] : []),
+                    ...(normalizedSku ? [{ sku: normalizedSku }] : []),
+                    ...(normalizedSlug ? [{ normalizedSlug }] : []),
+                    { url: result.url },
+                  ],
+                }
               });
 
               if (!compProduct) {
@@ -187,9 +207,11 @@ export class DiscoveryService {
                     tenantId,
                     siteId: site.id,
                     url: result.url,
+                    canonicalUrl,
+                    normalizedSlug,
                     title: result.title,
                     imageUrl: result.imageUrl,
-                    sku: result.sku ?? undefined,
+                    sku: normalizedSku ?? undefined,
                     brand: result.brand ?? undefined,
                     model: result.model ?? undefined,
                     currentPrice: result.price,
@@ -205,12 +227,14 @@ export class DiscoveryService {
                   where: { id: compProduct.id },
                   data: {
                     title: result.title,
+                    canonicalUrl: canonicalUrl || compProduct.canonicalUrl,
+                    normalizedSlug: normalizedSlug || compProduct.normalizedSlug,
                     currentPrice: result.price,
                     inStock: result.inStock,
                     currency: result.currency || "BDT",
                     lastCrawledAt: new Date(),
                     ...(result.imageUrl ? { imageUrl: result.imageUrl } : {}),
-                    ...(result.sku ? { sku: result.sku } : {}),
+                    ...(normalizedSku ? { sku: normalizedSku } : {}),
                     ...(result.brand ? { brand: result.brand } : {}),
                     ...(result.model ? { model: result.model } : {}),
                   }

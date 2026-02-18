@@ -11,6 +11,9 @@ import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { ScrapeOrchestrator, ScrapeRequest, ScrapeResult } from './scrape-orchestrator';
 import { detectPriceAnomaly } from '../price-anomaly';
+import { RetryQueueService } from '@/lib/services/retry-queue';
+import { ScrapeExecutionStatus } from '@prisma/client';
+import { extractSlugFromUrl, normalizeCanonicalUrl, normalizeSku } from '@/lib/services/product-dedup';
 
 /**
  * ScraperAdapter class
@@ -20,9 +23,11 @@ import { detectPriceAnomaly } from '../price-anomaly';
  */
 export class ScraperAdapter {
     private orchestrator: ScrapeOrchestrator;
+    private retryQueue: RetryQueueService;
 
     constructor() {
         this.orchestrator = new ScrapeOrchestrator();
+        this.retryQueue = RetryQueueService.getInstance();
     }
 
     /**
@@ -80,7 +85,7 @@ export class ScraperAdapter {
             const result: ScrapeResult = await this.orchestrator.executeScrape(request);
 
             // Update database with results
-            await this.updateDatabaseWithResults(competitorProductId, result);
+            await this.updateDatabaseWithResults(competitorProductId, result, url, tenantId, product.siteId);
 
             // Convert to legacy format
             if (result.success && result.price) {
@@ -152,18 +157,35 @@ export class ScraperAdapter {
      */
     private async updateDatabaseWithResults(
         competitorProductId: string,
-        result: ScrapeResult
+        result: ScrapeResult,
+        sourceUrl: string,
+        tenantId: string,
+        siteId: string
     ): Promise<void> {
         try {
             const existing = await prisma.product.findUnique({
                 where: { id: competitorProductId },
-                select: { currentPrice: true, inStock: true, currency: true, priceAnomalyActive: true },
+                select: {
+                    currentPrice: true,
+                    inStock: true,
+                    currency: true,
+                    priceAnomalyActive: true,
+                    title: true,
+                    sku: true,
+                },
             });
 
             const updateData: any = {
                 lastCrawledAt: result.timestamp,
                 updatedAt: new Date(),
+                canonicalUrl: normalizeCanonicalUrl(sourceUrl),
+                normalizedSlug: extractSlugFromUrl(sourceUrl) || null,
             };
+
+            const normalizedSku = normalizeSku(existing?.sku || undefined);
+            if (normalizedSku) {
+                updateData.sku = normalizedSku;
+            }
 
             // Update price if successful
             if (result.success && result.price) {
@@ -191,6 +213,41 @@ export class ScraperAdapter {
                     await prisma.product.update({
                         where: { id: competitorProductId },
                         data: updateData,
+                    });
+
+                    await prisma.scrapePriceAnomaly.create({
+                        data: {
+                            tenantId,
+                            competitorProductId,
+                            competitorWebsiteId: siteId,
+                            detectedPrice: result.price,
+                            currency: result.currency || existing?.currency || 'USD',
+                            reasons: anomaly.reasons as any,
+                            details: anomaly.details as any,
+                        },
+                    });
+
+                    const latestAttempt = await prisma.scrapeAttempt.findFirst({
+                        where: {
+                            tenantId,
+                            competitorProductId,
+                        },
+                        orderBy: { createdAt: 'desc' },
+                        select: { id: true },
+                    });
+                    if (latestAttempt) {
+                        await prisma.scrapeAttempt.update({
+                            where: { id: latestAttempt.id },
+                            data: { scrapeStatus: ScrapeExecutionStatus.ANOMALY },
+                        });
+                    }
+
+                    await this.scheduleRetryIfAllowed({
+                        tenantId,
+                        siteId,
+                        productId: competitorProductId,
+                        url: sourceUrl,
+                        error: 'ANOMALY detected - pending verification re-scrape required',
                     });
                     return;
                 }
@@ -223,6 +280,16 @@ export class ScraperAdapter {
                 data: updateData,
             });
 
+            if (result.scrapeStatus === ScrapeExecutionStatus.PARTIAL) {
+                await this.scheduleRetryIfAllowed({
+                    tenantId,
+                    siteId,
+                    productId: competitorProductId,
+                    url: sourceUrl,
+                    error: 'PARTIAL scrape: product found but price missing',
+                });
+            }
+
             logger.debug('[ScraperAdapter] Database updated', {
                 competitorProductId,
                 success: result.success,
@@ -235,6 +302,49 @@ export class ScraperAdapter {
                 error: error instanceof Error ? error.message : String(error),
             });
             // Don't throw - scraping succeeded even if DB update failed
+        }
+    }
+
+    private async scheduleRetryIfAllowed(options: {
+        tenantId: string;
+        siteId: string;
+        productId: string;
+        url: string;
+        error: string;
+    }): Promise<void> {
+        const manualReview = await this.isDomainUnderManualReview(options.siteId, options.url);
+        if (manualReview) {
+            logger.warn('[ScraperAdapter] Retry skipped: domain requires manual review', {
+                siteId: options.siteId,
+                productId: options.productId,
+            });
+            return;
+        }
+
+        await this.retryQueue.addToRetryQueue({
+            tenantId: options.tenantId,
+            siteId: options.siteId,
+            productId: options.productId,
+            url: options.url,
+            error: options.error,
+            maxRetries: 4,
+        });
+    }
+
+    private async isDomainUnderManualReview(siteId: string, url: string): Promise<boolean> {
+        try {
+            const site = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: { baseUrl: true },
+            });
+            const domain = site?.baseUrl ? new URL(site.baseUrl).hostname : new URL(url).hostname;
+            const profile = await prisma.domainProfile.findUnique({
+                where: { domain },
+                select: { needsManualReview: true },
+            });
+            return Boolean(profile?.needsManualReview);
+        } catch {
+            return false;
         }
     }
 
