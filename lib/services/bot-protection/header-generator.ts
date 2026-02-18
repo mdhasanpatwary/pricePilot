@@ -80,6 +80,8 @@ const ACCEPT_LANGUAGES = [
  */
 const DESKTOP_PLATFORMS = ['"Windows"', '"macOS"', '"Linux"'];
 const MOBILE_PLATFORMS = ['"Android"', '"iOS"'];
+const CACHE_CONTROL_VARIANTS = ['max-age=0', 'no-cache', 'max-age=0, no-cache'];
+const DNT_VARIANTS = ['1', '0'];
 
 /**
  * Generate realistic HTTP headers
@@ -110,6 +112,10 @@ export function generateHeaders(options: HeaderOptions): Record<string, string> 
     } else {
         baseHeaders['sec-ch-ua-platform'] = MOBILE_PLATFORMS[Math.floor(Math.random() * MOBILE_PLATFORMS.length)];
     }
+
+    // Minor variance that does not alter request semantics.
+    baseHeaders['Cache-Control'] = CACHE_CONTROL_VARIANTS[Math.floor(Math.random() * CACHE_CONTROL_VARIANTS.length)];
+    baseHeaders['DNT'] = DNT_VARIANTS[Math.floor(Math.random() * DNT_VARIANTS.length)];
 
     // Add referer if provided
     if (referer) {

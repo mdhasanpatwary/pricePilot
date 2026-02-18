@@ -75,6 +75,9 @@ export class HttpScraper {
         const startTime = Date.now();
 
         try {
+            // Small jitter prevents perfectly periodic request signatures.
+            await this.sleep(this.randomJitterMs(30, 140));
+
             // Build axios request configuration
             const axiosConfig: AxiosRequestConfig = {
                 url: config.url,
@@ -176,5 +179,13 @@ export class HttpScraper {
                 }
                 : undefined,
         };
+    }
+
+    private randomJitterMs(minMs: number, maxMs: number): number {
+        return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+    }
+
+    private async sleep(ms: number): Promise<void> {
+        await new Promise((resolve) => setTimeout(resolve, ms));
     }
 }

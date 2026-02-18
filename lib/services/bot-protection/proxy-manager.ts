@@ -42,6 +42,17 @@ export interface ProxyHealth {
   cooldownUntil: Date | null;
 }
 
+export interface ProxySelectionOptions {
+  excludeProxyIds?: string[];
+}
+
+export interface ProxyOutcomeDetails {
+  responseTimeMs?: number;
+  statusCode?: number;
+  failureType?: string;
+  blocked?: boolean;
+}
+
 /**
  * ProxyManager class
  *
@@ -59,12 +70,16 @@ export class ProxyManager {
    *
    * Requirements: 2.1, 2.6
    */
-  async getProxy(competitorWebsiteId: string): Promise<Proxy | null> {
+  async getProxy(competitorWebsiteId: string, options?: ProxySelectionOptions): Promise<Proxy | null> {
     try {
       const now = new Date();
+      const excludedProxyIds = new Set(options?.excludeProxyIds || []);
       const proxies = await prisma.proxy.findMany({
         where: { status: 'active' },
-        include: { ProxySiteHealth: { where: { competitorWebsiteId } } },
+        include: {
+          ProxySiteHealth: { where: { competitorWebsiteId } },
+          ProxyHealthSummary: true,
+        },
       });
 
       if (proxies.length === 0) {
@@ -74,6 +89,10 @@ export class ProxyManager {
 
       const availableProxies = proxies
         .map((proxyRecord) => {
+          if (excludedProxyIds.has(proxyRecord.id)) return null;
+
+          if (proxyRecord.ProxyHealthSummary?.disabledAt) return null;
+
           const globalTotal = proxyRecord.globalSuccessCount + proxyRecord.globalFailureCount;
           const globalSuccessRate = globalTotal > 0 ? proxyRecord.globalSuccessCount / globalTotal : 0;
           if (globalTotal >= 10 && globalSuccessRate < 0.1) return null;
@@ -139,7 +158,7 @@ export class ProxyManager {
       const topProxies = availableProxies.slice(0, Math.min(3, availableProxies.length));
       const selected = topProxies[Math.floor(Math.random() * topProxies.length)];
 
-      logger.info(`Selected proxy \${selected.proxy.id} for site \${competitorWebsiteId}`);
+      logger.info(`Selected proxy ${selected.proxy.id} for site ${competitorWebsiteId}`);
       return selected.proxy;
     } catch (error) {
       logger.error('Error getting proxy', { error });
@@ -151,7 +170,11 @@ export class ProxyManager {
    * Mark a proxy as failed for a specific competitor website
    * Requirements: 2.2, 2.3, 2.4
    */
-  async markProxyFailed(proxyId: string, competitorWebsiteId: string): Promise<void> {
+  async markProxyFailed(
+    proxyId: string,
+    competitorWebsiteId: string,
+    details?: ProxyOutcomeDetails
+  ): Promise<void> {
     try {
       const now = new Date();
       let siteHealth = await prisma.proxySiteHealth.findUnique({
@@ -159,8 +182,16 @@ export class ProxyManager {
       });
 
       if (!siteHealth) {
+        const cooldownUntil = new Date(now.getTime() + 5 * 60 * 1000);
         await prisma.proxySiteHealth.create({
-          data: { proxyId, competitorWebsiteId, successCount: 0, failureCount: 1, lastFailureAt: now },
+          data: {
+            proxyId,
+            competitorWebsiteId,
+            successCount: 0,
+            failureCount: 1,
+            lastFailureAt: now,
+            cooldownUntil,
+          },
         });
       } else {
         const newFailureCount = siteHealth.failureCount + 1;
@@ -171,12 +202,22 @@ export class ProxyManager {
           where: { proxyId_competitorWebsiteId: { proxyId, competitorWebsiteId } },
           data: { failureCount: newFailureCount, lastFailureAt: now, cooldownUntil },
         });
-        logger.info(`Proxy \${proxyId} failed for site \${competitorWebsiteId} (cooldown: \${cooldownMinutes} min)`);
+        logger.info(`Proxy ${proxyId} failed for site ${competitorWebsiteId} (cooldown: ${cooldownMinutes} min)`);
       }
 
       await prisma.proxy.update({
         where: { id: proxyId },
         data: { globalFailureCount: { increment: 1 } },
+      });
+
+      await this.recordProxyHealthSummary(proxyId, {
+        success: false,
+        responseTimeMs: details?.responseTimeMs,
+        blocked:
+          details?.blocked === true ||
+          details?.statusCode === 403 ||
+          details?.statusCode === 429 ||
+          details?.failureType === 'BOT_BLOCKED',
       });
 
       await this.checkAllProxiesBlocked(competitorWebsiteId);
@@ -189,7 +230,11 @@ export class ProxyManager {
    * Mark a proxy as successful for a specific competitor website
    * Requirements: 2.2, 2.3, 2.4
    */
-  async markProxySuccess(proxyId: string, competitorWebsiteId: string): Promise<void> {
+  async markProxySuccess(
+    proxyId: string,
+    competitorWebsiteId: string,
+    details?: ProxyOutcomeDetails
+  ): Promise<void> {
     try {
       const now = new Date();
       const siteHealth = await prisma.proxySiteHealth.findUnique({
@@ -211,8 +256,78 @@ export class ProxyManager {
         where: { id: proxyId },
         data: { globalSuccessCount: { increment: 1 } },
       });
+
+      await this.recordProxyHealthSummary(proxyId, {
+        success: true,
+        responseTimeMs: details?.responseTimeMs,
+        blocked: false,
+      });
     } catch (error) {
       logger.error('Error marking proxy as successful', { error });
+    }
+  }
+
+  private async recordProxyHealthSummary(
+    proxyId: string,
+    params: { success: boolean; blocked: boolean; responseTimeMs?: number }
+  ): Promise<void> {
+    const existing = await prisma.proxyHealthSummary.findUnique({
+      where: { proxyId },
+    });
+
+    const nextTotalAttempts = (existing?.totalAttempts || 0) + 1;
+    const nextSuccessfulAttempts = (existing?.successfulAttempts || 0) + (params.success ? 1 : 0);
+    const nextBlockedAttempts = (existing?.blockedAttempts || 0) + (params.blocked ? 1 : 0);
+    const nextSuccessRate = nextTotalAttempts > 0 ? nextSuccessfulAttempts / nextTotalAttempts : 0;
+    const nextBlockRate = nextTotalAttempts > 0 ? nextBlockedAttempts / nextTotalAttempts : 0;
+
+    const previousAvg = existing?.avgResponseTime || 0;
+    const measuredResponseTime = typeof params.responseTimeMs === 'number' && params.responseTimeMs > 0
+      ? params.responseTimeMs
+      : previousAvg;
+    const nextAvgResponseTime = nextTotalAttempts > 0
+      ? ((previousAvg * (nextTotalAttempts - 1)) + measuredResponseTime) / nextTotalAttempts
+      : measuredResponseTime;
+
+    const disableByLowSuccess = nextTotalAttempts >= 20 && nextSuccessRate < 0.1;
+    const disableByBlockRate = nextTotalAttempts >= 10 && nextBlockRate > 0.6;
+    const shouldDisable = disableByLowSuccess || disableByBlockRate;
+
+    await prisma.proxyHealthSummary.upsert({
+      where: { proxyId },
+      create: {
+        proxyId,
+        totalAttempts: nextTotalAttempts,
+        successfulAttempts: nextSuccessfulAttempts,
+        blockedAttempts: nextBlockedAttempts,
+        successRate: nextSuccessRate,
+        blockRate: nextBlockRate,
+        avgResponseTime: nextAvgResponseTime,
+        lastFailureAt: params.success ? null : new Date(),
+        disabledAt: shouldDisable ? new Date() : null,
+      },
+      update: {
+        totalAttempts: nextTotalAttempts,
+        successfulAttempts: nextSuccessfulAttempts,
+        blockedAttempts: nextBlockedAttempts,
+        successRate: nextSuccessRate,
+        blockRate: nextBlockRate,
+        avgResponseTime: nextAvgResponseTime,
+        lastFailureAt: params.success ? existing?.lastFailureAt || null : new Date(),
+        disabledAt: shouldDisable ? (existing?.disabledAt || new Date()) : null,
+      },
+    });
+
+    if (shouldDisable) {
+      await prisma.proxy.update({
+        where: { id: proxyId },
+        data: { status: 'disabled' },
+      });
+      logger.warn(`Auto-disabled unhealthy proxy ${proxyId}`, {
+        successRate: nextSuccessRate,
+        blockRate: nextBlockRate,
+        totalAttempts: nextTotalAttempts,
+      });
     }
   }
 
@@ -227,7 +342,7 @@ export class ProxyManager {
         include: { ProxySiteHealth: true },
       });
 
-      if (!proxyRecord) throw new Error(`Proxy \${proxyId} not found`);
+      if (!proxyRecord) throw new Error(`Proxy ${proxyId} not found`);
 
       const globalTotal = proxyRecord.globalSuccessCount + proxyRecord.globalFailureCount;
       const globalSuccessRate = globalTotal > 0 ? proxyRecord.globalSuccessCount / globalTotal : 0;
@@ -298,7 +413,7 @@ export class ProxyManager {
       });
 
       if (allBlocked) {
-        logger.error(`All proxies blocked for competitor website \${competitorWebsiteId}`);
+        logger.error(`All proxies blocked for competitor website ${competitorWebsiteId}`);
 
         const site = await prisma.site.findUnique({
           where: { id: competitorWebsiteId },
@@ -313,11 +428,11 @@ export class ProxyManager {
               severity: 'critical',
               type: 'all_proxies_blocked',
               title: 'All Proxies Blocked',
-              message: `All proxies are currently blocked or in cooldown for \${site.baseUrl}. Scraping operations cannot proceed until proxies recover or new proxies are added.`,
+              message: `All proxies are currently blocked or in cooldown for ${site.baseUrl}. Scraping operations cannot proceed until proxies recover or new proxies are added.`,
               metadata: { activeProxyCount: activeProxies.length, timestamp: now.toISOString() },
             },
           });
-          logger.info(`Created critical alert for all proxies blocked on site \${competitorWebsiteId}`);
+          logger.info(`Created critical alert for all proxies blocked on site ${competitorWebsiteId}`);
         }
       }
     } catch (error) {

@@ -196,6 +196,8 @@ export class HeadlessBrowserScraper {
                 }
             });
 
+            await page.waitForTimeout(this.randomJitterMs(50, 180));
+
             // Navigate to URL
             const response = await page.goto(config.url, {
                 timeout: config.timeout,
@@ -654,5 +656,47 @@ export class HeadlessBrowserScraper {
     async invalidateDomainContext(domainKey: string): Promise<void> {
         if (!this.usePool) return;
         await this.browserPool.invalidateByDomainKey(domainKey);
+    }
+
+    async warmupSession(config: BrowserScrapeConfig, warmupUrl: string): Promise<void> {
+        if (!this.usePool) return;
+
+        let page: Page | null = null;
+        let context: BrowserContext | null = null;
+        try {
+            context = await this.browserPool.acquire({
+                ...config,
+                url: warmupUrl,
+            });
+            page = await context.newPage();
+            await page.setExtraHTTPHeaders(config.headers);
+            await page.waitForTimeout(this.randomJitterMs(100, 260));
+            await page.goto(warmupUrl, {
+                timeout: Math.min(config.timeout, 15000),
+                waitUntil: 'domcontentloaded',
+            });
+            await page.waitForTimeout(this.randomJitterMs(120, 320));
+        } catch {
+            // Warmup is best-effort; main scrape flow must continue.
+        } finally {
+            if (page) {
+                try {
+                    await page.close();
+                } catch {
+                    // Ignore close errors
+                }
+            }
+            if (context) {
+                try {
+                    await this.browserPool.release(context);
+                } catch {
+                    // Ignore pool release errors
+                }
+            }
+        }
+    }
+
+    private randomJitterMs(minMs: number, maxMs: number): number {
+        return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
     }
 }

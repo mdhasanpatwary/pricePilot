@@ -814,11 +814,31 @@ model Proxy {
   globalFailureCount Int               @default(0)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime @updatedAt
+  ProxyHealthSummary ProxyHealthSummary?
   ProxySiteHealth    ProxySiteHealth[]
   ScrapeAttempt      ScrapeAttempt[]
 
   @@unique([host, port])
   @@index([status])
+}
+
+model ProxyHealthSummary {
+  id                 String   @id @default(cuid())
+  proxyId            String   @unique
+  successRate        Float    @default(0)
+  blockRate          Float    @default(0)
+  avgResponseTime    Float    @default(0)
+  lastFailureAt      DateTime?
+  totalAttempts      Int      @default(0)
+  successfulAttempts Int      @default(0)
+  blockedAttempts    Int      @default(0)
+  disabledAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  Proxy              Proxy    @relation(fields: [proxyId], references: [id], onDelete: Cascade)
+
+  @@index([blockRate])
+  @@index([successRate])
 }
 
 model ProxyHealth {

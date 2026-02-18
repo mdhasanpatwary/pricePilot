@@ -10,6 +10,11 @@
  */
 export type UserAgentType = 'desktop' | 'mobile';
 
+export interface UserAgentOutcome {
+    success: boolean;
+    failureType?: 'PARTIAL' | 'PRICE_ZERO' | 'PARSE_FAILED' | 'STRUCTURE_CHANGED' | 'BOT_BLOCKED' | 'TIMEOUT' | 'OTHER';
+}
+
 /**
  * Desktop user agents (Chrome, Firefox, Safari, Edge)
  * Updated with current browser versions as of 2024
@@ -123,6 +128,7 @@ export class UserAgentPool {
     private mobileAgents: string[];
     private lastUsedIndex: Map<UserAgentType, number>;
     private stickyAgents: Map<string, string>;
+    private userAgentScores: Map<string, number>;
 
     constructor() {
         this.desktopAgents = [...DESKTOP_USER_AGENTS];
@@ -132,6 +138,7 @@ export class UserAgentPool {
             ['mobile', -1],
         ]);
         this.stickyAgents = new Map();
+        this.userAgentScores = new Map();
     }
 
     /**
@@ -140,10 +147,8 @@ export class UserAgentPool {
      * @param type - User agent type (desktop or mobile)
      * @returns Random user agent string
      */
-    getRandomUserAgent(type: UserAgentType = 'desktop'): string {
-        const agents = type === 'desktop' ? this.desktopAgents : this.mobileAgents;
-        const randomIndex = Math.floor(Math.random() * agents.length);
-        return agents[randomIndex];
+    getRandomUserAgent(type: UserAgentType = 'desktop', key?: string): string {
+        return this.getWeightedUserAgent(type, key);
     }
 
     /**
@@ -174,13 +179,47 @@ export class UserAgentPool {
         const existing = this.stickyAgents.get(key);
         if (existing) return existing;
 
-        const ua = this.getRandomUserAgent(type);
+        const ua = this.getWeightedUserAgent(type, key);
         this.stickyAgents.set(key, ua);
         return ua;
     }
 
     invalidateStickyUserAgent(key: string): void {
         this.stickyAgents.delete(key);
+    }
+
+    recordOutcome(key: string, userAgent: string, outcome: UserAgentOutcome): void {
+        const scoreKey = this.getScoreKey(key, userAgent);
+        const currentScore = this.userAgentScores.get(scoreKey) ?? 1.0;
+        let delta = 0;
+
+        if (outcome.success) {
+            // Count only full successful scrape as a success signal.
+            delta = 0.25;
+        } else {
+            switch (outcome.failureType) {
+                case 'PRICE_ZERO':
+                    delta = -0.35;
+                    break;
+                case 'PARSE_FAILED':
+                case 'STRUCTURE_CHANGED':
+                    delta = -0.25;
+                    break;
+                case 'BOT_BLOCKED':
+                case 'TIMEOUT':
+                    delta = -0.45;
+                    break;
+                case 'PARTIAL':
+                    delta = -0.2;
+                    break;
+                default:
+                    delta = -0.15;
+                    break;
+            }
+        }
+
+        const nextScore = Math.min(5, Math.max(0.1, currentScore + delta));
+        this.userAgentScores.set(scoreKey, nextScore);
     }
 
     /**
@@ -216,6 +255,39 @@ export class UserAgentPool {
         this.lastUsedIndex.set('desktop', -1);
         this.lastUsedIndex.set('mobile', -1);
         this.stickyAgents.clear();
+    }
+
+    private getWeightedUserAgent(type: UserAgentType, key?: string): string {
+        const agents = type === 'desktop' ? this.desktopAgents : this.mobileAgents;
+        if (agents.length === 0) {
+            throw new Error('No user agents available');
+        }
+
+        // Exploration to avoid converging too aggressively.
+        if (Math.random() < 0.2 || !key) {
+            const randomIndex = Math.floor(Math.random() * agents.length);
+            return agents[randomIndex];
+        }
+
+        let totalWeight = 0;
+        const weights = agents.map((ua) => {
+            const score = this.userAgentScores.get(this.getScoreKey(key, ua)) ?? 1.0;
+            const weight = Math.max(0.05, score);
+            totalWeight += weight;
+            return weight;
+        });
+
+        let pick = Math.random() * totalWeight;
+        for (let i = 0; i < agents.length; i++) {
+            pick -= weights[i];
+            if (pick <= 0) return agents[i];
+        }
+
+        return agents[agents.length - 1];
+    }
+
+    private getScoreKey(key: string, userAgent: string): string {
+        return `${key}::${userAgent}`;
     }
 
     /**

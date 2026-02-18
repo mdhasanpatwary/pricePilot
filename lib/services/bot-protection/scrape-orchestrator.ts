@@ -10,7 +10,7 @@
 
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
-import { ScrapeFailureType } from '@prisma/client';
+import { ScrapeFailureType, PlatformType } from '@prisma/client';
 import { DetectionEngine, ProtectionType, HttpResponse } from './detection-engine';
 import { ProxyManager, Proxy } from './proxy-manager';
 import { RateLimiter } from './rate-limiter';
@@ -542,6 +542,10 @@ export class ScrapeOrchestrator {
         let lastProtectionType: ProtectionType | undefined;
         let lastErrorMessage: string | undefined;
         let lastScreenshot: Buffer | undefined;
+        let lastAttemptResult: AttemptResult | undefined;
+        let consecutiveTimeouts = 0;
+        const excludedProxyIds = new Set<string>();
+        const domainRisk = await this.loadDomainRiskProfile(request.competitorWebsiteId, request.url);
 
         // Retry loop
         while (attemptNumber <= siteConfig.maxRetries) {
@@ -560,8 +564,16 @@ export class ScrapeOrchestrator {
                 const attemptResult = await this.executeSingleAttempt(
                     request,
                     siteConfig,
-                    currentStrategy
+                    currentStrategy,
+                    {
+                        attemptNumber,
+                        domainRisk,
+                        previousAttempt: lastAttemptResult,
+                        consecutiveTimeouts,
+                        excludedProxyIds: Array.from(excludedProxyIds),
+                    }
                 );
+                lastAttemptResult = attemptResult;
 
                 // Log attempt
                 await this.logScrapeAttempt(request, attemptResult, currentStrategy, attemptNumber);
@@ -575,9 +587,19 @@ export class ScrapeOrchestrator {
                     if (attemptResult.proxyId) {
                         await this.proxyManager.markProxySuccess(
                             attemptResult.proxyId,
-                            request.competitorWebsiteId
+                            request.competitorWebsiteId,
+                            {
+                                responseTimeMs: attemptResult.responseTimeMs,
+                                statusCode: attemptResult.statusCode,
+                            }
                         );
                     }
+
+                    this.userAgentPool.recordOutcome(
+                        this.getDomainKey(request.url, request.competitorWebsiteId),
+                        attemptResult.userAgent,
+                        { success: true }
+                    );
 
                     // Update last known good price
                     if (attemptResult.price) {
@@ -632,8 +654,41 @@ export class ScrapeOrchestrator {
                 if (attemptResult.proxyId) {
                     await this.proxyManager.markProxyFailed(
                         attemptResult.proxyId,
-                        request.competitorWebsiteId
+                        request.competitorWebsiteId,
+                        {
+                            responseTimeMs: attemptResult.responseTimeMs,
+                            statusCode: attemptResult.statusCode,
+                            failureType: attemptResult.failureType,
+                            blocked:
+                                attemptResult.failureType === ScrapeFailureType.BOT_BLOCKED ||
+                                attemptResult.statusCode === 403 ||
+                                attemptResult.statusCode === 429,
+                        }
                     );
+                }
+
+                const uaFailureType = this.mapFailureTypeToUaOutcome(attemptResult.failureType);
+                this.userAgentPool.recordOutcome(
+                    this.getDomainKey(request.url, request.competitorWebsiteId),
+                    attemptResult.userAgent,
+                    { success: false, failureType: uaFailureType }
+                );
+
+                if (
+                    attemptResult.proxyId &&
+                    (
+                        attemptResult.statusCode === 403 ||
+                        attemptResult.failureType === ScrapeFailureType.BOT_BLOCKED ||
+                        attemptResult.failureType === ScrapeFailureType.TIMEOUT
+                    )
+                ) {
+                    excludedProxyIds.add(attemptResult.proxyId);
+                }
+
+                if (attemptResult.failureType === ScrapeFailureType.TIMEOUT) {
+                    consecutiveTimeouts += 1;
+                } else {
+                    consecutiveTimeouts = 0;
                 }
 
                 // Check if we should retry
@@ -778,18 +833,22 @@ export class ScrapeOrchestrator {
     private async executeSingleAttempt(
         request: ScrapeRequest,
         siteConfig: SiteConfiguration,
-        strategy: ScrapingStrategy
+        strategy: ScrapingStrategy,
+        executionContext: AttemptExecutionContext
     ): Promise<AttemptResult> {
         const domainKey = this.getDomainKey(request.url, request.competitorWebsiteId);
         const userAgent = this.isHttpStrategy(strategy)
-            ? this.userAgentPool.getRandomUserAgent()
+            ? this.userAgentPool.getRandomUserAgent('desktop', domainKey)
             : this.userAgentPool.getStickyUserAgent(domainKey);
         let proxy: Proxy | null = null;
 
         try {
-            // Get proxy if strategy requires it
-            proxy = this.shouldUseProxy(strategy)
-                ? await this.proxyManager.getProxy(request.competitorWebsiteId)
+            // Adaptive proxy decision: low-risk OpenCart stays direct unless we see blocks/retry pressure.
+            const useProxy = this.shouldUseProxy(strategy, siteConfig, executionContext);
+            proxy = useProxy
+                ? await this.proxyManager.getProxy(request.competitorWebsiteId, {
+                    excludeProxyIds: executionContext.excludedProxyIds,
+                })
                 : null;
 
             // Get cookies
@@ -799,7 +858,7 @@ export class ScrapeOrchestrator {
             if (this.isHttpStrategy(strategy)) {
                 return this.executeHttpScrape(request, siteConfig, proxy, userAgent, cookies);
             } else {
-                return this.executeBrowserScrape(request, siteConfig, strategy, proxy, userAgent, cookies);
+                return this.executeBrowserScrape(request, siteConfig, strategy, proxy, userAgent, cookies, executionContext);
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -932,7 +991,8 @@ export class ScrapeOrchestrator {
         strategy: ScrapingStrategy,
         proxy: Proxy | null,
         userAgent: string,
-        cookies: any[]
+        cookies: any[],
+        executionContext: AttemptExecutionContext
     ): Promise<AttemptResult> {
         const domainKey = this.getDomainKey(request.url, request.competitorWebsiteId);
         // Generate headers
@@ -966,6 +1026,11 @@ export class ScrapeOrchestrator {
                 isMobile: false,
             },
         };
+
+        if (this.shouldWarmupBrowser(executionContext)) {
+            const warmupUrl = this.getWarmupUrl(request.url);
+            await this.browserScraper.warmupSession(browserConfig, warmupUrl);
+        }
 
         // Execute browser scrape
         let response: BrowserScrapeResponse;
@@ -1224,6 +1289,58 @@ export class ScrapeOrchestrator {
         }
     }
 
+    private async loadDomainRiskProfile(
+        competitorWebsiteId: string,
+        url: string
+    ): Promise<DomainRiskProfile> {
+        let domain = this.getDomainKey(url, competitorWebsiteId);
+        try {
+            const site = await prisma.site.findUnique({
+                where: { id: competitorWebsiteId },
+                select: { baseUrl: true },
+            });
+            if (site?.baseUrl) {
+                domain = new URL(site.baseUrl).hostname;
+            }
+        } catch {
+            // fall back to URL domain
+        }
+
+        try {
+            const domainProfile = await prisma.domainProfile.findUnique({
+                where: { domain },
+                select: {
+                    platformType: true,
+                    protectionLevel: true,
+                },
+            });
+
+            return {
+                domain,
+                platformType: domainProfile?.platformType || PlatformType.GENERIC,
+                protectionLevel: domainProfile?.protectionLevel || 'UNKNOWN',
+            };
+        } catch {
+            return {
+                domain,
+                platformType: PlatformType.GENERIC,
+                protectionLevel: 'UNKNOWN',
+            };
+        }
+    }
+
+    private mapFailureTypeToUaOutcome(
+        failureType?: ScrapeFailureType
+    ): 'PARTIAL' | 'PRICE_ZERO' | 'PARSE_FAILED' | 'STRUCTURE_CHANGED' | 'BOT_BLOCKED' | 'TIMEOUT' | 'OTHER' {
+        if (!failureType) return 'PARTIAL';
+        if (failureType === ScrapeFailureType.PRICE_ZERO) return 'PRICE_ZERO';
+        if (failureType === ScrapeFailureType.PARSE_FAILED) return 'PARSE_FAILED';
+        if (failureType === ScrapeFailureType.STRUCTURE_CHANGED) return 'STRUCTURE_CHANGED';
+        if (failureType === ScrapeFailureType.BOT_BLOCKED) return 'BOT_BLOCKED';
+        if (failureType === ScrapeFailureType.TIMEOUT) return 'TIMEOUT';
+        return 'OTHER';
+    }
+
     private classifyExtractionFailure(extraction: ExtractionResult, statusCode: number): ScrapeFailureType {
         // Non-OK responses are navigation issues unless we explicitly detected bot protection earlier.
         if (statusCode >= 400) {
@@ -1333,11 +1450,74 @@ export class ScrapeOrchestrator {
      * @param strategy - Scraping strategy
      * @returns True if proxy should be used
      */
-    private shouldUseProxy(strategy: ScrapingStrategy): boolean {
-        return (
+    private shouldUseProxy(
+        strategy: ScrapingStrategy,
+        siteConfig: SiteConfiguration,
+        executionContext: AttemptExecutionContext
+    ): boolean {
+        const strategyRequiresProxy =
             strategy === ScrapingStrategy.HTTP_WITH_PROXY ||
-            strategy === ScrapingStrategy.HEADLESS_WITH_PROXY
+            strategy === ScrapingStrategy.HEADLESS_WITH_PROXY;
+
+        if (strategyRequiresProxy) return true;
+
+        if (siteConfig.proxyRequired) return true;
+
+        const risk = executionContext.domainRisk;
+        const isLowRiskOpenCart =
+            risk.platformType === PlatformType.OPENCART &&
+            !this.isMediumOrHighProtectionLevel(risk.protectionLevel);
+
+        if (isLowRiskOpenCart) {
+            // Escalate only after clear signals.
+            return (
+                executionContext.attemptNumber > 2 ||
+                executionContext.previousAttempt?.failureType === ScrapeFailureType.BOT_BLOCKED ||
+                executionContext.previousAttempt?.statusCode === 403 ||
+                executionContext.consecutiveTimeouts >= 2
+            );
+        }
+
+        return (
+            this.isMediumOrHighProtectionLevel(risk.protectionLevel) ||
+            executionContext.previousAttempt?.failureType === ScrapeFailureType.BOT_BLOCKED ||
+            executionContext.previousAttempt?.statusCode === 403 ||
+            executionContext.attemptNumber > 2 ||
+            executionContext.consecutiveTimeouts >= 2
         );
+    }
+
+    private shouldWarmupBrowser(executionContext: AttemptExecutionContext): boolean {
+        const risk = executionContext.domainRisk;
+        const isLowRiskOpenCart =
+            risk.platformType === PlatformType.OPENCART &&
+            !this.isMediumOrHighProtectionLevel(risk.protectionLevel);
+
+        if (isLowRiskOpenCart) return false;
+
+        const protectionHigh = this.isHighProtectionLevel(risk.protectionLevel);
+        const firstVisit = executionContext.attemptNumber === 1 && !executionContext.previousAttempt;
+        const previousBlocked = executionContext.previousAttempt?.failureType === ScrapeFailureType.BOT_BLOCKED;
+
+        return firstVisit || protectionHigh || previousBlocked;
+    }
+
+    private getWarmupUrl(url: string): string {
+        try {
+            const parsed = new URL(url);
+            return `${parsed.protocol}//${parsed.host}/`;
+        } catch {
+            return url;
+        }
+    }
+
+    private isMediumOrHighProtectionLevel(level?: string | null): boolean {
+        const normalized = (level || '').toUpperCase();
+        return normalized === 'MEDIUM' || normalized === 'HIGH';
+    }
+
+    private isHighProtectionLevel(level?: string | null): boolean {
+        return (level || '').toUpperCase() === 'HIGH';
     }
 
     /**
@@ -1845,4 +2025,18 @@ interface AttemptResult {
     responseTimeMs?: number;
     userAgent: string;
     responseSizeBytes?: number;
+}
+
+interface DomainRiskProfile {
+    domain: string;
+    platformType: PlatformType;
+    protectionLevel: string;
+}
+
+interface AttemptExecutionContext {
+    attemptNumber: number;
+    domainRisk: DomainRiskProfile;
+    previousAttempt?: AttemptResult;
+    consecutiveTimeouts: number;
+    excludedProxyIds: string[];
 }
