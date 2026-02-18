@@ -635,6 +635,11 @@ model PriceHistory {
   id         String   @id @default(cuid())
   productId  String
   price      Decimal  @db.Decimal(10, 2)
+  originalPrice Decimal? @db.Decimal(10, 2)
+  originalCurrency String?
+  normalizedPrice Decimal? @db.Decimal(10, 2)
+  exchangeRateUsed Decimal? @db.Decimal(18, 8)
+  exchangeRateTimestamp DateTime?
   recordedAt DateTime @default(now())
   Product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -703,6 +708,11 @@ model Product {
   model                                                  String?
   currentPrice                                           Decimal                 @db.Decimal(10, 2)
   currency                                               String                  @default("USD")
+  originalPrice                                          Decimal?                @db.Decimal(10, 2)
+  originalCurrency                                       String?
+  normalizedPrice                                        Decimal?                @db.Decimal(10, 2)
+  exchangeRateUsed                                       Decimal?                @db.Decimal(18, 8)
+  exchangeRateTimestamp                                  DateTime?
   lastCrawledAt                                          DateTime?
   nextScrapeAt                                           DateTime?
   lastScrapeAttemptAt                                    DateTime?
@@ -729,6 +739,8 @@ model Product {
   priceAnomalyActive                                     Boolean                 @default(false)
   priceAnomalyDetectedAt                                 DateTime?               @db.Timestamp(6)
   priceAnomalyData                                       Json?
+  geoVariantDetected                                     Boolean                 @default(false)
+  geoVariantDetectedAt                                   DateTime?
   PendingPriceChange                                     PendingPriceChange[]
   PriceHistory                                           PriceHistory[]
   PriceUpdateLog                                         PriceUpdateLog[]
@@ -752,6 +764,7 @@ model Product {
   @@index([tenantId, inStock])
   @@index([tenantId, currentPrice])
   @@index([priceAnomalyActive])
+  @@index([geoVariantDetected])
   @@index([sku])
   @@index([siteId, canonicalUrl])
   @@index([siteId, normalizedSlug])
@@ -1009,6 +1022,9 @@ model ScrapeAttempt {
   contextCreated      Boolean               @default(false)
   success             Boolean
   scrapeStatus        ScrapeExecutionStatus @default(FAILED)
+  observedPrice       Decimal?              @db.Decimal(10, 2)
+  observedCurrency    String?
+  geoVariantDetected  Boolean               @default(false)
   protectionDetected  Boolean               @default(false)
   protectionType      String?
   failureType         ScrapeFailureType?
@@ -1031,6 +1047,7 @@ model ScrapeAttempt {
   @@index([protectionDetected, protectionType])
   @@index([success])
   @@index([scrapeStatus])
+  @@index([geoVariantDetected])
   @@index([failureType])
   @@index([competitorWebsiteId, failureType])
   @@index([tenantId])
@@ -1317,6 +1334,7 @@ model DomainProfile {
   needsManualReview Boolean     @default(false)
   consecutiveFailures Int       @default(0)
   lastFailureAt   DateTime?
+  availabilityConfig Json?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

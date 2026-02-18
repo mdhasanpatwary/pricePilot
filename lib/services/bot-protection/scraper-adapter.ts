@@ -14,6 +14,8 @@ import { detectPriceAnomaly } from '../price-anomaly';
 import { RetryQueueService } from '@/lib/services/retry-queue';
 import { ScrapeExecutionStatus } from '@prisma/client';
 import { extractSlugFromUrl, normalizeCanonicalUrl, normalizeSku } from '@/lib/services/product-dedup';
+import { detectCurrency, SupportedCurrency } from '@/lib/services/currency-parser';
+import { exchangeRateService } from '@/lib/services/exchange-rate';
 
 /**
  * ScraperAdapter class
@@ -89,12 +91,13 @@ export class ScraperAdapter {
 
             // Convert to legacy format
             if (result.success && result.price) {
+                const supportedCurrency = this.toSupportedCurrency(result.currency) || 'USD';
                 return {
                     title: product.title,
                     price: result.price,
-                    currency: result.currency || 'USD',
+                    currency: supportedCurrency,
                     url,
-                    inStock: true,
+                    inStock: result.inStock !== false,
                     protectionDetected: result.protectionDetected,
                     protectionType: result.protectionType,
                 };
@@ -189,13 +192,36 @@ export class ScraperAdapter {
 
             // Update price if successful
             if (result.success && result.price) {
+                const parsedCurrency = this.toSupportedCurrency(result.currency)
+                    || this.toSupportedCurrency(existing?.currency)
+                    || detectCurrency(existing?.title || '')
+                    || null;
+                if (!parsedCurrency) {
+                    logger.warn('[ScraperAdapter] Price present but currency missing, refusing unsafe save', {
+                        competitorProductId,
+                        sourceUrl,
+                    });
+                    return;
+                }
+
+                const tenant = await prisma.tenant.findUnique({
+                    where: { id: tenantId },
+                    select: { currency: true },
+                });
+                const baseCurrency = ((tenant?.currency || 'USD').toUpperCase() as SupportedCurrency);
+                const normalized = await exchangeRateService.normalizeToBase({
+                    amount: result.price,
+                    fromCurrency: parsedCurrency,
+                    baseCurrency,
+                });
+
                 const oldPrice = existing?.currentPrice ? parseFloat(existing.currentPrice.toString()) : null;
                 const anomaly = detectPriceAnomaly({
                     newPrice: result.price,
                     oldPrice,
-                    inStock: true,
-                    explicitOos: false,
-                    currency: result.currency || existing?.currency || null,
+                    inStock: result.inStock !== false,
+                    explicitOos: Boolean(result.explicitOutOfStock),
+                    currency: parsedCurrency || existing?.currency || null,
                 });
 
                 if (anomaly.flagged) {
@@ -221,7 +247,7 @@ export class ScraperAdapter {
                             competitorProductId,
                             competitorWebsiteId: siteId,
                             detectedPrice: result.price,
-                            currency: result.currency || existing?.currency || 'USD',
+                            currency: parsedCurrency,
                             reasons: anomaly.reasons as any,
                             details: anomaly.details as any,
                         },
@@ -253,16 +279,28 @@ export class ScraperAdapter {
                 }
 
                 updateData.currentPrice = result.price;
-                updateData.currency = result.currency || 'USD';
+                updateData.currency = parsedCurrency;
+                updateData.originalPrice = result.price;
+                updateData.originalCurrency = parsedCurrency;
+                updateData.normalizedPrice = normalized.normalizedAmount;
+                updateData.exchangeRateUsed = normalized.exchangeRateUsed;
+                updateData.exchangeRateTimestamp = normalized.exchangeRateTimestamp;
                 updateData.priceAnomalyActive = false;
                 updateData.priceAnomalyDetectedAt = null;
                 updateData.priceAnomalyData = null;
+                updateData.geoVariantDetected = Boolean(result.geoVariantDetected);
+                updateData.geoVariantDetectedAt = result.geoVariantDetected ? new Date() : null;
 
                 // Create price history entry
                 await prisma.priceHistory.create({
                     data: {
                         productId: competitorProductId,
                         price: result.price,
+                        originalPrice: result.price,
+                        originalCurrency: parsedCurrency,
+                        normalizedPrice: normalized.normalizedAmount,
+                        exchangeRateUsed: normalized.exchangeRateUsed,
+                        exchangeRateTimestamp: normalized.exchangeRateTimestamp,
                         recordedAt: result.timestamp,
                     },
                 });
@@ -346,6 +384,15 @@ export class ScraperAdapter {
         } catch {
             return false;
         }
+    }
+
+    private toSupportedCurrency(input?: string | null): SupportedCurrency | null {
+        if (!input) return null;
+        const upper = input.toUpperCase();
+        if (upper === 'BDT' || upper === 'INR' || upper === 'USD' || upper === 'EUR') {
+            return upper as SupportedCurrency;
+        }
+        return detectCurrency(input) || null;
     }
 
     /**

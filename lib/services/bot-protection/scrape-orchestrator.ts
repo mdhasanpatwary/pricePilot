@@ -42,6 +42,7 @@ import { StrategyPerformanceService } from './strategy-performance-service';
 import { detectOpenCartFromUrlAndHtml } from '@/lib/services/platform-detector';
 import { StatusSpikeTracker } from './status-spike-tracker';
 import { DomainFingerprintService } from '@/lib/services/domain-fingerprint-service';
+import { detectAvailability } from '@/lib/services/availability-parser';
 
 /**
  * Scrape request interface
@@ -75,6 +76,9 @@ export interface ScrapeResult {
     apiPattern?: Partial<APIPattern>; // API pattern used (if any)
     detectionTime?: number; // Time spent on API detection
     proxyUsed?: boolean;
+    inStock?: boolean | null;
+    explicitOutOfStock?: boolean;
+    geoVariantDetected?: boolean;
 }
 
 /**
@@ -323,6 +327,9 @@ export class ScrapeOrchestrator {
                             scrapeStatus: ScrapeExecutionStatus.SUCCESS,
                             price: matchedProduct.price,
                             currency: matchedProduct.currency,
+                            inStock: true,
+                            explicitOutOfStock: false,
+                            geoVariantDetected: false,
                             protectionDetected: false,
                             attempts: 1,
                             finalStrategy: ScrapingStrategy.HTTP_CLIENT,
@@ -483,6 +490,9 @@ export class ScrapeOrchestrator {
                 success: false,
                 scrapeStatus: ScrapeExecutionStatus.FAILED,
                 protectionDetected: false,
+                inStock: null,
+                explicitOutOfStock: false,
+                geoVariantDetected: false,
                 attempts: 1,
                 finalStrategy: ScrapingStrategy.HTTP_CLIENT,
                 responseTime,
@@ -513,6 +523,9 @@ export class ScrapeOrchestrator {
             success: false,
             scrapeStatus: ScrapeExecutionStatus.FAILED,
             protectionDetected: false,
+            inStock: null,
+            explicitOutOfStock: false,
+            geoVariantDetected: false,
             attempts: 1,
             finalStrategy: ScrapingStrategy.HTTP_CLIENT,
             responseTime: Date.now() - startTime,
@@ -658,6 +671,9 @@ export class ScrapeOrchestrator {
                         scrapeStatus: attemptResult.scrapeStatus || ScrapeExecutionStatus.SUCCESS,
                         price: attemptResult.price,
                         currency: attemptResult.currency,
+                        inStock: attemptResult.inStock,
+                        explicitOutOfStock: attemptResult.explicitOutOfStock,
+                        geoVariantDetected: attemptResult.geoVariantDetected,
                         protectionDetected: attemptResult.protectionDetected,
                         protectionType: attemptResult.protectionType,
                         attempts: attemptNumber,
@@ -843,6 +859,9 @@ export class ScrapeOrchestrator {
         return {
             success: false,
             scrapeStatus: lastAttemptResult?.scrapeStatus || ScrapeExecutionStatus.FAILED,
+            inStock: lastAttemptResult?.inStock,
+            explicitOutOfStock: lastAttemptResult?.explicitOutOfStock,
+            geoVariantDetected: lastAttemptResult?.geoVariantDetected,
             protectionDetected: lastProtectionType !== undefined,
             protectionType: lastProtectionType,
             attempts: attemptNumber,
@@ -916,6 +935,8 @@ export class ScrapeOrchestrator {
                 responseTimeMs: 0,
                 userAgent,
                 responseSizeBytes: 0,
+                inStock: null,
+                explicitOutOfStock: false,
             };
         }
     }
@@ -987,6 +1008,8 @@ export class ScrapeOrchestrator {
                 responseTimeMs: 0,
                 userAgent,
                 responseSizeBytes: 0,
+                inStock: null,
+                explicitOutOfStock: false,
             };
         }
 
@@ -1095,6 +1118,8 @@ export class ScrapeOrchestrator {
                 responseTimeMs: 0,
                 userAgent,
                 responseSizeBytes: 0,
+                inStock: null,
+                explicitOutOfStock: false,
             };
         }
 
@@ -1227,6 +1252,18 @@ export class ScrapeOrchestrator {
             });
         }
 
+        let availabilityConfig: any = undefined;
+        try {
+            const profile = await prisma.domainProfile.findUnique({
+                where: { domain: normalizedDomain },
+                select: { availabilityConfig: true },
+            });
+            availabilityConfig = profile?.availabilityConfig || undefined;
+        } catch {
+            availabilityConfig = undefined;
+        }
+        const availability = detectAvailability(response.body, availabilityConfig as any);
+
         // If protection detected, return failure
         if (detection.protectionDetected || has403Spike) {
             const protectionType = detection.protectionType || ProtectionType.IP_BLOCK;
@@ -1260,6 +1297,8 @@ export class ScrapeOrchestrator {
                 responseTimeMs: response.responseTime,
                 userAgent,
                 responseSizeBytes: response.body.length,
+                inStock: availability.inStock,
+                explicitOutOfStock: availability.explicitOutOfStock,
             };
         }
 
@@ -1284,6 +1323,8 @@ export class ScrapeOrchestrator {
                 responseTimeMs: response.responseTime,
                 userAgent,
                 responseSizeBytes: response.body.length,
+                inStock: availability.inStock ?? true,
+                explicitOutOfStock: availability.explicitOutOfStock,
             };
         }
 
@@ -1318,6 +1359,8 @@ export class ScrapeOrchestrator {
             responseTimeMs: response.responseTime,
             userAgent,
             responseSizeBytes: response.body.length,
+            inStock: availability.inStock,
+            explicitOutOfStock: availability.explicitOutOfStock,
         };
     }
 
@@ -1480,6 +1523,54 @@ export class ScrapeOrchestrator {
                 });
             }
         }
+    }
+
+    private async getProxyRegion(proxyId?: string): Promise<string> {
+        if (!proxyId) return 'DIRECT';
+        try {
+            const proxy = await prisma.proxy.findUnique({
+                where: { id: proxyId },
+                select: { region: true },
+            });
+            return proxy?.region || 'PROXY_UNKNOWN_REGION';
+        } catch {
+            return 'PROXY_UNKNOWN_REGION';
+        }
+    }
+
+    private async detectGeoVariant(
+        competitorProductId: string,
+        currentPrice?: number,
+        currentRegion?: string
+    ): Promise<boolean> {
+        if (!currentPrice || !currentRegion) return false;
+
+        const history = await prisma.scrapeAttempt.findMany({
+            where: {
+                competitorProductId,
+                success: true,
+                observedPrice: { not: null },
+            },
+            include: {
+                Proxy: { select: { region: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+        });
+
+        for (const row of history) {
+            const previousRegion = row.Proxy?.region || 'DIRECT';
+            const previousPrice = row.observedPrice ? Number(row.observedPrice) : null;
+            if (!previousPrice) continue;
+            if (previousRegion === currentRegion) continue;
+
+            const diffPct = Math.abs((previousPrice - currentPrice) / Math.max(previousPrice, 0.01)) * 100;
+            if (diffPct >= 3) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private classifyExtractionFailure(extraction: ExtractionResult, statusCode: number): ScrapeFailureType {
@@ -1820,6 +1911,12 @@ export class ScrapeOrchestrator {
     ): Promise<void> {
         try {
             const scrapeStatus = result.scrapeStatus || (result.success ? ScrapeExecutionStatus.SUCCESS : ScrapeExecutionStatus.FAILED);
+            const proxyRegion = await this.getProxyRegion(result.proxyId);
+            const geoVariantDetected = await this.detectGeoVariant(
+                request.competitorProductId,
+                result.price,
+                proxyRegion
+            );
             const baseData = {
                 tenantId: request.tenantId,
                 competitorProductId: request.competitorProductId,
@@ -1831,6 +1928,9 @@ export class ScrapeOrchestrator {
                 contextCreated: result.contextCreated ?? false,
                 success: result.success,
                 scrapeStatus,
+                observedPrice: result.price,
+                observedCurrency: result.currency,
+                geoVariantDetected,
                 protectionDetected: result.protectionDetected,
                 protectionType: result.protectionType,
                 statusCode: result.statusCode,
@@ -1867,6 +1967,16 @@ export class ScrapeOrchestrator {
                     },
                     select: { id: true },
                 });
+
+                if (geoVariantDetected) {
+                    await prisma.product.update({
+                        where: { id: request.competitorProductId },
+                        data: {
+                            geoVariantDetected: true,
+                            geoVariantDetectedAt: new Date(),
+                        },
+                    });
+                }
             } catch (error) {
                 if (!this.isMissingColumnError(error)) throw error;
 
@@ -2158,6 +2268,9 @@ interface AttemptResult {
     scrapeStatus?: ScrapeExecutionStatus;
     price?: number;
     currency?: string;
+    inStock?: boolean | null;
+    explicitOutOfStock?: boolean;
+    geoVariantDetected?: boolean;
     protectionDetected: boolean;
     protectionType?: ProtectionType;
     failureType?: ScrapeFailureType;

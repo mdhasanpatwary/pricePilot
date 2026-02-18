@@ -217,6 +217,11 @@ export class DiscoveryService {
                     currentPrice: result.price,
                     inStock: result.inStock,
                     currency: result.currency || "BDT",
+                    originalPrice: result.price,
+                    originalCurrency: result.currency || "BDT",
+                    normalizedPrice: result.price,
+                    exchangeRateUsed: 1,
+                    exchangeRateTimestamp: new Date(),
                     lastCrawledAt: new Date(),
                   }
                 });
@@ -232,6 +237,11 @@ export class DiscoveryService {
                     currentPrice: result.price,
                     inStock: result.inStock,
                     currency: result.currency || "BDT",
+                    originalPrice: result.price,
+                    originalCurrency: result.currency || "BDT",
+                    normalizedPrice: result.price,
+                    exchangeRateUsed: 1,
+                    exchangeRateTimestamp: new Date(),
                     lastCrawledAt: new Date(),
                     ...(result.imageUrl ? { imageUrl: result.imageUrl } : {}),
                     ...(normalizedSku ? { sku: normalizedSku } : {}),

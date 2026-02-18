@@ -6,6 +6,7 @@
  */
 
 import * as cheerio from 'cheerio';
+import { detectCurrency, parseLocalizedCurrencyAmount } from '@/lib/services/currency-parser';
 
 /**
  * Configuration for price extraction selectors
@@ -378,54 +379,8 @@ export class DataExtractor {
         if (!priceText) {
             return null;
         }
-
-        // Remove common currency symbols and text
-        let cleaned = priceText
-            .replace(/[$£€¥₹₽]/g, '')
-            .replace(/USD|EUR|GBP|CAD|AUD|JPY|CNY|INR|RUB/gi, '')
-            .trim();
-
-        // Handle different decimal separators
-        // If there are multiple commas and dots, determine which is decimal
-        const commaCount = (cleaned.match(/,/g) || []).length;
-        const dotCount = (cleaned.match(/\./g) || []).length;
-
-        if (commaCount > 0 && dotCount > 0) {
-            // Both present - last one is decimal separator
-            const lastComma = cleaned.lastIndexOf(',');
-            const lastDot = cleaned.lastIndexOf('.');
-
-            if (lastComma > lastDot) {
-                // Comma is decimal separator (European format)
-                cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-            } else {
-                // Dot is decimal separator (US format)
-                cleaned = cleaned.replace(/,/g, '');
-            }
-        } else if (commaCount > 0) {
-            // Only commas - could be thousands separator or decimal
-            if (commaCount === 1) {
-                const parts = cleaned.split(',');
-                if (parts[1] && parts[1].length === 2) {
-                    // Likely decimal separator (e.g., "99,99")
-                    cleaned = cleaned.replace(',', '.');
-                } else {
-                    // Likely thousands separator (e.g., "1,234")
-                    cleaned = cleaned.replace(/,/g, '');
-                }
-            } else {
-                // Multiple commas - thousands separators
-                cleaned = cleaned.replace(/,/g, '');
-            }
-        }
-
-        // Remove any remaining non-numeric characters except dot
-        cleaned = cleaned.replace(/[^\d.]/g, '');
-
-        // Parse to float
-        const price = parseFloat(cleaned);
-
-        return isNaN(price) ? null : price;
+        const parsed = parseLocalizedCurrencyAmount(priceText);
+        return parsed.amount;
     }
 
     /**
@@ -435,21 +390,7 @@ export class DataExtractor {
      * @returns Currency code or symbol, or undefined
      */
     private extractCurrency(priceText: string): string | undefined {
-        // Check for currency symbols
-        if (priceText.includes('$')) return 'USD';
-        if (priceText.includes('£')) return 'GBP';
-        if (priceText.includes('€')) return 'EUR';
-        if (priceText.includes('¥')) return 'JPY';
-        if (priceText.includes('₹')) return 'INR';
-        if (priceText.includes('₽')) return 'RUB';
-
-        // Check for currency codes
-        const currencyMatch = priceText.match(/\b(USD|EUR|GBP|CAD|AUD|JPY|CNY|INR|RUB)\b/i);
-        if (currencyMatch) {
-            return currencyMatch[1].toUpperCase();
-        }
-
-        return undefined;
+        return detectCurrency(priceText);
     }
 
     /**
