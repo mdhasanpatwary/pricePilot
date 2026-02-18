@@ -231,12 +231,14 @@ export class ScrapeJobProcessor {
           lastScheduledAt: now.toISOString(),
         },
         {
-          jobId: `scrape:${p.id}`,
+          jobId: `scrape-${p.id}`,
           priority: priority.bullmqPriority,
           delay: Math.max(0, nextAt.getTime() - now.getTime()),
           removeOnFail: { count: 2000, age: 7 * 24 * 3600 },
         },
-      ).catch((e) => {
+      ).then(() => {
+        seeded++;
+      }).catch((e) => {
         const msg = e instanceof Error ? e.message : String(e);
         // Duplicate jobId is expected if a job already exists.
         if (msg.includes("Job") && msg.includes("already exists")) return;
@@ -245,8 +247,6 @@ export class ScrapeJobProcessor {
           error: msg,
         });
       });
-
-      seeded++;
     }
 
     logger.info("[ScrapeJobProcessor] Seeded scrape jobs", {
