@@ -39,6 +39,7 @@ import { APIExtractor } from '../api-detection/api-extractor';
 import type { APIPattern, Product as APIProduct } from '@/lib/types/api-detection';
 import { ConcurrencyLimiter } from '../concurrency-limiter';
 import { StrategyPerformanceService } from './strategy-performance-service';
+import { detectOpenCartFromUrlAndHtml } from '@/lib/services/platform-detector';
 
 /**
  * Scrape request interface
@@ -875,7 +876,7 @@ export class ScrapeOrchestrator {
         }
 
         // Analyze response
-        return this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id);
+        return await this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id);
     }
 
     /**
@@ -962,7 +963,7 @@ export class ScrapeOrchestrator {
         // Note: Browser cookies are handled by Playwright context
 
         // Analyze response
-        return this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id, response.screenshot);
+        return await this.analyzeResponse(request, siteConfig, response, userAgent, proxy?.id, response.screenshot);
     }
 
     /**
@@ -975,14 +976,14 @@ export class ScrapeOrchestrator {
      * @param screenshot - Screenshot buffer (if any)
      * @returns Attempt result
      */
-    private analyzeResponse(
-        _request: ScrapeRequest,
+    private async analyzeResponse(
+        request: ScrapeRequest,
         siteConfig: SiteConfiguration,
         response: ScrapeResponse | BrowserScrapeResponse,
         userAgent: string,
         proxyId?: string,
         screenshot?: Buffer
-    ): AttemptResult {
+    ): Promise<AttemptResult> {
         // Convert response to HttpResponse for detection
         const httpResponse: HttpResponse = {
             statusCode: response.statusCode,
@@ -995,6 +996,33 @@ export class ScrapeOrchestrator {
 
         // Detect bot protection
         const detection = this.detectionEngine.analyzeResponse(httpResponse);
+
+        // Best-effort platform detection (OpenCart) to enable optimized defaults.
+        // Never block scraping on detection/DB issues.
+        try {
+            const urlForDetection = httpResponse.finalUrl || request.url;
+            if (detectOpenCartFromUrlAndHtml({ url: urlForDetection, html: response.body })) {
+                const domain = new URL(urlForDetection).hostname;
+                const existing = await prisma.domainProfile.findUnique({ where: { domain } });
+                if (!existing || !existing.platformType) {
+                    await prisma.domainProfile.upsert({
+                        where: { domain },
+                        create: {
+                            domain,
+                            platformType: 'OPENCART',
+                        },
+                        update: {
+                            platformType: 'OPENCART',
+                        },
+                    });
+                }
+            }
+        } catch (error) {
+            logger.debug('[ScrapeOrchestrator] Platform detection failed', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
 
         // If protection detected, return failure
         if (detection.protectionDetected) {
@@ -1162,6 +1190,56 @@ export class ScrapeOrchestrator {
             }
         } catch (error) {
             logger.error('[ScrapeOrchestrator] Failed to load site configuration', { competitorWebsiteId, error });
+        }
+
+        // Optimized defaults for detected platforms (DomainProfile).
+        try {
+            const site = await prisma.site.findUnique({
+                where: { id: competitorWebsiteId },
+                select: { baseUrl: true },
+            });
+            if (site?.baseUrl) {
+                const domain = new URL(site.baseUrl).hostname;
+                const dp = await prisma.domainProfile.findUnique({
+                    where: { domain },
+                    select: { platformType: true },
+                });
+
+                if (dp?.platformType === 'OPENCART') {
+                    return {
+                        // Lightweight mode by default
+                        preferredStrategy: ScrapingStrategy.HTTP_CLIENT,
+                        requiresJavaScript: false,
+                        rateLimit: {
+                            baseDelay: 1200,
+                            maxDelay: 60000,
+                            backoffMultiplier: 2.0,
+                            jitterRange: 20,
+                        },
+                        // Skip proxy unless needed (retry logic can still escalate to proxy strategies)
+                        proxyRequired: false,
+                        // Predefined selector templates for OpenCart
+                        customSelectors: {
+                            priceSelectors: [
+                                '.price-new',
+                                '.price',
+                                '#content .list-unstyled h2',
+                                '#product-product .list-unstyled h2',
+                                '[itemprop="price"]',
+                                '[data-price]',
+                                'meta[property="product:price:amount"]',
+                                'meta[property="og:price:amount"]',
+                            ],
+                        },
+                        maxRetries: 2,
+                    };
+                }
+            }
+        } catch (error) {
+            logger.debug('[ScrapeOrchestrator] Failed to load DomainProfile for optimized defaults', {
+                competitorWebsiteId,
+                error: error instanceof Error ? error.message : String(error),
+            });
         }
 
         // Default configuration if not found

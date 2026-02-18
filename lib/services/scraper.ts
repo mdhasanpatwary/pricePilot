@@ -20,6 +20,7 @@ import { getUserAgentTracker } from "./user-agent-tracker";
 import { sessionTracker } from "./session-tracker";
 import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
 import { SystemConfigService } from "@/lib/config";
+import { detectOpenCartFromUrlAndHtml } from "./platform-detector";
 
 interface ScrapedProduct {
   title: string;
@@ -1453,34 +1454,55 @@ export class ScraperService {
         throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
       }
 
-      // 4. Enhanced Human Simulation
-      logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
+      // 4. Platform Optimization (OpenCart)
+      // If we detect OpenCart signals, default to lightweight mode for this domain.
+      try {
+        const isOpenCart = await page.evaluate(() => {
+          const generator = document
+            .querySelector('meta[name="generator"]')
+            ?.getAttribute("content")
+            ?.toLowerCase();
+          if (generator?.includes("opencart")) return true;
+          if (document.querySelector("#product-product")) return true;
+          return false;
+        });
 
-      // Random pause before starting interactions
-      await HumanSimulation.randomPause(300, 800);
+        if (isOpenCart || detectOpenCartFromUrlAndHtml({ url, html: null })) {
+          const current = siteProfileManager.getProfile(hostname);
+          if (current.strategy === "full-js") {
+            siteProfileManager.updateProfile(hostname, {
+              strategy: "html-only",
+              waitTime: Math.min(current.waitTime, 1200),
+              retryCount: Math.min(current.retryCount, 1),
+            });
+          }
+        }
+      } catch {
+        // Ignore platform detection errors; scraping must proceed.
+      }
 
-      // Simulate natural mouse movement
-      await HumanSimulation.simulateMouseMove(page);
+      // 5. Enhanced Human Simulation (heavy) only for full-js profiles.
+      const effectiveProfile = siteProfileManager.getProfile(hostname);
+      if (effectiveProfile.strategy === "full-js") {
+        logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
 
-      // Random pause between actions
-      await HumanSimulation.randomPause(200, 600);
+        await HumanSimulation.randomPause(300, 800);
+        await HumanSimulation.simulateMouseMove(page);
+        await HumanSimulation.randomPause(200, 600);
+        await HumanSimulation.simulateScroll(page);
+        await HumanSimulation.randomPause(300, 900);
+        await HumanSimulation.simulateTabFocus(page);
+        await HumanSimulation.randomPause(400, 1000);
+      } else {
+        logger.debug(
+          `[ScraperService] Skipping enhanced human simulation for ${hostname} (strategy=${effectiveProfile.strategy})`,
+        );
+      }
 
-      // Simulate scrolling behavior
-      await HumanSimulation.simulateScroll(page);
+      // Wait for profile specific time (always)
+      await page.waitForTimeout(effectiveProfile.waitTime);
 
-      // Random pause between actions
-      await HumanSimulation.randomPause(300, 900);
-
-      // Simulate tab focus to appear more human-like
-      await HumanSimulation.simulateTabFocus(page);
-
-      // Final random pause before extraction
-      await HumanSimulation.randomPause(400, 1000);
-
-      // Wait for profile specific time
-      await page.waitForTimeout(profile.waitTime);
-
-      // 5. Extraction Strategies
+      // 6. Extraction Strategies
       // ... (JSON-LD, OG, CSS, Heuristics)
       const jsonLdData = await this.extractFromJsonLd(page);
       if (jsonLdData && jsonLdData.price > 0) {
@@ -2156,38 +2178,59 @@ export class ScraperService {
         throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
       }
 
-      // 4. Enhanced Human Simulation
-      logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
+      // 4. Platform Optimization (OpenCart)
+      // If we detect OpenCart signals, default to lightweight mode for this domain.
+      try {
+        const isOpenCart = await page.evaluate(() => {
+          const generator = document
+            .querySelector('meta[name="generator"]')
+            ?.getAttribute("content")
+            ?.toLowerCase();
+          if (generator?.includes("opencart")) return true;
+          if (document.querySelector("#product-product")) return true;
+          return false;
+        });
 
-      // Random pause before starting interactions
-      await HumanSimulation.randomPause(300, 800);
+        if (isOpenCart || detectOpenCartFromUrlAndHtml({ url, html: null })) {
+          const current = siteProfileManager.getProfile(hostname);
+          if (current.strategy === "full-js") {
+            siteProfileManager.updateProfile(hostname, {
+              strategy: "html-only",
+              waitTime: Math.min(current.waitTime, 1200),
+              retryCount: Math.min(current.retryCount, 1),
+            });
+          }
+        }
+      } catch {
+        // Ignore platform detection errors; scraping must proceed.
+      }
 
-      // Simulate natural mouse movement
-      await HumanSimulation.simulateMouseMove(page);
+      // 5. Enhanced Human Simulation (heavy) only for full-js profiles.
+      const effectiveProfile = siteProfileManager.getProfile(hostname);
+      if (effectiveProfile.strategy === "full-js") {
+        logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
 
-      // Random pause between actions
-      await HumanSimulation.randomPause(200, 600);
+        await HumanSimulation.randomPause(300, 800);
+        await HumanSimulation.simulateMouseMove(page);
+        await HumanSimulation.randomPause(200, 600);
+        await HumanSimulation.simulateScroll(page);
+        await HumanSimulation.randomPause(300, 900);
+        await HumanSimulation.simulateTabFocus(page);
+        await HumanSimulation.randomPause(400, 1000);
+      } else {
+        logger.debug(
+          `[ScraperService] Skipping enhanced human simulation for ${hostname} (strategy=${effectiveProfile.strategy})`,
+        );
+      }
 
-      // Simulate scrolling behavior
-      await HumanSimulation.simulateScroll(page);
-
-      // Random pause between actions
-      await HumanSimulation.randomPause(300, 900);
-
-      // Simulate tab focus to appear more human-like
-      await HumanSimulation.simulateTabFocus(page);
-
-      // Final random pause before extraction
-      await HumanSimulation.randomPause(400, 1000);
-
-      // Wait for profile specific time
-      await page.waitForTimeout(profile.waitTime);
+      // Wait for profile specific time (always)
+      await page.waitForTimeout(effectiveProfile.waitTime);
 
       // Requirement 2.4: Track data extraction
       extractionStartTime = Date.now();
       await sessionTracker.updateStage(sessionId, 'data_extraction');
 
-      // 5. Extraction Strategies
+      // 6. Extraction Strategies
       const jsonLdData = await this.extractFromJsonLd(page);
       if (jsonLdData && jsonLdData.price > 0) {
         const extractionTime = Date.now() - extractionStartTime;
