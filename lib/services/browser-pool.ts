@@ -93,6 +93,8 @@ export class BrowserPool {
   private browserIdleTimeout: number = 15 * 60 * 1000; // 15 minutes
   private cleanupInterval: NodeJS.Timeout | null = null;
   private stealthConfigured = false;
+  private initialized = false;
+  private domainLocks: Map<string, Promise<void>> = new Map();
 
   private constructor() {
     // Private constructor for singleton
@@ -123,14 +125,22 @@ export class BrowserPool {
    * Initialize the browser pool
    */
   async init(maxContexts: number = 10) {
-    this.maxContexts = Math.max(1, maxContexts);
-    this.maxContextsPerDomain = Math.max(1, Math.min(5, Math.floor(this.maxContexts / 2) || 1));
+    const nextMaxContexts = Math.max(1, maxContexts);
+    const nextMaxPerDomain = Math.max(1, Math.min(5, Math.floor(nextMaxContexts / 2) || 1));
+    const configChanged =
+      this.maxContexts !== nextMaxContexts || this.maxContextsPerDomain !== nextMaxPerDomain;
+
+    this.maxContexts = nextMaxContexts;
+    this.maxContextsPerDomain = nextMaxPerDomain;
 
     this.startCleanup();
-    logger.info("[BrowserPool] Initialized domain-aware pool", {
-      maxContexts: this.maxContexts,
-      maxContextsPerDomain: this.maxContextsPerDomain,
-    });
+    if (!this.initialized || configChanged) {
+      logger.info("[BrowserPool] Initialized domain-aware pool", {
+        maxContexts: this.maxContexts,
+        maxContextsPerDomain: this.maxContextsPerDomain,
+      });
+    }
+    this.initialized = true;
   }
 
   /**
@@ -150,74 +160,76 @@ export class BrowserPool {
    * New domain-first API.
    */
   async getContext(domain: string, options: ContextOptions = {}): Promise<BrowserContext> {
-    if (this.domainSessions.size === 0 && !this.cleanupInterval) {
-      await this.init(this.maxContexts);
-    }
-
     const normalizedDomain = this.normalizeDomain(domain);
-    const session = await this.ensureDomainSession(normalizedDomain);
-    session.lastUsedAt = new Date();
-
-    const contextKey = this.getContextKey(options.userAgent, options.proxy);
-    const pooled = session.contexts.get(contextKey);
-
-    if (pooled && !pooled.inUse) {
-      const isValid = await this.isContextValid(pooled.context, session.browser);
-      if (isValid) {
-        pooled.inUse = true;
-        pooled.lastUsedAt = new Date();
-        logger.info("[BrowserPool] Context reused", {
-          domain: normalizedDomain,
-          contextKey,
-          totalDomainContexts: session.contexts.size,
-        });
-        return pooled.context;
+    return this.withDomainLock(normalizedDomain, async () => {
+      if (this.domainSessions.size === 0 && !this.cleanupInterval) {
+        await this.init(this.maxContexts);
       }
 
-      await this.removeContext(normalizedDomain, contextKey, pooled, "invalid_stale");
-    }
+      const session = await this.ensureDomainSession(normalizedDomain);
+      session.lastUsedAt = new Date();
 
-    const domainLimitReached = session.contexts.size >= this.maxContextsPerDomain;
-    const globalLimitReached = this.getTotalContexts() >= this.maxContexts;
+      const contextKey = this.getContextKey(options.userAgent, options.proxy);
+      const pooled = session.contexts.get(contextKey);
 
-    if (domainLimitReached || globalLimitReached) {
-      const evicted = domainLimitReached
-        ? await this.evictOldestUnusedContext(normalizedDomain)
-        : await this.evictOldestUnusedContext();
+      if (pooled && !pooled.inUse) {
+        const isValid = await this.isContextValid(pooled.context, session.browser);
+        if (isValid) {
+          pooled.inUse = true;
+          pooled.lastUsedAt = new Date();
+          logger.info("[BrowserPool] Context reused", {
+            domain: normalizedDomain,
+            contextKey,
+            totalDomainContexts: session.contexts.size,
+          });
+          return pooled.context;
+        }
 
-      if (!evicted) {
-        logger.warn("[BrowserPool] Context pool is saturated, waiting for available context", {
-          domain: normalizedDomain,
-          domainContexts: session.contexts.size,
-          totalContexts: this.getTotalContexts(),
-          maxContexts: this.maxContexts,
-          maxContextsPerDomain: this.maxContextsPerDomain,
-        });
-        return this.waitForAvailableContext(normalizedDomain, contextKey);
+        await this.removeContext(normalizedDomain, contextKey, pooled, "invalid_stale");
       }
-    }
 
-    const context = await this.createContext(session, options);
+      const domainLimitReached = session.contexts.size >= this.maxContextsPerDomain;
+      const globalLimitReached = this.getTotalContexts() >= this.maxContexts;
 
-    const pooledContext: PooledContext = {
-      context,
-      inUse: true,
-      createdAt: new Date(),
-      lastUsedAt: new Date(),
-      key: contextKey,
-    };
+      if (domainLimitReached || globalLimitReached) {
+        const evicted = domainLimitReached
+          ? await this.evictOldestUnusedContext(normalizedDomain)
+          : await this.evictOldestUnusedContext();
 
-    session.contexts.set(contextKey, pooledContext);
-    this.contextIndex.set(context, { domain: normalizedDomain, key: contextKey });
+        if (!evicted) {
+          logger.warn("[BrowserPool] Context pool is saturated, waiting for available context", {
+            domain: normalizedDomain,
+            domainContexts: session.contexts.size,
+            totalContexts: this.getTotalContexts(),
+            maxContexts: this.maxContexts,
+            maxContextsPerDomain: this.maxContextsPerDomain,
+          });
+          return this.waitForAvailableContext(normalizedDomain, contextKey);
+        }
+      }
 
-    logger.info("[BrowserPool] Context created", {
-      domain: normalizedDomain,
-      contextKey,
-      totalDomainContexts: session.contexts.size,
-      totalContexts: this.getTotalContexts(),
+      const context = await this.createContext(session, options);
+
+      const pooledContext: PooledContext = {
+        context,
+        inUse: true,
+        createdAt: new Date(),
+        lastUsedAt: new Date(),
+        key: contextKey,
+      };
+
+      session.contexts.set(contextKey, pooledContext);
+      this.contextIndex.set(context, { domain: normalizedDomain, key: contextKey });
+
+      logger.info("[BrowserPool] Context created", {
+        domain: normalizedDomain,
+        contextKey,
+        totalDomainContexts: session.contexts.size,
+        totalContexts: this.getTotalContexts(),
+      });
+
+      return context;
     });
-
-    return context;
   }
 
   /**
@@ -739,6 +751,26 @@ export class BrowserPool {
         }
       }, 100);
     });
+  }
+
+  private async withDomainLock<T>(domain: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.domainLocks.get(domain) || Promise.resolve();
+    let releaseCurrent: () => void = () => undefined;
+    const current = new Promise<void>((resolve) => {
+      releaseCurrent = resolve;
+    });
+    const lockToken = previous.then(() => current);
+    this.domainLocks.set(domain, lockToken);
+
+    await previous;
+    try {
+      return await fn();
+    } finally {
+      releaseCurrent();
+      if (this.domainLocks.get(domain) === lockToken) {
+        this.domainLocks.delete(domain);
+      }
+    }
   }
 
   private async evictOldestUnusedContext(preferredDomain?: string): Promise<boolean> {
