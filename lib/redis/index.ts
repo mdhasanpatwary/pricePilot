@@ -138,14 +138,24 @@ const createRedisClient = (role: RedisRole): Redis => {
 };
 
 const getOrCreateRedisClient = (role: RedisRole): Redis => {
+  // Use a single command client for both base operations and publishing.
+  // Subscriber must remain a dedicated connection because SUBSCRIBE mode blocks normal commands.
+  const normalizedRole: RedisRole = role === "publisher" ? "base" : role;
+
   const map = getSingletonMap();
-  const existing = map[role];
+  const existing = map[normalizedRole];
   if (existing && existing.status !== "end") {
+    if (role === "publisher" && !map.publisher) {
+      map.publisher = existing;
+    }
     return existing;
   }
 
-  const client = createRedisClient(role);
-  map[role] = client;
+  const client = createRedisClient(normalizedRole);
+  map[normalizedRole] = client;
+  if (role === "publisher") {
+    map.publisher = client;
+  }
   return client;
 };
 
@@ -159,7 +169,7 @@ export const getRedisProcessInstanceId = (): string => getProcessInstanceId();
 
 export const disconnectRedis = async (): Promise<void> => {
   const map = getSingletonMap();
-  const clients = Object.values(map).filter((client): client is Redis => Boolean(client));
+  const clients = [...new Set(Object.values(map).filter((client): client is Redis => Boolean(client)))];
 
   if (clients.length === 0) {
     return;

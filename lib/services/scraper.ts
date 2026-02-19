@@ -3450,6 +3450,21 @@ export class ScraperService {
 
     let context: any = null;
     let page: any = null;
+    const releaseSearchResources = async () => {
+      if (page) {
+        await page.close().catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to close search page: `, { error: err });
+        });
+        page = null;
+      }
+
+      if (context) {
+        await this.browserPool.releaseContext(context).catch((err: Error) => {
+          logger.warn(`[ScraperService] Failed to release search context: `, { error: err });
+        });
+        context = null;
+      }
+    };
 
     try {
       const proxyResult = await this.getNextProxy();
@@ -3835,6 +3850,9 @@ export class ScraperService {
             // ignore
           }
 
+          // Release search resources before scraping product page to avoid
+          // self-saturation when maxContextsPerDomain is 1.
+          await releaseSearchResources();
           this.relaxProtectionForDomain(hostname);
           return await this.scrapeProductPage(productLink, {
             isAdvancedProtected: isAdvancedProtectedSite,
@@ -3916,6 +3934,9 @@ export class ScraperService {
 
           for (const fq of fallbackQueries) {
             if (fq === cleanQuery) continue;
+            // Release current context/page before recursive fallback to avoid self-block
+            // when maxContextsPerDomain is 1.
+            await releaseSearchResources();
             const result = await this.searchAndScrape(baseUrl, fq, siteId, attempt + 1, seen);
             if (result) return result;
           }
@@ -3936,18 +3957,7 @@ export class ScraperService {
       logger.error(`[ScraperService] Search failed for ${query}: `, { error });
       return null;
     } finally {
-      // Close page first, then release context (don't close context)
-      if (page) {
-        await page.close().catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to close search page: `, { error: err });
-        });
-      }
-
-      if (context) {
-        await this.browserPool.releaseContext(context).catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to release search context: `, { error: err });
-        });
-      }
+      await releaseSearchResources();
     }
   }
 
