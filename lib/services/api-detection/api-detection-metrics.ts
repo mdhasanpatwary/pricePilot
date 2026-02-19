@@ -44,6 +44,27 @@ export interface FallbackMetrics {
  * Aggregates and stores daily metrics for API detection operations
  */
 export class ApiDetectionMetrics {
+    private static async resolveMetricTenantId(
+        tenantId: string,
+        competitorWebsiteId: string
+    ): Promise<string | null> {
+        if (!competitorWebsiteId || competitorWebsiteId === 'unknown') {
+            return null;
+        }
+
+        // Keep hot path fast: trust provided tenantId unless it's explicitly unknown.
+        if (tenantId && tenantId !== 'unknown') {
+            return tenantId;
+        }
+
+        const site = await prisma.site.findUnique({
+            where: { id: competitorWebsiteId },
+            select: { tenantId: true },
+        });
+
+        return site?.tenantId || null;
+    }
+
     /**
      * Track a detection attempt
      * 
@@ -51,19 +72,25 @@ export class ApiDetectionMetrics {
      */
     static async trackDetection(metrics: DetectionMetrics): Promise<void> {
         try {
+            const resolvedTenantId = await this.resolveMetricTenantId(
+                metrics.tenantId,
+                metrics.competitorWebsiteId
+            );
+            if (!resolvedTenantId) return;
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             await prisma.apiDetectionMetric.upsert({
                 where: {
                     tenantId_competitorWebsiteId_date: {
-                        tenantId: metrics.tenantId,
+                        tenantId: resolvedTenantId,
                         competitorWebsiteId: metrics.competitorWebsiteId,
                         date: today,
                     },
                 },
                 create: {
-                    tenantId: metrics.tenantId,
+                    tenantId: resolvedTenantId,
                     competitorWebsiteId: metrics.competitorWebsiteId,
                     date: today,
                     detectionAttempts: 1,
@@ -92,19 +119,25 @@ export class ApiDetectionMetrics {
      */
     static async trackExtraction(metrics: ExtractionMetrics): Promise<void> {
         try {
+            const resolvedTenantId = await this.resolveMetricTenantId(
+                metrics.tenantId,
+                metrics.competitorWebsiteId
+            );
+            if (!resolvedTenantId) return;
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             await prisma.apiDetectionMetric.upsert({
                 where: {
                     tenantId_competitorWebsiteId_date: {
-                        tenantId: metrics.tenantId,
+                        tenantId: resolvedTenantId,
                         competitorWebsiteId: metrics.competitorWebsiteId,
                         date: today,
                     },
                 },
                 create: {
-                    tenantId: metrics.tenantId,
+                    tenantId: resolvedTenantId,
                     competitorWebsiteId: metrics.competitorWebsiteId,
                     date: today,
                     totalExtractionTimeMs: BigInt(metrics.extractionTimeMs),
@@ -128,19 +161,25 @@ export class ApiDetectionMetrics {
      */
     static async trackCache(metrics: CacheMetrics): Promise<void> {
         try {
+            const resolvedTenantId = await this.resolveMetricTenantId(
+                metrics.tenantId,
+                metrics.competitorWebsiteId
+            );
+            if (!resolvedTenantId) return;
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             await prisma.apiDetectionMetric.upsert({
                 where: {
                     tenantId_competitorWebsiteId_date: {
-                        tenantId: metrics.tenantId,
+                        tenantId: resolvedTenantId,
                         competitorWebsiteId: metrics.competitorWebsiteId,
                         date: today,
                     },
                 },
                 create: {
-                    tenantId: metrics.tenantId,
+                    tenantId: resolvedTenantId,
                     competitorWebsiteId: metrics.competitorWebsiteId,
                     date: today,
                     cacheHits: metrics.hit ? 1 : 0,
@@ -164,19 +203,25 @@ export class ApiDetectionMetrics {
      */
     static async trackFallback(metrics: FallbackMetrics): Promise<void> {
         try {
+            const resolvedTenantId = await this.resolveMetricTenantId(
+                metrics.tenantId,
+                metrics.competitorWebsiteId
+            );
+            if (!resolvedTenantId) return;
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             await prisma.apiDetectionMetric.upsert({
                 where: {
                     tenantId_competitorWebsiteId_date: {
-                        tenantId: metrics.tenantId,
+                        tenantId: resolvedTenantId,
                         competitorWebsiteId: metrics.competitorWebsiteId,
                         date: today,
                     },
                 },
                 create: {
-                    tenantId: metrics.tenantId,
+                    tenantId: resolvedTenantId,
                     competitorWebsiteId: metrics.competitorWebsiteId,
                     date: today,
                     fallbackCount: 1,

@@ -71,6 +71,47 @@ export class RateLimiter {
     private configCacheTTL: number = 300000; // 5 minutes
     private configCacheTimestamps: Map<string, number> = new Map();
 
+    private async upsertScrapingConfigState(
+        competitorWebsiteId: string,
+        data: {
+            lastRequestAt?: Date;
+            nextAvailableAt?: Date;
+            consecutiveFailures?: number;
+        }
+    ): Promise<void> {
+        const site = await prisma.site.findUnique({
+            where: { id: competitorWebsiteId },
+            select: { tenantId: true },
+        });
+
+        if (!site) {
+            logger.warn(`Cannot persist rate limit state: site not found (${competitorWebsiteId})`);
+            return;
+        }
+
+        await prisma.scrapingConfig.upsert({
+            where: { competitorWebsiteId },
+            create: {
+                tenantId: site.tenantId,
+                competitorWebsiteId,
+                preferredStrategy: 'http_client',
+                requiresJavascript: false,
+                proxyRequired: false,
+                baseDelayMs: DEFAULT_CONFIG.baseDelay,
+                maxDelayMs: DEFAULT_CONFIG.maxDelay,
+                backoffMultiplier: DEFAULT_CONFIG.backoffMultiplier,
+                maxRetries: 3,
+                priceSelectors: ['.price', '[itemprop="price"]', '.product-price'],
+                currencySelector: null,
+                fallbackRegex: null,
+                consecutiveFailures: data.consecutiveFailures ?? 0,
+                lastRequestAt: data.lastRequestAt,
+                nextAvailableAt: data.nextAvailableAt,
+            },
+            update: data,
+        });
+    }
+
     /**
      * Load rate limit configuration for a competitor website from database
      *
@@ -205,12 +246,9 @@ export class RateLimiter {
 
         // Persist update to database
         try {
-            await prisma.scrapingConfig.update({
-                where: { competitorWebsiteId },
-                data: {
-                    lastRequestAt: state.lastRequestTime,
-                    nextAvailableAt: state.nextAvailableTime
-                }
+            await this.upsertScrapingConfigState(competitorWebsiteId, {
+                lastRequestAt: state.lastRequestTime || undefined,
+                nextAvailableAt: state.nextAvailableTime || undefined,
             });
         } catch (error) {
             logger.error(`Failed to update rate limit state in DB for site ${competitorWebsiteId}`, { error });
@@ -261,12 +299,9 @@ export class RateLimiter {
             const nextAvailable = new Date(Date.now() + delay);
             state.nextAvailableTime = nextAvailable;
 
-            await prisma.scrapingConfig.update({
-                where: { competitorWebsiteId },
-                data: {
-                    consecutiveFailures: state.consecutiveFailures,
-                    nextAvailableAt: nextAvailable
-                }
+            await this.upsertScrapingConfigState(competitorWebsiteId, {
+                consecutiveFailures: state.consecutiveFailures,
+                nextAvailableAt: nextAvailable,
             });
 
             logger.info(
@@ -301,12 +336,8 @@ export class RateLimiter {
 
         // Persist to database
         try {
-            await prisma.scrapingConfig.update({
-                where: { competitorWebsiteId },
-                data: {
-                    consecutiveFailures: 0,
-                    // Optionally reset nextAvailableAt or let it be
-                }
+            await this.upsertScrapingConfigState(competitorWebsiteId, {
+                consecutiveFailures: 0,
             });
 
             if (previousFailures > 0) {
