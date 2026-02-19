@@ -7,6 +7,8 @@ import net from "net";
 import os from "os";
 import path from "path";
 import { createWorkers } from "../lib/queue/worker";
+import { getRedisConnection } from "../lib/queue/connection";
+import { GlobalScrapeBudgetService } from "../lib/services/scheduling/global-scrape-budget";
 
 console.log("🚀 Starting PricePilot Background Workers...");
 
@@ -148,6 +150,87 @@ async function preflightRedisConnectivity(): Promise<void> {
   }
 }
 
+function parsePositiveInt(input: string | undefined, fallback: number, min: number): number {
+  const parsed = Number(input);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.floor(parsed));
+}
+
+async function validateRedisHardening(): Promise<void> {
+  const redis = getRedisConnection() as any;
+
+  // Must be reachable in production. In development, warn and continue.
+  try {
+    if (redis.status !== "ready" && redis.status !== "connecting") {
+      await redis.connect();
+    }
+    await redis.ping();
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        `Redis startup validation failed in production: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    console.warn("⚠️ Redis ping failed during startup validation (non-production):", error);
+    return;
+  }
+
+  try {
+    const infoMemory = await redis.info("memory");
+    const usedMemoryBytes =
+      Number((infoMemory.match(/used_memory:(\d+)/) || [])[1] || 0) || 0;
+    const usedMemoryHuman =
+      (infoMemory.match(/used_memory_human:([^\r\n]+)/) || [])[1] || "unknown";
+    const maxMemoryBytes =
+      Number((infoMemory.match(/maxmemory:(\d+)/) || [])[1] || 0) || 0;
+
+    console.log("🧠 Redis memory snapshot:");
+    console.log(`   - used_memory: ${usedMemoryHuman} (${usedMemoryBytes} bytes)`);
+    console.log(
+      `   - maxmemory: ${maxMemoryBytes > 0 ? `${maxMemoryBytes} bytes` : "0 (no hard cap configured)"}`,
+    );
+  } catch (error) {
+    console.warn("⚠️ Unable to read Redis INFO memory:", error);
+  }
+
+  try {
+    const configResult = (await redis.config("GET", "maxmemory-policy")) as string[];
+    // Typical Redis returns ["maxmemory-policy", "allkeys-lru"].
+    const policy = Array.isArray(configResult) ? configResult[1] : undefined;
+    if (!policy) {
+      console.warn("⚠️ Redis maxmemory-policy could not be resolved.");
+      return;
+    }
+
+    if (policy === "noeviction") {
+      console.warn(
+        "⚠️ Redis maxmemory-policy is 'noeviction'. Queue and limiter writes may fail under memory pressure.",
+      );
+    } else {
+      console.log(`✅ Redis maxmemory-policy: ${policy}`);
+    }
+  } catch (error) {
+    // Some managed Redis plans disable CONFIG GET.
+    console.warn("⚠️ Unable to read Redis maxmemory-policy via CONFIG GET:", error);
+  }
+}
+
+function applyMemoryGuardDefaults(): void {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  if (!process.env.BROWSER_POOL_MAX_RSS_MB) {
+    process.env.BROWSER_POOL_MAX_RSS_MB = "1536";
+    console.log("ℹ️ BROWSER_POOL_MAX_RSS_MB not set. Defaulting to 1536MB for production.");
+  }
+
+  if (!process.env.WORKER_MAX_RSS_MB) {
+    process.env.WORKER_MAX_RSS_MB = "2048";
+    console.log("ℹ️ WORKER_MAX_RSS_MB not set. Defaulting to 2048MB for production.");
+  }
+}
+
 async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
   if (!shouldEnforceSingleWorkerInstance()) {
     return async () => {};
@@ -226,6 +309,9 @@ async function start() {
     let scrapeWorker: any = null;
     let notificationWorker: any = null;
     let degraded = false;
+    let isShuttingDown = false;
+    let workerRssMonitorTimer: NodeJS.Timeout | null = null;
+    let globalBudgetCleanupTimer: NodeJS.Timeout | null = null;
 
     const handleProcessError = (err: unknown) => {
       if (process.env.NODE_ENV !== "production" && isRedisStartupError(err)) {
@@ -247,7 +333,9 @@ async function start() {
       process.on("uncaughtException", handleProcessError);
 
     const startWorkersOnce = async (): Promise<void> => {
+      applyMemoryGuardDefaults();
       await preflightRedisConnectivity();
+      await validateRedisHardening();
 
       const created = createWorkers();
       syncWorker = created.syncWorker as any;
@@ -284,8 +372,18 @@ async function start() {
     };
 
     // Handle graceful shutdown (works both in active + degraded modes).
-    const gracefulShutdown = async () => {
+    const gracefulShutdown = async (exitCode: number = 0) => {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
       console.log("🛑 Shutting down workers...");
+      if (workerRssMonitorTimer) {
+        clearInterval(workerRssMonitorTimer);
+        workerRssMonitorTimer = null;
+      }
+      if (globalBudgetCleanupTimer) {
+        clearInterval(globalBudgetCleanupTimer);
+        globalBudgetCleanupTimer = null;
+      }
       try {
         if (syncWorker) await syncWorker.close();
       } catch { }
@@ -301,7 +399,44 @@ async function start() {
         await BrowserPool.shutdown();
       } catch { }
       await releaseWorkerLock?.();
-      process.exit(0);
+      process.exit(exitCode);
+    };
+
+    const startWorkerRssGuard = () => {
+      const maxRssMb = parsePositiveInt(process.env.WORKER_MAX_RSS_MB, 0, 0);
+      const warnRssMb = parsePositiveInt(process.env.WORKER_RSS_WARN_MB, Math.max(1024, Math.floor(maxRssMb * 0.75)), 256);
+      const intervalMs = parsePositiveInt(process.env.WORKER_RSS_MONITOR_INTERVAL_MS, 30000, 5000);
+
+      if (maxRssMb <= 0) {
+        return;
+      }
+
+      workerRssMonitorTimer = setInterval(() => {
+        const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        if (rssMb >= warnRssMb) {
+          console.warn("[WorkerMemoryGuard] RSS spike detected", {
+            rssMb,
+            warnRssMb,
+            maxRssMb,
+          });
+        }
+
+        if (rssMb > maxRssMb) {
+          console.error("[WorkerMemoryGuard] RSS limit exceeded, triggering graceful restart", {
+            rssMb,
+            maxRssMb,
+          });
+          void gracefulShutdown(1);
+        }
+      }, intervalMs);
+    };
+
+    const startGlobalBudgetJanitor = () => {
+      const leaseTtlMs = GlobalScrapeBudgetService.getInstance().getLeaseTtlMs();
+      const intervalMs = Math.max(15_000, Math.floor(leaseTtlMs / 2));
+      globalBudgetCleanupTimer = setInterval(() => {
+        void GlobalScrapeBudgetService.getInstance().cleanupStaleLeases();
+      }, intervalMs);
     };
 
     process.on("SIGTERM", gracefulShutdown);
@@ -309,6 +444,8 @@ async function start() {
 
     try {
       await startWorkersOnce();
+      startWorkerRssGuard();
+      startGlobalBudgetJanitor();
     } catch (error) {
       // In development, Redis is often optional. Keep the process alive so `dev:full`
       // doesn't kill Next.js when Redis is unavailable.
@@ -331,7 +468,7 @@ async function start() {
             if (isRedisStartupError(e)) return;
             console.error("❌ Worker startup failed with a non-Redis error:", e);
             clearInterval(timer);
-            await gracefulShutdown();
+            await gracefulShutdown(1);
           }
         }, intervalMs);
 

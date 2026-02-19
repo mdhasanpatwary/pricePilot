@@ -143,7 +143,8 @@ export class BrowserPool {
     const acquireTimeoutMs = parseInt(process.env.BROWSER_POOL_ACQUIRE_TIMEOUT || "15000", 10);
     const browserIdleTimeoutMs = parseInt(process.env.BROWSER_POOL_BROWSER_IDLE_TIMEOUT || String(15 * 60 * 1000), 10);
     const maxGlobalBrowsers = parseInt(process.env.BROWSER_POOL_MAX_BROWSERS || String(maxConcurrent), 10);
-    const maxRssMb = parseInt(process.env.BROWSER_POOL_MAX_RSS_MB || "0", 10);
+    const defaultMaxRssMb = process.env.NODE_ENV === "production" ? "1536" : "0";
+    const maxRssMb = parseInt(process.env.BROWSER_POOL_MAX_RSS_MB || defaultMaxRssMb, 10);
 
     this.config = {
       maxConcurrent: config?.maxConcurrent ?? maxConcurrent,
@@ -267,6 +268,8 @@ export class BrowserPool {
           return this.waitForAvailableContext(normalizedDomain, contextKey, this.config.acquireTimeoutMs);
         }
       }
+
+      await this.enforceHardMemoryCap("context_create");
 
       const slot = await this.ensureBrowserSlotForDomain(normalizedDomain);
       const context = await this.createContext(slot.browser, options);
@@ -539,6 +542,8 @@ export class BrowserPool {
   }
 
   private async createBrowserSlot(): Promise<BrowserSlot> {
+    await this.enforceHardMemoryCap("browser_launch");
+
     if (!this.stealthConfigured) {
       chromium.use(StealthPlugin());
       this.stealthConfigured = true;
@@ -581,6 +586,31 @@ export class BrowserPool {
     });
 
     return slot;
+  }
+
+  private getRssMb(): number {
+    return Math.round(process.memoryUsage().rss / 1024 / 1024);
+  }
+
+  private async enforceHardMemoryCap(reason: "browser_launch" | "context_create"): Promise<void> {
+    if (this.config.maxRssMb <= 0) return;
+
+    const rssBefore = this.getRssMb();
+    if (rssBefore <= this.config.maxRssMb) return;
+
+    logger.warn("[UnifiedBrowserPool] RSS above cap before allocation; running memory guard", {
+      reason,
+      rssBeforeMb: rssBefore,
+      capMb: this.config.maxRssMb,
+    });
+    await this.runMemoryGuard();
+
+    const rssAfter = this.getRssMb();
+    if (rssAfter > this.config.maxRssMb) {
+      throw new Error(
+        `[UnifiedBrowserPool] Memory cap exceeded (${rssAfter}MB > ${this.config.maxRssMb}MB); refusing new ${reason}`,
+      );
+    }
   }
 
   private pickLeastLoadedBrowser(): BrowserSlot | null {

@@ -13,10 +13,15 @@ import {
   TenantConcurrencyLimiter,
   TenantConcurrencyPermit,
 } from "@/lib/services/scheduling/tenant-concurrency-limiter";
+import {
+  GlobalScrapeBudgetService,
+  GlobalScrapePermit,
+} from "@/lib/services/scheduling/global-scrape-budget";
 import { enqueueWithBackpressure } from "@/lib/queue/backpressure";
 
 const adapter = new ScraperAdapter();
 const tenantConcurrencyLimiter = new TenantConcurrencyLimiter();
+const globalScrapeBudget = GlobalScrapeBudgetService.getInstance();
 
 function normalizeDomainFromBaseUrl(baseUrl: string): string {
   try {
@@ -138,79 +143,123 @@ export class ScrapeJobProcessor {
           await this.reschedule(job, Date.now() + waitMs);
         }
 
-        // Execute scrape (this writes ScrapeAttempt + updates Product/PriceHistory).
-        await adapter.scrapeCompetitorProduct(product.id, url, product.tenantId);
+        const qpsBudget = await globalScrapeBudget.consumeQpsToken();
+        if (!qpsBudget.allowed) {
+          const delayMs = Math.max(
+            globalScrapeBudget.getRequeueDelayMs(),
+            qpsBudget.retryAfterMs || 0,
+          );
+          logger.info("[ScrapeJobProcessor] Global scrape QPS budget exceeded, delaying job", {
+            productId: product.id,
+            tenantId,
+            delayMs,
+          });
+          await this.reschedule(job, Date.now() + delayMs);
+        }
 
-        const lastAttempt = await prisma.scrapeAttempt.findFirst({
-          where: { competitorProductId: product.id },
-          orderBy: { createdAt: "desc" },
-          select: {
-            success: true,
-            failureType: true,
-            statusCode: true,
-          },
-        });
+        const activeBudget = await globalScrapeBudget.acquire(product.id);
+        const globalPermit = activeBudget.permit;
+        if (!activeBudget.acquired || !globalPermit) {
+          const delayMs = Math.max(
+            globalScrapeBudget.getRequeueDelayMs(),
+            activeBudget.retryAfterMs || 0,
+          );
+          logger.info("[ScrapeJobProcessor] Global active scrape budget exhausted, delaying job", {
+            productId: product.id,
+            tenantId,
+            currentActive: activeBudget.currentActive,
+            maxActive: globalScrapeBudget.getMaxActive(),
+            delayMs,
+          });
+          await this.reschedule(job, Date.now() + delayMs);
+        }
+        const activeGlobalPermit = globalPermit as GlobalScrapePermit;
+        let globalHeartbeatTimer: NodeJS.Timeout | null = null;
+        const globalHeartbeatEveryMs = Math.max(10_000, Math.floor(activeGlobalPermit.leaseTtlMs / 3));
+        globalHeartbeatTimer = setInterval(() => {
+          void globalScrapeBudget.refresh(activeGlobalPermit);
+        }, globalHeartbeatEveryMs);
 
-        const success = Boolean(lastAttempt?.success);
-        const failureType = (lastAttempt?.failureType ?? null) as ScrapeFailureType | null;
-        const statusCode = lastAttempt?.statusCode ?? null;
+        try {
+          // Execute scrape (this writes ScrapeAttempt + updates Product/PriceHistory).
+          await adapter.scrapeCompetitorProduct(product.id, url, product.tenantId);
 
-        // Update volatility only after a successful scrape (and DB update).
-        const volatility = success
-          ? await VolatilityService.upsertForProduct(product.id)
-          : { volatilityScore: product.ProductVolatility?.volatilityScore ?? 0, lastPriceChangeAt: null, priceChangeCount30d: 0 };
+          const lastAttempt = await prisma.scrapeAttempt.findFirst({
+            where: { competitorProductId: product.id },
+            orderBy: { createdAt: "desc" },
+            select: {
+              success: true,
+              failureType: true,
+              statusCode: true,
+            },
+          });
 
-        // Update product scheduling state.
-        const consecutiveFailures = success ? 0 : product.consecutiveScrapeFailures + 1;
-        const lastFailedAt = success ? null : startedAt;
-        const lastSucceededAt = success ? startedAt : null;
+          const success = Boolean(lastAttempt?.success);
+          const failureType = (lastAttempt?.failureType ?? null) as ScrapeFailureType | null;
+          const statusCode = lastAttempt?.statusCode ?? null;
 
-        const next = ScrapeSchedulingService.computeRefreshDecision(
-          {
+          // Update volatility only after a successful scrape (and DB update).
+          const volatility = success
+            ? await VolatilityService.upsertForProduct(product.id)
+            : { volatilityScore: product.ProductVolatility?.volatilityScore ?? 0, lastPriceChangeAt: null, priceChangeCount30d: 0 };
+
+          // Update product scheduling state.
+          const consecutiveFailures = success ? 0 : product.consecutiveScrapeFailures + 1;
+          const lastFailedAt = success ? null : startedAt;
+          const lastSucceededAt = success ? startedAt : null;
+
+          const next = ScrapeSchedulingService.computeRefreshDecision(
+            {
+              volatilityScore: volatility.volatilityScore,
+              inStock: product.inStock,
+              consecutiveFailures,
+              lastFailureType: failureType,
+              domainPenaltyLevel: throttle.penaltyLevel,
+            },
+            startedAt,
+          );
+
+          const priority = ScrapeSchedulingService.computePriority({
             volatilityScore: volatility.volatilityScore,
-            inStock: product.inStock,
             consecutiveFailures,
-            lastFailureType: failureType,
-            domainPenaltyLevel: throttle.penaltyLevel,
-          },
-          startedAt,
-        );
+            lastFailedAt,
+            inStock: product.inStock,
+            businessPriority: product.businessPriority,
+            domainPriorityPenalty: throttle.priorityPenalty,
+          });
 
-        const priority = ScrapeSchedulingService.computePriority({
-          volatilityScore: volatility.volatilityScore,
-          consecutiveFailures,
-          lastFailedAt,
-          inStock: product.inStock,
-          businessPriority: product.businessPriority,
-          domainPriorityPenalty: throttle.priorityPenalty,
-        });
+          await prisma.product.update({
+            where: { id: product.id },
+            data: {
+              nextScrapeAt: next.nextScrapeAt,
+              lastScrapeAttemptAt: startedAt,
+              lastScrapeSucceededAt: lastSucceededAt ?? undefined,
+              lastScrapeFailedAt: lastFailedAt ?? undefined,
+              consecutiveScrapeFailures: consecutiveFailures,
+            },
+            select: { id: true },
+          });
 
-        await prisma.product.update({
-          where: { id: product.id },
-          data: {
-            nextScrapeAt: next.nextScrapeAt,
-            lastScrapeAttemptAt: startedAt,
-            lastScrapeSucceededAt: lastSucceededAt ?? undefined,
-            lastScrapeFailedAt: lastFailedAt ?? undefined,
-            consecutiveScrapeFailures: consecutiveFailures,
-          },
-          select: { id: true },
-        });
+          await DomainThrottleService.recordAttempt({
+            domain,
+            success,
+            failureType,
+            statusCode,
+          });
 
-        await DomainThrottleService.recordAttempt({
-          domain,
-          success,
-          failureType,
-          statusCode,
-        });
-
-        await job.updateData({
-          ...job.data,
-          priorityScore: priority.priorityScore,
-          lastScheduledAt: startedAt.toISOString(),
-        });
-        await job.changePriority({ priority: priority.bullmqPriority });
-        await this.reschedule(job, next.nextScrapeAt.getTime());
+          await job.updateData({
+            ...job.data,
+            priorityScore: priority.priorityScore,
+            lastScheduledAt: startedAt.toISOString(),
+          });
+          await job.changePriority({ priority: priority.bullmqPriority });
+          await this.reschedule(job, next.nextScrapeAt.getTime());
+        } finally {
+          if (globalHeartbeatTimer) {
+            clearInterval(globalHeartbeatTimer);
+          }
+          await globalScrapeBudget.release(activeGlobalPermit);
+        }
       } finally {
         await DomainRateLimiter.releaseConcurrency(domain);
       }
