@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { QueueBackpressureError, enqueueWithBackpressure } from "@/lib/queue/backpressure";
 import {
   validateBody,
   validationErrorResponse,
@@ -30,10 +31,16 @@ async function handlePOST(req: NextRequest) {
     const { QUEUE_NAMES } = await import("@/lib/queue/types");
 
     const queue = getSyncQueue();
-    const job = await queue.add(QUEUE_NAMES.SYNC, {
-      type: "SOURCE_SYNC",
-      siteId,
-    });
+    const job = await enqueueWithBackpressure(
+      queue,
+      QUEUE_NAMES.SYNC,
+      {
+        type: "SOURCE_SYNC",
+        siteId,
+      },
+      {},
+      { producer: "api:v1/integrations/sync", strategy: "reject" },
+    );
     console.log(`[API] Queued SOURCE_SYNC job ${job.id} for site ${siteId}`);
 
     return NextResponse.json({
@@ -41,6 +48,18 @@ async function handlePOST(req: NextRequest) {
       success: true,
     });
   } catch (error) {
+    if (error instanceof QueueBackpressureError) {
+      return NextResponse.json(
+        {
+          error: "Queue overloaded. Please retry shortly.",
+          details: error.message,
+          queueDepth: error.queueDepth,
+          threshold: error.threshold,
+        },
+        { status: 429 },
+      );
+    }
+
     const err = error as Error;
     console.error("Sync error:", err);
     return NextResponse.json(

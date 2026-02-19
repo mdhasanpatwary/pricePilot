@@ -5,20 +5,30 @@
  * Tokens are added at a constant rate, and each request consumes one token.
  * If no tokens are available, the request must wait.
  */
+import { getRedisConnection } from "@/lib/queue/connection";
 
 export interface RateLimiterConfig {
     requestsPerMinute: number;
     maxBurst?: number; // Maximum tokens that can accumulate (defaults to requestsPerMinute)
 }
 
-interface TokenBucket {
-    tokens: number;
-    lastRefill: number;
-    config: RateLimiterConfig;
-}
-
 export class RateLimiter {
-    private buckets: Map<string, TokenBucket> = new Map();
+    private static readonly KEY_PREFIX = "pp:rate-limit:bucket:";
+
+    private normalizeDomain(domain: string): string {
+        return (domain || "").trim().toLowerCase().replace(/^www\./, "");
+    }
+
+    private getKey(domain: string): string {
+        return `${RateLimiter.KEY_PREFIX}${this.normalizeDomain(domain)}`;
+    }
+
+    private computeKeyTtlMs(config: RateLimiterConfig): number {
+        const rpm = Math.max(1, config.requestsPerMinute);
+        const maxBurst = Math.max(1, config.maxBurst ?? rpm);
+        const refillMs = Math.ceil((maxBurst / rpm) * 60_000);
+        return Math.max(60_000, refillMs * 5);
+    }
 
     /**
      * Wait for a token to become available for the given domain
@@ -27,27 +37,87 @@ export class RateLimiter {
      * @returns Promise that resolves when a token is available
      */
     async waitForToken(domain: string, config: RateLimiterConfig): Promise<void> {
-        const bucket = this.getOrCreateBucket(domain, config);
+        const redis = getRedisConnection();
+        const rpm = Math.max(1, Math.floor(config.requestsPerMinute));
+        const maxBurst = Math.max(1, Math.floor(config.maxBurst ?? rpm));
+        const ttlMs = this.computeKeyTtlMs({ requestsPerMinute: rpm, maxBurst });
+        const key = this.getKey(domain);
 
-        // Refill tokens based on time elapsed
-        this.refillBucket(bucket);
+        const consumeLua = `
+            local key = KEYS[1]
+            local now = tonumber(ARGV[1])
+            local rpm = tonumber(ARGV[2])
+            local maxBurst = tonumber(ARGV[3])
+            local ttl = tonumber(ARGV[4])
+            local consume = tonumber(ARGV[5])
 
-        // If we have tokens, consume one and return immediately
-        if (bucket.tokens >= 1) {
-            bucket.tokens -= 1;
-            return;
+            local values = redis.call("HMGET", key, "tokens", "lastRefill", "rpm", "maxBurst")
+            local tokens = tonumber(values[1])
+            local lastRefill = tonumber(values[2])
+            local prevRpm = tonumber(values[3])
+            local prevMaxBurst = tonumber(values[4])
+
+            if not tokens or not lastRefill or not prevRpm or not prevMaxBurst then
+              tokens = maxBurst
+              lastRefill = now
+              prevRpm = rpm
+              prevMaxBurst = maxBurst
+            end
+
+            if prevRpm ~= rpm or prevMaxBurst ~= maxBurst then
+              tokens = math.min(maxBurst, tokens)
+              prevRpm = rpm
+              prevMaxBurst = maxBurst
+            end
+
+            if now > lastRefill then
+              local elapsed = now - lastRefill
+              local refill = elapsed * (rpm / 60000)
+              tokens = math.min(maxBurst, tokens + refill)
+              lastRefill = now
+            end
+
+            local allowed = 0
+            local waitMs = 0
+            if tokens >= consume then
+              tokens = tokens - consume
+              allowed = 1
+            else
+              local needed = consume - tokens
+              local tokensPerMs = rpm / 60000
+              waitMs = math.ceil(needed / tokensPerMs)
+            end
+
+            redis.call("HMSET", key,
+              "tokens", tostring(tokens),
+              "lastRefill", tostring(lastRefill),
+              "rpm", tostring(rpm),
+              "maxBurst", tostring(maxBurst)
+            )
+            redis.call("PEXPIRE", key, ttl)
+
+            return {allowed, waitMs}
+        `;
+
+        while (true) {
+            const nowMs = Date.now();
+            const result = (await redis.eval(
+                consumeLua,
+                1,
+                key,
+                nowMs,
+                rpm,
+                maxBurst,
+                ttlMs,
+                1,
+            )) as [number, number];
+
+            const allowed = Number(result?.[0] ?? 0) === 1;
+            const waitMs = Math.max(0, Math.ceil(Number(result?.[1] ?? 0)));
+
+            if (allowed) return;
+            await new Promise(resolve => setTimeout(resolve, Math.max(waitMs, 10)));
         }
-
-        // Calculate how long to wait for the next token
-        const tokensPerMs = config.requestsPerMinute / 60000; // Convert to tokens per millisecond
-        const timeToNextToken = (1 - bucket.tokens) / tokensPerMs;
-
-        // Wait for the next token
-        await new Promise(resolve => setTimeout(resolve, timeToNextToken));
-
-        // Refill and consume
-        this.refillBucket(bucket);
-        bucket.tokens = Math.max(0, bucket.tokens - 1);
     }
 
     /**
@@ -56,77 +126,105 @@ export class RateLimiter {
      * @param config Rate limit configuration
      * @returns True if a token is available
      */
-    hasToken(domain: string, config: RateLimiterConfig): boolean {
-        const bucket = this.getOrCreateBucket(domain, config);
-        this.refillBucket(bucket);
-        return bucket.tokens >= 1;
+    async hasToken(domain: string, config: RateLimiterConfig): Promise<boolean> {
+        const redis = getRedisConnection();
+        const rpm = Math.max(1, Math.floor(config.requestsPerMinute));
+        const maxBurst = Math.max(1, Math.floor(config.maxBurst ?? rpm));
+        const ttlMs = this.computeKeyTtlMs({ requestsPerMinute: rpm, maxBurst });
+        const key = this.getKey(domain);
+
+        const peekLua = `
+            local key = KEYS[1]
+            local now = tonumber(ARGV[1])
+            local rpm = tonumber(ARGV[2])
+            local maxBurst = tonumber(ARGV[3])
+            local ttl = tonumber(ARGV[4])
+
+            local values = redis.call("HMGET", key, "tokens", "lastRefill", "rpm", "maxBurst")
+            local tokens = tonumber(values[1])
+            local lastRefill = tonumber(values[2])
+            local prevRpm = tonumber(values[3])
+            local prevMaxBurst = tonumber(values[4])
+
+            if not tokens or not lastRefill or not prevRpm or not prevMaxBurst then
+              tokens = maxBurst
+              lastRefill = now
+              prevRpm = rpm
+              prevMaxBurst = maxBurst
+            end
+
+            if prevRpm ~= rpm or prevMaxBurst ~= maxBurst then
+              tokens = math.min(maxBurst, tokens)
+              prevRpm = rpm
+              prevMaxBurst = maxBurst
+            end
+
+            if now > lastRefill then
+              local elapsed = now - lastRefill
+              local refill = elapsed * (rpm / 60000)
+              tokens = math.min(maxBurst, tokens + refill)
+              lastRefill = now
+            end
+
+            redis.call("HMSET", key,
+              "tokens", tostring(tokens),
+              "lastRefill", tostring(lastRefill),
+              "rpm", tostring(rpm),
+              "maxBurst", tostring(maxBurst)
+            )
+            redis.call("PEXPIRE", key, ttl)
+
+            if tokens >= 1 then
+              return 1
+            end
+            return 0
+        `;
+
+        const result = (await redis.eval(
+            peekLua,
+            1,
+            key,
+            Date.now(),
+            rpm,
+            maxBurst,
+            ttlMs,
+        )) as number;
+
+        return Number(result) === 1;
     }
 
     /**
      * Get or create a token bucket for a domain
      */
-    private getOrCreateBucket(domain: string, config: RateLimiterConfig): TokenBucket {
-        let bucket = this.buckets.get(domain);
-
-        if (!bucket) {
-            const maxBurst = config.maxBurst ?? config.requestsPerMinute;
-            bucket = {
-                tokens: maxBurst, // Start with full bucket
-                lastRefill: Date.now(),
-                config: { ...config, maxBurst }
-            };
-            this.buckets.set(domain, bucket);
-        }
-
-        // Update config if it changed
-        if (bucket.config.requestsPerMinute !== config.requestsPerMinute) {
-            bucket.config = { ...config, maxBurst: config.maxBurst ?? config.requestsPerMinute };
-        }
-
-        return bucket;
-    }
-
-    /**
-     * Refill tokens based on time elapsed since last refill
-     */
-    private refillBucket(bucket: TokenBucket): void {
-        const now = Date.now();
-        const elapsed = now - bucket.lastRefill;
-
-        if (elapsed <= 0) return;
-
-        // Calculate tokens to add based on elapsed time
-        const tokensPerMs = bucket.config.requestsPerMinute / 60000;
-        const tokensToAdd = elapsed * tokensPerMs;
-
-        // Add tokens up to max burst
-        const maxBurst = bucket.config.maxBurst ?? bucket.config.requestsPerMinute;
-        bucket.tokens = Math.min(maxBurst, bucket.tokens + tokensToAdd);
-        bucket.lastRefill = now;
-    }
-
-    /**
-     * Reset rate limiter for a specific domain
-     */
-    reset(domain: string): void {
-        this.buckets.delete(domain);
+    async reset(domain: string): Promise<void> {
+        const redis = getRedisConnection();
+        await redis.del(this.getKey(domain));
     }
 
     /**
      * Reset all rate limiters
      */
-    resetAll(): void {
-        this.buckets.clear();
+    async resetAll(): Promise<void> {
+        const redis = getRedisConnection();
+        const pattern = `${RateLimiter.KEY_PREFIX}*`;
+        let cursor = "0";
+        do {
+            const result = (await redis.scan(cursor, "MATCH", pattern, "COUNT", 200)) as [string, string[]];
+            cursor = result[0];
+            const keys = result[1] || [];
+            if (keys.length > 0) {
+                await redis.del(...keys);
+            }
+        } while (cursor !== "0");
     }
 
     /**
      * Get current token count for a domain (for debugging/monitoring)
      */
-    getTokenCount(domain: string): number {
-        const bucket = this.buckets.get(domain);
-        if (!bucket) return 0;
-
-        this.refillBucket(bucket);
-        return bucket.tokens;
+    async getTokenCount(domain: string): Promise<number> {
+        const redis = getRedisConnection();
+        const values = await redis.hmget(this.getKey(domain), "tokens");
+        const tokens = Number(values?.[0] ?? 0);
+        return Number.isFinite(tokens) ? tokens : 0;
     }
 }

@@ -1,4 +1,5 @@
 import { logger } from '../logger';
+import { getRedisConnection } from '@/lib/queue/connection';
 
 /**
  * Configuration options for the ConcurrencyLimiter
@@ -82,6 +83,9 @@ interface RequestResult {
 export class ConcurrencyLimiter {
     private config: ConcurrencyConfig;
     private siteStates: Map<string, SiteState> = new Map();
+    private static readonly DISTRIBUTED_KEY_PREFIX = 'pp:concurrency:site:';
+    private readonly leaseTtlMs: number;
+    private readonly pollIntervalMs: number;
 
     /**
      * Create a new ConcurrencyLimiter
@@ -95,6 +99,12 @@ export class ConcurrencyLimiter {
             initialConcurrency: config?.initialConcurrency ?? 3,
             adjustmentThreshold: config?.adjustmentThreshold ?? 0.2,
         };
+        const leaseTtlRaw = Number(process.env.SCRAPE_SITE_CONCURRENCY_LEASE_TTL_MS || '600000');
+        const pollIntervalRaw = Number(process.env.SCRAPE_SITE_CONCURRENCY_POLL_MS || '50');
+        this.leaseTtlMs =
+            Number.isFinite(leaseTtlRaw) && leaseTtlRaw >= 30_000 ? Math.floor(leaseTtlRaw) : 600000;
+        this.pollIntervalMs =
+            Number.isFinite(pollIntervalRaw) && pollIntervalRaw >= 10 ? Math.floor(pollIntervalRaw) : 50;
 
         // Validate and sanitize configuration
         if (this.config.minConcurrency < 1) {
@@ -120,6 +130,64 @@ export class ConcurrencyLimiter {
             maxConcurrency: this.config.maxConcurrency,
             initialConcurrency: this.config.initialConcurrency,
         });
+    }
+
+    private normalizeSite(site: string): string {
+        return (site || '').trim().toLowerCase().replace(/^www\./, '');
+    }
+
+    private getDistributedKey(site: string): string {
+        return `${ConcurrencyLimiter.DISTRIBUTED_KEY_PREFIX}${this.normalizeSite(site)}`;
+    }
+
+    private async sleep(ms: number): Promise<void> {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    private async tryAcquireDistributed(site: string, limit: number): Promise<boolean> {
+        const redis = getRedisConnection();
+        const key = this.getDistributedKey(site);
+        const ttlMs = this.leaseTtlMs;
+        const cappedLimit = Math.max(1, Math.floor(limit));
+
+        const lua = `
+            local key = KEYS[1]
+            local max = tonumber(ARGV[1])
+            local ttl = tonumber(ARGV[2])
+            local current = tonumber(redis.call("GET", key) or "0")
+            if current >= max then
+              return 0
+            end
+            local nextValue = redis.call("INCR", key)
+            redis.call("PEXPIRE", key, ttl)
+            return nextValue
+        `;
+
+        const result = (await redis.eval(lua, 1, key, cappedLimit, ttlMs)) as number;
+        return result > 0;
+    }
+
+    private async releaseDistributed(site: string): Promise<void> {
+        const redis = getRedisConnection();
+        const key = this.getDistributedKey(site);
+        const ttlMs = this.leaseTtlMs;
+        const lua = `
+            local key = KEYS[1]
+            local ttl = tonumber(ARGV[1])
+            local current = tonumber(redis.call("GET", key) or "0")
+            if current <= 1 then
+              redis.call("DEL", key)
+              return 0
+            end
+            local nextValue = redis.call("DECR", key)
+            if nextValue <= 0 then
+              redis.call("DEL", key)
+              return 0
+            end
+            redis.call("PEXPIRE", key, ttl)
+            return nextValue
+        `;
+        await redis.eval(lua, 1, key, ttlMs);
     }
 
     /**
@@ -165,20 +233,16 @@ export class ConcurrencyLimiter {
      */
     async acquireSlot(site: string): Promise<void> {
         const state = this.getState(site);
-
-        // If under limit, increment and proceed immediately
-        if (state.activeRequests < state.currentConcurrency) {
-            state.activeRequests++;
-            return;
+        while (true) {
+            if (state.activeRequests < state.currentConcurrency) {
+                const acquired = await this.tryAcquireDistributed(site, state.currentConcurrency);
+                if (acquired) {
+                    state.activeRequests++;
+                    return;
+                }
+            }
+            await this.sleep(this.pollIntervalMs);
         }
-
-        // Otherwise, queue the request and wait
-        return new Promise<void>((resolve) => {
-            state.requestQueue.push(() => {
-                state.activeRequests++;
-                resolve();
-            });
-        });
     }
 
     /**
@@ -208,12 +272,12 @@ export class ConcurrencyLimiter {
         }
 
         state.activeRequests = Math.max(0, state.activeRequests - 1);
-
-        // Process next queued request if any
-        const nextRequest = state.requestQueue.shift();
-        if (nextRequest) {
-            nextRequest();
-        }
+        void this.releaseDistributed(site).catch((error) => {
+            logger.warn('[ConcurrencyLimiter] Failed to release distributed concurrency slot', {
+                site,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
     }
 
     /**
@@ -425,6 +489,8 @@ export class ConcurrencyLimiter {
      */
     resetSite(site: string): void {
         this.siteStates.delete(site);
+        const redis = getRedisConnection();
+        void redis.del(this.getDistributedKey(site)).catch(() => undefined);
         logger.info(`[ConcurrencyLimiter] Reset state for site: ${site}`);
     }
 
@@ -434,6 +500,19 @@ export class ConcurrencyLimiter {
      */
     resetAll(): void {
         this.siteStates.clear();
+        const redis = getRedisConnection();
+        let cursor = '0';
+        const pattern = `${ConcurrencyLimiter.DISTRIBUTED_KEY_PREFIX}*`;
+        const run = async () => {
+            do {
+                const [nextCursor, keys] = (await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200)) as [string, string[]];
+                cursor = nextCursor;
+                if (keys.length > 0) {
+                    await redis.del(...keys);
+                }
+            } while (cursor !== '0');
+        };
+        void run().catch(() => undefined);
         logger.info('[ConcurrencyLimiter] Reset all site states');
     }
 }

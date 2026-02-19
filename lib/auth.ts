@@ -6,64 +6,39 @@ import bcrypt from "bcryptjs";
 import { cacheWarmingService } from "@/lib/services/cache-warming";
 import { securityMonitoringService } from "@/lib/services/monitoring/security-monitoring";
 import { getOrSetRequestCache } from "@/lib/cache/request-cache";
+import { getRedisConnection } from "@/lib/queue/connection";
 
-type SessionLookupCacheEntry = {
-  value: any | null;
-  expiresAt: number;
-  promise?: Promise<any | null>;
-};
-
-const globalSessionLookupState = globalThis as typeof globalThis & {
-  __ppSessionLookupCache?: Map<string, SessionLookupCacheEntry>;
-};
-
-const sessionLookupCache =
-  globalSessionLookupState.__ppSessionLookupCache ??
-  new Map<string, SessionLookupCacheEntry>();
-if (!globalSessionLookupState.__ppSessionLookupCache) {
-  globalSessionLookupState.__ppSessionLookupCache = sessionLookupCache;
-}
+const SESSION_LOOKUP_PREFIX = "pp:auth:session-lookup:";
 
 async function getSessionRecordWithShortTtl(
   sessionToken: string,
 ): Promise<any | null> {
+  const redis = getRedisConnection();
   const ttlMs = Number.parseInt(process.env.SESSION_LOOKUP_CACHE_MS || "5000", 10);
   const effectiveTtlMs = Number.isFinite(ttlMs) ? Math.max(1000, ttlMs) : 5000;
-  const now = Date.now();
-  const cacheKey = `session:${sessionToken}`;
-  const cached = sessionLookupCache.get(cacheKey);
+  const cacheKey = `${SESSION_LOOKUP_PREFIX}${sessionToken}`;
 
-  if (cached && cached.expiresAt > now) {
-    if (cached.promise) {
-      return cached.promise;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
     }
-    return cached.value;
+  } catch {
+    // ignore cache read errors and fallback to DB
   }
 
-  const inFlightLookup = (async () => {
-    const record = await (prisma as any).session.findUnique({
-      where: { sessionToken },
-    });
-
-    sessionLookupCache.set(cacheKey, {
-      value: record ?? null,
-      expiresAt: Date.now() + effectiveTtlMs,
-    });
-
-    return record ?? null;
-  })();
-  sessionLookupCache.set(cacheKey, {
-    value: null,
-    expiresAt: now + effectiveTtlMs,
-    promise: inFlightLookup,
+  const record = await (prisma as any).session.findUnique({
+    where: { sessionToken },
   });
 
   try {
-    return await inFlightLookup;
-  } catch (error) {
-    sessionLookupCache.delete(cacheKey);
-    throw error;
+    const ttlSeconds = Math.max(1, Math.ceil(effectiveTtlMs / 1000));
+    await redis.set(cacheKey, JSON.stringify(record ?? null), "EX", ttlSeconds);
+  } catch {
+    // ignore cache write errors
   }
+
+  return record ?? null;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -238,7 +213,9 @@ export const authOptions: NextAuthOptions = {
           await (prisma as any).session.deleteMany({
             where: { id: sessionRecord.id },
           });
-          sessionLookupCache.delete(`session:${token.sessionId as string}`);
+          await getRedisConnection()
+            .del(`${SESSION_LOOKUP_PREFIX}${token.sessionId as string}`)
+            .catch(() => undefined);
           (token as any).invalidated = true;
           delete (token as any).sessionId;
           delete (token as any).tenantId;
@@ -256,10 +233,14 @@ export const authOptions: NextAuthOptions = {
             where: { id: sessionRecord.id },
             data: { lastUsedAt: new Date() },
           });
-          sessionLookupCache.set(`session:${token.sessionId as string}`, {
-            value: updatedSessionRecord,
-            expiresAt: Date.now() + 5000,
-          });
+          await getRedisConnection()
+            .set(
+              `${SESSION_LOOKUP_PREFIX}${token.sessionId as string}`,
+              JSON.stringify(updatedSessionRecord),
+              "EX",
+              5,
+            )
+            .catch(() => undefined);
         }
       }
 

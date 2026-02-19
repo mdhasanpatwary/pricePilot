@@ -1,12 +1,12 @@
-import { ScraperService, ScrapeBlockError } from "./scraper";
+import { ScrapeBlockError } from "./scraper";
 import { detectPriceAnomaly } from "./price-anomaly";
 import { RulesEngine } from "./rules-engine";
 import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
 import { NotificationService } from "./notification";
-import { withRetry } from "@/lib/utils/timeout";
 import { SystemConfigService } from "@/lib/config";
 import { getSyncQueue } from "@/lib/queue/client";
+import { getRedisConnection } from "@/lib/queue/connection";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
 import { CacheInvalidationService } from "./cache-invalidation";
@@ -14,9 +14,11 @@ import { AutoApprovalService } from "./auto-approval";
 import { withDbRetry } from "@/lib/utils/db-retry";
 import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 import { scrapeLogger } from "./scrape-logger";
+import { enqueueWithBackpressure } from "@/lib/queue/backpressure";
+import { ScrapingEngineService } from "@/lib/services/scraping-engine-service";
 
 export class SyncOrchestrator {
-  private static retrySiteLocks = new Map<string, Promise<void>>();
+  private static readonly RETRY_SITE_LOCK_TTL_MS = 10 * 60 * 1000;
 
   private static sanitizeQueueSegment(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -24,6 +26,15 @@ export class SyncOrchestrator {
 
   private static buildRetryJobId(siteId: string, productId: string, attempt: number): string {
     return `retry-${this.sanitizeQueueSegment(siteId)}-${this.sanitizeQueueSegment(productId)}-a${attempt}`;
+  }
+
+  private static getRetrySiteLockKey(siteId: string): string {
+    return `pp:lock:retry-site:${this.sanitizeQueueSegment(siteId)}`;
+  }
+
+  private static getRetrySiteLockTtlMs(): number {
+    const raw = Number(process.env.SYNC_RETRY_SITE_LOCK_TTL_MS || this.RETRY_SITE_LOCK_TTL_MS);
+    return Number.isFinite(raw) && raw >= 30_000 ? Math.floor(raw) : this.RETRY_SITE_LOCK_TTL_MS;
   }
 
   private static getRetryBackoffMinutes(retryCount: number, isAdvancedBlock: boolean): number {
@@ -90,10 +101,16 @@ export class SyncOrchestrator {
       };
     }
 
-    await getSyncQueue().add(QUEUE_NAMES.SYNC, {
-      type: "FULL",
-      tenantId,
-    }, { priority: 5 }); // Lowest priority for mass background syncs
+    await enqueueWithBackpressure(
+      getSyncQueue(),
+      QUEUE_NAMES.SYNC,
+      {
+        type: "FULL",
+        tenantId,
+      },
+      { priority: 5 },
+      { producer: "SyncOrchestrator.dispatchFullSync", strategy: "reject" },
+    ); // Lowest priority for mass background syncs
     return { success: true, message: "Full sync job queued successfully." };
   }
 
@@ -102,11 +119,17 @@ export class SyncOrchestrator {
    */
   static async dispatchSiteSync(siteId: string, force: boolean = false) {
     const { getSyncQueue } = await import("@/lib/queue/client");
-    await getSyncQueue().add(QUEUE_NAMES.SYNC, {
-      type: "SINGLE",
-      siteId,
-      force,
-    }, { priority: 2 }); // Higher priority for user-triggered single site syncs
+    await enqueueWithBackpressure(
+      getSyncQueue(),
+      QUEUE_NAMES.SYNC,
+      {
+        type: "SINGLE",
+        siteId,
+        force,
+      },
+      { priority: 2 },
+      { producer: "SyncOrchestrator.dispatchSiteSync", strategy: "reject" },
+    ); // Higher priority for user-triggered single site syncs
 
     // Record QUEUE event
     metricsCollector.recordSyncLifecycle(siteId, 'QUEUE', { force, source: 'dispatchSiteSync' }).catch(console.error);
@@ -119,10 +142,16 @@ export class SyncOrchestrator {
    */
   static async dispatchProductSync(productId: string) {
     const { getSyncQueue } = await import("@/lib/queue/client");
-    await getSyncQueue().add(QUEUE_NAMES.SYNC, {
-      type: "PRODUCT",
-      productId,
-    }, { priority: 1 }); // Highest priority for manual one-off syncs
+    await enqueueWithBackpressure(
+      getSyncQueue(),
+      QUEUE_NAMES.SYNC,
+      {
+        type: "PRODUCT",
+        productId,
+      },
+      { priority: 1 },
+      { producer: "SyncOrchestrator.dispatchProductSync", strategy: "reject" },
+    ); // Highest priority for manual one-off syncs
     return { success: true, message: "Product sync job queued successfully." };
   }
 
@@ -213,14 +242,25 @@ export class SyncOrchestrator {
       for (const site of competitorSites) {
         // Optimization: Instead of doing everything here, dispatch individual jobs
         // to the queue so multiple workers can pick them up in parallel.
-        await getSyncQueue().add(QUEUE_NAMES.SYNC, {
-          type: "SINGLE",
-          siteId: site.id,
-          isCron: isCron,
-        }, {
-          jobId: `sync-${site.id}-${syncSessionStart.getTime()}`,
-          priority: isCron ? 4 : 2
-        });
+        await enqueueWithBackpressure(
+          getSyncQueue(),
+          QUEUE_NAMES.SYNC,
+          {
+            type: "SINGLE",
+            siteId: site.id,
+            isCron: isCron,
+          },
+          {
+            jobId: `sync-${site.id}-${syncSessionStart.getTime()}`,
+            priority: isCron ? 4 : 2,
+          },
+          {
+            producer: "SyncOrchestrator.processFullSync",
+            strategy: "delay",
+            minDelayMs: 15_000,
+            maxDelayMs: 180_000,
+          },
+        );
 
         // Record QUEUE for each site in full sync
         metricsCollector.recordSyncLifecycle(site.id, 'QUEUE', { source: 'fullSync', isCron }).catch(console.error);
@@ -362,8 +402,6 @@ export class SyncOrchestrator {
       }
     }
 
-
-    let scraper: ScraperService | null = null;
     try {
       if (!siteId) return { success: false, message: "Missing siteId" };
 
@@ -402,9 +440,6 @@ export class SyncOrchestrator {
         matchedProducts.length - productsToScrape.length;
       let processed = alreadyProcessedCount;
       let count = 0;
-
-      scraper = new ScraperService();
-      await scraper.init();
 
       // Initialize progress
       await prisma.site.update({
@@ -454,15 +489,6 @@ export class SyncOrchestrator {
       const baseBatchSize = process.env.NODE_ENV === "production"
         ? normalizedBatchSize
         : Math.min(normalizedBatchSize, devBatchCap);
-      const SCRAPE_TIMEOUT = await SystemConfigService.get(
-        "SCRAPER_TIMEOUT",
-        45000,
-      );
-      const MAX_RETRIES = await SystemConfigService.get(
-        "SCRAPER_MAX_RETRIES",
-        3,
-      );
-
       for (let i = 0; i < productsToScrape.length;) {
         const batchSize = isGoldenRule ? 1 : baseBatchSize;
 
@@ -493,7 +519,7 @@ export class SyncOrchestrator {
         if (batch.length === 0) continue;
         const productsToScrapeBatch = batch;
 
-        // Process batch in parallel with retry logic
+        // Process batch in parallel. Retry ownership lives in ScrapeOrchestrator + retry queue.
 
         const results = (await Promise.allSettled(
           batch.map(async (product) => {
@@ -510,13 +536,13 @@ export class SyncOrchestrator {
               const delay = 8000 + Math.random() * 7000; // 8-15s
               await new Promise(r => setTimeout(r, delay));
             }
-            const result = await withRetry(
-              () => scraper!.scrapeProductPage(product.url || "", {
-                isAdvancedProtected: isGoldenRule,
-              }),
-              MAX_RETRIES,
-              SCRAPE_TIMEOUT,
-            );
+            const result = await ScrapingEngineService.scrapeByUrl(product.url || "", {
+              context: "worker",
+              isAdvancedProtected: isGoldenRule,
+              competitorProductId: product.id,
+              tenantId: product.tenantId,
+              siteId,
+            });
             return { product, result };
           }),
         )) as any[];
@@ -723,13 +749,6 @@ export class SyncOrchestrator {
           }
         }
 
-        // Periodic metrics flush keeps buffers bounded for long-running syncs.
-        if (processed > 0 && processed % 25 === 0) {
-          await scraper!.persistMetrics().catch((e) =>
-            logger.warn("[SyncOrchestrator] Failed periodic metrics flush", { error: e })
-          );
-        }
-
         // Small delay between batches to avoid overwhelming the server
         if (i + batchSize < productsToScrape.length) {
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -848,12 +867,6 @@ export class SyncOrchestrator {
 
       throw error;
     } finally {
-      if (scraper) {
-        await scraper.dispose({ flushMetrics: true }).catch((e) =>
-          logger.error("Failed to dispose scraper service:", { error: e })
-        );
-      }
-
       // Use updateMany to safely update state even if record is gone
       // IMPORTANT: Only reset if the site is still associated with OUR session ID
       await prisma.site
@@ -884,12 +897,13 @@ export class SyncOrchestrator {
 
     if (!product || !product.url) throw new Error("Product or URL not found");
 
-    const scraper = new ScraperService();
-    try {
-      await scraper.init();
-
-      const result = await scraper.scrapeProductPage(product.url, {
+    {
+      const result = await ScrapingEngineService.scrapeByUrl(product.url, {
+        context: "worker",
         isAdvancedProtected: Boolean((product as any).Site?.isAdvancedProtected),
+        competitorProductId: product.id,
+        tenantId: product.tenantId,
+        siteId: product.siteId,
       });
       if (result && result.price) {
         await prisma.product.update({
@@ -940,10 +954,6 @@ export class SyncOrchestrator {
       }
 
       return { success: true, price: result?.price };
-    } finally {
-      await scraper.dispose({ flushMetrics: true }).catch((e) =>
-        logger.error("Failed to dispose scraper service:", { error: e })
-      );
     }
   }
 
@@ -960,21 +970,22 @@ export class SyncOrchestrator {
       where: { id: { in: productIds } },
     });
 
-    const scraper = new ScraperService();
-    try {
-      await scraper.init();
-      const site = await prisma.site.findUnique({
-        where: { id: siteId },
-        select: { isAdvancedProtected: true },
-      });
-      const isAdvancedProtected = Boolean(site?.isAdvancedProtected);
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { isAdvancedProtected: true },
+    });
+    const isAdvancedProtected = Boolean(site?.isAdvancedProtected);
 
-      for (const product of products) {
-        if (!product.url) continue;
-        const result = await scraper.scrapeProductPage(product.url, {
-          isAdvancedProtected,
-        });
-        if (result && result.price) {
+    for (const product of products) {
+      if (!product.url) continue;
+      const result = await ScrapingEngineService.scrapeByUrl(product.url, {
+        context: "worker",
+        isAdvancedProtected,
+        competitorProductId: product.id,
+        tenantId: product.tenantId,
+        siteId,
+      });
+      if (result && result.price) {
           await prisma.product.update({
             where: { id: product.id },
             data: {
@@ -1000,12 +1011,7 @@ export class SyncOrchestrator {
           await prisma.priceHistory.create({
             data: { productId: product.id, price: result.price },
           });
-        }
       }
-    } finally {
-      await scraper.dispose({ flushMetrics: true }).catch((e) =>
-        logger.error("Failed to dispose scraper service:", { error: e })
-      );
     }
   }
 
@@ -1013,19 +1019,58 @@ export class SyncOrchestrator {
    * Process a delayed retry for blocked products
    */
   static async processRetrySync(siteId: string, productIds: string[]) {
-    const previousLock = this.retrySiteLocks.get(siteId) || Promise.resolve();
-    const currentLock = previousLock
-      .catch(() => undefined)
-      .then(() => this.processRetrySyncInternal(siteId, productIds));
+    const redis = getRedisConnection();
+    const lockKey = this.getRetrySiteLockKey(siteId);
+    const lockTtlMs = this.getRetrySiteLockTtlMs();
+    const lockToken = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    const acquired = await redis.set(lockKey, lockToken, "PX", lockTtlMs, "NX");
 
-    this.retrySiteLocks.set(siteId, currentLock);
+    if (acquired !== "OK") {
+      logger.info(`[SyncOrchestrator] Skipping retry sync; lock already held for site ${siteId}`);
+      return;
+    }
+
+    const heartbeatEveryMs = Math.max(10_000, Math.floor(lockTtlMs / 3));
+    const heartbeat = setInterval(async () => {
+      try {
+        const renewLua = `
+          local key = KEYS[1]
+          local token = ARGV[1]
+          local ttl = tonumber(ARGV[2])
+          if redis.call("GET", key) == token then
+            redis.call("PEXPIRE", key, ttl)
+            return 1
+          end
+          return 0
+        `;
+        await redis.eval(renewLua, 1, lockKey, lockToken, lockTtlMs);
+      } catch (error) {
+        logger.warn("[SyncOrchestrator] Failed to refresh retry-site lock", {
+          siteId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }, heartbeatEveryMs);
 
     try {
-      await currentLock;
+      await this.processRetrySyncInternal(siteId, productIds);
     } finally {
-      if (this.retrySiteLocks.get(siteId) === currentLock) {
-        this.retrySiteLocks.delete(siteId);
-      }
+      clearInterval(heartbeat);
+      const releaseLua = `
+        local key = KEYS[1]
+        local token = ARGV[1]
+        if redis.call("GET", key) == token then
+          redis.call("DEL", key)
+          return 1
+        end
+        return 0
+      `;
+      await redis.eval(releaseLua, 1, lockKey, lockToken).catch((error: Error) => {
+        logger.warn("[SyncOrchestrator] Failed to release retry-site lock", {
+          siteId,
+          error: error.message,
+        });
+      });
     }
   }
 
@@ -1035,11 +1080,7 @@ export class SyncOrchestrator {
 
     logger.info(`[SyncOrchestrator] Starting retry sync for ${productIds.length} products on site ${siteId}`);
 
-    const scraper = new ScraperService();
-    try {
-      await scraper.init();
-
-      for (let index = 0; index < productIds.length; index++) {
+    for (let index = 0; index < productIds.length; index++) {
         const productId = productIds[index];
         const userProduct = await prisma.product.findUnique({ where: { id: productId } });
         if (!userProduct) continue;
@@ -1064,7 +1105,11 @@ export class SyncOrchestrator {
 
         try {
           const cleanTitle = userProduct.title.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-          const result = await scraper.searchAndScrape(site.baseUrl, cleanTitle, siteId);
+          const result = await ScrapingEngineService.searchAndScrape(site.baseUrl, cleanTitle, {
+            siteId,
+            tenantId: userProduct.tenantId,
+            context: "retry",
+          });
 
         if (result && result.price > 0) {
           // Success! Create match
@@ -1140,15 +1185,26 @@ export class SyncOrchestrator {
               }
             });
 
-            await getSyncQueue().add(QUEUE_NAMES.SYNC, {
-              type: "RETRY",
-              siteId,
-              tenantId: userProduct.tenantId,
-              productIds: [productId]
-            }, {
-              delay: retryAfter * 60 * 1000,
-              jobId: this.buildRetryJobId(siteId, productId, nextAttemptNumber),
-            });
+            await enqueueWithBackpressure(
+              getSyncQueue(),
+              QUEUE_NAMES.SYNC,
+              {
+                type: "RETRY",
+                siteId,
+                tenantId: userProduct.tenantId,
+                productIds: [productId],
+              },
+              {
+                delay: retryAfter * 60 * 1000,
+                jobId: this.buildRetryJobId(siteId, productId, nextAttemptNumber),
+              },
+              {
+                producer: "SyncOrchestrator.processRetryQueue",
+                strategy: "delay",
+                minDelayMs: 10_000,
+                maxDelayMs: 120_000,
+              },
+            );
 
             await prisma.syncLog.create({
               data: {
@@ -1171,10 +1227,5 @@ export class SyncOrchestrator {
           }
         }
       }
-    } finally {
-      await scraper.dispose({ flushMetrics: true }).catch((e) =>
-        logger.error("Failed to dispose scraper service:", { error: e })
-      );
-    }
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { QueueBackpressureError } from "@/lib/queue/backpressure";
 import {
   validateBody,
   validationErrorResponse,
@@ -15,6 +16,7 @@ import { withDbRetry } from "@/lib/utils/db-retry";
  */
 async function handleSync(req: NextRequest) {
   const session = await getCachedSession();
+  let queuedSiteId: string | null = null;
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,6 +31,7 @@ async function handleSync(req: NextRequest) {
     }
 
     const { siteId, force } = validation.data!;
+    queuedSiteId = siteId;
 
     // Check if site is already syncing
     const { prisma } = await import("@/lib/prisma");
@@ -86,10 +89,7 @@ async function handleSync(req: NextRequest) {
       console.error("Cache invalidation error:", err)
     );
 
-    // Run sync in background (don't await)
-    SyncOrchestrator.dispatchSiteSync(siteId, force).catch((error) => {
-      console.error(`[API] Background sync failed for site ${siteId}:`, error);
-    });
+    await SyncOrchestrator.dispatchSiteSync(siteId, force);
 
     // Return immediately so the frontend can start polling
     return NextResponse.json({
@@ -98,6 +98,33 @@ async function handleSync(req: NextRequest) {
       siteId,
     });
   } catch (error) {
+    if (error instanceof QueueBackpressureError) {
+      if (queuedSiteId) {
+        const siteIdForReset = queuedSiteId;
+        const { prisma } = await import("@/lib/prisma");
+        await withDbRetry(
+          () =>
+            prisma.site.update({
+              where: { id: siteIdForReset },
+              data: {
+                isSyncing: false,
+                syncLastAction: "Queue overloaded. Try again shortly.",
+              },
+            }),
+          { operationName: "ResetSiteSyncingOnQueueBackpressure" },
+        ).catch(() => undefined);
+      }
+
+      return NextResponse.json(
+        {
+          error: "Sync queue overloaded. Please retry shortly.",
+          queueDepth: error.queueDepth,
+          threshold: error.threshold,
+        },
+        { status: 429 },
+      );
+    }
+
     const err = error as Error;
     console.error("Site sync failed:", err);
     return NextResponse.json(

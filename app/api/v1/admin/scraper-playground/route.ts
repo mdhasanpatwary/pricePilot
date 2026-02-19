@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ScraperService } from "@/lib/services/scraper";
+import { ScrapingEngineService } from "@/lib/services/scraping-engine-service";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
   validateBody,
@@ -17,11 +17,9 @@ async function handlePOST(req: NextRequest) {
 
     const { url } = validation.data!;
 
-    const scraper = new ScraperService();
-    // Use scrapeProductPage which is designed for direct URL scraping
-    const result = await scraper.scrapeProductPage(url);
-
-    await scraper.close();
+    const result = await ScrapingEngineService.scrapeByUrl(url, {
+      context: "worker",
+    });
 
     if (!result) {
       return NextResponse.json(

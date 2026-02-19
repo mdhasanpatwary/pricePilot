@@ -14,12 +14,9 @@ import { createSlidingWindowRateLimiter } from "@/lib/redis/sliding-window-ratel
  * @see {@link https://docs.upstash.com/redis/features/ratelimiting|Upstash Rate Limiting}
  */
 
-/**
- * Redis client for distributed rate limiting.
- */
-let ratelimitDisabledUntilMs = 0;
-
 const redis = getRedisConnection();
+const RATE_LIMIT_DISABLED_KEY = "pp:ratelimit:disable:global";
+const RATE_LIMIT_DISABLED_TTL_SECONDS = 30;
 
 /**
  * Rate limiter configurations for different endpoint types
@@ -162,14 +159,19 @@ export async function checkRateLimit(
   remaining: number;
   reset: number;
 }> {
-  // If temporarily disabled, skip rate limiting (fail open).
-  if (ratelimitDisabledUntilMs > Date.now()) {
-    return {
-      success: true,
-      limit: 1000,
-      remaining: 999,
-      reset: Date.now(),
-    };
+  // If temporarily disabled, skip rate limiting (fail open), cluster-wide.
+  try {
+    const disabled = await redis.get(RATE_LIMIT_DISABLED_KEY);
+    if (disabled) {
+      return {
+        success: true,
+        limit: 1000,
+        remaining: 999,
+        reset: Date.now(),
+      };
+    }
+  } catch {
+    // ignore redis read error and proceed to limiter call
   }
 
   try {
@@ -182,8 +184,10 @@ export async function checkRateLimit(
       reset: result.reset,
     };
   } catch (_err) {
-    // Redis error: disable briefly to avoid spamming logs during outages.
-    ratelimitDisabledUntilMs = Date.now() + 30 * 1000;
+    // Redis error: disable briefly to avoid spamming logs during outages (cluster-wide).
+    await redis
+      .set(RATE_LIMIT_DISABLED_KEY, "1", "EX", RATE_LIMIT_DISABLED_TTL_SECONDS)
+      .catch(() => undefined);
     return {
       success: true,
       limit: 1000,

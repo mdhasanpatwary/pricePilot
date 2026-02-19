@@ -9,8 +9,14 @@ import { VolatilityService } from "@/lib/services/scheduling/volatility-service"
 import { DomainThrottleService } from "@/lib/services/scheduling/domain-throttle-service";
 import { DomainRateLimiter } from "@/lib/services/scheduling/domain-rate-limiter";
 import { ScrapeSchedulingService } from "@/lib/services/scheduling/scrape-scheduling";
+import {
+  TenantConcurrencyLimiter,
+  TenantConcurrencyPermit,
+} from "@/lib/services/scheduling/tenant-concurrency-limiter";
+import { enqueueWithBackpressure } from "@/lib/queue/backpressure";
 
 const adapter = new ScraperAdapter();
+const tenantConcurrencyLimiter = new TenantConcurrencyLimiter();
 
 function normalizeDomainFromBaseUrl(baseUrl: string): string {
   try {
@@ -68,107 +74,159 @@ export class ScrapeJobProcessor {
 
     const url = product.url!;
     const domain = normalizeDomainFromBaseUrl(product.Site.baseUrl);
+    const tenantId = job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : product.tenantId;
 
-    // Domain adaptive throttling + per-domain concurrency.
-    const throttle = await DomainThrottleService.get(domain);
-
-    if (throttle.cooldownUntilMs && throttle.cooldownUntilMs > Date.now()) {
-      await this.reschedule(job, throttle.cooldownUntilMs);
+    if (!tenantId) {
+      logger.warn("[ScrapeJobProcessor] Missing tenantId, delaying", {
+        productId: job.data.productId,
+      });
+      await this.reschedule(job, Date.now() + 60_000);
+      return;
     }
 
-    const acquired = await DomainRateLimiter.tryAcquireConcurrency({
-      domain,
-      maxConcurrent: throttle.maxConcurrent,
-      ttlMs: 120_000,
-    });
-    if (!acquired) {
-      await this.reschedule(job, Date.now() + 1000);
+    const permit = await tenantConcurrencyLimiter.tryAcquire(tenantId);
+    if (!permit) {
+      const requeueDelayRaw = Number(process.env.SCRAPE_TENANT_CONCURRENCY_REQUEUE_DELAY_MS || "5000");
+      const requeueDelayMs =
+        Number.isFinite(requeueDelayRaw) && requeueDelayRaw >= 1000
+          ? Math.floor(requeueDelayRaw)
+          : 5000;
+
+      logger.info("[ScrapeJobProcessor] Tenant concurrency saturated, delaying job", {
+        tenantId,
+        productId: product.id,
+        maxPerTenant: tenantConcurrencyLimiter.getMaxPerTenant(),
+        delayMs: requeueDelayMs,
+      });
+      await this.reschedule(job, Date.now() + requeueDelayMs);
+      return;
     }
+
+    let heartbeatTimer: NodeJS.Timeout | null = null;
+    const startPermitHeartbeat = (activePermit: TenantConcurrencyPermit) => {
+      const heartbeatEveryMs = Math.max(10_000, Math.floor(tenantConcurrencyLimiter.getLeaseTtlMs() / 3));
+      heartbeatTimer = setInterval(() => {
+        void tenantConcurrencyLimiter.refresh(activePermit);
+      }, heartbeatEveryMs);
+    };
+
+    startPermitHeartbeat(permit);
 
     try {
-      const waitMs = await DomainRateLimiter.takeIntervalPermit({
-        domain,
-        minIntervalMs: throttle.minIntervalMs,
-      });
-      if (waitMs > 0) {
-        await this.reschedule(job, Date.now() + waitMs);
+      // Domain adaptive throttling + per-domain concurrency.
+      const throttle = await DomainThrottleService.get(domain);
+
+      if (throttle.cooldownUntilMs && throttle.cooldownUntilMs > Date.now()) {
+        await this.reschedule(job, throttle.cooldownUntilMs);
       }
 
-      // Execute scrape (this writes ScrapeAttempt + updates Product/PriceHistory).
-      await adapter.scrapeCompetitorProduct(product.id, url, product.tenantId);
-
-      const lastAttempt = await prisma.scrapeAttempt.findFirst({
-        where: { competitorProductId: product.id },
-        orderBy: { createdAt: "desc" },
-        select: {
-          success: true,
-          failureType: true,
-          statusCode: true,
-        },
-      });
-
-      const success = Boolean(lastAttempt?.success);
-      const failureType = (lastAttempt?.failureType ?? null) as ScrapeFailureType | null;
-      const statusCode = lastAttempt?.statusCode ?? null;
-
-      // Update volatility only after a successful scrape (and DB update).
-      const volatility = success
-        ? await VolatilityService.upsertForProduct(product.id)
-        : { volatilityScore: product.ProductVolatility?.volatilityScore ?? 0, lastPriceChangeAt: null, priceChangeCount30d: 0 };
-
-      // Update product scheduling state.
-      const consecutiveFailures = success ? 0 : product.consecutiveScrapeFailures + 1;
-      const lastFailedAt = success ? null : startedAt;
-      const lastSucceededAt = success ? startedAt : null;
-
-      const next = ScrapeSchedulingService.computeRefreshDecision(
-        {
-          volatilityScore: volatility.volatilityScore,
-          inStock: product.inStock,
-          consecutiveFailures,
-          lastFailureType: failureType,
-          domainPenaltyLevel: throttle.penaltyLevel,
-        },
-        startedAt,
-      );
-
-      const priority = ScrapeSchedulingService.computePriority({
-        volatilityScore: volatility.volatilityScore,
-        consecutiveFailures,
-        lastFailedAt,
-        inStock: product.inStock,
-        businessPriority: product.businessPriority,
-        domainPriorityPenalty: throttle.priorityPenalty,
-      });
-
-      await prisma.product.update({
-        where: { id: product.id },
-        data: {
-          nextScrapeAt: next.nextScrapeAt,
-          lastScrapeAttemptAt: startedAt,
-          lastScrapeSucceededAt: lastSucceededAt ?? undefined,
-          lastScrapeFailedAt: lastFailedAt ?? undefined,
-          consecutiveScrapeFailures: consecutiveFailures,
-        },
-        select: { id: true },
-      });
-
-      await DomainThrottleService.recordAttempt({
+      const acquired = await DomainRateLimiter.tryAcquireConcurrency({
         domain,
-        success,
-        failureType,
-        statusCode,
+        maxConcurrent: throttle.maxConcurrent,
+        ttlMs: 120_000,
       });
+      if (!acquired) {
+        await this.reschedule(job, Date.now() + 1000);
+      }
 
-      await job.updateData({
-        ...job.data,
-        priorityScore: priority.priorityScore,
-        lastScheduledAt: startedAt.toISOString(),
-      });
-      await job.changePriority({ priority: priority.bullmqPriority });
-      await this.reschedule(job, next.nextScrapeAt.getTime());
+      try {
+        const waitMs = await DomainRateLimiter.takeIntervalPermit({
+          domain,
+          minIntervalMs: throttle.minIntervalMs,
+        });
+        if (waitMs > 0) {
+          await this.reschedule(job, Date.now() + waitMs);
+        }
+
+        // Execute scrape (this writes ScrapeAttempt + updates Product/PriceHistory).
+        await adapter.scrapeCompetitorProduct(product.id, url, product.tenantId);
+
+        const lastAttempt = await prisma.scrapeAttempt.findFirst({
+          where: { competitorProductId: product.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            success: true,
+            failureType: true,
+            statusCode: true,
+          },
+        });
+
+        const success = Boolean(lastAttempt?.success);
+        const failureType = (lastAttempt?.failureType ?? null) as ScrapeFailureType | null;
+        const statusCode = lastAttempt?.statusCode ?? null;
+
+        // Update volatility only after a successful scrape (and DB update).
+        const volatility = success
+          ? await VolatilityService.upsertForProduct(product.id)
+          : { volatilityScore: product.ProductVolatility?.volatilityScore ?? 0, lastPriceChangeAt: null, priceChangeCount30d: 0 };
+
+        // Update product scheduling state.
+        const consecutiveFailures = success ? 0 : product.consecutiveScrapeFailures + 1;
+        const lastFailedAt = success ? null : startedAt;
+        const lastSucceededAt = success ? startedAt : null;
+
+        const next = ScrapeSchedulingService.computeRefreshDecision(
+          {
+            volatilityScore: volatility.volatilityScore,
+            inStock: product.inStock,
+            consecutiveFailures,
+            lastFailureType: failureType,
+            domainPenaltyLevel: throttle.penaltyLevel,
+          },
+          startedAt,
+        );
+
+        const priority = ScrapeSchedulingService.computePriority({
+          volatilityScore: volatility.volatilityScore,
+          consecutiveFailures,
+          lastFailedAt,
+          inStock: product.inStock,
+          businessPriority: product.businessPriority,
+          domainPriorityPenalty: throttle.priorityPenalty,
+        });
+
+        await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            nextScrapeAt: next.nextScrapeAt,
+            lastScrapeAttemptAt: startedAt,
+            lastScrapeSucceededAt: lastSucceededAt ?? undefined,
+            lastScrapeFailedAt: lastFailedAt ?? undefined,
+            consecutiveScrapeFailures: consecutiveFailures,
+          },
+          select: { id: true },
+        });
+
+        await DomainThrottleService.recordAttempt({
+          domain,
+          success,
+          failureType,
+          statusCode,
+        });
+
+        await job.updateData({
+          ...job.data,
+          priorityScore: priority.priorityScore,
+          lastScheduledAt: startedAt.toISOString(),
+        });
+        await job.changePriority({ priority: priority.bullmqPriority });
+        await this.reschedule(job, next.nextScrapeAt.getTime());
+      } finally {
+        await DomainRateLimiter.releaseConcurrency(domain);
+      }
     } finally {
-      await DomainRateLimiter.releaseConcurrency(domain);
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+      }
+      try {
+        await tenantConcurrencyLimiter.release(permit);
+      } catch (error) {
+        logger.warn("[ScrapeJobProcessor] Failed to release tenant concurrency permit", {
+          tenantId,
+          productId: product.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -219,7 +277,8 @@ export class ScrapeJobProcessor {
 
       const nextAt = p.nextScrapeAt && p.nextScrapeAt > now ? p.nextScrapeAt : now;
 
-      await queue.add(
+      await enqueueWithBackpressure(
+        queue,
         `SCRAPE:${p.id}`,
         {
           type: "SCRAPE_PRODUCT",
@@ -235,6 +294,12 @@ export class ScrapeJobProcessor {
           priority: priority.bullmqPriority,
           delay: Math.max(0, nextAt.getTime() - now.getTime()),
           removeOnFail: { count: 2000, age: 7 * 24 * 3600 },
+        },
+        {
+          producer: "ScrapeJobProcessor.seedJobs",
+          strategy: "delay",
+          minDelayMs: 10_000,
+          maxDelayMs: 180_000,
         },
       ).then(() => {
         seeded++;

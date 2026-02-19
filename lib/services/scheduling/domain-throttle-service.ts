@@ -1,5 +1,6 @@
 import { getRedisConnection } from "@/lib/queue/connection";
 import { ScrapeFailureType } from "@prisma/client";
+import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 
 export type DomainThrottleState = {
   penaltyLevel: number; // 0..10
@@ -114,7 +115,8 @@ export class DomainThrottleService {
     // TTL keeps Redis clean even if domains disappear.
     await redis.set(key, JSON.stringify(next), "EX", 6 * 60 * 60);
 
+    void OperationalMetricsService.recordDomainAttempt(domain, isBlock);
+
     return next;
   }
 }
-

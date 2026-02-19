@@ -291,13 +291,9 @@ cron.schedule('0 */6 * * *', async () => {
 process.on('SIGTERM', async () => {
     console.log('[Scheduler] Received SIGTERM, shutting down gracefully...');
     await prisma.$disconnect();
-    // Best-effort: close any shared Playwright pools to avoid lingering Chromium processes.
+    // Best-effort: close the shared Playwright pool to avoid lingering Chromium processes.
     try {
         const { BrowserPool } = await import('@/lib/services/browser-pool');
-        await BrowserPool.shutdown();
-    } catch { }
-    try {
-        const { BrowserPool } = await import('@/lib/services/bot-protection/browser-pool');
         await BrowserPool.shutdown();
     } catch { }
     process.exit(0);
@@ -306,13 +302,9 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
     console.log('[Scheduler] Received SIGINT, shutting down gracefully...');
     await prisma.$disconnect();
-    // Best-effort: close any shared Playwright pools to avoid lingering Chromium processes.
+    // Best-effort: close the shared Playwright pool to avoid lingering Chromium processes.
     try {
         const { BrowserPool } = await import('@/lib/services/browser-pool');
-        await BrowserPool.shutdown();
-    } catch { }
-    try {
-        const { BrowserPool } = await import('@/lib/services/bot-protection/browser-pool');
         await BrowserPool.shutdown();
     } catch { }
     process.exit(0);

@@ -295,13 +295,9 @@ async function start() {
       try {
         if (notificationWorker) await notificationWorker.close();
       } catch { }
-      // Best-effort: close any shared Playwright pools to avoid lingering Chromium processes in dev.
+      // Best-effort: close the shared Playwright pool to avoid lingering Chromium processes.
       try {
         const { BrowserPool } = await import("../lib/services/browser-pool");
-        await BrowserPool.shutdown();
-      } catch { }
-      try {
-        const { BrowserPool } = await import("../lib/services/bot-protection/browser-pool");
         await BrowserPool.shutdown();
       } catch { }
       await releaseWorkerLock?.();

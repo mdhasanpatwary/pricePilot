@@ -148,6 +148,51 @@ export class ScraperAdapter {
     }
 
     /**
+     * Scrape a URL through bot orchestrator without an existing competitor product.
+     *
+     * This path avoids creating probe Product rows and runs in anonymous mode
+     * (tenant + site + url only).
+     */
+    async scrapeUrlWithProbe(
+        url: string,
+        tenantId: string,
+        competitorWebsiteId: string,
+        probeTitle?: string
+    ): Promise<ScrapedProductData | null> {
+        try {
+            const result = await this.orchestrator.executeScrape({
+                competitorWebsiteId,
+                url,
+                tenantId,
+                priority: 'normal',
+            });
+
+            if (!result.success || !result.price) {
+                return null;
+            }
+
+            const currency = this.toSupportedCurrency(result.currency) || 'USD';
+            return {
+                title: probeTitle?.trim() || 'Discovered Product',
+                price: result.price,
+                currency,
+                url,
+                inStock: result.inStock !== false,
+                protectionDetected: result.protectionDetected,
+                protectionType: result.protectionType,
+            };
+        } catch (error) {
+            logger.error('[ScraperAdapter] Probe scrape failed', {
+                url,
+                tenantId,
+                competitorWebsiteId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+        }
+    }
+
+    /**
      * Update database with scrape results
      * 
      * Updates the competitor product record with the scrape results,
@@ -416,6 +461,7 @@ export interface ScrapedProductData {
     brand?: string;
     model?: string;
     imageUrl?: string;
+    specifications?: Record<string, string>;
     protectionDetected?: boolean;
     protectionType?: string;
 }

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "../logger";
 import { RetryQueueService, RetryQueueItem } from "./retry-queue";
-import { ScraperService } from "./scraper";
+import { ScrapingEngineService } from "./scraping-engine-service";
 
 /**
  * Retry Queue Processor
@@ -15,14 +15,12 @@ import { ScraperService } from "./scraper";
 export class RetryQueueProcessor {
     private static instance: RetryQueueProcessor;
     private retryQueueService: RetryQueueService;
-    private scraperService: ScraperService;
     private isRunning: boolean = false;
     private intervalId: NodeJS.Timeout | null = null;
     private processingInterval: number = 60000; // 1 minute
 
     private constructor() {
         this.retryQueueService = RetryQueueService.getInstance();
-        this.scraperService = new ScraperService();
     }
 
     /**
@@ -50,9 +48,6 @@ export class RetryQueueProcessor {
         this.isRunning = true;
 
         logger.info(`[RetryQueueProcessor] Starting with interval ${intervalMs}ms`);
-
-        // Initialize scraper service
-        await this.scraperService.init();
 
         // Process immediately on start
         await this.processQueue();
@@ -83,9 +78,6 @@ export class RetryQueueProcessor {
             this.intervalId = null;
         }
 
-        // Close scraper service
-        await this.scraperService.close();
-
         logger.info('[RetryQueueProcessor] Stopped successfully');
     }
 
@@ -100,9 +92,9 @@ export class RetryQueueProcessor {
         }
 
         try {
-            // Get next batch of retries
+            // Atomically claim next batch of retries (multi-worker safe)
             const batchSize = 10;
-            const items = await this.retryQueueService.getNextRetryBatch(batchSize);
+            const items = await this.retryQueueService.claimNextRetryBatch(batchSize);
 
             if (items.length === 0) {
                 logger.info('[RetryQueueProcessor] No items ready for retry');
@@ -132,17 +124,18 @@ export class RetryQueueProcessor {
         try {
             logger.info(`[RetryQueueProcessor] Processing retry item ${item.id} for product ${item.productId} (attempt ${item.retryCount + 1}/${item.maxRetries})`);
 
-            // Mark as in progress
-            await this.retryQueueService.markInProgress(item.id);
-
             const site = await prisma.site.findUnique({
                 where: { id: item.siteId },
                 select: { isAdvancedProtected: true },
             });
 
             // Execute retry with fresh context
-            const scrapedData = await this.scraperService.scrapeProductPage(item.url, {
+            const scrapedData = await ScrapingEngineService.scrapeByUrl(item.url, {
+                context: "retry",
                 isAdvancedProtected: Boolean(site?.isAdvancedProtected),
+                competitorProductId: item.productId,
+                tenantId: item.tenantId,
+                siteId: item.siteId,
             });
 
             if (scrapedData && scrapedData.price > 0) {

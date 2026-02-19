@@ -126,10 +126,6 @@ const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
 const USER_AGENTS = getAllUserAgents();
 
 export class ScraperService {
-  private static readonly NO_RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
-  private static readonly noResultQueryCache = new Map<string, number>();
-  private static appliedAntiBotProfiles: Map<string, 'cloudflare' | 'perimeterx' | 'datadome'> = new Map();
-  private static appliedNoProxySafeProfiles: Set<string> = new Set();
   private browserPool: BrowserPool;
   private proxies: string[] = [];
   private proxyIndex: number = 0;
@@ -268,23 +264,16 @@ export class ScraperService {
   }
 
   private isKnownNoResultQuery(hostname: string, query: string): boolean {
-    const key = this.getNoResultCacheKey(hostname, query);
-    const lastSeenAt = ScraperService.noResultQueryCache.get(key);
-    if (!lastSeenAt) return false;
-
-    const age = Date.now() - lastSeenAt;
-    if (age > ScraperService.NO_RESULT_CACHE_TTL_MS) {
-      ScraperService.noResultQueryCache.delete(key);
-      return false;
-    }
-
-    return true;
+    // Cluster-safe mode: avoid process-local negative query cache.
+    // This is intentionally disabled to prevent divergent behavior across workers.
+    void this.getNoResultCacheKey(hostname, query);
+    return false;
   }
 
   private rememberNoResultQuery(hostname: string, query: string): void {
-    if (!query.trim()) return;
-    const key = this.getNoResultCacheKey(hostname, query);
-    ScraperService.noResultQueryCache.set(key, Date.now());
+    // Cluster-safe mode: no process-local writes.
+    void hostname;
+    void query;
   }
 
   private isStartechFallbackEnabled(): boolean {
@@ -371,10 +360,6 @@ export class ScraperService {
       return;
     }
 
-    if (ScraperService.appliedNoProxySafeProfiles.has(hostname)) {
-      return;
-    }
-
     try {
       const currentProfile = siteProfileManager.getProfile(hostname);
       const existingRpm = currentProfile.rateLimit?.requestsPerMinute;
@@ -407,7 +392,6 @@ export class ScraperService {
         },
       });
 
-      ScraperService.appliedNoProxySafeProfiles.add(hostname);
       logger.warn(`[ScraperService] Applied no-proxy safe profile for ${hostname}`, { reason });
     } catch (error) {
       logger.warn(`[ScraperService] Failed to apply no-proxy safe profile for ${hostname}`, { error, reason });
@@ -419,11 +403,7 @@ export class ScraperService {
       const antiBotSystem = this.mapProviderToAntiBotSystem(provider);
 
       if (antiBotSystem) {
-        const appliedProfile = ScraperService.appliedAntiBotProfiles.get(hostname);
-        if (appliedProfile !== antiBotSystem) {
-          siteProfileManager.applyAntiBotProfile(hostname, antiBotSystem);
-          ScraperService.appliedAntiBotProfiles.set(hostname, antiBotSystem);
-        }
+        siteProfileManager.applyAntiBotProfile(hostname, antiBotSystem);
       }
 
       // Keep conservative constraints in no-proxy mode even after anti-bot profiles are applied.
@@ -456,9 +436,6 @@ export class ScraperService {
     // Update proxies
     if (hasProxiesNow) {
       this.proxies = newConfig.proxies.map((p: ProxyConfig) => p.url);
-      if (!hadProxies) {
-        ScraperService.appliedNoProxySafeProfiles.clear();
-      }
 
       // Recreate ProxyManager with new proxies
       if (this.proxyManager) {
@@ -474,7 +451,6 @@ export class ScraperService {
       }
       this.proxies = [];
       if (hadProxies) {
-        ScraperService.appliedNoProxySafeProfiles.clear();
         logger.info('[ScraperService] Proxies removed, operating in direct mode');
       } else {
         logger.debug('[ScraperService] Configuration updated in direct mode (no proxy changes)');

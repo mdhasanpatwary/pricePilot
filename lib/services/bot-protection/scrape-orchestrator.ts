@@ -43,12 +43,15 @@ import { detectOpenCartFromUrlAndHtml } from '@/lib/services/platform-detector';
 import { StatusSpikeTracker } from './status-spike-tracker';
 import { DomainFingerprintService } from '@/lib/services/domain-fingerprint-service';
 import { detectAvailability } from '@/lib/services/availability-parser';
+import { getRedisConnection } from '@/lib/queue/connection';
+
+const ANON_METRIC_KEY_PREFIX = 'pp:scrape:anon:minute:';
 
 /**
  * Scrape request interface
  */
 export interface ScrapeRequest {
-    competitorProductId: string;
+    competitorProductId?: string;
     competitorWebsiteId: string;
     url: string;
     tenantId: string;
@@ -127,6 +130,40 @@ export class ScrapeOrchestrator {
     private isMissingColumnError(error: unknown): boolean {
         const msg = error instanceof Error ? error.message : String(error);
         return msg.includes('does not exist in the current database') || msg.includes('The column `(not available)` does not exist');
+    }
+
+    private hasProductContext(request: ScrapeRequest): request is ScrapeRequest & { competitorProductId: string } {
+        return Boolean(request.competitorProductId);
+    }
+
+    private async recordAnonymousScrapeMetric(request: ScrapeRequest, result: ScrapeResult): Promise<void> {
+        try {
+            const redis = getRedisConnection();
+            const minuteBucket = Math.floor(Date.now() / 60_000);
+            const key = `${ANON_METRIC_KEY_PREFIX}${minuteBucket}`;
+            const method = result.method || 'unknown';
+            const outcome = result.success ? 'success' : 'failed';
+            const expireSeconds = 7 * 24 * 3600;
+
+            const tx = redis.multi();
+            tx.hincrby(key, 'total', 1);
+            tx.hincrby(key, outcome, 1);
+            tx.hincrby(key, `method:${method}`, 1);
+            tx.hincrby(key, `site:${request.competitorWebsiteId}:total`, 1);
+            tx.hincrby(key, `tenant:${request.tenantId}:total`, 1);
+
+            if (result.protectionDetected) {
+                tx.hincrby(key, 'protectionDetected', 1);
+            }
+
+            tx.expire(key, expireSeconds);
+            await tx.exec();
+        } catch (error) {
+            logger.debug('[ScrapeOrchestrator] Failed to record anonymous scrape metric', {
+                competitorWebsiteId: request.competitorWebsiteId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
 
     /**
@@ -289,18 +326,22 @@ export class ScrapeOrchestrator {
                         await this.apiCache.updateMetrics(request.competitorWebsiteId, true);
 
                         // Update last known good price
-                        await this.updateLastKnownGoodPrice(
-                            request.competitorProductId,
-                            matchedProduct.price,
-                            matchedProduct.currency || 'USD'
-                        );
+                        if (this.hasProductContext(request)) {
+                            await this.updateLastKnownGoodPrice(
+                                request.competitorProductId,
+                                matchedProduct.price,
+                                matchedProduct.currency || 'USD'
+                            );
+                        }
 
                         // Handle manual price override
-                        await this.handleManualPriceOverride(
-                            request.competitorProductId,
-                            matchedProduct.price,
-                            matchedProduct.currency || 'USD'
-                        );
+                        if (this.hasProductContext(request)) {
+                            await this.handleManualPriceOverride(
+                                request.competitorProductId,
+                                matchedProduct.price,
+                                matchedProduct.currency || 'USD'
+                            );
+                        }
 
                         const responseTime = Date.now() - startTime;
 
@@ -516,6 +557,9 @@ export class ScrapeOrchestrator {
             if (result) {
                 await this.updateDomainFailureEscalation(request, result);
                 await this.recordScrapeCostMetric(request, result);
+                if (!this.hasProductContext(request)) {
+                    await this.recordAnonymousScrapeMetric(request, result);
+                }
             }
         }
 
@@ -586,7 +630,7 @@ export class ScrapeOrchestrator {
         const domainRisk = await this.loadDomainRiskProfile(request.competitorWebsiteId, request.url);
         let anyProxyUsed = false;
         const effectiveMaxRetries = domainRisk.needsManualReview ? 1 : siteConfig.maxRetries;
-        const proxyStickySessionKey = `${domainRisk.domain}:${request.competitorProductId}`;
+        const proxyStickySessionKey = `${domainRisk.domain}:${request.competitorProductId || `anon-${request.tenantId}`}`;
 
         // Retry loop
         while (attemptNumber <= effectiveMaxRetries) {
@@ -645,7 +689,7 @@ export class ScrapeOrchestrator {
                     );
 
                     // Update last known good price
-                    if (attemptResult.price) {
+                    if (attemptResult.price && this.hasProductContext(request)) {
                         await this.updateLastKnownGoodPrice(
                             request.competitorProductId,
                             attemptResult.price,
@@ -654,7 +698,7 @@ export class ScrapeOrchestrator {
                     }
 
                     // Handle manual price override if applicable
-                    if (attemptResult.price) {
+                    if (attemptResult.price && this.hasProductContext(request)) {
                         await this.handleManualPriceOverride(
                             request.competitorProductId,
                             attemptResult.price,
@@ -867,10 +911,12 @@ export class ScrapeOrchestrator {
         });
 
         // Record price history gap to maintain continuity
-        await recordPriceHistoryGap(
-            request.competitorProductId,
-            lastProtectionType || 'scraping_failed'
-        );
+        if (this.hasProductContext(request)) {
+            await recordPriceHistoryGap(
+                request.competitorProductId,
+                lastProtectionType || 'scraping_failed'
+            );
+        }
 
         return {
             success: false,
@@ -1197,13 +1243,13 @@ export class ScrapeOrchestrator {
         };
 
         // Track 401/403 spikes to detect burst blocks and escalate strategy faster.
-        this.statusSpikeTracker.recordStatus(request.competitorWebsiteId, httpResponse.statusCode);
+        await this.statusSpikeTracker.recordStatus(request.competitorWebsiteId, httpResponse.statusCode);
 
         // Detect bot protection
         const detection = this.detectionEngine.analyzeResponse(httpResponse);
         const has403Spike =
             (httpResponse.statusCode === 401 || httpResponse.statusCode === 403) &&
-            this.statusSpikeTracker.is403Spike(request.competitorWebsiteId);
+            await this.statusSpikeTracker.is403Spike(request.competitorWebsiteId);
 
         const domainKey = this.getDomainKey(httpResponse.finalUrl || request.url, request.competitorWebsiteId);
         const normalizedDomain = domainKey.toLowerCase().replace(/^www\./, '');
@@ -1528,6 +1574,10 @@ export class ScrapeOrchestrator {
         result: ScrapeResult
     ): Promise<void> {
         try {
+            if (!this.hasProductContext(request)) {
+                return;
+            }
+
             const retryCount = Math.max((result.attempts || 1) - 1, 0);
             const proxyUsed = Boolean(result.proxyUsed);
             const baseCost =
@@ -1947,6 +1997,10 @@ export class ScrapeOrchestrator {
         attemptNumber: number
     ): Promise<void> {
         try {
+            if (!this.hasProductContext(request)) {
+                return;
+            }
+
             const scrapeStatus = result.scrapeStatus || (result.success ? ScrapeExecutionStatus.SUCCESS : ScrapeExecutionStatus.FAILED);
             const proxyRegion = await this.getProxyRegion(result.proxyId);
             const geoVariantDetected = await this.detectGeoVariant(

@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getRedisConnection } from "@/lib/queue/connection";
-import { BrowserPool } from "./browser-pool";
+import { BrowserPool as BotBrowserPool } from "@/lib/services/bot-protection/browser-pool";
 import { circuitBreakerRegistry, CircuitState } from "@/lib/utils/circuit-breaker";
 import { logger } from "../logger";
 
@@ -95,20 +95,23 @@ export class SystemHealthService {
      */
     static async checkBrowserPool(): Promise<HealthStatus> {
         try {
-            const pool = BrowserPool.getInstance();
+            const pool = BotBrowserPool.getInstance();
             const stats = pool.getStats();
+            const total = stats.totalInstances;
+            const inUse = stats.inUseInstances;
+            const utilization = total === 0 ? 0 : inUse / total;
 
-            if (stats.inUse / stats.total > 0.9) {
+            if (utilization > 0.9) {
                 return {
                     status: "degraded",
-                    message: `Browser pool near capacity (${stats.inUse}/${stats.total})`,
+                    message: `Browser pool near capacity (${inUse}/${total})`,
                     details: stats,
                 };
             }
 
             return {
                 status: "healthy",
-                message: `Browser pool healthy (${stats.inUse}/${stats.total} contexts)`,
+                message: `Browser pool healthy (${inUse}/${total} instances)`,
                 details: stats,
             };
         } catch (error) {

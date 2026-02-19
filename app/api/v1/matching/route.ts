@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import axios from "axios";
+import { createHash } from "crypto";
 import {
   validationErrorResponse,
   matchApprovalSchema,
@@ -11,6 +12,7 @@ import { CacheInvalidationService } from "@/lib/services/cache-invalidation";
 import { sanitizeProductMatch } from "@/lib/middleware/sanitize-response";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 function normalizeImageUrl(
   imageUrl: unknown,
@@ -45,13 +47,51 @@ const MAX_OG_INLINE_RESOLVE_PER_REQUEST = Number.parseInt(
   process.env.MATCH_OG_INLINE_RESOLVE_PER_REQUEST || "2",
   10,
 );
-const OG_NEGATIVE_CACHE_MAX_ENTRIES = Number.parseInt(
-  process.env.MATCH_OG_NEGATIVE_CACHE_MAX_ENTRIES || "2000",
-  10,
-);
+const OG_NEGATIVE_PREFIX = "pp:matching:og-negative:";
+const OG_INFLIGHT_PREFIX = "pp:matching:og-inflight:";
+const OG_INFLIGHT_TTL_MS = Math.max(10_000, OG_IMAGE_CACHE_TTL_MS);
 
-const ogImageNegativeCache = new Map<string, number>(); // url -> expiresAt
-const ogImageInFlight = new Map<string, Promise<void>>(); // productId -> promise
+function ogNegativeKey(pageUrl: string): string {
+  const digest = createHash("sha1").update(pageUrl).digest("hex");
+  return `${OG_NEGATIVE_PREFIX}${digest}`;
+}
+
+function ogInFlightKey(productId: string): string {
+  return `${OG_INFLIGHT_PREFIX}${productId}`;
+}
+
+async function hasOgNegativeCache(pageUrl: string): Promise<boolean> {
+  const redis = getRedisConnection();
+  return Boolean(await redis.get(ogNegativeKey(pageUrl)));
+}
+
+async function rememberOgNegativeCache(pageUrl: string): Promise<void> {
+  const redis = getRedisConnection();
+  const ttlSeconds = Math.max(1, Math.ceil(OG_IMAGE_CACHE_TTL_MS / 1000));
+  await redis.set(ogNegativeKey(pageUrl), "1", "EX", ttlSeconds);
+}
+
+async function acquireOgInFlightLock(productId: string): Promise<string | null> {
+  const redis = getRedisConnection();
+  const key = ogInFlightKey(productId);
+  const token = `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  const acquired = await redis.set(key, token, "PX", OG_INFLIGHT_TTL_MS, "NX");
+  return acquired === "OK" ? token : null;
+}
+
+async function releaseOgInFlightLock(productId: string, token: string): Promise<void> {
+  const redis = getRedisConnection();
+  const key = ogInFlightKey(productId);
+  const releaseLua = `
+    local key = KEYS[1]
+    local token = ARGV[1]
+    if redis.call("GET", key) == token then
+      return redis.call("DEL", key)
+    end
+    return 0
+  `;
+  await redis.eval(releaseLua, 1, key, token).catch(() => undefined);
+}
 
 function extractOgImage(html: string): string | undefined {
   const metaTags = html.match(/<meta\s+[^>]*>/gi);
@@ -80,12 +120,9 @@ async function resolveOgImageAndPersist(
 ): Promise<string | undefined> {
   if (!productId || !pageUrl) return undefined;
 
-  const negativeUntil = ogImageNegativeCache.get(pageUrl);
-  if (negativeUntil && negativeUntil > Date.now()) return undefined;
-
-  // If a backfill is already in-flight, don't duplicate. We can't reliably await it
-  // for a return value, so just skip and let next refresh pick it up.
-  if (ogImageInFlight.has(productId)) return undefined;
+  if (await hasOgNegativeCache(pageUrl)) return undefined;
+  const lockToken = await acquireOgInFlightLock(productId);
+  if (!lockToken) return undefined;
 
   try {
     const res = await axios.get(pageUrl, {
@@ -104,11 +141,7 @@ async function resolveOgImageAndPersist(
     const raw = html ? extractOgImage(html) : undefined;
     const normalized = normalizeImageUrl(raw, pageUrl);
     if (!normalized) {
-      if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
-        const first = ogImageNegativeCache.keys().next().value;
-        if (first) ogImageNegativeCache.delete(first);
-      }
-      ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+      await rememberOgNegativeCache(pageUrl);
       return undefined;
     }
 
@@ -119,12 +152,10 @@ async function resolveOgImageAndPersist(
 
     return normalized;
   } catch {
-    if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
-      const first = ogImageNegativeCache.keys().next().value;
-      if (first) ogImageNegativeCache.delete(first);
-    }
-    ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+    await rememberOgNegativeCache(pageUrl);
     return undefined;
+  } finally {
+    await releaseOgInFlightLock(productId, lockToken);
   }
 }
 
@@ -134,12 +165,11 @@ function queueProductImageBackfillFromOgMeta(
 ): void {
   if (!productId || !pageUrl) return;
 
-  const negativeUntil = ogImageNegativeCache.get(pageUrl);
-  if (negativeUntil && negativeUntil > Date.now()) return;
-
-  if (ogImageInFlight.has(productId)) return;
-
   const task: Promise<void> = (async () => {
+    if (await hasOgNegativeCache(pageUrl)) return;
+    const lockToken = await acquireOgInFlightLock(productId);
+    if (!lockToken) return;
+
     try {
       const res = await axios.get(pageUrl, {
         timeout: 7000,
@@ -155,18 +185,14 @@ function queueProductImageBackfillFromOgMeta(
 
       const html = typeof res.data === "string" ? res.data : "";
       if (!html) {
-        ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+        await rememberOgNegativeCache(pageUrl);
         return;
       }
 
       const raw = extractOgImage(html);
       const normalized = normalizeImageUrl(raw, pageUrl);
       if (!normalized) {
-        if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
-          const first = ogImageNegativeCache.keys().next().value;
-          if (first) ogImageNegativeCache.delete(first);
-        }
-        ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+        await rememberOgNegativeCache(pageUrl);
         return;
       }
 
@@ -176,17 +202,12 @@ function queueProductImageBackfillFromOgMeta(
         data: { imageUrl: normalized },
       });
     } catch {
-      if (ogImageNegativeCache.size >= OG_NEGATIVE_CACHE_MAX_ENTRIES) {
-        const first = ogImageNegativeCache.keys().next().value;
-        if (first) ogImageNegativeCache.delete(first);
-      }
-      ogImageNegativeCache.set(pageUrl, Date.now() + OG_IMAGE_CACHE_TTL_MS);
+      await rememberOgNegativeCache(pageUrl);
     } finally {
-      ogImageInFlight.delete(productId);
+      await releaseOgInFlightLock(productId, lockToken);
     }
   })();
-
-  ogImageInFlight.set(productId, task);
+  void task;
 }
 
 async function handleGET(req: NextRequest) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { QueueBackpressureError } from "@/lib/queue/backpressure";
 
 /**
  * POST /api/sync/full
@@ -25,6 +26,17 @@ async function handleFullSync(_req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof QueueBackpressureError) {
+      return NextResponse.json(
+        {
+          error: "Sync queue is overloaded. Please retry shortly.",
+          queueDepth: error.queueDepth,
+          threshold: error.threshold,
+        },
+        { status: 429 },
+      );
+    }
+
     console.error("Full sync failed:", error);
     return NextResponse.json(
       { error: "Full sync orchestration failed" },

@@ -1,4 +1,4 @@
-import { ScraperService, ScrapeBlockError } from "./scraper";
+import { ScrapeBlockError } from "./scraper";
 import { prisma } from "@/lib/prisma";
 import { getSyncQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
@@ -10,6 +10,7 @@ import {
   normalizeProductSlug,
   normalizeSku,
 } from "@/lib/services/product-dedup";
+import { ScrapingEngineService } from "@/lib/services/scraping-engine-service";
 
 function sanitizeQueueSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -83,7 +84,6 @@ export class DiscoveryService {
       },
     });
 
-    const scraper = new ScraperService();
     let discoveredCount = 0;
 
     // Process in batches for better performance (Parallel Discovery)
@@ -156,7 +156,11 @@ export class DiscoveryService {
         }
 
         try {
-          const result = await scraper.searchAndScrape(site.baseUrl, cleanTitle, siteId);
+          const result = await ScrapingEngineService.searchAndScrape(site.baseUrl, cleanTitle, {
+            siteId,
+            tenantId,
+            context: "discovery",
+          });
 
           if (result) {
 
@@ -398,7 +402,6 @@ export class DiscoveryService {
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    // DO NOT call scraper.close() here as it shuts down the global BrowserPool singleton
     return { discoveredCount, aborted: false };
   }
 }

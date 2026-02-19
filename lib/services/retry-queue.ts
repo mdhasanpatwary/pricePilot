@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "../logger";
+import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 
 /**
  * Retry Queue Service
@@ -100,6 +101,8 @@ export class RetryQueueService {
                 },
             });
 
+            void OperationalMetricsService.recordRetryEvent('requeued');
+
             return updated as RetryQueueItem;
         }
 
@@ -121,6 +124,8 @@ export class RetryQueueService {
                 status: 'PENDING',
             },
         });
+
+        void OperationalMetricsService.recordRetryEvent('enqueued');
 
         return item as RetryQueueItem;
     }
@@ -171,6 +176,64 @@ export class RetryQueueService {
     }
 
     /**
+     * Atomically claim the next batch of pending retries.
+     *
+     * Multi-worker safety:
+     * - candidate rows are discovered first
+     * - each row is claimed with conditional update (status must still be PENDING)
+     * - only successfully claimed rows are returned
+     */
+    async claimNextRetryBatch(batchSize: number = 10): Promise<RetryQueueItem[]> {
+        const now = new Date();
+        const claimed: RetryQueueItem[] = [];
+
+        const candidates = await prisma.retryQueue.findMany({
+            where: {
+                status: 'PENDING',
+                nextRetryAt: { lte: now },
+            },
+            orderBy: { nextRetryAt: 'asc' },
+            take: Math.max(batchSize, batchSize * 3),
+            select: { id: true },
+        });
+
+        for (const candidate of candidates) {
+            if (claimed.length >= batchSize) break;
+
+            const lockAttempt = await prisma.retryQueue.updateMany({
+                where: {
+                    id: candidate.id,
+                    status: 'PENDING',
+                    nextRetryAt: { lte: now },
+                },
+                data: {
+                    status: 'IN_PROGRESS',
+                    lastAttemptAt: now,
+                    updatedAt: now,
+                },
+            });
+
+            if (lockAttempt.count !== 1) {
+                continue;
+            }
+
+            const row = await prisma.retryQueue.findUnique({
+                where: { id: candidate.id },
+            });
+
+            if (row) {
+                claimed.push(row as RetryQueueItem);
+            }
+        }
+
+        logger.info(`[RetryQueue] Claimed ${claimed.length}/${batchSize} items for processing`);
+        if (claimed.length > 0) {
+            void OperationalMetricsService.recordRetryEvent('claimed', claimed.length);
+        }
+        return claimed;
+    }
+
+    /**
      * Update retry status to IN_PROGRESS
      * 
      * @param id Retry queue item ID
@@ -204,6 +267,7 @@ export class RetryQueueService {
         });
 
         logger.info(`[RetryQueue] Marked item ${id} as SUCCESS`);
+        void OperationalMetricsService.recordRetryEvent('success');
     }
 
     /**
@@ -224,6 +288,7 @@ export class RetryQueueService {
         });
 
         logger.warn(`[RetryQueue] Marked item ${id} as permanently FAILED: ${error}`);
+        void OperationalMetricsService.recordRetryEvent('failed');
     }
 
     /**
@@ -261,8 +326,10 @@ export class RetryQueueService {
 
         if (status === 'FAILED') {
             logger.warn(`[RetryQueue] Item ${id} exceeded max retries (${item.maxRetries}), marked as FAILED`);
+            void OperationalMetricsService.recordRetryEvent('failed');
         } else {
             logger.info(`[RetryQueue] Item ${id} retry count incremented to ${newRetryCount}, next retry at ${nextRetryAt.toISOString()}`);
+            void OperationalMetricsService.recordRetryEvent('requeued');
         }
     }
 

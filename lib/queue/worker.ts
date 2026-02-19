@@ -3,6 +3,7 @@ import { getRedisConnection } from "./connection";
 import { QUEUE_NAMES, SyncJobData, NotificationJobData, ScrapeJobData } from "./types";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { ScrapeJobProcessor } from "@/lib/services/scheduling/scrape-job-processor";
+import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 
 // Processor for Sync Jobs
 const syncProcessor = async (job: Job<SyncJobData>) => {
@@ -173,18 +174,64 @@ export const createWorkers = () => {
 
   syncWorker.on("completed", (job) => {
     console.log(`[Worker] Sync Job ${job.id} completed!`);
+    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.SYNC, "completed", job.data.tenantId);
   });
 
   syncWorker.on("failed", (job, err) => {
     console.error(`[Worker] Sync Job ${job?.id} failed: ${err.message}`);
+    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.SYNC, "failed", job?.data?.tenantId);
+  });
+
+  syncWorker.on("active", (job) => {
+    const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
+    void OperationalMetricsService.recordQueueLifecycle(
+      QUEUE_NAMES.SYNC,
+      "active",
+      job.data.tenantId,
+      latencyMs,
+    );
   });
 
   scrapeWorker.on("completed", (job) => {
     console.log(`[Worker] Scrape Job ${job.id} completed!`);
+    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.SCRAPE, "completed", job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined);
   });
 
   scrapeWorker.on("failed", (job, err) => {
     console.error(`[Worker] Scrape Job ${job?.id} failed: ${err.message}`);
+    void OperationalMetricsService.recordQueueLifecycle(
+      QUEUE_NAMES.SCRAPE,
+      "failed",
+      job?.data?.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined,
+    );
+  });
+
+  scrapeWorker.on("active", (job) => {
+    const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
+    void OperationalMetricsService.recordQueueLifecycle(
+      QUEUE_NAMES.SCRAPE,
+      "active",
+      job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined,
+      latencyMs,
+    );
+  });
+
+  notificationWorker.on("completed", () => {
+    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.NOTIFICATIONS, "completed");
+  });
+
+  notificationWorker.on("failed", () => {
+    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.NOTIFICATIONS, "failed");
+  });
+
+  notificationWorker.on("active", (job) => {
+    const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
+    void OperationalMetricsService.recordQueueLifecycle(
+      QUEUE_NAMES.NOTIFICATIONS,
+      "active",
+      undefined,
+      latencyMs,
+    );
   });
 
   return { syncWorker, scrapeWorker, notificationWorker };

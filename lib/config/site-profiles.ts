@@ -557,7 +557,7 @@ class SiteProfileManager {
   /**
    * Check if rate limit allows request without waiting
    */
-  canMakeRequest(domain: string): boolean {
+  async canMakeRequest(domain: string): Promise<boolean> {
     const profile = this.getProfile(domain);
 
     if (!profile.rateLimit) {
