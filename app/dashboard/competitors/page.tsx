@@ -145,6 +145,18 @@ interface CompetitorProgressSnapshot {
   }>;
 }
 
+interface AdvancedAccessFormState {
+  proxyEnabled: boolean;
+  proxyProtocol: "http" | "https" | "socks5";
+  proxyHost: string;
+  proxyPort: string;
+  proxyUsername: string;
+  proxyPassword: string;
+  captchaEnabled: boolean;
+  captchaProvider: string;
+  captchaApiKey: string;
+}
+
 type SyncUiState = "IDLE" | "STARTING" | "RUNNING" | "STOPPING" | "STOPPED";
 type SyncActionIntent = "START" | "STOP";
 type SyncUiEvent =
@@ -219,6 +231,21 @@ export default function CompetitorsPage() {
   const [editingSite, setEditingSite] = useState<Competitor | null>(null);
   const [searchPatternInput, setSearchPatternInput] = useState("");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [advancedPromptSite, setAdvancedPromptSite] = useState<Competitor | null>(null);
+  const [advancedMissingRequirements, setAdvancedMissingRequirements] = useState<Array<"proxy" | "captcha">>([]);
+  const [isAdvancedConfigLoading, setIsAdvancedConfigLoading] = useState(false);
+  const [isAdvancedConfigSaving, setIsAdvancedConfigSaving] = useState(false);
+  const [advancedForm, setAdvancedForm] = useState<AdvancedAccessFormState>({
+    proxyEnabled: true,
+    proxyProtocol: "http",
+    proxyHost: "",
+    proxyPort: "",
+    proxyUsername: "",
+    proxyPassword: "",
+    captchaEnabled: true,
+    captchaProvider: "2captcha",
+    captchaApiKey: "",
+  });
 
   useEffect(() => {
     syncUiStateBySiteRef.current = syncUiStateBySite;
@@ -621,6 +648,21 @@ export default function CompetitorsPage() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
+        if (errorData?.code === "ADVANCED_PROTECTION_REQUIRES_SERVICES") {
+          const targetSite = competitors.find((c) => c.id === id) || null;
+          setAdvancedPromptSite(targetSite);
+          setAdvancedMissingRequirements(
+            Array.isArray(errorData?.missingRequirements)
+              ? errorData.missingRequirements
+              : ["proxy", "captcha"],
+          );
+          if (targetSite) {
+            await loadAdvancedAccessConfig(targetSite.id);
+          }
+          applySyncUiEvent(id, { type: "START_FAILED" });
+          await fetchCompetitors(true);
+          return;
+        }
         throw new Error(errorData.error || "Failed to start sync");
       }
 
@@ -819,6 +861,89 @@ export default function CompetitorsPage() {
     } finally {
       setIsSavingSettings(false);
     }
+  };
+
+  const loadAdvancedAccessConfig = async (siteId: string) => {
+    setIsAdvancedConfigLoading(true);
+    try {
+      const res = await fetch(`/api/v1/competitors/${siteId}/advanced-access`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const proxy = json?.data?.proxy || {};
+      const captcha = json?.data?.captcha || {};
+      setAdvancedForm((prev) => ({
+        ...prev,
+        proxyEnabled: Boolean(proxy.enabled ?? true),
+        proxyProtocol: (proxy.protocol || "http") as "http" | "https" | "socks5",
+        proxyHost: proxy.host || "",
+        proxyPort: proxy.port ? String(proxy.port) : "",
+        proxyUsername: proxy.username || "",
+        proxyPassword: "",
+        captchaEnabled: Boolean(captcha.enabled ?? true),
+        captchaProvider: captcha.provider || "2captcha",
+        captchaApiKey: "",
+      }));
+    } catch {
+      // best effort only
+    } finally {
+      setIsAdvancedConfigLoading(false);
+    }
+  };
+
+  const saveAdvancedAccessConfig = async (): Promise<boolean> => {
+    if (!advancedPromptSite) return false;
+    setIsAdvancedConfigSaving(true);
+    try {
+      const payload = {
+        proxyEnabled: advancedForm.proxyEnabled,
+        proxyProtocol: advancedForm.proxyProtocol,
+        proxyHost: advancedForm.proxyHost.trim() || undefined,
+        proxyPort: advancedForm.proxyPort ? Number(advancedForm.proxyPort) : undefined,
+        proxyUsername: advancedForm.proxyUsername.trim() || undefined,
+        proxyPassword: advancedForm.proxyPassword.trim() || undefined,
+        captchaEnabled: advancedForm.captchaEnabled,
+        captchaProvider: advancedForm.captchaProvider.trim() || undefined,
+        captchaApiKey: advancedForm.captchaApiKey.trim() || undefined,
+      };
+
+      const res = await fetch(`/api/v1/competitors/${advancedPromptSite.id}/advanced-access`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        toast.error(result?.error || "Failed to save advanced access settings");
+        return false;
+      }
+
+      const result = await res.json();
+      if (result?.data?.status !== "READY") {
+        toast.error("Proxy and captcha solver must both be configured to continue.");
+        return false;
+      }
+
+      toast.success("Advanced access configured. You can continue sync now.");
+      return true;
+    } catch {
+      toast.error("Connection error while saving advanced access");
+      return false;
+    } finally {
+      setIsAdvancedConfigSaving(false);
+    }
+  };
+
+  const handleSaveAndContinueAdvancedSync = async () => {
+    if (!advancedPromptSite) return;
+    const saved = await saveAdvancedAccessConfig();
+    if (!saved) return;
+
+    const target = advancedPromptSite;
+    setAdvancedPromptSite(null);
+    setAdvancedMissingRequirements([]);
+    await fetchCompetitors(true);
+    await handleSyncSite(target.id);
   };
 
   useEffect(() => {
@@ -1535,6 +1660,180 @@ export default function CompetitorsPage() {
               ) : (
                 "Save Configuration"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!advancedPromptSite}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAdvancedPromptSite(null);
+            setAdvancedMissingRequirements([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Advanced Anti-Bot Protection Detected</DialogTitle>
+            <DialogDescription>
+              This competitor site requires both proxy and captcha solver service before sync can continue.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
+            Missing requirements:{" "}
+            {advancedMissingRequirements.length > 0
+              ? advancedMissingRequirements.join(" + ").toUpperCase()
+              : "PROXY + CAPTCHA"}
+          </div>
+
+          {isAdvancedConfigLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading existing advanced access settings...
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <Label className="font-semibold">Proxy Service</Label>
+                  <input
+                    type="checkbox"
+                    checked={advancedForm.proxyEnabled}
+                    onChange={(e) =>
+                      setAdvancedForm((prev) => ({
+                        ...prev,
+                        proxyEnabled: e.target.checked,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Protocol</Label>
+                    <select
+                      className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
+                      value={advancedForm.proxyProtocol}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({
+                          ...prev,
+                          proxyProtocol: e.target.value as "http" | "https" | "socks5",
+                        }))
+                      }
+                    >
+                      <option value="http">http</option>
+                      <option value="https">https</option>
+                      <option value="socks5">socks5</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Host</Label>
+                    <Input
+                      value={advancedForm.proxyHost}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({ ...prev, proxyHost: e.target.value }))
+                      }
+                      placeholder="proxy.example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Port</Label>
+                    <Input
+                      value={advancedForm.proxyPort}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({ ...prev, proxyPort: e.target.value }))
+                      }
+                      placeholder="8080"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Username (optional)</Label>
+                    <Input
+                      value={advancedForm.proxyUsername}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({ ...prev, proxyUsername: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs">Password (optional; leave empty to keep existing)</Label>
+                    <Input
+                      type="password"
+                      value={advancedForm.proxyPassword}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({ ...prev, proxyPassword: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <Label className="font-semibold">Captcha Solver Service</Label>
+                  <input
+                    type="checkbox"
+                    checked={advancedForm.captchaEnabled}
+                    onChange={(e) =>
+                      setAdvancedForm((prev) => ({
+                        ...prev,
+                        captchaEnabled: e.target.checked,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Provider</Label>
+                    <Input
+                      value={advancedForm.captchaProvider}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({ ...prev, captchaProvider: e.target.value }))
+                      }
+                      placeholder="2captcha"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">API Key (leave empty to keep existing)</Label>
+                    <Input
+                      type="password"
+                      value={advancedForm.captchaApiKey}
+                      onChange={(e) =>
+                        setAdvancedForm((prev) => ({ ...prev, captchaApiKey: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAdvancedPromptSite(null);
+                setAdvancedMissingRequirements([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={isAdvancedConfigSaving}
+              onClick={async () => {
+                await saveAdvancedAccessConfig();
+              }}
+            >
+              {isAdvancedConfigSaving ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              disabled={isAdvancedConfigSaving}
+              onClick={handleSaveAndContinueAdvancedSync}
+            >
+              {isAdvancedConfigSaving ? "Please wait..." : "Save & Continue Sync"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -13,7 +13,7 @@ import { prisma } from '@/lib/prisma';
 import { ScrapeFailureType, PlatformType, ScrapeExecutionStatus } from '@prisma/client';
 import { DetectionEngine, ProtectionType, HttpResponse } from './detection-engine';
 import { ProxyManager, Proxy } from './proxy-manager';
-import { RateLimiter } from './rate-limiter';
+import { RateLimiter, type RateLimitConfig } from './rate-limiter';
 import { SessionManager } from './session-manager';
 import { HttpScraper, ScrapeConfig, ScrapeResponse } from './http-scraper';
 import {
@@ -643,7 +643,10 @@ export class ScrapeOrchestrator {
 
             try {
                 // Acquire rate limit permit
-                await this.rateLimiter.acquirePermit(request.competitorWebsiteId);
+                await this.rateLimiter.acquirePermit(
+                    request.competitorWebsiteId,
+                    this.getPermitConfigForRequest(request),
+                );
 
                 // Execute scrape with current strategy
                 const attemptResult = await this.executeSingleAttempt(
@@ -1614,6 +1617,7 @@ export class ScrapeOrchestrator {
 
     private async getProxyRegion(proxyId?: string): Promise<string> {
         if (!proxyId) return 'DIRECT';
+        if (proxyId.startsWith('tenant:')) return 'TENANT_CUSTOM';
         try {
             const proxy = await prisma.proxy.findUnique({
                 where: { id: proxyId },
@@ -1833,6 +1837,38 @@ export class ScrapeOrchestrator {
     private isMediumOrHighProtectionLevel(level?: string | null): boolean {
         const normalized = (level || '').toUpperCase();
         return normalized === 'MEDIUM' || normalized === 'HIGH';
+    }
+
+    private getPermitConfigForRequest(request: ScrapeRequest): RateLimitConfig | undefined {
+        const isProbeLike = !request.competitorProductId;
+        const isHighPriority = request.priority === 'high';
+        const isNormalPriority = request.priority === 'normal';
+        if (!isProbeLike && !isHighPriority && !isNormalPriority) return undefined;
+
+        const baseDelay = Number.parseInt(
+            process.env.SCRAPE_PROBE_BASE_DELAY_MS || (isProbeLike ? '1000' : isHighPriority ? '800' : '1200'),
+            10,
+        );
+        const maxDelay = Number.parseInt(
+            process.env.SCRAPE_PROBE_MAX_DELAY_MS || (isProbeLike ? '20000' : isHighPriority ? '25000' : '45000'),
+            10,
+        );
+        const backoffMultiplier = Number.parseFloat(
+            process.env.SCRAPE_PROBE_BACKOFF_MULTIPLIER || (isProbeLike ? '1.6' : isHighPriority ? '1.5' : '1.7'),
+        );
+        const jitterRange = Number.parseInt(process.env.SCRAPE_PROBE_JITTER_RANGE || '20', 10);
+
+        const safeBaseDelay = Number.isFinite(baseDelay) ? Math.max(300, baseDelay) : 1000;
+        const safeMaxDelay = Number.isFinite(maxDelay) ? Math.max(safeBaseDelay, maxDelay) : 20000;
+        const safeBackoff = Number.isFinite(backoffMultiplier) ? Math.max(1.1, backoffMultiplier) : 1.6;
+        const safeJitter = Number.isFinite(jitterRange) ? Math.min(50, Math.max(0, jitterRange)) : 20;
+
+        return {
+            baseDelay: safeBaseDelay,
+            maxDelay: safeMaxDelay,
+            backoffMultiplier: safeBackoff,
+            jitterRange: safeJitter,
+        };
     }
 
     private isHighProtectionLevel(level?: string | null): boolean {

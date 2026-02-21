@@ -22,10 +22,14 @@ async function handlePOST(req: NextRequest) {
 
     // To "stop" a sync, we simply flip the flag.
     // The SyncOrchestrator check this flag on every iteration and will terminate.
-    await prisma.site.update({
+    const stopped = await prisma.site.updateMany({
       where: { id: siteId, tenantId: session.user.tenantId },
       data: { isSyncing: false },
     });
+
+    if (stopped.count === 0) {
+      return NextResponse.json({ error: "Site not found" }, { status: 404 });
+    }
 
     // Invalidate competitors list cache for this tenant
     const { invalidateCache } = await import("@/lib/middleware/api-cache");
@@ -44,5 +48,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "sync", handlePOST);
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

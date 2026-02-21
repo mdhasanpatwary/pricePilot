@@ -190,10 +190,27 @@ export const authOptions: NextAuthOptions = {
 
       // ON EVERY REQUEST: Verify session still exists in DB (revocation check)
       if (token.sessionId) {
-        const sessionRecord = await getOrSetRequestCache<any>(
-          `session:${token.sessionId}`,
-          () => getSessionRecordWithShortTtl(token.sessionId as string)
-        );
+        let sessionRecord: any | null = null;
+        try {
+          sessionRecord = await getOrSetRequestCache<any>(
+            `session:${token.sessionId}`,
+            () => getSessionRecordWithShortTtl(token.sessionId as string)
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const transientDbIssue =
+            message.includes("Connection terminated unexpectedly") ||
+            message.includes("P1001") ||
+            message.includes("Timed out fetching");
+
+          if (transientDbIssue) {
+            console.warn("[Auth] Session verification skipped due to transient DB issue", {
+              error: message,
+            });
+            return token;
+          }
+          throw error;
+        }
 
         if (!sessionRecord) {
           // Session was revoked! Mark token invalidated (keep payload object).

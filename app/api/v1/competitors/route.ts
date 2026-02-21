@@ -21,8 +21,49 @@ import { withCache } from "@/lib/middleware/api-cache";
 import { withDbRetry } from "@/lib/utils/db-retry";
 import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 import { logger } from "@/lib/logger";
+import { randomUUID } from "crypto";
 
 import { toSiteDTO } from "@/lib/dtos/site.dto";
+
+function isMissingColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("P2022") || message.includes("does not exist in the current database");
+}
+
+let competitorAdvancedColumnsSupported: boolean | null = null;
+let competitorAdvancedProbePromise: Promise<boolean> | null = null;
+
+async function supportsAdvancedAccessColumnsForSiteCreate(): Promise<boolean> {
+  if (competitorAdvancedColumnsSupported !== null) {
+    return competitorAdvancedColumnsSupported;
+  }
+
+  if (!competitorAdvancedProbePromise) {
+    competitorAdvancedProbePromise = (async () => {
+      try {
+        const result = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(`
+          SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name IN ('Site', 'site')
+              AND column_name = 'advancedAccessStatus'
+          ) AS "exists"
+        `);
+        competitorAdvancedColumnsSupported = Boolean(result?.[0]?.exists);
+      } catch {
+        competitorAdvancedColumnsSupported = false;
+      }
+      return competitorAdvancedColumnsSupported;
+    })();
+  }
+
+  try {
+    return await competitorAdvancedProbePromise;
+  } finally {
+    competitorAdvancedProbePromise = null;
+  }
+}
 
 async function handleGET(req: NextRequest) {
   const startTime = Date.now();
@@ -51,8 +92,29 @@ async function handleGET(req: NextRequest) {
       sortOrder: paginationParams.sortOrder || 'desc'
     },
     {
-      _count: {
-        select: { Product: true },
+      select: {
+        id: true,
+        tenantId: true,
+        type: true,
+        platform: true,
+        baseUrl: true,
+        apiToken: true,
+        lastSyncAt: true,
+        createdAt: true,
+        updatedAt: true,
+        isSyncing: true,
+        syncProcessed: true,
+        syncStartedAt: true,
+        syncTotal: true,
+        syncLastAction: true,
+        syncToken: true,
+        currency: true,
+        isAdvancedProtected: true,
+        lastSecurityBlockAt: true,
+        searchQueryPattern: true,
+        _count: {
+          select: { Product: true },
+        },
       },
     }
   ), { operationName: 'ListCompetitors' });
@@ -162,16 +224,97 @@ async function handlePOST(req: NextRequest) {
     );
   }
 
-  const site = await prisma.site.create({
-    data: {
-      baseUrl,
-      type: "COMPETITOR",
+  const canUseStandardCreate = await supportsAdvancedAccessColumnsForSiteCreate();
+  let site: any;
+  if (canUseStandardCreate) {
+    try {
+      site = await prisma.site.create({
+        data: {
+          baseUrl,
+          type: "COMPETITOR",
+          tenantId,
+          isSyncing: true, // Start as syncing immediately so UI picks it up
+          syncLastAction: "Initializing crawler...",
+          searchQueryPattern,
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          type: true,
+          platform: true,
+          baseUrl: true,
+          apiToken: true,
+          lastSyncAt: true,
+          createdAt: true,
+          updatedAt: true,
+          isSyncing: true,
+          syncProcessed: true,
+          syncStartedAt: true,
+          syncTotal: true,
+          syncLastAction: true,
+          syncToken: true,
+          currency: true,
+          isAdvancedProtected: true,
+          lastSecurityBlockAt: true,
+          searchQueryPattern: true,
+        },
+      });
+    } catch (error) {
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+      competitorAdvancedColumnsSupported = false;
+    }
+  }
+
+  if (!site) {
+    const legacySiteId = randomUUID();
+    const now = new Date();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Site" ("id","tenantId","type","baseUrl","isSyncing","syncLastAction","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      legacySiteId,
       tenantId,
-      isSyncing: true, // Start as syncing immediately so UI picks it up
-      syncLastAction: "Initializing crawler...",
-      searchQueryPattern,
-    },
-  });
+      "COMPETITOR",
+      baseUrl,
+      true,
+      "Initializing crawler...",
+      now,
+      now,
+    );
+
+    if (searchQueryPattern) {
+      await prisma.site.updateMany({
+        where: { id: legacySiteId },
+        data: { searchQueryPattern },
+      }).catch(() => undefined);
+    }
+
+    site = await prisma.site.findUnique({
+      where: { id: legacySiteId },
+      select: {
+        id: true,
+        tenantId: true,
+        type: true,
+        platform: true,
+        baseUrl: true,
+        apiToken: true,
+        lastSyncAt: true,
+        createdAt: true,
+        updatedAt: true,
+        isSyncing: true,
+        syncProcessed: true,
+        syncStartedAt: true,
+        syncTotal: true,
+        syncLastAction: true,
+        syncToken: true,
+        currency: true,
+        isAdvancedProtected: true,
+        lastSecurityBlockAt: true,
+        searchQueryPattern: true,
+      },
+    });
+  }
 
   await recordAuditLog({
     tenantId,

@@ -35,7 +35,7 @@ interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const pathname = usePathname();
   const router = useRouter();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -51,6 +51,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
       const res = await fetch("/api/v1/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(id ? { id } : { all: true }),
       });
       if (res.ok) {
@@ -68,13 +69,19 @@ export default function Header({ onMenuClick }: HeaderProps) {
   };
 
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (sessionStatus !== "authenticated" || !session?.user?.id) return;
 
     const fetchNotifications = async () => {
       if (document.hidden) return;
 
       try {
-        const res = await fetch("/api/v1/notifications");
+        const res = await fetch("/api/v1/notifications", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (res.status === 401) {
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           setNotifications(data.notifications);
@@ -103,7 +110,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, sessionStatus]);
 
   // Search functionality
   useEffect(() => {

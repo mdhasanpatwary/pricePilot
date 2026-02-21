@@ -16,6 +16,10 @@ import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 import { scrapeLogger } from "./scrape-logger";
 import { enqueueWithBackpressure } from "@/lib/queue/backpressure";
 import { ScrapingEngineService } from "@/lib/services/scraping-engine-service";
+import {
+  markSiteAsAdvancedProtected,
+  shouldBlockSyncForAdvancedAccess,
+} from "@/lib/services/advanced-access";
 
 export class SyncOrchestrator {
   private static readonly RETRY_SITE_LOCK_TTL_MS = 10 * 60 * 1000;
@@ -56,12 +60,18 @@ export class SyncOrchestrator {
    * Handle an advanced security block by switching to Golden Rule mode
    */
   private static async handleSecurityBlock(siteId: string, tenantId: string, siteName: string, productCount: number) {
-    await (prisma.site as any).update({
-      where: { id: siteId },
-      data: {
-        isAdvancedProtected: true,
-        lastSecurityBlockAt: new Date()
-      }
+    await markSiteAsAdvancedProtected({
+      siteId,
+      tenantId,
+      reason: "Advanced security block detected during sync",
+    }).catch(async () => {
+      await (prisma.site as any).update({
+        where: { id: siteId },
+        data: {
+          isAdvancedProtected: true,
+          lastSecurityBlockAt: new Date()
+        }
+      });
     });
 
     // ETA: 12s average * products
@@ -75,7 +85,7 @@ export class SyncOrchestrator {
 
     await scrapeLogger.log({
       siteId,
-      message: `🚨 Golden Rule Activated! Advanced protection detected. Scraper slowing down (ETA: ~${etaString}).`,
+      message: `🚨 Advanced protection detected. Sync halted until proxy + captcha solver are configured (estimated prior runtime: ~${etaString}).`,
       level: "WARNING"
     });
   }
@@ -321,9 +331,40 @@ export class SyncOrchestrator {
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },
-      include: { Tenant: true },
+      select: {
+        id: true,
+        tenantId: true,
+        baseUrl: true,
+        isAdvancedProtected: true,
+      },
     }) as any;
     if (!site) throw new Error("Site not found");
+
+    const advancedGate = await shouldBlockSyncForAdvancedAccess({
+      siteId,
+      tenantId: site.tenantId,
+    });
+    if (advancedGate.block) {
+      await prisma.site.updateMany({
+        where: { id: siteId },
+        data: {
+          isSyncing: false,
+          syncLastAction:
+            "Advanced anti-bot protection detected. Configure proxy + captcha solver to continue.",
+        },
+      });
+      await scrapeLogger.log({
+        siteId,
+        message:
+          "🛑 Sync blocked: advanced anti-bot protection requires proxy + captcha solver setup.",
+        level: "WARNING",
+      });
+      return {
+        success: false,
+        message: advancedGate.message,
+        requiresAdvancedAccess: true,
+      };
+    }
 
     // ATOMIC LOCK ACQUISITION / RESUME CHECK
     const currentSite = await prisma.site.findUnique({
@@ -442,7 +483,7 @@ export class SyncOrchestrator {
       let count = 0;
 
       // Initialize progress
-      await prisma.site.update({
+      await prisma.site.updateMany({
         where: { id: siteId },
         data: {
           syncTotal: matchedProducts.length,
@@ -518,6 +559,10 @@ export class SyncOrchestrator {
         const batch = productsToScrape.slice(i, i + batchSize);
         if (batch.length === 0) continue;
         const productsToScrapeBatch = batch;
+        const perItemTimeoutMsRaw = Number(process.env.SYNC_SCRAPE_ITEM_TIMEOUT_MS || 90000);
+        const perItemTimeoutMs = Number.isFinite(perItemTimeoutMsRaw)
+          ? Math.max(15000, perItemTimeoutMsRaw)
+          : 90000;
 
         // Process batch in parallel. Retry ownership lives in ScrapeOrchestrator + retry queue.
 
@@ -536,13 +581,18 @@ export class SyncOrchestrator {
               const delay = 8000 + Math.random() * 7000; // 8-15s
               await new Promise(r => setTimeout(r, delay));
             }
-            const result = await ScrapingEngineService.scrapeByUrl(product.url || "", {
-              context: "worker",
-              isAdvancedProtected: isGoldenRule,
-              competitorProductId: product.id,
-              tenantId: product.tenantId,
-              siteId,
-            });
+            const result = await Promise.race([
+              ScrapingEngineService.scrapeByUrl(product.url || "", {
+                context: "worker",
+                isAdvancedProtected: isGoldenRule,
+                competitorProductId: product.id,
+                tenantId: product.tenantId,
+                siteId,
+              }),
+              new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error(`timeout: scrape item exceeded ${perItemTimeoutMs}ms`)), perItemTimeoutMs);
+              }),
+            ]);
             return { product, result };
           }),
         )) as any[];
@@ -551,25 +601,27 @@ export class SyncOrchestrator {
         for (const promiseResult of results) {
           processed++;
 
+          // Persist progress regardless of scrape outcome so UI stays live.
+          if (processed % 5 === 0 || processed === productsToScrape.length) {
+            await withDbRetry(() => prisma.site.updateMany({
+              where: { id: siteId },
+              data: {
+                syncProcessed: processed,
+                syncLastAction: `Syncing: ${processed}/${matchedProducts.length} items...`,
+              },
+            }), { operationName: "UpdateSyncProgress" });
+
+            metricsCollector
+              .recordSyncLifecycle(siteId, "PROGRESS", { processed, total: matchedProducts.length })
+              .catch(console.error);
+          }
+
           if (
             promiseResult.status === "fulfilled" &&
             promiseResult.value.result &&
             promiseResult.value.result.price > 0 // Issue 3: Validate price > 0
           ) {
             const { product, result } = promiseResult.value;
-
-            if (processed % 5 === 0 || processed === productsToScrape.length) {
-              await withDbRetry(() => prisma.site.update({
-                where: { id: siteId },
-                data: {
-                  syncProcessed: processed,
-                  syncLastAction: `Syncing: ${processed}/${matchedProducts.length} items...`,
-                },
-              }), { operationName: 'UpdateSyncProgress' });
-
-              // Record PROGRESS event
-              metricsCollector.recordSyncLifecycle(siteId, 'PROGRESS', { processed, total: matchedProducts.length }).catch(console.error);
-            }
 
             // Issue 4: Reduce log noise - log every 5th product success or always log failures
             if (processed % 5 === 0 || processed === productsToScrape.length) {
@@ -743,7 +795,20 @@ export class SyncOrchestrator {
               if (error instanceof ScrapeBlockError && error.isAdvanced) {
                 const urlObj = new URL(site.baseUrl);
                 await this.handleSecurityBlock(siteId, site.tenantId, urlObj.hostname, productsToScrape.length - processed);
-                isGoldenRule = true;
+                await prisma.site.updateMany({
+                  where: { id: siteId },
+                  data: {
+                    isSyncing: false,
+                    syncLastAction:
+                      "Advanced anti-bot protection detected. Configure proxy + captcha solver to continue.",
+                  },
+                });
+                return {
+                  success: false,
+                  message:
+                    "Advanced anti-bot protection detected during sync. Configure proxy + captcha solver and retry.",
+                  requiresAdvancedAccess: true,
+                };
               }
             }
           }
@@ -1075,7 +1140,14 @@ export class SyncOrchestrator {
   }
 
   private static async processRetrySyncInternal(siteId: string, productIds: string[]) {
-    const site = await prisma.site.findUnique({ where: { id: siteId } });
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: {
+        id: true,
+        baseUrl: true,
+        isSyncing: true,
+      },
+    });
     if (!site || !site.isSyncing) return;
 
     logger.info(`[SyncOrchestrator] Starting retry sync for ${productIds.length} products on site ${siteId}`);

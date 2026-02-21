@@ -33,14 +33,15 @@ async function handlePUT(req: NextRequest, { params }: { params: Promise<{ id: s
     // Verify ownership
     const site = await prisma.site.findFirst({
       where: { id: siteId, tenantId },
+      select: { id: true },
     });
 
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
-    await prisma.site.update({
-      where: { id: siteId },
+    await prisma.site.updateMany({
+      where: { id: siteId, tenantId },
       data: { searchQueryPattern },
     });
 

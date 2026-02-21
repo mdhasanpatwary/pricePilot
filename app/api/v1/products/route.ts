@@ -75,19 +75,52 @@ async function handleGET(req: NextRequest) {
   const { page, limit, sortBy = 'updatedAt', sortOrder = 'desc' } = paginationParams;
 
   // Get paginated results - retry on transient failures
-  const paginatedResult = await withDbRetry(() => paginate(prisma.product, where, { page, limit, sortBy, sortOrder }, {
-    matchesAsUser: {
-      include: {
-        competitorProduct: {
-          include: { Site: true },
+  const paginatedResult = await withDbRetry(
+    () =>
+      paginate(prisma.product, where, { page, limit, sortBy, sortOrder }, {
+        select: {
+          id: true,
+          sku: true,
+          title: true,
+          imageUrl: true,
+          currentPrice: true,
+          inStock: true,
+          stockLevel: true,
+          category: true,
+          brand: true,
+          model: true,
+          specifications: true,
+          url: true,
+          Site: {
+            select: {
+              baseUrl: true,
+            },
+          },
+          matchesAsUser: {
+            orderBy: {
+              competitorProduct: { currentPrice: "asc" },
+            },
+            select: {
+              id: true,
+              competitorProduct: {
+                select: {
+                  url: true,
+                  imageUrl: true,
+                  currentPrice: true,
+                  inStock: true,
+                  Site: {
+                    select: {
+                      baseUrl: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-      },
-      orderBy: {
-        competitorProduct: { currentPrice: "asc" },
-      },
-    },
-    Site: true,
-  }), { operationName: 'ListProducts' });
+      }),
+    { operationName: "ListProducts" },
+  );
 
   const products = paginatedResult.data;
 

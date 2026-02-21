@@ -112,10 +112,10 @@ const SEARCH_STRATEGIES: Record<
 
   // TechLandBD: /search/advance/product/result/QUERY
   "techlandbd.com": (baseUrl, query) =>
-    `${baseUrl.replace(/\/$/, "")}/search/advance/product/result/${encodeURIComponent(query).replace(/%20/g, "+")}`,
+    `${baseUrl.replace(/\/$/, "")}/search/advance/product/result/${encodeURIComponent(query)}`,
 
   "techland.com.bd": (baseUrl, query) =>
-    `${baseUrl.replace(/\/$/, "")}/search/advance/product/result/${encodeURIComponent(query).replace(/%20/g, "+")}`,
+    `${baseUrl.replace(/\/$/, "")}/search/advance/product/result/${encodeURIComponent(query)}`,
 };
 
 // Default Fallback: /search?q=QUERY
@@ -126,6 +126,8 @@ const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
 const USER_AGENTS = getAllUserAgents();
 
 export class ScraperService {
+  private static readonly warningThrottleMs = 5 * 60 * 1000;
+  private static warningLastSeen = new Map<string, number>();
   private browserPool: BrowserPool;
   private proxies: string[] = [];
   private proxyIndex: number = 0;
@@ -257,6 +259,14 @@ export class ScraperService {
     }
 
     return null;
+  }
+
+  private shouldLogWarningOnce(key: string): boolean {
+    const now = Date.now();
+    const prev = ScraperService.warningLastSeen.get(key) || 0;
+    if (now - prev < ScraperService.warningThrottleMs) return false;
+    ScraperService.warningLastSeen.set(key, now);
+    return true;
   }
 
   private getNoResultCacheKey(hostname: string, query: string): string {
@@ -3525,7 +3535,12 @@ export class ScraperService {
           baseUrlToUse = "";
         }
 
-        const encodedQuery = encodeURIComponent(cleanQuery).replace(/%20/g, "+");
+        const placeholderIndex = p.indexOf("{query}") >= 0 ? p.indexOf("{query}") : p.indexOf("{q}");
+        const queryStart = p.indexOf("?");
+        const placeholderInQuery = queryStart >= 0 && placeholderIndex > queryStart;
+        const encodedQuery = placeholderInQuery
+          ? encodeURIComponent(cleanQuery).replace(/%20/g, "+")
+          : encodeURIComponent(cleanQuery);
         if (p.includes("{query}")) return (baseUrlToUse + p).replace("{query}", encodedQuery);
         if (p.includes("{q}")) return (baseUrlToUse + p).replace("{q}", encodedQuery);
         return baseUrlToUse + p + encodeURIComponent(cleanQuery);
@@ -3548,6 +3563,26 @@ export class ScraperService {
         }
       }
 
+      const isTechlandDomain = hostname.includes("techlandbd.com") || hostname.includes("techland.com.bd");
+      if (isTechlandDomain && explicitPattern) {
+        const normalizedExplicit = explicitPattern.toLowerCase().replace(/\s+/g, "");
+        const expectedPath = "/search/advance/product/result/{query}";
+        if (!normalizedExplicit.includes("/search/advance/product/result/")) {
+          const warnKey = `ignore-techland-db-pattern:${hostname}:${normalizedExplicit}`;
+          if (this.shouldLogWarningOnce(warnKey)) {
+            logger.warn(
+              `[ScraperService] Ignoring incompatible DB search pattern for ${hostname}: ${explicitPattern}`,
+            );
+          }
+          explicitPattern = null;
+        } else if (normalizedExplicit !== expectedPath && !normalizedExplicit.endsWith(expectedPath)) {
+          // Keep explicit pattern for full URLs, but still prefer known-safe built-in fallback.
+          logger.info(
+            `[ScraperService] DB pattern differs from recommended pattern for ${hostname}; builtin fallback retained.`,
+          );
+        }
+      }
+
       const normalizedDomain = SearchPatternLearningService.normalizeDomain(hostname);
       if (!explicitPattern) {
         try {
@@ -3562,37 +3597,46 @@ export class ScraperService {
         patternForLearning: string;
         label: string;
       }> = [];
+      const isCompatibleTechlandPattern = (value: string): boolean =>
+        value.toLowerCase().includes("/search/advance/product/result/");
 
       const usedTemplates = new Set<string>();
       const pushCandidate = (patternForLearning: string, searchUrl: string, label: string) => {
         const key = (patternForLearning || "").trim();
         if (!key || usedTemplates.has(key)) return;
+        if (isTechlandDomain && !isCompatibleTechlandPattern(key)) {
+          // Ignore generic patterns for Techland silently; they're known-incompatible.
+          return;
+        }
         usedTemplates.add(key);
         searchCandidates.push({ searchUrl, patternForLearning: key, label });
       };
 
       if (explicitPattern) {
         pushCandidate(explicitPattern, buildSearchUrlFromTemplate(explicitPattern), "Database Pattern");
-      } else {
-        if (learnedPattern) {
-          pushCandidate(learnedPattern, buildSearchUrlFromTemplate(learnedPattern), "Learned Pattern");
-        }
+      }
 
-        if (strategyKey) {
-          const template = strategyPatternTemplate[strategyKey] || strategyPatternTemplate[Object.keys(strategyPatternTemplate).find(k => strategyKey.includes(k)) || ""];
-          pushCandidate(
-            template || defaultPatternTemplate,
-            SEARCH_STRATEGIES[strategyKey](baseUrl, cleanQuery),
-            template ? "Built-in Pattern" : "Built-in Strategy",
-          );
-        }
+      if (learnedPattern) {
+        pushCandidate(learnedPattern, buildSearchUrlFromTemplate(learnedPattern), "Learned Pattern");
+      }
 
+      if (strategyKey) {
+        const template = strategyPatternTemplate[strategyKey] || strategyPatternTemplate[Object.keys(strategyPatternTemplate).find(k => strategyKey.includes(k)) || ""];
+        pushCandidate(
+          template || defaultPatternTemplate,
+          SEARCH_STRATEGIES[strategyKey](baseUrl, cleanQuery),
+          template ? "Built-in Pattern" : "Built-in Strategy",
+        );
+      }
+
+      if (!isTechlandDomain) {
         pushCandidate(defaultPatternTemplate, DEFAULT_STRATEGY(baseUrl, cleanQuery), "Default Pattern");
+      }
 
-        for (const template of commonFallbackTemplates) {
-          if (searchCandidates.length >= 4) break;
-          pushCandidate(template, buildSearchUrlFromTemplate(template), "Common Pattern");
-        }
+      const fallbackTemplatesForHost = isTechlandDomain ? [] : commonFallbackTemplates;
+      for (const template of fallbackTemplatesForHost) {
+        if (searchCandidates.length >= 6) break;
+        pushCandidate(template, buildSearchUrlFromTemplate(template), "Common Pattern");
       }
 
       if (isAdvancedProtectedSite) {
@@ -3609,6 +3653,13 @@ export class ScraperService {
 
       for (const candidate of searchCandidates) {
         const searchUrl = candidate.searchUrl;
+        if (isTechlandDomain && !isCompatibleTechlandPattern(searchUrl)) {
+          const warnKey = `skip-techland-url:${hostname}:${searchUrl}`;
+          if (this.shouldLogWarningOnce(warnKey)) {
+            logger.warn(`[ScraperService] Skipping known-404 Techland URL: ${searchUrl}`);
+          }
+          continue;
+        }
 
         logger.info(
           `[ScraperService] Searching: ${searchUrl} (Strategy: ${candidate.label})`,
@@ -3626,6 +3677,11 @@ export class ScraperService {
           waitUntil: "domcontentloaded",
           timeout: 30000,
         });
+        const status = response?.status() ?? 0;
+        if (status === 404) {
+          logger.warn(`[ScraperService] Search URL returned 404, trying next candidate: ${searchUrl}`);
+          continue;
+        }
 
         const securityInfo = await this.analyzeSecurity(page, response);
         if (securityInfo.isBlocked) {
@@ -3729,7 +3785,7 @@ export class ScraperService {
           (searchDiagnostics?.counts?.productUrlLinks ?? 0) <= 2,
         );
 
-        if (!likelyNoResults) {
+        if (strictSearchMode && !likelyNoResults) {
           logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
 
           const searchBehavior = strictSearchMode
@@ -3778,7 +3834,7 @@ export class ScraperService {
               break;
             }
           }
-        } else {
+        } else if (likelyNoResults) {
           logger.info(
             `[ScraperService] Skipping enhanced human simulation due to likely no-results page for "${cleanQuery}"`,
           );
@@ -3815,15 +3871,17 @@ export class ScraperService {
           logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
           logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink} `);
 
-          try {
-            const linkElement = await page.$(`a[href="${productLink}"]`);
-            const hasBox = linkElement ? await linkElement.boundingBox().catch(() => null) : null;
-            if (linkElement && hasBox) {
-              await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
-              await HumanSimulation.randomPause(100, 220);
+          if (strictSearchMode) {
+            try {
+              const linkElement = await page.$(`a[href="${productLink}"]`);
+              const hasBox = linkElement ? await linkElement.boundingBox().catch(() => null) : null;
+              if (linkElement && hasBox) {
+                await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
+                await HumanSimulation.randomPause(100, 220);
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
           }
 
           // Release search resources before scraping product page to avoid
@@ -4245,6 +4303,7 @@ export class ScraperService {
     const handlers: Record<SiteSearchAdapterKey, () => Promise<string | null>> = {
       startech: () => this.evaluateStartechProductLink(page, query, hostname),
       ryans: () => this.evaluateRyansProductLink(page, query, hostname),
+      techland: () => this.evaluateTechlandProductLink(page, query, hostname),
     };
 
     const handler = handlers[adapter];
@@ -4448,6 +4507,119 @@ export class ScraperService {
                   const score = scoreHref(href, `${node.name || ""}`);
                   if (score > 12) candidates.push({ href, score: score + 6 });
                 }
+              }
+              for (const value of Object.values(node)) {
+                if (value && typeof value === "object") stack.push(value);
+              }
+            }
+          }
+        } catch {
+          // ignore malformed JSON-LD
+        }
+      }
+
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => b.score - a.score);
+      return candidates[0].href || null;
+    }, { q: query });
+  }
+
+  /**
+   * Techland adapter fallback when weighted scoring returns null.
+   * Techland can emit product-like links under /search/advance/product/result/*
+   * so we must not discard every /search/* URL for this host.
+   */
+  private async evaluateTechlandProductLink(
+    page: Page,
+    query: string,
+    hostname: string,
+  ): Promise<string | null> {
+    if (!hostname.includes("techlandbd.com") && !hostname.includes("techland.com.bd")) return null;
+
+    return await page.evaluate(({ q }) => {
+      const normalize = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const queryTokens = normalize(q).split(" ").filter((t) => t.length >= 2);
+      const modelTokens = queryTokens.filter((t) => /[a-z]/.test(t) && /\d/.test(t));
+
+      const scoreHref = (href: string, text: string) => {
+        const normalizedText = normalize(`${text} ${href}`);
+        const normalizedHref = href.toLowerCase();
+        let score = 0;
+
+        if (normalizedHref.includes("/product/")) score += 20;
+        if (normalizedHref.includes("/item/")) score += 12;
+        if (normalizedHref.includes("/search/advance/product/result/")) score += 16;
+        if (
+          normalizedHref.includes("/search?") ||
+          normalizedHref.includes("/search/") && !normalizedHref.includes("/search/advance/product/result/") ||
+          normalizedHref.includes("/manufacturer") ||
+          normalizedHref.includes("/brand")
+        ) {
+          score -= 35;
+        }
+
+        for (const token of queryTokens) {
+          if (normalizedText.includes(token)) score += 7;
+        }
+        for (const token of modelTokens) {
+          if (normalizedText.includes(token)) score += 14;
+        }
+
+        return score;
+      };
+
+      const candidates: Array<{ href: string; score: number }> = [];
+      const candidateSelectors = [
+        ".p-item-name a[href]",
+        ".product-name a[href]",
+        ".product-title a[href]",
+        ".p-item a[href]",
+        ".product-item a[href]",
+        ".product-thumb a[href]",
+        ".product-box a[href]",
+        ".card a[href]",
+        "main a[href]",
+      ];
+
+      for (const selector of candidateSelectors) {
+        const links = Array.from(document.querySelectorAll(selector)) as HTMLAnchorElement[];
+        for (const link of links) {
+          const href = link.href;
+          const text = (link.textContent || link.getAttribute("title") || link.getAttribute("aria-label") || "").trim();
+          if (!href || href.startsWith("javascript:") || href.includes("#")) continue;
+          if (href.includes("/search?") || href.includes("/manufacturer") || href.includes("/brand")) continue;
+          const score = scoreHref(href, text);
+          if (score > 10) candidates.push({ href, score });
+        }
+      }
+
+      // JSON-LD fallback
+      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+      for (const script of scripts) {
+        const raw = script.textContent || "";
+        if (!raw.trim()) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          const stack = [...items];
+          while (stack.length > 0) {
+            const node = stack.pop() as any;
+            if (!node) continue;
+            if (Array.isArray(node)) {
+              stack.push(...node);
+              continue;
+            }
+            if (typeof node === "object") {
+              if (node.url && typeof node.url === "string") {
+                const href = node.url;
+                const score = scoreHref(href, `${node.name || ""}`);
+                if (score > 10) candidates.push({ href, score: score + 6 });
               }
               for (const value of Object.values(node)) {
                 if (value && typeof value === "object") stack.push(value);

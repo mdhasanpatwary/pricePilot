@@ -18,10 +18,20 @@ import {
   GlobalScrapePermit,
 } from "@/lib/services/scheduling/global-scrape-budget";
 import { enqueueWithBackpressure } from "@/lib/queue/backpressure";
+import { shouldBlockSyncForAdvancedAccess } from "@/lib/services/advanced-access";
 
 const adapter = new ScraperAdapter();
 const tenantConcurrencyLimiter = new TenantConcurrencyLimiter();
 const globalScrapeBudget = GlobalScrapeBudgetService.getInstance();
+const logThrottleState = new Map<string, number>();
+
+function shouldLogWithThrottle(key: string, windowMs: number): boolean {
+  const now = Date.now();
+  const last = logThrottleState.get(key) || 0;
+  if (now - last < windowMs) return false;
+  logThrottleState.set(key, now);
+  return true;
+}
 
 function normalizeDomainFromBaseUrl(baseUrl: string): string {
   try {
@@ -89,6 +99,25 @@ export class ScrapeJobProcessor {
       return;
     }
 
+    const advancedGate = await shouldBlockSyncForAdvancedAccess({
+      siteId: product.siteId,
+      tenantId,
+    });
+    if (advancedGate.block) {
+      const requeueDelayMs = 30 * 60 * 1000;
+      if (shouldLogWithThrottle(`advanced-gate:${tenantId}:${product.siteId}`, 60_000)) {
+        logger.info("[ScrapeJobProcessor] Advanced protection gate active, delaying scrape jobs", {
+          tenantId,
+          productId: product.id,
+          siteId: product.siteId,
+          missingRequirements: advancedGate.missingRequirements,
+          delayMs: requeueDelayMs,
+        });
+      }
+      await this.reschedule(job, Date.now() + requeueDelayMs);
+      return;
+    }
+
     const permit = await tenantConcurrencyLimiter.tryAcquire(tenantId);
     if (!permit) {
       const requeueDelayRaw = Number(process.env.SCRAPE_TENANT_CONCURRENCY_REQUEUE_DELAY_MS || "5000");
@@ -97,12 +126,14 @@ export class ScrapeJobProcessor {
           ? Math.floor(requeueDelayRaw)
           : 5000;
 
-      logger.info("[ScrapeJobProcessor] Tenant concurrency saturated, delaying job", {
-        tenantId,
-        productId: product.id,
-        maxPerTenant: tenantConcurrencyLimiter.getMaxPerTenant(),
-        delayMs: requeueDelayMs,
-      });
+      if (shouldLogWithThrottle(`tenant-saturated:${tenantId}`, 15_000)) {
+        logger.info("[ScrapeJobProcessor] Tenant concurrency saturated, delaying job", {
+          tenantId,
+          productId: product.id,
+          maxPerTenant: tenantConcurrencyLimiter.getMaxPerTenant(),
+          delayMs: requeueDelayMs,
+        });
+      }
       await this.reschedule(job, Date.now() + requeueDelayMs);
       return;
     }

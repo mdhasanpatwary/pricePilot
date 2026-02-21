@@ -26,6 +26,9 @@ export interface SiteResponseDTO {
   // Advanced Protection
   isAdvancedProtected: boolean;
   lastSecurityBlockAt: Date | null;
+  advancedAccessStatus: string;
+  advancedAccessRequiredAt: Date | null;
+  advancedAccessReason: string | null;
 
   // Configuration
   searchQueryPattern: string | null;
@@ -43,11 +46,34 @@ export interface SiteStats {
   totalUserProductsCount?: number;
 }
 
+type SiteDTOInput = Pick<
+  Site,
+  | "id"
+  | "baseUrl"
+  | "type"
+  | "isSyncing"
+  | "syncTotal"
+  | "syncProcessed"
+  | "syncLastAction"
+  | "syncStartedAt"
+  | "lastSyncAt"
+  | "isAdvancedProtected"
+  | "lastSecurityBlockAt"
+  | "searchQueryPattern"
+  | "currency"
+  | "createdAt"
+  | "updatedAt"
+> & {
+  advancedAccessStatus?: string | null;
+  advancedAccessRequiredAt?: Date | null;
+  advancedAccessReason?: string | null;
+};
+
 /**
  * Transforms a raw Prisma Site model into a standardized API Response DTO.
  * This guarantees consistent shape across GET/POST/PUT endpoints.
  */
-export function toSiteDTO(site: Site, stats: SiteStats = {}): SiteResponseDTO {
+export function toSiteDTO(site: SiteDTOInput, stats: SiteStats = {}): SiteResponseDTO {
   // Extract Name from URL
   let name = "Unknown";
   try {
@@ -101,6 +127,9 @@ export function toSiteDTO(site: Site, stats: SiteStats = {}): SiteResponseDTO {
 
     isAdvancedProtected: site.isAdvancedProtected,
     lastSecurityBlockAt: site.lastSecurityBlockAt,
+    advancedAccessStatus: site.advancedAccessStatus || "NOT_REQUIRED",
+    advancedAccessRequiredAt: site.advancedAccessRequiredAt || null,
+    advancedAccessReason: site.advancedAccessReason || null,
 
     searchQueryPattern: site.searchQueryPattern,
     currency: site.currency,

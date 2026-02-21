@@ -16,6 +16,7 @@ import { ScrapeExecutionStatus } from '@prisma/client';
 import { extractSlugFromUrl, normalizeCanonicalUrl, normalizeSku } from '@/lib/services/product-dedup';
 import { detectCurrency, SupportedCurrency } from '@/lib/services/currency-parser';
 import { exchangeRateService } from '@/lib/services/exchange-rate';
+import { markSiteAsAdvancedProtected } from '@/lib/services/advanced-access';
 
 /**
  * ScraperAdapter class
@@ -164,7 +165,7 @@ export class ScraperAdapter {
                 competitorWebsiteId,
                 url,
                 tenantId,
-                priority: 'normal',
+                priority: 'high',
             });
 
             if (!result.success || !result.price) {
@@ -211,6 +212,14 @@ export class ScraperAdapter {
         siteId: string
     ): Promise<void> {
         try {
+            if (result.protectionDetected) {
+                await markSiteAsAdvancedProtected({
+                    siteId,
+                    tenantId,
+                    reason: result.errorMessage || 'Bot protection detected during scraping',
+                }).catch(() => null);
+            }
+
             const existing = await prisma.product.findUnique({
                 where: { id: competitorProductId },
                 select: {

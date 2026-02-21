@@ -217,6 +217,7 @@ export default function TenantMetricsDashboard() {
     };
 
     const recommendations = getRecommendations();
+    const hasRequests = (data?.totalRequests || 0) > 0;
 
     // Calculate challenge statistics
     const totalChallenges = data?.sites.reduce((sum, site) => sum + site.challenges.detected, 0) || 0;
@@ -300,18 +301,26 @@ export default function TenantMetricsDashboard() {
                             <span
                                 className={cn(
                                     "text-2xl font-bold",
-                                    data.overallSuccessRate >= 80
+                                    !hasRequests
+                                        ? "text-muted-foreground"
+                                        : data.overallSuccessRate >= 80
                                         ? "text-emerald-600 dark:text-emerald-500"
                                         : data.overallSuccessRate >= 60
                                             ? "text-amber-600 dark:text-amber-500"
                                             : "text-red-600 dark:text-red-500"
                                 )}
                             >
-                                {data.overallSuccessRate.toFixed(1)}%
+                                {hasRequests ? `${data.overallSuccessRate.toFixed(1)}%` : "N/A"}
                             </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {data.overallSuccessRate >= 80 ? "Excellent" : data.overallSuccessRate >= 60 ? "Good" : "Needs attention"}
+                            {!hasRequests
+                                ? "No scrape attempts in selected range"
+                                : data.overallSuccessRate >= 80
+                                    ? "Excellent"
+                                    : data.overallSuccessRate >= 60
+                                        ? "Good"
+                                        : "Needs attention"}
                         </p>
                     </Card>
 
@@ -326,18 +335,26 @@ export default function TenantMetricsDashboard() {
                             <span
                                 className={cn(
                                     "text-2xl font-bold",
-                                    data.overallBlockRate <= 10
+                                    !hasRequests
+                                        ? "text-muted-foreground"
+                                        : data.overallBlockRate <= 10
                                         ? "text-emerald-600 dark:text-emerald-500"
                                         : data.overallBlockRate <= 30
                                             ? "text-amber-600 dark:text-amber-500"
                                             : "text-red-600 dark:text-red-500"
                                 )}
                             >
-                                {data.overallBlockRate.toFixed(1)}%
+                                {hasRequests ? `${data.overallBlockRate.toFixed(1)}%` : "N/A"}
                             </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {data.overallBlockRate <= 10 ? "Excellent" : data.overallBlockRate <= 30 ? "Acceptable" : "High"}
+                            {!hasRequests
+                                ? "No scrape attempts in selected range"
+                                : data.overallBlockRate <= 10
+                                    ? "Excellent"
+                                    : data.overallBlockRate <= 30
+                                        ? "Acceptable"
+                                        : "High"}
                         </p>
                     </Card>
 

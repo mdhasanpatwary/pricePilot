@@ -130,6 +130,14 @@ export class ProxyManager {
     return proxyId.startsWith('env:');
   }
 
+  private isTenantProxyId(proxyId: string): boolean {
+    return proxyId.startsWith('tenant:');
+  }
+
+  private isRuntimeProxyId(proxyId: string): boolean {
+    return this.isEnvProxyId(proxyId) || this.isTenantProxyId(proxyId);
+  }
+
   private isBlockedFailure(details?: ProxyOutcomeDetails): boolean {
     return (
       details?.blocked === true ||
@@ -292,6 +300,62 @@ export class ProxyManager {
     return candidates;
   }
 
+  private async getTenantSiteProxyCandidate(
+    competitorWebsiteId: string
+  ): Promise<Candidate | null> {
+    try {
+      const site = await (prisma.site as any).findUnique({
+        where: { id: competitorWebsiteId },
+        select: {
+          tenantId: true,
+          tenantProxyEnabled: true,
+          tenantProxyProtocol: true,
+          tenantProxyHost: true,
+          tenantProxyPort: true,
+          tenantProxyUsername: true,
+          tenantProxyPasswordEncrypted: true,
+        },
+      });
+
+      if (!site?.tenantProxyEnabled || !site.tenantProxyHost || !site.tenantProxyPort) {
+        return null;
+      }
+
+      let password: string | undefined = undefined;
+      if (site.tenantProxyPasswordEncrypted) {
+        try {
+          password = decryptForUse(site.tenantProxyPasswordEncrypted);
+        } catch (error) {
+          logger.warn('[ProxyManager] Failed to decrypt tenant proxy password', {
+            competitorWebsiteId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      return {
+        proxy: {
+          id: `tenant:${site.tenantId}:${competitorWebsiteId}`,
+          host: site.tenantProxyHost,
+          port: site.tenantProxyPort,
+          protocol: (site.tenantProxyProtocol || 'http') as 'http' | 'https' | 'socks5',
+          username: site.tenantProxyUsername || undefined,
+          password,
+          provider: 'tenant-managed',
+          type: 'residential',
+          source: 'env',
+        },
+        score: 0.95,
+      };
+    } catch (error) {
+      logger.warn('[ProxyManager] Failed to load tenant proxy candidate', {
+        competitorWebsiteId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   private getEnvCandidates(excludedProxyIds: Set<string>): Candidate[] {
     const healthMap = this.getRuntimeHealthMap();
     const nowMs = Date.now();
@@ -334,13 +398,17 @@ export class ProxyManager {
       const excludedProxyIds = new Set(options?.excludeProxyIds || []);
       const poolPreference = this.normalizePoolPreference(policy, options);
 
+      const tenantProxyCandidate = await this.getTenantSiteProxyCandidate(competitorWebsiteId);
       const dbCandidates = await this.getDatabaseCandidates(competitorWebsiteId, excludedProxyIds);
       const envCandidates = this.getEnvCandidates(excludedProxyIds);
 
-      let candidates = this.applyPoolFilter([...dbCandidates, ...envCandidates], poolPreference);
+      const prioritized: Candidate[] = tenantProxyCandidate
+        ? [tenantProxyCandidate, ...dbCandidates, ...envCandidates]
+        : [...dbCandidates, ...envCandidates];
+      let candidates = this.applyPoolFilter(prioritized, poolPreference);
       if (candidates.length === 0 && poolPreference !== 'any') {
         // Fall back to any pool to avoid full outage.
-        candidates = [...dbCandidates, ...envCandidates];
+        candidates = prioritized;
       }
 
       if (candidates.length === 0) {
@@ -397,7 +465,7 @@ export class ProxyManager {
     details?: ProxyOutcomeDetails
   ): Promise<void> {
     try {
-      if (this.isEnvProxyId(proxyId)) {
+      if (this.isRuntimeProxyId(proxyId)) {
         const now = Date.now();
         const healthMap = this.getRuntimeHealthMap();
         const state = healthMap[proxyId] || { successCount: 0, failureCount: 0, blockedCount: 0 };
@@ -411,7 +479,7 @@ export class ProxyManager {
         state.cooldownUntilMs = now + cooldownMinutes * 60 * 1000;
         healthMap[proxyId] = state;
         this.removeStickyAssignmentsForProxy(proxyId);
-        logger.info('[ProxyManager] Marked env proxy failed', {
+        logger.info('[ProxyManager] Marked runtime proxy failed', {
           proxyId,
           competitorWebsiteId,
           cooldownMinutes,
@@ -475,14 +543,14 @@ export class ProxyManager {
     details?: ProxyOutcomeDetails
   ): Promise<void> {
     try {
-      if (this.isEnvProxyId(proxyId)) {
+      if (this.isRuntimeProxyId(proxyId)) {
         const healthMap = this.getRuntimeHealthMap();
         const state = healthMap[proxyId] || { successCount: 0, failureCount: 0, blockedCount: 0 };
         state.successCount += 1;
         state.failureCount = 0;
         state.cooldownUntilMs = undefined;
         healthMap[proxyId] = state;
-        logger.info('[ProxyManager] Marked env proxy success', {
+        logger.info('[ProxyManager] Marked runtime proxy success', {
           proxyId,
           competitorWebsiteId,
           responseTimeMs: details?.responseTimeMs,

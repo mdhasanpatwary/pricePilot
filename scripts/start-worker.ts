@@ -372,9 +372,19 @@ async function start() {
     };
 
     // Handle graceful shutdown (works both in active + degraded modes).
-    const gracefulShutdown = async (exitCode: number = 0) => {
+    const gracefulShutdown = async (
+      exitOrSignal: number | NodeJS.Signals = 0,
+    ) => {
       if (isShuttingDown) return;
       isShuttingDown = true;
+      const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
+        SIGINT: 130,
+        SIGTERM: 143,
+      };
+      const exitCode =
+        typeof exitOrSignal === "number"
+          ? exitOrSignal
+          : (signalExitCodes[exitOrSignal] ?? 0);
       console.log("🛑 Shutting down workers...");
       if (workerRssMonitorTimer) {
         clearInterval(workerRssMonitorTimer);
@@ -439,8 +449,12 @@ async function start() {
       }, intervalMs);
     };
 
-    process.on("SIGTERM", gracefulShutdown);
-    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", () => {
+      void gracefulShutdown("SIGTERM");
+    });
+    process.on("SIGINT", () => {
+      void gracefulShutdown("SIGINT");
+    });
 
     try {
       await startWorkersOnce();

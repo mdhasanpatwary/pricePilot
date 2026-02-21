@@ -41,7 +41,9 @@ async function handleGET(
             tenantId,
             type: "COMPETITOR",
         },
-        include: {
+        select: {
+            id: true,
+            baseUrl: true,
             ScrapingConfig: true,
         },
     });
@@ -137,7 +139,9 @@ async function handlePUT(
             tenantId,
             type: "COMPETITOR",
         },
-        include: {
+        select: {
+            id: true,
+            baseUrl: true,
             ScrapingConfig: true,
         },
     });

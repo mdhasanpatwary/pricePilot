@@ -242,12 +242,40 @@ async function handleGET(req: NextRequest) {
           ]
           : undefined,
       },
-      include: {
+      select: {
+        id: true,
+        confidenceScore: true,
+        matchType: true,
+        status: true,
         userProduct: {
-          include: { Site: true },
+          select: {
+            id: true,
+            title: true,
+            sku: true,
+            currentPrice: true,
+            url: true,
+            imageUrl: true,
+            Site: {
+              select: {
+                baseUrl: true,
+              },
+            },
+          },
         },
         competitorProduct: {
-          include: { Site: true },
+          select: {
+            id: true,
+            title: true,
+            sku: true,
+            currentPrice: true,
+            url: true,
+            imageUrl: true,
+            Site: {
+              select: {
+                baseUrl: true,
+              },
+            },
+          },
         },
       },
       orderBy: {

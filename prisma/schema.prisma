@@ -1284,6 +1284,18 @@ model Site {
   currency            String             @default("USD")
   isAdvancedProtected Boolean            @default(false)
   lastSecurityBlockAt DateTime?
+  advancedAccessStatus String            @default("NOT_REQUIRED")
+  advancedAccessRequiredAt DateTime?
+  advancedAccessReason String?
+  tenantProxyEnabled   Boolean           @default(false)
+  tenantProxyProtocol  String?
+  tenantProxyHost      String?
+  tenantProxyPort      Int?
+  tenantProxyUsername  String?
+  tenantProxyPasswordEncrypted String?
+  tenantCaptchaEnabled Boolean           @default(false)
+  tenantCaptchaProvider String?
+  tenantCaptchaApiKeyEncrypted String?
   searchQueryPattern  String?
   ApiDetectionMetric  ApiDetectionMetric[]
   ApiPattern          ApiPattern?

@@ -34,8 +34,8 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
       const { SyncService } = await import("@/lib/services/sync");
       await SyncService.syncSite(job.data.siteId);
     } else if (job.data.type === "RETRY") {
-       if (!job.data.siteId || !job.data.productIds) throw new Error("Missing data for retry sync");
-       await SyncOrchestrator.processRetrySync(job.data.siteId, job.data.productIds);
+      if (!job.data.siteId || !job.data.productIds) throw new Error("Missing data for retry sync");
+      await SyncOrchestrator.processRetrySync(job.data.siteId, job.data.productIds);
     } else if (job.data.type === "PRODUCT") {
       if (!job.data.productId) throw new Error("ProductID required for product sync");
       await SyncOrchestrator.syncProduct(job.data.productId);
@@ -66,11 +66,10 @@ const notificationProcessor = async (job: Job<NotificationJobData>) => {
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
           <h2 style="color: #0070f3; margin-top: 0;">${payload.title}</h2>
           <p style="font-size: 16px; color: #333; line-height: 1.5;">${payload.message}</p>
-          ${
-            payload.link
-              ? `<a href="${fullLink}" style="display: inline-block; background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">View in Dashboard</a>`
-              : ""
-          }
+          ${payload.link
+          ? `<a href="${fullLink}" style="display: inline-block; background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">View in Dashboard</a>`
+          : ""
+        }
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="font-size: 12px; color: #666;">This is an automated message from PricePilot. Please do not reply.</p>
         </div>
@@ -139,7 +138,7 @@ export const createWorkers = () => {
   const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
     connection: getRedisConnection() as any,
     concurrency: cappedSyncConcurrency,
-    lockDuration: 3600000, // 1 hour - ensures long-running discovery of 200+ products doesn't trigger a stall retry
+    lockDuration: 12 * 60 * 60 * 1000, // 12 hours - ensures long-running discovery of 700+ products doesn't trigger a stall retry
   });
 
   const computedScrapeConcurrency = Math.max(1, Math.min(cpus, Math.floor(cpus * 0.75)));
@@ -155,7 +154,10 @@ export const createWorkers = () => {
   const scrapeWorker = new Worker(QUEUE_NAMES.SCRAPE, scrapeProcessor, {
     connection: getRedisConnection() as any,
     concurrency: scrapeConcurrency,
-    lockDuration: 10 * 60 * 1000,
+    // Scrape jobs can run long (rate-limit waits + retries + anti-bot handling).
+    // Use a longer lock window to reduce false "could not renew lock" failures.
+    lockDuration: 30 * 60 * 1000,
+    maxStalledCount: 2,
   });
 
   const notificationWorker = new Worker(

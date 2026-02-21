@@ -47,18 +47,25 @@ export async function paginate<T>(
     model: any,
     where: any,
     params: PaginationParams,
-    include?: any
+    queryOptions?: any
 ): Promise<PaginatedResponse<T>> {
     // Validate and normalize pagination parameters
     const page = Math.max(1, params.page || 1);
     const limit = Math.min(100, Math.max(1, params.limit || 20));
     const skip = (page - 1) * limit;
 
+    const normalizedQueryOptions =
+        queryOptions && (queryOptions.include || queryOptions.select)
+            ? queryOptions
+            : queryOptions
+                ? { include: queryOptions }
+                : {};
+
     // Execute query and count in parallel for performance
     const [data, total] = await Promise.all([
         model.findMany({
             where,
-            include,
+            ...normalizedQueryOptions,
             skip,
             take: limit,
             orderBy: params.sortBy ? {
@@ -107,15 +114,22 @@ export async function paginateCursor<T>(
     model: any,
     where: any,
     params: CursorPaginationParams,
-    include?: any
+    queryOptions?: any
 ): Promise<CursorPaginatedResponse<T>> {
     const limit = Math.min(100, Math.max(1, params.limit || 20));
     const sortBy = params.sortBy || 'id';
     const sortOrder = params.sortOrder || 'desc';
 
+    const normalizedQueryOptions =
+        queryOptions && (queryOptions.include || queryOptions.select)
+            ? queryOptions
+            : queryOptions
+                ? { include: queryOptions }
+                : {};
+
     const data = await model.findMany({
         where,
-        include,
+        ...normalizedQueryOptions,
         take: limit + 1, // Fetch one extra to determine if there's a next page
         cursor: params.cursor ? { [sortBy]: params.cursor } : undefined,
         skip: params.cursor ? 1 : 0, // Skip the cursor itself

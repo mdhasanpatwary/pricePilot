@@ -110,6 +110,9 @@ export class ScrapingEngineService {
 
     try {
       let result;
+      const allowLegacyFallback =
+        this.canFallbackToLegacy() || options.context === "discovery";
+
       if (primary === "legacy") {
         const legacy = this.getLegacyScraper();
         result = await legacy.searchAndScrape(baseUrl, query, options.siteId, options.attempt, options.visitedQueries);
@@ -120,7 +123,7 @@ export class ScrapingEngineService {
           hasSiteId: Boolean(options.siteId),
           hasTenantId: Boolean(options.tenantId),
         });
-        if (this.canFallbackToLegacy()) {
+        if (allowLegacyFallback) {
           metricEngine = "legacy";
           const legacy = this.getLegacyScraper();
           result = await legacy.searchAndScrape(baseUrl, query, options.siteId, options.attempt, options.visitedQueries);
@@ -131,7 +134,13 @@ export class ScrapingEngineService {
         const discovered = await BotSearchDiscoveryService.discoverProductUrl(baseUrl, query, options.siteId);
         if (!discovered?.url) {
           metricFallbackReason = "bot-search-discovery-miss";
-          result = null;
+          if (allowLegacyFallback) {
+            metricEngine = "legacy";
+            const legacy = this.getLegacyScraper();
+            result = await legacy.searchAndScrape(baseUrl, query, options.siteId, options.attempt, options.visitedQueries);
+          } else {
+            result = null;
+          }
         } else {
           const botResult = await this.getBotAdapter().scrapeUrlWithProbe(
             discovered.url,
@@ -155,7 +164,13 @@ export class ScrapingEngineService {
             };
           } else {
             metricFallbackReason = "bot-search-rescrape-failed";
-            result = null;
+            if (allowLegacyFallback) {
+              metricEngine = "legacy";
+              const legacy = this.getLegacyScraper();
+              result = await legacy.searchAndScrape(baseUrl, query, options.siteId, options.attempt, options.visitedQueries);
+            } else {
+              result = null;
+            }
           }
         }
       }

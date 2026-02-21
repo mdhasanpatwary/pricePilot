@@ -3,6 +3,7 @@ import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { QueueBackpressureError } from "@/lib/queue/backpressure";
+import { shouldBlockSyncForAdvancedAccess } from "@/lib/services/advanced-access";
 import {
   validateBody,
   validationErrorResponse,
@@ -32,6 +33,23 @@ async function handleSync(req: NextRequest) {
 
     const { siteId, force } = validation.data!;
     queuedSiteId = siteId;
+
+    const advancedGate = await shouldBlockSyncForAdvancedAccess({
+      siteId,
+      tenantId: session.user.tenantId,
+    });
+    if (advancedGate.block) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: advancedGate.message,
+          code: "ADVANCED_PROTECTION_REQUIRES_SERVICES",
+          missingRequirements: advancedGate.missingRequirements,
+          siteId,
+        },
+        { status: 409 },
+      );
+    }
 
     // Check if site is already syncing
     const { prisma } = await import("@/lib/prisma");
@@ -73,8 +91,8 @@ async function handleSync(req: NextRequest) {
                      currentSiteStatus.syncProcessed < currentSiteStatus.syncTotal;
 
     // Mark site as syncing immediately to provide instant feedback to the frontend
-    await withDbRetry(() => prisma.site.update({
-      where: { id: siteId },
+    await withDbRetry(() => prisma.site.updateMany({
+      where: { id: siteId, tenantId: session.user.tenantId },
       data: {
         isSyncing: true,
         syncStartedAt: isResume ? currentSiteStatus!.syncStartedAt : now,
@@ -104,8 +122,8 @@ async function handleSync(req: NextRequest) {
         const { prisma } = await import("@/lib/prisma");
         await withDbRetry(
           () =>
-            prisma.site.update({
-              where: { id: siteIdForReset },
+            prisma.site.updateMany({
+              where: { id: siteIdForReset, tenantId: session.user.tenantId },
               data: {
                 isSyncing: false,
                 syncLastAction: "Queue overloaded. Try again shortly.",

@@ -59,12 +59,26 @@ interface QuerySignals {
 }
 
 export class BotSearchDiscoveryService {
+  private static readonly warningThrottleMs = 5 * 60 * 1000;
+  private static warningLastSeen = new Map<string, number>();
+
+  private static shouldLogWarningOnce(key: string): boolean {
+    const now = Date.now();
+    const prev = this.warningLastSeen.get(key) || 0;
+    if (now - prev < this.warningThrottleMs) return false;
+    this.warningLastSeen.set(key, now);
+    return true;
+  }
+
   static async discoverProductUrl(baseUrl: string, query: string, siteId?: string): Promise<DiscoveryResult | null> {
     const cleanQuery = this.sanitizeQuery(query);
     if (!cleanQuery) return null;
 
     const normalizedHost = new URL(baseUrl).hostname.toLowerCase();
     const normalizedDomain = SearchPatternLearningService.normalizeDomain(normalizedHost);
+    const isTechlandDomain = normalizedHost.includes("techlandbd.com") || normalizedHost.includes("techland.com.bd");
+    const isCompatibleTechlandPattern = (value: string): boolean =>
+      value.toLowerCase().includes("/search/advance/product/result/");
     const queryPlan = this.buildIntelligentFallbackQueries(cleanQuery);
 
     const candidates = await this.buildSearchCandidates(baseUrl, cleanQuery, siteId, normalizedHost, normalizedDomain);
@@ -82,6 +96,10 @@ export class BotSearchDiscoveryService {
 
       for (const candidate of candidates) {
         const searchUrl = this.buildSearchUrl(baseUrl, searchQuery, candidate.pattern);
+        if (isTechlandDomain && !isCompatibleTechlandPattern(searchUrl)) {
+          await this.recordPatternAttempt(normalizedDomain, candidate.pattern, false);
+          continue;
+        }
 
         try {
           const response = await fetch(searchUrl, {
@@ -146,9 +164,17 @@ export class BotSearchDiscoveryService {
     const used = new Set<string>();
     const out: Array<{ searchUrl: string; pattern: string; label: string }> = [];
 
+    const isTechlandDomain = normalizedHost.includes("techlandbd.com") || normalizedHost.includes("techland.com.bd");
+    const isCompatibleTechlandPattern = (value: string): boolean =>
+      value.toLowerCase().includes("/search/advance/product/result/");
+
     const push = (pattern: string | null | undefined, label: string) => {
       const p = (pattern || "").trim();
       if (!p || used.has(p)) return;
+      if (isTechlandDomain && !isCompatibleTechlandPattern(p)) {
+        // Ignore generic patterns for Techland silently; they're known-incompatible.
+        return;
+      }
       used.add(p);
       out.push({
         searchUrl: this.buildSearchUrl(baseUrl, query, p),
@@ -166,21 +192,36 @@ export class BotSearchDiscoveryService {
       explicitPattern = site?.searchQueryPattern || null;
     }
 
+    if (isTechlandDomain && explicitPattern) {
+      const normalizedExplicit = explicitPattern.toLowerCase().replace(/\s+/g, "");
+      if (!normalizedExplicit.includes("/search/advance/product/result/")) {
+        const warnKey = `ignore-techland-db-pattern:${normalizedHost}:${normalizedExplicit}`;
+        if (this.shouldLogWarningOnce(warnKey)) {
+          logger.warn("[BotSearchDiscovery] Ignoring incompatible DB search pattern for Techland host", {
+            host: normalizedHost,
+            pattern: explicitPattern,
+          });
+        }
+        explicitPattern = null;
+      }
+    }
+
     if (explicitPattern) {
       push(explicitPattern, "database");
-    } else {
-      const learned = await SearchPatternLearningService.getBestPatternForDomain(normalizedDomain).catch(() => null);
-      push(learned, "learned");
+    }
 
-      const builtin = Object.entries(BUILTIN_PATTERNS).find(([domain]) => normalizedHost.includes(domain));
-      if (builtin) {
-        push(builtin[1], "builtin");
-      }
+    const learned = await SearchPatternLearningService.getBestPatternForDomain(normalizedDomain).catch(() => null);
+    push(learned, "learned");
 
-      for (const fallbackPattern of COMMON_FALLBACK_PATTERNS) {
-        if (out.length >= 6) break;
-        push(fallbackPattern, "fallback");
-      }
+    const builtin = Object.entries(BUILTIN_PATTERNS).find(([domain]) => normalizedHost.includes(domain));
+    if (builtin) {
+      push(builtin[1], "builtin");
+    }
+
+    const fallbackPatternsForHost = isTechlandDomain ? [] : COMMON_FALLBACK_PATTERNS;
+    for (const fallbackPattern of fallbackPatternsForHost) {
+      if (out.length >= 6) break;
+      push(fallbackPattern, "fallback");
     }
 
     return out;
@@ -278,7 +319,12 @@ export class BotSearchDiscoveryService {
   }
 
   private static buildSearchUrl(baseUrl: string, query: string, pattern: string): string {
-    const encoded = encodeURIComponent(query).replace(/%20/g, "+");
+    const placeholderIndex = pattern.indexOf("{query}") >= 0 ? pattern.indexOf("{query}") : pattern.indexOf("{q}");
+    const queryStart = pattern.indexOf("?");
+    const placeholderInQuery = queryStart >= 0 && placeholderIndex > queryStart;
+    const encoded = placeholderInQuery
+      ? encodeURIComponent(query).replace(/%20/g, "+")
+      : encodeURIComponent(query);
 
     if (pattern.startsWith("http://") || pattern.startsWith("https://")) {
       return pattern.replace("{query}", encoded).replace("{q}", encoded);
@@ -291,6 +337,15 @@ export class BotSearchDiscoveryService {
 
   private static pickBestProductUrl(html: string, searchUrl: string, signals: QuerySignals): string | null {
     const $ = cheerio.load(html);
+    const searchHost = (() => {
+      try {
+        return new URL(searchUrl).hostname.toLowerCase();
+      } catch {
+        return "";
+      }
+    })();
+    const isTechlandHost = searchHost.includes("techlandbd.com") || searchHost.includes("techland.com.bd");
+    const minScore = isTechlandHost ? 12 : 20;
 
     const scored = $("a[href]")
       .toArray()
@@ -300,8 +355,8 @@ export class BotSearchDiscoveryService {
         const absolute = this.toAbsoluteUrl(href, searchUrl);
         if (!absolute) return null;
 
-        const score = this.scoreCandidate(absolute, text, signals);
-        if (score < 20) return null;
+        const score = this.scoreCandidate(absolute, text, signals, isTechlandHost);
+        if (score < minScore) return null;
 
         return { absolute, score };
       })
@@ -311,11 +366,20 @@ export class BotSearchDiscoveryService {
     return scored[0]?.absolute || null;
   }
 
-  private static scoreCandidate(url: string, text: string, signals: QuerySignals): number {
+  private static scoreCandidate(
+    url: string,
+    text: string,
+    signals: QuerySignals,
+    isTechlandHost = false,
+  ): number {
     const lowerUrl = url.toLowerCase();
     const lowerText = text.toLowerCase();
+    const isTechlandSearchProductUrl = lowerUrl.includes("/search/advance/product/result/");
 
-    if (BLOCKED_PATH_HINTS.some((hint) => lowerUrl.includes(hint))) {
+    if (
+      BLOCKED_PATH_HINTS.some((hint) => lowerUrl.includes(hint)) &&
+      !(isTechlandHost && isTechlandSearchProductUrl)
+    ) {
       return 0;
     }
 
@@ -323,6 +387,7 @@ export class BotSearchDiscoveryService {
 
     if (lowerUrl.includes("/product/")) score += 35;
     if (lowerUrl.includes("/item/")) score += 18;
+    if (isTechlandHost && isTechlandSearchProductUrl) score += 20;
     if (lowerUrl.includes("-p-") || /\/p\//.test(lowerUrl)) score += 10;
 
     const urlTokens = this.tokenize(lowerUrl.replace(/https?:\/\//g, " "));

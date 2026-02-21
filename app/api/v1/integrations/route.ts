@@ -31,13 +31,29 @@ async function handleGET(_req: NextRequest) {
         tenantId,
         type: "USER",
       },
-      include: {
+      select: {
+        id: true,
+        platform: true,
+        type: true,
+        baseUrl: true,
+        isSyncing: true,
+        syncProcessed: true,
+        syncTotal: true,
+        syncLastAction: true,
+        lastSyncAt: true,
+        createdAt: true,
         _count: {
           select: { Product: true },
         },
         SyncLog: {
           orderBy: { createdAt: "desc" },
           take: 10,
+          select: {
+            id: true,
+            level: true,
+            message: true,
+            createdAt: true,
+          },
         },
       },
       orderBy: {
@@ -210,6 +226,10 @@ async function handleDELETE(req: NextRequest) {
         id: siteId,
         tenantId,
       },
+      select: {
+        id: true,
+        baseUrl: true,
+      },
     });
 
     if (!site) {
@@ -217,8 +237,8 @@ async function handleDELETE(req: NextRequest) {
     }
 
     // Delete the site (cascade will handle related products)
-    await prisma.site.delete({
-      where: { id: siteId },
+    await prisma.site.deleteMany({
+      where: { id: siteId, tenantId },
     });
 
     // Invalidate product list cache for this tenant

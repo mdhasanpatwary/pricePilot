@@ -52,6 +52,9 @@ export interface Competitor {
   syncStartedAt?: string | Date | null;
   totalUserProducts?: number;
   isAdvancedProtected?: boolean;
+  advancedAccessStatus?: "NOT_REQUIRED" | "REQUIRES_SETUP" | "READY";
+  advancedAccessRequiredAt?: string | Date | null;
+  advancedAccessReason?: string | null;
   searchQueryPattern?: string | null;
   logs?: any[];
 }

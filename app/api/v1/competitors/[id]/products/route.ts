@@ -36,7 +36,26 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
                 tenantId,
                 type: "COMPETITOR",
             },
-            include: {
+            select: {
+                id: true,
+                tenantId: true,
+                type: true,
+                platform: true,
+                baseUrl: true,
+                apiToken: true,
+                lastSyncAt: true,
+                createdAt: true,
+                updatedAt: true,
+                isSyncing: true,
+                syncProcessed: true,
+                syncStartedAt: true,
+                syncTotal: true,
+                syncLastAction: true,
+                syncToken: true,
+                currency: true,
+                isAdvancedProtected: true,
+                lastSecurityBlockAt: true,
+                searchQueryPattern: true,
                 _count: {
                     select: { Product: true }
                 }
@@ -61,7 +80,19 @@ async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: s
             siteId: competitorId,
             tenantId,
         },
-        include: {
+        select: {
+            id: true,
+            sku: true,
+            title: true,
+            imageUrl: true,
+            currentPrice: true,
+            inStock: true,
+            brand: true,
+            model: true,
+            category: true,
+            url: true,
+            updatedAt: true,
+            specifications: true,
             _count: {
                 select: { matchesAsCompetitor: true }
             }

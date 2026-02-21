@@ -32,6 +32,10 @@ async function handleGET(
             tenantId,
             type: "COMPETITOR",
         },
+        select: {
+            id: true,
+            baseUrl: true,
+        },
     });
 
     if (!competitorWebsite) {
@@ -165,6 +169,10 @@ async function handlePOST(
             id: competitorWebsiteId,
             tenantId,
             type: "COMPETITOR",
+        },
+        select: {
+            id: true,
+            baseUrl: true,
         },
     });
 

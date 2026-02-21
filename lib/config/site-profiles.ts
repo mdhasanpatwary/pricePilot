@@ -1,4 +1,4 @@
-export type SiteSearchAdapterKey = 'startech' | 'ryans';
+export type SiteSearchAdapterKey = 'startech' | 'ryans' | 'techland';
 
 export interface SiteProfile {
   strategy: 'light-js' | 'full-js' | 'html-only';
@@ -83,6 +83,7 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
       price: ['.product-price'],
       stock: ['.stock-info']
     },
+    searchAdapter: 'techland',
     waitTime: 1000,
     cacheTime: 86400, // 24 hours - Requirement 2.9.4
     successRate: 0.90,
