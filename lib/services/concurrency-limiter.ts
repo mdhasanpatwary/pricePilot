@@ -83,9 +83,11 @@ interface RequestResult {
 export class ConcurrencyLimiter {
     private config: ConcurrencyConfig;
     private siteStates: Map<string, SiteState> = new Map();
+    // Event-driven waiters: replaces 50ms spin-poll with zero-overhead Promise parking
+    private waiters: Map<string, Array<() => void>> = new Map();
     private static readonly DISTRIBUTED_KEY_PREFIX = 'pp:concurrency:site:';
     private readonly leaseTtlMs: number;
-    private readonly pollIntervalMs: number;
+
 
     /**
      * Create a new ConcurrencyLimiter
@@ -100,11 +102,9 @@ export class ConcurrencyLimiter {
             adjustmentThreshold: config?.adjustmentThreshold ?? 0.2,
         };
         const leaseTtlRaw = Number(process.env.SCRAPE_SITE_CONCURRENCY_LEASE_TTL_MS || '600000');
-        const pollIntervalRaw = Number(process.env.SCRAPE_SITE_CONCURRENCY_POLL_MS || '50');
         this.leaseTtlMs =
             Number.isFinite(leaseTtlRaw) && leaseTtlRaw >= 30_000 ? Math.floor(leaseTtlRaw) : 600000;
-        this.pollIntervalMs =
-            Number.isFinite(pollIntervalRaw) && pollIntervalRaw >= 10 ? Math.floor(pollIntervalRaw) : 50;
+
 
         // Validate and sanitize configuration
         if (this.config.minConcurrency < 1) {
@@ -138,10 +138,6 @@ export class ConcurrencyLimiter {
 
     private getDistributedKey(site: string): string {
         return `${ConcurrencyLimiter.DISTRIBUTED_KEY_PREFIX}${this.normalizeSite(site)}`;
-    }
-
-    private async sleep(ms: number): Promise<void> {
-        await new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     private async tryAcquireDistributed(site: string, limit: number): Promise<boolean> {
@@ -233,6 +229,7 @@ export class ConcurrencyLimiter {
      */
     async acquireSlot(site: string): Promise<void> {
         const state = this.getState(site);
+        // Event-driven: try immediately, then park until releaseSlot() wakes us
         while (true) {
             if (state.activeRequests < state.currentConcurrency) {
                 const acquired = await this.tryAcquireDistributed(site, state.currentConcurrency);
@@ -241,7 +238,12 @@ export class ConcurrencyLimiter {
                     return;
                 }
             }
-            await this.sleep(this.pollIntervalMs);
+            // Park the caller — zero CPU/Redis while waiting
+            await new Promise<void>((resolve) => {
+                const q = this.waiters.get(site) ?? [];
+                q.push(resolve);
+                this.waiters.set(site, q);
+            });
         }
     }
 
@@ -278,6 +280,13 @@ export class ConcurrencyLimiter {
                 error: error instanceof Error ? error.message : String(error),
             });
         });
+
+        // Wake one parked waiter (FIFO) so it can re-try acquireSlot
+        const q = this.waiters.get(site);
+        if (q && q.length > 0) {
+            const next = q.shift()!;
+            next();
+        }
     }
 
     /**
@@ -439,7 +448,7 @@ export class ConcurrencyLimiter {
 
     /**
      * Record the result of a request and automatically adjust concurrency.
-     * 
+     *
      * @param site - Site identifier
      * @param success - Whether the request was successful
      * @param blocked - Whether the request was blocked

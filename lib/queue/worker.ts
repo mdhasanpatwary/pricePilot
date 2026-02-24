@@ -138,7 +138,13 @@ export const createWorkers = () => {
   const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
     connection: getRedisConnection() as any,
     concurrency: cappedSyncConcurrency,
-    lockDuration: 12 * 60 * 60 * 1000, // 12 hours - ensures long-running discovery of 700+ products doesn't trigger a stall retry
+    // 30 min lock window — BullMQ auto-renews the lock (1/4 before expiry) while the job
+    // is actively running, so long-running discovery (700+ products) won't stall.
+    // The old 12h setting only delayed stall detection after a crash by 12 hours.
+    lockDuration: 30 * 60 * 1000,
+    lockRenewTime: 10 * 60 * 1000,
+    maxStalledCount: 2,
+    stalledInterval: 5 * 60 * 1000,
   });
 
   const computedScrapeConcurrency = Math.max(1, Math.min(cpus, Math.floor(cpus * 0.75)));

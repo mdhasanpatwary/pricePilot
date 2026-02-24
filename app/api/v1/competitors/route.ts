@@ -31,15 +31,18 @@ function isMissingColumnError(error: unknown): boolean {
 }
 
 let competitorAdvancedColumnsSupported: boolean | null = null;
-let competitorAdvancedProbePromise: Promise<boolean> | null = null;
+// In-flight dedup: prevents concurrent POST requests from each launching a probe
+let competitorAdvancedColsProbing: Promise<boolean> | null = null;
 
 async function supportsAdvancedAccessColumnsForSiteCreate(): Promise<boolean> {
+  // Permanent cache – once resolved, never re-query information_schema
   if (competitorAdvancedColumnsSupported !== null) {
     return competitorAdvancedColumnsSupported;
   }
 
-  if (!competitorAdvancedProbePromise) {
-    competitorAdvancedProbePromise = (async () => {
+  // Dedup concurrent requests during the first probe
+  if (!competitorAdvancedColsProbing) {
+    competitorAdvancedColsProbing = (async () => {
       try {
         const result = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(`
           SELECT EXISTS (
@@ -53,16 +56,14 @@ async function supportsAdvancedAccessColumnsForSiteCreate(): Promise<boolean> {
         competitorAdvancedColumnsSupported = Boolean(result?.[0]?.exists);
       } catch {
         competitorAdvancedColumnsSupported = false;
+      } finally {
+        competitorAdvancedColsProbing = null;
       }
-      return competitorAdvancedColumnsSupported;
+      return competitorAdvancedColumnsSupported!;
     })();
   }
 
-  try {
-    return await competitorAdvancedProbePromise;
-  } finally {
-    competitorAdvancedProbePromise = null;
-  }
+  return competitorAdvancedColsProbing;
 }
 
 async function handleGET(req: NextRequest) {

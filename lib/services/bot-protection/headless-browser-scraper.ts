@@ -301,13 +301,35 @@ export class HeadlessBrowserScraper {
   private convertCookies(cookies: Cookie[], url: string): any[] {
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
+    const toPlaywrightExpires = (value: unknown): number => {
+      if (value === null || value === undefined) return -1;
+
+      if (value instanceof Date) {
+        const ts = value.getTime();
+        return Number.isFinite(ts) ? Math.floor(ts / 1000) : -1;
+      }
+
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value) || value <= 0) return -1;
+        // Support both milliseconds and seconds inputs.
+        const ms = value > 1e12 ? value : value * 1000;
+        return Math.floor(ms / 1000);
+      }
+
+      if (typeof value === 'string') {
+        const parsed = new Date(value).getTime();
+        return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : -1;
+      }
+
+      return -1;
+    };
 
     return cookies.map((cookie) => ({
       name: cookie.name,
       value: cookie.value,
       domain: cookie.domain || domain,
       path: cookie.path || '/',
-      expires: cookie.expires ? Math.floor(cookie.expires.getTime() / 1000) : -1,
+      expires: toPlaywrightExpires(cookie.expires),
       httpOnly: cookie.httpOnly,
       secure: cookie.secure,
       sameSite: cookie.sameSite || 'Lax',

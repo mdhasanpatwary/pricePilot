@@ -141,6 +141,13 @@ export class ScraperService {
   private captchaConfigState: { enabled: boolean; apiKey: string; timeout: number } | null = null;
   private unsubscribeConfigChange?: () => void;
   private disposed = false;
+  // Lazy-init: init() is called once; subsequent calls resolve immediately
+  private _initPromise: Promise<void> | null = null;
+
+  private static parsePositiveInt(value: string | undefined, fallback: number): number {
+    const parsed = parseInt(value || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
 
   /**
    * Normalize scraped image URLs so relative paths from competitor sites
@@ -172,15 +179,11 @@ export class ScraperService {
       backoffMultiplier: 2,
       jitter: true,
     });
-    const parsePositiveInt = (value: string | undefined, fallback: number): number => {
-      const parsed = parseInt(value || '', 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    };
 
-    const configuredMinConcurrency = parsePositiveInt(process.env.CONCURRENCY_MIN, 1);
-    const configuredMaxConcurrency = parsePositiveInt(process.env.CONCURRENCY_MAX, 10);
-    const configuredInitialConcurrency = parsePositiveInt(process.env.CONCURRENCY_INITIAL, 3);
-    const configuredDevConcurrencyCap = parsePositiveInt(process.env.CONCURRENCY_DEV_MAX, 2);
+    const configuredMinConcurrency = ScraperService.parsePositiveInt(process.env.CONCURRENCY_MIN, 1);
+    const configuredMaxConcurrency = ScraperService.parsePositiveInt(process.env.CONCURRENCY_MAX, 10);
+    const configuredInitialConcurrency = ScraperService.parsePositiveInt(process.env.CONCURRENCY_INITIAL, 3);
+    const configuredDevConcurrencyCap = ScraperService.parsePositiveInt(process.env.CONCURRENCY_DEV_MAX, 2);
     const safeDevConcurrencyCap =
       Number.isFinite(configuredDevConcurrencyCap) && configuredDevConcurrencyCap > 0
         ? configuredDevConcurrencyCap
@@ -267,23 +270,6 @@ export class ScraperService {
     if (now - prev < ScraperService.warningThrottleMs) return false;
     ScraperService.warningLastSeen.set(key, now);
     return true;
-  }
-
-  private getNoResultCacheKey(hostname: string, query: string): string {
-    return `${hostname.toLowerCase()}::${query.trim().toLowerCase()}`;
-  }
-
-  private isKnownNoResultQuery(hostname: string, query: string): boolean {
-    // Cluster-safe mode: avoid process-local negative query cache.
-    // This is intentionally disabled to prevent divergent behavior across workers.
-    void this.getNoResultCacheKey(hostname, query);
-    return false;
-  }
-
-  private rememberNoResultQuery(hostname: string, query: string): void {
-    // Cluster-safe mode: no process-local writes.
-    void hostname;
-    void query;
   }
 
   private isStartechFallbackEnabled(): boolean {
@@ -529,16 +515,26 @@ export class ScraperService {
   }
 
   /**
+   * Ensure the browser pool is initialized exactly once.
+   * After the first successful init, subsequent calls resolve immediately.
+   */
+  private ensureInitialized(): Promise<void> {
+    if (!this._initPromise) {
+      this._initPromise = this.init().catch((err) => {
+        // Clear so the next call retries if init fails
+        this._initPromise = null;
+        throw err;
+      });
+    }
+    return this._initPromise;
+  }
+
+  /**
    * Initialize the browser pool
    */
   async init() {
-    const parsePositiveInt = (value: string | undefined, fallback: number): number => {
-      const parsed = parseInt(value || '', 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    };
-
-    const configuredMaxContexts = parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS, 10);
-    const configuredDevMaxContexts = parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS_DEV_MAX, 2);
+    const configuredMaxContexts = ScraperService.parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS, 10);
+    const configuredDevMaxContexts = ScraperService.parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS_DEV_MAX, 2);
     const safeDevMaxContexts =
       Number.isFinite(configuredDevMaxContexts) && configuredDevMaxContexts > 0
         ? configuredDevMaxContexts
@@ -719,7 +715,8 @@ export class ScraperService {
     let hostname = 'unknown';
 
     try {
-      await this.init();
+      // Ensure browser pool is initialized once; subsequent calls resolve instantly
+      await this.ensureInitialized();
 
       try {
         hostname = new URL(url).hostname;
@@ -1166,15 +1163,26 @@ export class ScraperService {
       if (profile.strategy !== 'full-js') {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5000);
+          const timeout = setTimeout(() => controller.abort(), 8000);
           const preFlight = await fetch(url, { method: "HEAD", signal: controller.signal });
           clearTimeout(timeout);
-          if (!preFlight.ok && preFlight.status !== 403 && preFlight.status !== 429) {
-            logger.warn(`[Scraper] 🛑 Pre-flight failed: ${preFlight.status} for ${url}.`);
-            return null;
+
+          if (!preFlight.ok) {
+            if (preFlight.status === 403 || preFlight.status === 429) {
+              logger.warn(
+                `[Scraper] 🛡️ Potential anti-bot response during pre-flight (${preFlight.status}) for ${url}. Continuing with browser.`,
+              );
+            } else if (preFlight.status === 404) {
+              logger.warn(`[Scraper] 🛑 Pre-flight 404 for ${url}. Page likely gone.`);
+              return null;
+            } else {
+              logger.warn(
+                `[Scraper] ⚠️ Pre-flight warning (${preFlight.status}) for ${url}. Continuing with browser.`,
+              );
+            }
           }
         } catch (e) {
-          logger.warn(`[Scraper] Pre-flight net error: ${e}.`);
+          logger.warn(`[Scraper] Pre-flight net warning: ${e}. Continuing with browser.`);
         }
       }
 
@@ -3484,15 +3492,8 @@ export class ScraperService {
         logger.warn("[ScraperService] Empty query after sanitization, skipping search.");
         return null;
       }
-
       // 2. Resolve Search Strategy
       const hostname = new URL(baseUrl).hostname.toLowerCase();
-      if (this.isKnownNoResultQuery(hostname, normalizedQuery)) {
-        logger.info(
-          `[ScraperService] Skipping known no-result query (cached): "${cleanQuery}" on ${hostname}`,
-        );
-        return null;
-      }
 
       const seen = visitedQueries ?? new Set<string>();
       if (seen.has(normalizedQuery)) {
@@ -3976,9 +3977,8 @@ export class ScraperService {
           }
         }
       }
-
       if (likelyNoResults || attempt > 0) {
-        this.rememberNoResultQuery(hostname, normalizedQuery);
+        // Was rememberNoResultQuery here, now removed
       }
       logger.error(`[ScraperService] ❌ All strategies exhausted for: "${cleanQuery}"`);
       return null;

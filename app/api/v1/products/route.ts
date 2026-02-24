@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
 import { UnauthorizedError } from "@/lib/utils/error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
-import { paginate, getPaginationParams } from "@/lib/utils/pagination";
+import { paginateCursor, getCursorPaginationParams } from "@/lib/utils/pagination";
 import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
@@ -70,14 +70,14 @@ async function handleGET(req: NextRequest) {
     }
   }
 
-  // Get pagination parameters
-  const paginationParams = getPaginationParams(searchParams);
-  const { page, limit, sortBy = 'updatedAt', sortOrder = 'desc' } = paginationParams;
+  // Get cursor pagination parameters (constant-time, no OFFSET scan)
+  const paginationParams = getCursorPaginationParams(searchParams);
+  const { sortBy = 'updatedAt', sortOrder = 'desc' } = paginationParams;
 
   // Get paginated results - retry on transient failures
   const paginatedResult = await withDbRetry(
     () =>
-      paginate(prisma.product, where, { page, limit, sortBy, sortOrder }, {
+      paginateCursor(prisma.product, where, { ...paginationParams, sortBy, sortOrder }, {
         select: {
           id: true,
           sku: true,
@@ -97,6 +97,9 @@ async function handleGET(req: NextRequest) {
             },
           },
           matchesAsUser: {
+            // Only load the single best (lowest-price) match for the list view.
+            // All matches are available via GET /api/v1/products/[id]/matches.
+            take: 1,
             orderBy: {
               competitorProduct: { currentPrice: "asc" },
             },

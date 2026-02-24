@@ -12,10 +12,8 @@ const globalForQueues = global as unknown as {
 /**
  * Lazy-initialized Sync Queue
  */
-export const getSyncQueue = () => {
-  if (globalForQueues.syncQueue) return globalForQueues.syncQueue;
-
-  const queue = new Queue(QUEUE_NAMES.SYNC, {
+export const getSyncQueue = (): Queue => {
+  return (globalForQueues.syncQueue ??= new Queue(QUEUE_NAMES.SYNC, {
     connection: getRedisConnection() as any,
     defaultJobOptions: {
       attempts: 3, // Allow retries for transient networking errors
@@ -32,22 +30,14 @@ export const getSyncQueue = () => {
         age: 7 * 24 * 3600, // Keep failures for a week
       },
     },
-  });
-
-  if (process.env.NODE_ENV !== "production") {
-    globalForQueues.syncQueue = queue;
-  }
-  return queue;
+  }));
 };
 
 /**
  * Lazy-initialized Notification Queue
  */
-export const getNotificationQueue = () => {
-  if (globalForQueues.notificationQueue)
-    return globalForQueues.notificationQueue;
-
-  const queue = new Queue(QUEUE_NAMES.NOTIFICATIONS, {
+export const getNotificationQueue = (): Queue => {
+  return (globalForQueues.notificationQueue ??= new Queue(QUEUE_NAMES.NOTIFICATIONS, {
     connection: getRedisConnection() as any,
     defaultJobOptions: {
       attempts: 5,
@@ -55,22 +45,17 @@ export const getNotificationQueue = () => {
         type: "exponential",
         delay: 2000,
       },
+      removeOnComplete: { count: 100, age: 24 * 3600 },
+      removeOnFail: { count: 500, age: 7 * 24 * 3600 },
     },
-  });
-
-  if (process.env.NODE_ENV !== "production") {
-    globalForQueues.notificationQueue = queue;
-  }
-  return queue;
+  }));
 };
 
 /**
  * Lazy-initialized Scrape Queue (product-level scraping)
  */
-export const getScrapeQueue = () => {
-  if (globalForQueues.scrapeQueue) return globalForQueues.scrapeQueue;
-
-  const queue = new Queue(QUEUE_NAMES.SCRAPE, {
+export const getScrapeQueue = (): Queue => {
+  return (globalForQueues.scrapeQueue ??= new Queue(QUEUE_NAMES.SCRAPE, {
     connection: getRedisConnection() as any,
     defaultJobOptions: {
       attempts: 1,
@@ -81,12 +66,7 @@ export const getScrapeQueue = () => {
       // Scrape jobs are long-lived (we reschedule via moveToDelayed),
       // so completion cleanup isn't relied upon.
     },
-  });
-
-  if (process.env.NODE_ENV !== "production") {
-    globalForQueues.scrapeQueue = queue;
-  }
-  return queue;
+  }));
 };
 
 /**

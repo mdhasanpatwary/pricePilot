@@ -364,19 +364,20 @@ export class RateLimiter {
         protectionType?: ProtectionType
     ): Promise<void> {
         const loaded = await this.loadSiteConfigAndState(competitorWebsiteId);
-        const config = loaded.config;
 
         await this.withSiteLock(competitorWebsiteId, async () => {
-            const state = await this.readState(competitorWebsiteId, config, loaded.state);
+            const state = await this.readState(competitorWebsiteId, loaded.config, loaded.state);
+            // Keep failure backoff aligned with the active permit config persisted in Redis state.
+            const effectiveConfig = state.config || loaded.config;
 
             state.consecutiveFailures += 1;
             if (protectionType === ProtectionType.RATE_LIMIT) {
                 state.consecutiveFailures += 1;
             }
 
-            const delay = this.calculateDelay(state.consecutiveFailures, config);
+            const delay = this.calculateDelay(state.consecutiveFailures, effectiveConfig);
             state.nextAvailableTime = new Date(Date.now() + delay);
-            state.config = config;
+            state.config = effectiveConfig;
 
             await this.writeState(competitorWebsiteId, state);
             await this.upsertScrapingConfigState(competitorWebsiteId, {

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "prisma generate && next dev",
-    "dev:full": "prisma generate && concurrently --kill-others-on-fail \"next dev\" \"yarn run worker:dev\"",
+    "dev:full:clean": "pkill -f \"next dev\" || true; pkill -f \"scripts/start-worker.ts\" || true",
+    "dev:full": "yarn run dev:full:clean && prisma generate && concurrently --kill-others-on-fail \"next dev\" \"yarn run worker:dev\"",
     "dev:next": "prisma generate && next dev",
     "build": "prisma generate && next build",
     "start": "prisma generate && next start",

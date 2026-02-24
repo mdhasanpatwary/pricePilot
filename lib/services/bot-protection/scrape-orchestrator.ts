@@ -642,11 +642,17 @@ export class ScrapeOrchestrator {
             });
 
             try {
-                // Acquire rate limit permit
-                await this.rateLimiter.acquirePermit(
-                    request.competitorWebsiteId,
-                    this.getPermitConfigForRequest(request),
-                );
+                // Acquire a full permit only on the first attempt (or explicit rate-limit failures).
+                // Retries already have local exponential backoff and should not block tenant permits
+                // for long global cool-down windows.
+                const shouldAcquirePermit =
+                    attemptNumber === 1 || lastProtectionType === ProtectionType.RATE_LIMIT;
+                if (shouldAcquirePermit) {
+                    await this.rateLimiter.acquirePermit(
+                        request.competitorWebsiteId,
+                        this.getPermitConfigForRequest(request),
+                    );
+                }
 
                 // Execute scrape with current strategy
                 const attemptResult = await this.executeSingleAttempt(

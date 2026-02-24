@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ApprovalStatus } from "@prisma/client";
 import { z } from "zod";
-import { paginate, getPaginationParams } from "@/lib/utils/pagination";
+import { paginateCursor, getCursorPaginationParams } from "@/lib/utils/pagination";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
@@ -33,11 +33,11 @@ async function handleGET(req: NextRequest) {
 
         const status = rawStatus as ApprovalStatus;
 
-        // Get pagination parameters
-        const paginationParams = getPaginationParams(searchParams);
+        // Get cursor pagination parameters
+        const paginationParams = getCursorPaginationParams(searchParams);
 
-        // Use pagination helper
-        const paginatedResult = await paginate(
+        // Use cursor pagination helper (constant-time, no OFFSET scan)
+        const paginatedResult = await paginateCursor(
             prisma.pendingPriceChange,
             {
                 tenantId: session.user.tenantId,
@@ -204,16 +204,19 @@ async function handlePOST(req: NextRequest) {
                 });
             }
 
-            // Push approved changes to stores
+            // Push approved changes to stores in parallel (was sequential - O(n*syncTime) → O(syncTime))
             const userSites = await prisma.site.findMany({
                 where: { tenantId: session.user.tenantId, type: "USER" },
+                select: { id: true, platform: true },
             });
 
-            for (const site of userSites) {
-                if (site.platform === "OPENCART" || site.platform === "LARAVEL") {
-                    await SyncService.syncProductsToStore(site.id);
-                }
-            }
+            await Promise.all(
+                userSites
+                    .filter(s => s.platform === "OPENCART" || s.platform === "LARAVEL")
+                    .map(s => SyncService.syncProductsToStore(s.id).catch(err =>
+                        console.error(`[API] Store sync failed for site ${s.id}:`, err)
+                    ))
+            );
 
             return NextResponse.json({
                 success: true,
