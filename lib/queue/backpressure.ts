@@ -60,7 +60,7 @@ function getMetricWindowMs(): number {
   return parsePositiveInt(process.env.QUEUE_DEPTH_METRIC_WINDOW_MS, DEFAULT_METRIC_WINDOW_MS);
 }
 
-function calculateDelayMs(depth: number, threshold: number, minDelayMs: number, maxDelayMs: number): number {
+export function calculateDelayMs(depth: number, threshold: number, minDelayMs: number, maxDelayMs: number): number {
   const overflow = Math.max(1, depth - threshold);
   // Exponential backoff for queue depth overflow
   const exponent = Math.min(10, Math.floor(overflow / (threshold / 5)));

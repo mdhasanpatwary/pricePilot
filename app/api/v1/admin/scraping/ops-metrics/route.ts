@@ -33,6 +33,7 @@ type QueueSnapshot = {
     max: number;
     sampleSize: number;
   };
+  starvedCount: number; // Waiting > 1 hour
 };
 
 type AlertItem = {
@@ -94,6 +95,7 @@ async function getQueueSnapshot(
   const avg = ages.length > 0 ? Math.floor(sum / ages.length) : 0;
   const p95 = Math.floor(percentile(ages, 95));
   const max = ages.length > 0 ? ages[ages.length - 1] || 0 : 0;
+  const starvedCount = ages.filter((age: number) => age > 3600 * 1000).length;
 
   return {
     name: queueName,
@@ -105,6 +107,7 @@ async function getQueueSnapshot(
       max,
       sampleSize: ages.length,
     },
+    starvedCount,
   };
 }
 

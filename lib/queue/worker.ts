@@ -10,19 +10,21 @@ import { decrementTenantQueueDepth } from "./backpressure";
 const TENANT_ACTIVE_JOBS_PREFIX = "pp:queue:tenant:active:";
 const DEFAULT_TENANT_CONCURRENCY = 5;
 
-async function checkTenantConcurrency(queueName: string, tenantId: string): Promise<boolean> {
+async function tryAcquireTenantSlot(queueName: string, tenantId: string): Promise<boolean> {
   const redis = getRedisConnection();
   const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
-  const count = await redis.get(key);
   const limit = parseInt(process.env.MAX_TENANT_CONCURRENCY || String(DEFAULT_TENANT_CONCURRENCY));
-  return (count ? parseInt(count, 10) : 0) < limit;
-}
 
-async function incrementTenantActive(queueName: string, tenantId: string): Promise<void> {
-  const redis = getRedisConnection();
-  const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
-  await redis.incr(key);
+  // Atomic increment and check
+  const current = await redis.incr(key);
   await redis.expire(key, 3600); // 1h safety expiry
+
+  if (current > limit) {
+    // Exceeded, rollback the increment
+    await redis.decr(key);
+    return false;
+  }
+  return true;
 }
 
 async function decrementTenantActive(queueName: string, tenantId: string): Promise<void> {
@@ -40,15 +42,11 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     `[Worker] Processing Sync Job ${job.id} (Tenant: ${tenantId}, Type: ${job.data.type})`,
   );
 
-  // 1. Enforce Per-Tenant Concurrency
-  if (!(await checkTenantConcurrency(job.queueName, tenantId))) {
+  // 1. Enforce Per-Tenant Concurrency (Atomic)
+  if (!(await tryAcquireTenantSlot(job.queueName, tenantId))) {
      console.warn(`[Worker] Tenant ${tenantId} reached concurrency limit on ${job.queueName}. Deferring job.`);
-     // Optimization: BullMQ retry logic handles this naturally if we throw an error
-     // with a specific message that our backoff logic can recognize.
      throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
   }
-
-  await incrementTenantActive(job.queueName, tenantId);
 
   try {
     if (job.data.type === "FULL") {
