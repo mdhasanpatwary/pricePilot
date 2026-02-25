@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ExportService, ExportFormat } from "@/lib/services/export-service";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { getCachedSession } from "@/lib/auth/cached-session";
@@ -8,13 +7,13 @@ import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-co
 /**
  * GET /api/v1/admin/export/errors
  * Export error logs in specified format
- * 
+ *
  * Query Parameters:
  * - format: json | csv | pdf (default: json)
  * - tenantId: Filter by tenant (optional)
  * - startDate: Filter by start date (optional)
  * - endDate: Filter by end date (optional)
- * 
+ *
  * Requirements: 15.3, 15.5
  */
 async function handleGET(request: NextRequest) {
@@ -33,7 +32,7 @@ async function handleGET(request: NextRequest) {
 
         // Parse query parameters
         const searchParams = request.nextUrl.searchParams;
-        const format = (searchParams.get("format") || "json") as ExportFormat;
+        const format = (searchParams.get("format") || "json") as "json" | "csv" | "pdf";
         const tenantId = searchParams.get("tenantId") || undefined;
         const startDate = searchParams.get("startDate")
             ? new Date(searchParams.get("startDate")!)
@@ -113,7 +112,8 @@ async function handleGET(request: NextRequest) {
             });
         });
 
-        // Export errors
+        // Export errors (dynamic import)
+        const { ExportService } = await import("@/lib/services/export-service");
         const exported = await ExportService.exportErrors(errorLogs, { format });
 
         // Return file

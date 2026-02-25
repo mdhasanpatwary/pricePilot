@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ExportService, ExportFormat } from "@/lib/services/export-service";
 import { prisma } from "@/lib/prisma";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
@@ -7,12 +6,12 @@ import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-co
 /**
  * GET /api/v1/admin/export/metrics
  * Export proxy metrics in specified format
- * 
+ *
  * Query Parameters:
  * - format: json | csv | pdf (default: json)
  * - startDate: Filter by start date (optional)
  * - endDate: Filter by end date (optional)
- * 
+ *
  * Requirements: 15.2, 15.5
  */
 async function handleGET(request: NextRequest) {
@@ -31,7 +30,7 @@ async function handleGET(request: NextRequest) {
 
         // Parse query parameters
         const searchParams = request.nextUrl.searchParams;
-        const format = (searchParams.get("format") || "json") as ExportFormat;
+        const format = (searchParams.get("format") || "json") as "json" | "csv" | "pdf";
         const startDate = searchParams.get("startDate")
             ? new Date(searchParams.get("startDate")!)
             : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
@@ -132,7 +131,8 @@ async function handleGET(request: NextRequest) {
             };
         });
 
-        // Export metrics
+        // Export metrics (dynamic import)
+        const { ExportService } = await import("@/lib/services/export-service");
         const exported = await ExportService.exportProxyMetrics(proxyMetrics, { format });
 
         // Return file

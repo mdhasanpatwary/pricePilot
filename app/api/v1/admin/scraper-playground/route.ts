@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ScrapingEngineService } from "@/lib/services/scraping-engine-service";
 import { withRateLimit } from "@/lib/middleware/ratelimit";
 import {
   validateBody,
@@ -17,6 +16,7 @@ async function handlePOST(req: NextRequest) {
 
     const { url } = validation.data!;
 
+    const { ScrapingEngineService } = await import("@/lib/services/scraping-engine-service");
     const result = await ScrapingEngineService.scrapeByUrl(url, {
       context: "worker",
     });

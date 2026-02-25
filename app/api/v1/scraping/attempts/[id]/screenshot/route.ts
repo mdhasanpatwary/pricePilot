@@ -1,19 +1,14 @@
 /**
  * GET /api/v1/scraping/attempts/:id/screenshot
- * 
+ *
  * Retrieve screenshot for a scrape attempt.
  * Returns the screenshot image file.
- * 
+ *
  * Requirements: 8.7
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LoggingService } from '@/lib/services/bot-protection/logging-service';
-import { ScreenshotStorage } from '@/lib/services/bot-protection/screenshot-storage';
 import { getCachedSession } from "@/lib/auth/cached-session";
-
-const loggingService = new LoggingService();
-const screenshotStorage = new ScreenshotStorage();
 
 export async function GET(
     _request: NextRequest,
@@ -51,7 +46,9 @@ export async function GET(
 
         const { id } = await params;
 
-        // Get scrape attempt
+        // Get scrape attempt (dynamic import)
+        const { LoggingService } = await import('@/lib/services/bot-protection/logging-service');
+        const loggingService = new LoggingService();
         const attempt = await loggingService.getScrapeAttemptById(id);
 
         if (!attempt) {
@@ -95,7 +92,9 @@ export async function GET(
             );
         }
 
-        // Retrieve screenshot
+        // Retrieve screenshot (dynamic import)
+        const { ScreenshotStorage } = await import('@/lib/services/bot-protection/screenshot-storage');
+        const screenshotStorage = new ScreenshotStorage();
         const screenshot = await screenshotStorage.retrieveScreenshot(attempt.screenshotUrl);
 
         // Return screenshot as image

@@ -1,19 +1,16 @@
 /**
  * GET /api/v1/scraping/attempts
- * 
+ *
  * Query scrape attempt logs with filtering and pagination.
  * Supports filtering by competitor site, product, date range, protection type,
  * strategy, success status, and protection detection status.
- * 
+ *
  * Requirements: 8.7
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LoggingService } from '@/lib/services/bot-protection/logging-service';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { scrapeFailureTypeSchema } from "@/lib/validation/schemas";
-
-const loggingService = new LoggingService();
 
 export async function GET(request: NextRequest) {
     try {
@@ -187,7 +184,9 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Query logs
+        // Query logs (dynamic import)
+        const { LoggingService } = await import('@/lib/services/bot-protection/logging-service');
+        const loggingService = new LoggingService();
         let result;
         try {
             result = await loggingService.queryLogs({

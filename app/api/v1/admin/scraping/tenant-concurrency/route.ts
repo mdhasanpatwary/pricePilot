@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { prisma } from "@/lib/prisma";
-import { TenantConcurrencyLimiter } from "@/lib/services/scheduling/tenant-concurrency-limiter";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +18,7 @@ async function handleGET() {
     return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
   }
 
+  const { TenantConcurrencyLimiter } = await import("@/lib/services/scheduling/tenant-concurrency-limiter");
   const limiter = new TenantConcurrencyLimiter();
   const counters = await limiter.getActiveCounters();
   const tenantIds = counters.map((c) => c.tenantId);

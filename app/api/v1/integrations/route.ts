@@ -6,8 +6,6 @@ import {
   createIntegrationSchema,
 } from "@/lib/validation";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
-import { WebsiteService } from "@/lib/services/website-service";
-import { EncryptionError } from "@/lib/services/encryption/errors";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { getCachedTenant } from "@/lib/tenant/cached-tenant";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
@@ -139,9 +137,10 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
-    // Create the site
+    // Create the site (dynamic import)
     let site;
     try {
+      const { WebsiteService } = await import("@/lib/services/website-service");
       site = await WebsiteService.createWebsite(
         {
           tenantId,
@@ -154,6 +153,7 @@ async function handlePOST(req: NextRequest) {
         session.user.id
       );
     } catch (error) {
+      const { EncryptionError } = await import("@/lib/services/encryption/errors");
       if (error instanceof EncryptionError) {
         console.error('[Integrations API] Token encryption failed:', error);
         return NextResponse.json(

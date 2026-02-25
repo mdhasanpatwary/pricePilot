@@ -1,11 +1,10 @@
 /**
  * GDPR Data Export API
- * 
+ *
  * Implements GDPR Article 15 (Right to Access) and Article 20 (Right to Data Portability)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { GDPRService } from '@/lib/services/gdpr-service';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
 
@@ -37,6 +36,7 @@ export async function POST(req: NextRequest) {
                 );
             }
 
+            const { GDPRService } = await import('@/lib/services/gdpr-service');
             await GDPRService.requestDataExport(session.user.id, session.user.email);
 
             return NextResponse.json({
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
             });
         } else {
             // Return data directly
+            const { GDPRService } = await import('@/lib/services/gdpr-service');
             const exportData = await GDPRService.exportUserData(session.user.id);
 
             return NextResponse.json({
@@ -76,6 +77,7 @@ export async function GET(_req: NextRequest) {
         }
 
         // Return data directly for download
+        const { GDPRService } = await import('@/lib/services/gdpr-service');
         const exportData = await GDPRService.exportUserData(session.user.id);
 
         // Return as downloadable JSON file

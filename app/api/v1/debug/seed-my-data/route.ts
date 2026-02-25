@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
-import { WebsiteService } from "@/lib/services/website-service";
 
 async function handlePOST() {
   try {
@@ -15,7 +14,8 @@ async function handlePOST() {
     const tenantId = session.user.tenantId;
     const results = [];
 
-    // 1. Create User Site (Your Store)
+    // 1. Create User Site (Your Store) - dynamic import
+    const { WebsiteService } = await import("@/lib/services/website-service");
     const userSite = await WebsiteService.createWebsite(
       {
         tenantId,
@@ -326,9 +326,9 @@ async function handlePOST() {
 
   } catch (error: any) {
     console.error("Seed error:", error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: error.message,
-      details: error.stack 
+      details: error.stack
     }, { status: 500 });
   }
 }

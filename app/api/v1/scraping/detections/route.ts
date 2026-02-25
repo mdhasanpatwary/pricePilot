@@ -1,17 +1,14 @@
 /**
  * GET /api/v1/scraping/detections
- * 
+ *
  * Query bot protection detection logs with filtering and pagination.
  * Supports filtering by protection type, confidence level, competitor site, and date range.
- * 
+ *
  * Requirements: 8.7
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LoggingService } from '@/lib/services/bot-protection/logging-service';
 import { getCachedSession } from "@/lib/auth/cached-session";
-
-const loggingService = new LoggingService();
 
 export async function GET(request: NextRequest) {
     try {
@@ -136,7 +133,9 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Query detections
+        // Query detections (dynamic import)
+        const { LoggingService } = await import('@/lib/services/bot-protection/logging-service');
+        const loggingService = new LoggingService();
         const detections = await loggingService.queryDetections({
             tenantId,
             competitorWebsiteId,

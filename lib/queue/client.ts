@@ -113,7 +113,8 @@ export async function scheduleSystemTasks() {
         pattern: "0 3 * * *", // 3:00 AM every day
       },
       jobId: "system-maintenance", // Unique ID ensures only one instance is scheduled
-    },
+      groupId: "system",
+    } as any,
   );
 
   // SEED jobs go to LOW_PRIORITY as they are background tasks
@@ -125,7 +126,8 @@ export async function scheduleSystemTasks() {
         pattern: "*/10 * * * *", // every 10 minutes
       },
       jobId: "scrape-seed",
-    },
+      groupId: "system",
+    } as any,
   );
   console.log("✅ System maintenance tasks scheduled.");
 }

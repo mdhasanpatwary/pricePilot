@@ -7,9 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { getRedisConnection } from "@/lib/queue/connection";
 import { getNotificationQueue, getScrapeHighPrioQueue, getScrapeLowPrioQueue, getSyncFullQueue, getSyncDeltaQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
-import { BrowserPool } from "@/lib/services/browser-pool";
-import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
-import { TenantConcurrencyLimiter } from "@/lib/services/scheduling/tenant-concurrency-limiter";
 
 export const dynamic = "force-dynamic";
 
@@ -268,6 +265,10 @@ async function handleGET() {
   if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
   }
+
+  const { OperationalMetricsService } = await import("@/lib/services/observability/operational-metrics");
+  const { TenantConcurrencyLimiter } = await import("@/lib/services/scheduling/tenant-concurrency-limiter");
+  const { BrowserPool } = await import("@/lib/services/browser-pool");
 
   const [syncFullSnapshot, syncDeltaSnapshot, scrapeHighSnapshot, scrapeLowSnapshot, notificationQueueSnapshot, syncFullLatency, syncDeltaLatency, scrapeHighLatency, scrapeLowLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMemoryMb] = await Promise.all([
     getQueueSnapshot(QUEUE_NAMES.SYNC_FULL, getSyncFullQueue()),

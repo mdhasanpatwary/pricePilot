@@ -395,7 +395,8 @@ export class DiscoveryService {
               }, {
                 delay: retryAfter * 60 * 1000,
                 jobId: retryJobId,
-              });
+                groupId: tenantId,
+              } as any);
 
               // NEW: Trigger Golden Rule if advanced block detected during discovery
               if (error instanceof ScrapeBlockError && error.isAdvanced && !(site as any).isAdvancedProtected) {

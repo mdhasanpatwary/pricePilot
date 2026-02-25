@@ -10,7 +10,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { alertService } from '@/lib/services/bot-protection/alert-service';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { invalidateCache } from "@/lib/middleware/api-cache";
 
@@ -110,7 +109,8 @@ export async function POST(
             );
         }
 
-        // Acknowledge the alert using the alert service
+        // Acknowledge the alert using the alert service (dynamic import)
+        const { alertService } = await import('@/lib/services/bot-protection/alert-service');
         await alertService.acknowledgeAlert(alertId, session.user.id);
         await invalidateCache(`api:scraping-alerts:/api/v1/scraping/alerts:${tenantId}*`).catch((error) => {
             console.error('Scraping alerts cache invalidation error:', error);

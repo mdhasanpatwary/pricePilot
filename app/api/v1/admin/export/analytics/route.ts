@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ExportService, ExportFormat } from "@/lib/services/export-service";
-import { MetricsAggregator } from "@/lib/services/metrics-aggregator";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/export/analytics
  * Export analytics data in specified format
- * 
+ *
  * Query Parameters:
  * - format: json | csv | pdf (default: json)
  * - type: dashboard | sites | proxies | challenges (default: dashboard)
  * - tenantId: Filter by tenant (optional)
  * - startDate: Filter by start date (optional)
  * - endDate: Filter by end date (optional)
- * 
+ *
  * Requirements: 15.4, 15.5
  */
 async function handleGET(request: NextRequest) {
@@ -33,7 +31,7 @@ async function handleGET(request: NextRequest) {
 
         // Parse query parameters
         const searchParams = request.nextUrl.searchParams;
-        const format = (searchParams.get("format") || "json") as ExportFormat;
+        const format = (searchParams.get("format") || "json") as "json" | "csv" | "pdf";
         const type = searchParams.get("type") || "dashboard";
         const startDate = searchParams.get("startDate")
             ? new Date(searchParams.get("startDate")!)
@@ -57,6 +55,10 @@ async function handleGET(request: NextRequest) {
                 { status: 400 }
             );
         }
+
+        // Dynamic imports for backend services to satisfy queue safety guidelines
+        const { MetricsAggregator } = await import("@/lib/services/metrics-aggregator");
+        const { ExportService } = await import("@/lib/services/export-service");
 
         // Fetch analytics data based on type
         let analyticsData: any;

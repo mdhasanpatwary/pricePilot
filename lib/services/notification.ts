@@ -45,7 +45,7 @@ export class NotificationService {
           tenantId: options.tenantId,
         },
         recipient: options.tenantId, // Use tenantId as recipient for Slack
-      });
+      }, { groupId: options.tenantId } as any);
 
       // 2. Queue Email notifications for all tenant admins
       const admins = await prisma.user.findMany({
@@ -69,7 +69,8 @@ export class NotificationService {
               link: options.link,
             },
             recipient: admin.email,
-          }
+          },
+          opts: { groupId: options.tenantId } as any
         }));
 
       if (emailJobs.length > 0) {
@@ -88,7 +89,7 @@ export class NotificationService {
           tenantId: options.tenantId,
         },
         recipient: options.tenantId,
-      });
+      }, { groupId: options.tenantId } as any);
 
       return notification;
     } catch (error) {

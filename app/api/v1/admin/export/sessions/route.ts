@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SessionRepository } from "@/lib/services/session-repository";
-import { ExportService, ExportFormat } from "@/lib/services/export-service";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 /**
  * GET /api/v1/admin/export/sessions
  * Export session data in specified format
- * 
+ *
  * Query Parameters:
  * - format: json | csv | pdf (default: json)
  * - tenantId: Filter by tenant (optional)
  * - status: Filter by status (optional)
  * - startDate: Filter by start date (optional)
  * - endDate: Filter by end date (optional)
- * 
+ *
  * Requirements: 15.1, 15.5
  */
 async function handleGET(request: NextRequest) {
@@ -33,7 +31,7 @@ async function handleGET(request: NextRequest) {
 
         // Parse query parameters
         const searchParams = request.nextUrl.searchParams;
-        const format = (searchParams.get("format") || "json") as ExportFormat;
+        const format = (searchParams.get("format") || "json") as "json" | "csv" | "pdf";
         const tenantId = searchParams.get("tenantId") || undefined;
         const status = searchParams.get("status") || undefined;
         const startDate = searchParams.get("startDate")
@@ -51,7 +49,8 @@ async function handleGET(request: NextRequest) {
             );
         }
 
-        // Fetch sessions with filters
+        // Fetch sessions with filters (dynamic imports)
+        const { SessionRepository } = await import("@/lib/services/session-repository");
         const sessionRepo = new SessionRepository();
         const sessions = await sessionRepo.getSessionHistory({
             tenantId,
@@ -61,7 +60,8 @@ async function handleGET(request: NextRequest) {
             limit: 1000, // Limit to prevent memory issues
         });
 
-        // Export sessions
+        // Export sessions (dynamic import)
+        const { ExportService } = await import("@/lib/services/export-service");
         const exported = await ExportService.exportSessions(sessions, { format });
 
         // Return file

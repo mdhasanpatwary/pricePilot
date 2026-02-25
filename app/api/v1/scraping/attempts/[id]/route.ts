@@ -1,16 +1,13 @@
 /**
  * GET /api/v1/scraping/attempts/:id
- * 
+ *
  * Get a single scrape attempt by ID with associated detection logs.
- * 
+ *
  * Requirements: 8.7
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LoggingService } from '@/lib/services/bot-protection/logging-service';
 import { getCachedSession } from "@/lib/auth/cached-session";
-
-const loggingService = new LoggingService();
 
 export async function GET(
     _request: NextRequest,
@@ -48,7 +45,9 @@ export async function GET(
 
         const { id } = await params;
 
-        // Get scrape attempt
+        // Get scrape attempt (dynamic import)
+        const { LoggingService } = await import('@/lib/services/bot-protection/logging-service');
+        const loggingService = new LoggingService();
         const attempt = await loggingService.getScrapeAttemptById(id);
 
         if (!attempt) {

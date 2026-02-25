@@ -1,11 +1,10 @@
 /**
  * GDPR Account Deletion API
- * 
+ *
  * Implements GDPR Article 17 (Right to Erasure / Right to be Forgotten)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { GDPRService } from '@/lib/services/gdpr-service';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
 
@@ -36,6 +35,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        const { GDPRService } = await import('@/lib/services/gdpr-service');
         const result = await GDPRService.requestAccountDeletion(
             session.user.id,
             reason
@@ -73,6 +73,7 @@ export async function DELETE(_req: NextRequest) {
             );
         }
 
+        const { GDPRService } = await import('@/lib/services/gdpr-service');
         await GDPRService.cancelAccountDeletion(session.user.id);
 
         return NextResponse.json({
