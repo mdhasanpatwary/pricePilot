@@ -314,11 +314,17 @@ export class ScrapeJobProcessor {
     const batchSize = Math.max(50, Number(process.env.SCRAPE_SEED_BATCH_SIZE || 500));
     const now = new Date();
 
+    const whereClause: any = {
+      Site: { type: "COMPETITOR" },
+      url: { not: null },
+    };
+
+    if (job.data.tenantId) {
+      whereClause.tenantId = job.data.tenantId;
+    }
+
     const products = await prisma.product.findMany({
-      where: {
-        Site: { type: "COMPETITOR" },
-        url: { not: null },
-      },
+      where: whereClause,
       select: {
         id: true,
         tenantId: true,
@@ -336,12 +342,14 @@ export class ScrapeJobProcessor {
       take: batchSize,
     });
 
-    const { getScrapeQueue } = await import("@/lib/queue/client");
-    const queue = getScrapeQueue();
+    const { getScrapeHighPrioQueue, getScrapeLowPrioQueue } = await import("@/lib/queue/client");
 
     let seeded = 0;
     for (const p of products) {
       if (!p.url || !p.Site?.baseUrl) continue;
+
+      // Segregate traffic: High business priority goes to the high-concurrency/low-latency queue.
+      const queue = p.businessPriority >= 5 ? getScrapeHighPrioQueue() : getScrapeLowPrioQueue();
       const domain = normalizeDomainFromBaseUrl(p.Site.baseUrl);
       const throttle = await DomainThrottleService.get(domain);
 

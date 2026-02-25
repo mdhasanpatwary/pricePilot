@@ -8,12 +8,45 @@ import { OperationalMetricsService } from "@/lib/services/observability/operatio
 import { decrementTenantQueueDepth } from "./backpressure";
 
 const TENANT_ACTIVE_JOBS_PREFIX = "pp:queue:tenant:active:";
-const DEFAULT_TENANT_CONCURRENCY = 5;
+
+const TIER_CONCURRENCY_LIMITS: Record<string, number> = {
+  PRO: 15,    // Tier Pro
+  PREMIUM: 8, // Tier Premium
+  BASIC: 3,   // Tier Basic
+  system: 50, // System tasks
+};
+
+async function getTenantConcurrencyLimit(tenantId: string): Promise<number> {
+  if (tenantId === "system") return TIER_CONCURRENCY_LIMITS.system;
+
+  const redis = getRedisConnection();
+  const cacheKey = `pp:tier:limit:${tenantId}`;
+
+  // Try cache first
+  const cached = await redis.get(cacheKey);
+  if (cached) return parseInt(cached);
+
+  try {
+    // Fetch from DB
+    const { getCachedTenantPlan } = await import("@/lib/tenant/cached-tenant");
+    const plan = await getCachedTenantPlan(tenantId);
+
+    const limit = TIER_CONCURRENCY_LIMITS[plan || "BASIC"] || TIER_CONCURRENCY_LIMITS.BASIC;
+
+    // Cache for 10 mins
+    await redis.set(cacheKey, limit, "EX", 600);
+    return limit;
+  } catch (err) {
+    console.error(`[Worker] Failed to fetch tier for tenant ${tenantId}, falling back to BASIC limit`, err);
+    return TIER_CONCURRENCY_LIMITS.BASIC;
+  }
+}
 
 async function tryAcquireTenantSlot(queueName: string, tenantId: string): Promise<boolean> {
   const redis = getRedisConnection();
   const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
-  const limit = parseInt(process.env.MAX_TENANT_CONCURRENCY || String(DEFAULT_TENANT_CONCURRENCY));
+
+  const limit = await getTenantConcurrencyLimit(tenantId);
 
   // Atomic increment and check
   const current = await redis.incr(key);
@@ -157,14 +190,32 @@ export const createWorkers = () => {
   const scrapeConcurrency = globalCap ? Math.min(scrapeConcurrencyUncapped, globalCap) : scrapeConcurrencyUncapped;
 
   const scrapeProcessor = async (job: Job<ScrapeJobData>) => {
-    await ScrapeJobProcessor.process(job);
+    // Also enforce concurrency here if needed, but ScrapeJobProcessor handles its own lock logic usually.
+    // However, for consistency with our fair-share goals:
+    const tenantId = job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : "system";
+    if (!(await tryAcquireTenantSlot(job.queueName, tenantId))) {
+       throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
+    }
+
+    try {
+      await ScrapeJobProcessor.process(job);
+    } finally {
+      await decrementTenantActive(job.queueName, tenantId);
+    }
   };
 
-  const scrapeWorker = new Worker(QUEUE_NAMES.SCRAPE, scrapeProcessor, {
+  const scrapeHighWorker = new Worker(QUEUE_NAMES.SCRAPE_HIGH_PRIO, scrapeProcessor, {
     connection: getRedisConnection() as any,
-    concurrency: scrapeConcurrency,
+    concurrency: Math.max(1, Math.floor(scrapeConcurrency * 0.7)),
     lockDuration: 30 * 60 * 1000,
     maxStalledCount: 2,
+  });
+
+  const scrapeLowWorker = new Worker(QUEUE_NAMES.SCRAPE_LOW_PRIO, scrapeProcessor, {
+    connection: getRedisConnection() as any,
+    concurrency: Math.max(1, Math.floor(scrapeConcurrency * 0.3)),
+    lockDuration: 60 * 60 * 1000, // Background tasks can take longer
+    maxStalledCount: 1,
   });
 
   // 3. Notification Strategy
@@ -177,7 +228,8 @@ export const createWorkers = () => {
   // Attach concurrency for logging
   (syncFullWorker as any).concurrencyValue = syncFullConcurrency;
   (syncDeltaWorker as any).concurrencyValue = syncDeltaConcurrency;
-  (scrapeWorker as any).concurrencyValue = scrapeConcurrency;
+  (scrapeHighWorker as any).concurrencyValue = Math.max(1, Math.floor(scrapeConcurrency * 0.7));
+  (scrapeLowWorker as any).concurrencyValue = Math.max(1, Math.floor(scrapeConcurrency * 0.3));
   (notificationWorker as any).concurrencyValue = notificationConcurrency;
 
   const registerEvents = (worker: Worker, queueName: string) => {
@@ -204,8 +256,15 @@ export const createWorkers = () => {
 
   registerEvents(syncFullWorker, QUEUE_NAMES.SYNC_FULL);
   registerEvents(syncDeltaWorker, QUEUE_NAMES.SYNC_DELTA);
-  registerEvents(scrapeWorker, QUEUE_NAMES.SCRAPE);
+  registerEvents(scrapeHighWorker, QUEUE_NAMES.SCRAPE_HIGH_PRIO);
+  registerEvents(scrapeLowWorker, QUEUE_NAMES.SCRAPE_LOW_PRIO);
   registerEvents(notificationWorker, QUEUE_NAMES.NOTIFICATIONS);
 
-  return { syncFullWorker, syncDeltaWorker, scrapeWorker, notificationWorker };
+  return {
+    syncFullWorker,
+    syncDeltaWorker,
+    scrapeHighWorker,
+    scrapeLowWorker,
+    notificationWorker
+  };
 };

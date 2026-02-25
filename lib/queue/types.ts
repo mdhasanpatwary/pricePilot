@@ -2,7 +2,8 @@ export const QUEUE_NAMES = {
   SYNC_FULL: "sync-queue-full", // For discovery and large batch syncs
   SYNC_DELTA: "sync-queue-delta", // For individual product updates or small changes
   NOTIFICATIONS: "notification-queue",
-  SCRAPE: "scrape-queue",
+  SCRAPE_HIGH_PRIO: "scrape-queue-high", // For urgent/recent products
+  SCRAPE_LOW_PRIO: "scrape-queue-low",   // For background/old product maintenance
 } as const;
 
 export interface SyncJobData {
@@ -34,4 +35,5 @@ export type ScrapeJobData =
     }
   | {
       type: "SEED";
+      tenantId?: string;
     };

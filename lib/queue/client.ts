@@ -7,7 +7,8 @@ const globalForQueues = global as unknown as {
   syncFullQueue?: Queue;
   syncDeltaQueue?: Queue;
   notificationQueue?: Queue;
-  scrapeQueue?: Queue;
+  scrapeHighQueue?: Queue;
+  scrapeLowQueue?: Queue;
 };
 
 /**
@@ -64,22 +65,36 @@ export const getNotificationQueue = (): Queue => {
 };
 
 /**
- * Lazy-initialized Scrape Queue (product-level scraping)
+ * Lazy-initialized High-Priority Scrape Queue (recent products)
  */
-export const getScrapeQueue = (): Queue => {
-  return (globalForQueues.scrapeQueue ??= new Queue(QUEUE_NAMES.SCRAPE, {
+export const getScrapeHighPrioQueue = (): Queue => {
+  return (globalForQueues.scrapeHighQueue ??= new Queue(QUEUE_NAMES.SCRAPE_HIGH_PRIO, {
     connection: getRedisConnection() as any,
     defaultJobOptions: {
-      attempts: 1,
-      removeOnFail: {
-        count: 2000,
-        age: 7 * 24 * 3600,
-      },
-      // Scrape jobs are long-lived (we reschedule via moveToDelayed),
-      // so completion cleanup isn't relied upon.
+      attempts: 2, // Slight more retry for high-prio
+      backoff: { type: "exponential", delay: 10000 },
+      removeOnFail: { count: 1000, age: 7 * 24 * 3600 },
     },
   }));
 };
+
+/**
+ * Lazy-initialized Low-Priority Scrape Queue (background maintenance)
+ */
+export const getScrapeLowPrioQueue = (): Queue => {
+  return (globalForQueues.scrapeLowQueue ??= new Queue(QUEUE_NAMES.SCRAPE_LOW_PRIO, {
+    connection: getRedisConnection() as any,
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnFail: { count: 5000, age: 7 * 24 * 3600 },
+    },
+  }));
+};
+
+/**
+ * @deprecated Use getScrapeHighPrioQueue or getScrapeLowPrioQueue
+ */
+export const getScrapeQueue = getScrapeHighPrioQueue;
 
 /**
  * Schedules internal system tasks (maintenance, crons)
@@ -88,7 +103,8 @@ export const getScrapeQueue = (): Queue => {
 export async function scheduleSystemTasks() {
   console.log("📅 Scheduling system maintenance tasks...");
   const syncQueue = getSyncQueue();
-  const scrapeQueue = getScrapeQueue();
+  const scrapeLowQueue = getScrapeLowPrioQueue();
+
   await syncQueue.add(
     "INTERNAL_MAINTENANCE",
     { type: "MAINTENANCE" },
@@ -100,8 +116,8 @@ export async function scheduleSystemTasks() {
     },
   );
 
-  // Keep scrape queue hydrated with product jobs (best-effort).
-  await scrapeQueue.add(
+  // SEED jobs go to LOW_PRIORITY as they are background tasks
+  await scrapeLowQueue.add(
     "SCRAPE_SEED",
     { type: "SEED" },
     {

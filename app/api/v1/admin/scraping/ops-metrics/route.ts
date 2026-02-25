@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { prisma } from "@/lib/prisma";
 import { getRedisConnection } from "@/lib/queue/connection";
-import { getNotificationQueue, getScrapeQueue, getSyncFullQueue, getSyncDeltaQueue } from "@/lib/queue/client";
+import { getNotificationQueue, getScrapeHighPrioQueue, getScrapeLowPrioQueue, getSyncFullQueue, getSyncDeltaQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { BrowserPool } from "@/lib/services/browser-pool";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
@@ -269,14 +269,16 @@ async function handleGET() {
     return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
   }
 
-  const [syncFullSnapshot, syncDeltaSnapshot, scrapeQueueSnapshot, notificationQueueSnapshot, syncFullLatency, syncDeltaLatency, scrapeLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMemoryMb] = await Promise.all([
+  const [syncFullSnapshot, syncDeltaSnapshot, scrapeHighSnapshot, scrapeLowSnapshot, notificationQueueSnapshot, syncFullLatency, syncDeltaLatency, scrapeHighLatency, scrapeLowLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMemoryMb] = await Promise.all([
     getQueueSnapshot(QUEUE_NAMES.SYNC_FULL, getSyncFullQueue()),
     getQueueSnapshot(QUEUE_NAMES.SYNC_DELTA, getSyncDeltaQueue()),
-    getQueueSnapshot(QUEUE_NAMES.SCRAPE, getScrapeQueue()),
+    getQueueSnapshot(QUEUE_NAMES.SCRAPE_HIGH_PRIO, getScrapeHighPrioQueue()),
+    getQueueSnapshot(QUEUE_NAMES.SCRAPE_LOW_PRIO, getScrapeLowPrioQueue()),
     getQueueSnapshot(QUEUE_NAMES.NOTIFICATIONS, getNotificationQueue()),
     OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SYNC_FULL, 60),
     OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SYNC_DELTA, 60),
-    OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SCRAPE, 60),
+    OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SCRAPE_HIGH_PRIO, 60),
+    OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SCRAPE_LOW_PRIO, 60),
     OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.NOTIFICATIONS, 60),
     OperationalMetricsService.getActiveGauge(50),
     new TenantConcurrencyLimiter().getActiveCounters(),
@@ -287,30 +289,39 @@ async function handleGET() {
   const queues = {
     [QUEUE_NAMES.SYNC_FULL]: syncFullSnapshot,
     [QUEUE_NAMES.SYNC_DELTA]: syncDeltaSnapshot,
-    [QUEUE_NAMES.SCRAPE]: scrapeQueueSnapshot,
+    [QUEUE_NAMES.SCRAPE_HIGH_PRIO]: scrapeHighSnapshot,
+    [QUEUE_NAMES.SCRAPE_LOW_PRIO]: scrapeLowSnapshot,
     [QUEUE_NAMES.NOTIFICATIONS]: notificationQueueSnapshot,
   };
 
   const activeJobsLive =
-    syncFullSnapshot.counts.active + syncDeltaSnapshot.counts.active + scrapeQueueSnapshot.counts.active + notificationQueueSnapshot.counts.active;
+    syncFullSnapshot.counts.active +
+    syncDeltaSnapshot.counts.active +
+    scrapeHighSnapshot.counts.active +
+    scrapeLowSnapshot.counts.active +
+    notificationQueueSnapshot.counts.active;
   const activeJobs = activeGauge.total > 0 ? activeGauge.total : activeJobsLive;
+
+  const totalScrapeDepth = scrapeHighSnapshot.depth + scrapeLowSnapshot.depth;
 
   const queueDepth =
     syncFullSnapshot.depth +
     syncDeltaSnapshot.depth +
-    scrapeQueueSnapshot.depth +
+    totalScrapeDepth +
     notificationQueueSnapshot.depth;
 
   const queueLatencyP95MsRedis = Math.max(
     syncFullLatency.p95ApproxMs,
     syncDeltaLatency.p95ApproxMs,
-    scrapeLatency.p95ApproxMs,
+    scrapeHighLatency.p95ApproxMs,
+    scrapeLowLatency.p95ApproxMs,
     notificationLatency.p95ApproxMs,
   );
   const queueLatencyP95MsLive = Math.max(
     syncFullSnapshot.latencyMs.p95,
     syncDeltaSnapshot.latencyMs.p95,
-    scrapeQueueSnapshot.latencyMs.p95,
+    scrapeHighSnapshot.latencyMs.p95,
+    scrapeLowSnapshot.latencyMs.p95,
     notificationQueueSnapshot.latencyMs.p95,
   );
   const queueLatencyP95Ms = queueLatencyP95MsRedis > 0 ? queueLatencyP95MsRedis : queueLatencyP95MsLive;
@@ -416,7 +427,8 @@ async function handleGET() {
         queueLatencyByQueue: {
           [QUEUE_NAMES.SYNC_FULL]: syncFullLatency,
           [QUEUE_NAMES.SYNC_DELTA]: syncDeltaLatency,
-          [QUEUE_NAMES.SCRAPE]: scrapeLatency,
+          [QUEUE_NAMES.SCRAPE_HIGH_PRIO]: scrapeHighLatency,
+          [QUEUE_NAMES.SCRAPE_LOW_PRIO]: scrapeLowLatency,
           [QUEUE_NAMES.NOTIFICATIONS]: notificationLatency,
         },
         activeJobsByQueue: activeGauge.byQueue,
