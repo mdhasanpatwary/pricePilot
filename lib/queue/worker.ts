@@ -1,23 +1,57 @@
 import { Worker, Job } from "bullmq";
 import { getRedisConnection } from "./connection";
-import { QUEUE_NAMES, SyncJobData, NotificationJobData, ScrapeJobData } from "./types";
+import { QUEUE_NAMES } from "@/lib/queue/types";
+import { SyncJobData, NotificationJobData, ScrapeJobData } from "./types";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { ScrapeJobProcessor } from "@/lib/services/scheduling/scrape-job-processor";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
+import { decrementTenantQueueDepth } from "./backpressure";
+
+const TENANT_ACTIVE_JOBS_PREFIX = "pp:queue:tenant:active:";
+const DEFAULT_TENANT_CONCURRENCY = 5;
+
+async function checkTenantConcurrency(queueName: string, tenantId: string): Promise<boolean> {
+  const redis = getRedisConnection();
+  const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
+  const count = await redis.get(key);
+  const limit = parseInt(process.env.MAX_TENANT_CONCURRENCY || String(DEFAULT_TENANT_CONCURRENCY));
+  return (count ? parseInt(count, 10) : 0) < limit;
+}
+
+async function incrementTenantActive(queueName: string, tenantId: string): Promise<void> {
+  const redis = getRedisConnection();
+  const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
+  await redis.incr(key);
+  await redis.expire(key, 3600); // 1h safety expiry
+}
+
+async function decrementTenantActive(queueName: string, tenantId: string): Promise<void> {
+  const redis = getRedisConnection();
+  const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
+  const val = await redis.decr(key);
+  if (val < 0) await redis.set(key, 0);
+}
 
 // Processor for Sync Jobs
 const syncProcessor = async (job: Job<SyncJobData>) => {
+  const { data } = job;
+  const tenantId = data.tenantId || "system";
   console.log(
-    `[Worker] Processing Sync Job ${job.id} (Type: ${job.data.type})`,
+    `[Worker] Processing Sync Job ${job.id} (Tenant: ${tenantId}, Type: ${job.data.type})`,
   );
+
+  // 1. Enforce Per-Tenant Concurrency
+  if (!(await checkTenantConcurrency(job.queueName, tenantId))) {
+     console.warn(`[Worker] Tenant ${tenantId} reached concurrency limit on ${job.queueName}. Deferring job.`);
+     // Optimization: BullMQ retry logic handles this naturally if we throw an error
+     // with a specific message that our backoff logic can recognize.
+     throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
+  }
+
+  await incrementTenantActive(job.queueName, tenantId);
 
   try {
     if (job.data.type === "FULL") {
-      if (!job.data.tenantId)
-        throw new Error("TenantID required for full sync");
-      // We assume SyncOrchestrator.runFullSync handles logic.
-      // Note: You might need to adjust SyncOrchestrator to accept siteId vs tenantId specifically
-      // But based on previous context, runFullSync usually takes a tenantId.
       await SyncOrchestrator.processFullSync(job.data.tenantId, job.data.isCron);
     } else if (job.data.type === "SINGLE") {
       if (!job.data.siteId) throw new Error("SiteID required for single sync");
@@ -25,10 +59,7 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     } else if (job.data.type === "CHUNK") {
       if (!job.data.siteId || !job.data.productIds)
         throw new Error("Missing data for chunk sync");
-      await SyncOrchestrator.processChunkSync(
-        job.data.siteId,
-        job.data.productIds,
-      );
+      await SyncOrchestrator.processChunkSync(job.data.siteId, job.data.productIds);
     } else if (job.data.type === "SOURCE_SYNC") {
       if (!job.data.siteId) throw new Error("SiteID required for source sync");
       const { SyncService } = await import("@/lib/services/sync");
@@ -46,6 +77,9 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
   } catch (error) {
     console.error(`[Worker] Job ${job.id} failed:`, error);
     throw error;
+  } finally {
+    // Always decrement active count on exit
+    await decrementTenantActive(job.queueName, tenantId);
   }
 };
 
@@ -95,62 +129,33 @@ import os from "os";
 // Factory to create workers
 export const createWorkers = () => {
   const cpus = os.cpus().length;
-  const totalMemMb = Math.floor(os.totalmem() / 1024 / 1024);
 
-  // CONCURRENCY STRATEGY:
-  // 1. Sync Worker: Scraping is CPU and RAM intensive.
-  //    - Rule: 1 task per 512MB RAM, or 1 per CPU core, whichever is lower.
-  //    - Min: 1, Max: total CPUs.
-  //    - Safe Default: 0.5 * CPUs
-  const memBasedSync = Math.floor(totalMemMb / 512);
-  const computedSyncConcurrency = Math.max(
-    1,
-    Math.min(cpus, Math.floor(cpus * 0.5), memBasedSync),
-  );
-  const configuredSyncConcurrency = Number(process.env.SYNC_CONCURRENCY || 0);
-  const configuredDevCap = Number(process.env.SYNC_CONCURRENCY_DEV_MAX || 1);
-  const safeDevSyncCap =
-    Number.isFinite(configuredDevCap) && configuredDevCap > 0
-      ? Math.floor(configuredDevCap)
-      : 1;
-  const syncConcurrency = configuredSyncConcurrency > 0
-    ? configuredSyncConcurrency
-    : process.env.NODE_ENV === "production"
-      ? computedSyncConcurrency
-      : Math.min(computedSyncConcurrency, safeDevSyncCap);
+  // 1. Sync Strategy:
+  // - Sync FULL: High memory, lower concurrency (reserved for big discovery)
+  // - Sync DELTA: Lightweight, high concurrency
+  const syncFullConcurrency = Math.max(1, Math.floor(cpus * 0.25));
+  const syncDeltaConcurrency = Math.max(2, Math.floor(cpus * 0.5));
 
-  // Global cap for scraping workers. This applies to the scrape worker directly,
-  // and also caps sync worker concurrency to avoid oversubscription on small hosts.
-  const maxGlobalWorkers = Number(process.env.MAX_GLOBAL_WORKERS || 0);
-  const globalCap =
-    Number.isFinite(maxGlobalWorkers) && maxGlobalWorkers > 0
-      ? Math.floor(maxGlobalWorkers)
-      : null;
-
-  const cappedSyncConcurrency = globalCap ? Math.min(syncConcurrency, globalCap) : syncConcurrency;
-
-  // 2. Notification Worker: I/O intensive, lightweight.
-  //    - Rule: 5 tasks per CPU core.
-  const notificationConcurrency = Number(
-    process.env.NOTIFICATION_CONCURRENCY || Math.max(5, cpus * 5),
-  );
-
-  const syncWorker = new Worker(QUEUE_NAMES.SYNC, syncProcessor, {
+  const syncFullWorker = new Worker(QUEUE_NAMES.SYNC_FULL, syncProcessor, {
     connection: getRedisConnection() as any,
-    concurrency: cappedSyncConcurrency,
-    // 30 min lock window — BullMQ auto-renews the lock (1/4 before expiry) while the job
-    // is actively running, so long-running discovery (700+ products) won't stall.
-    // The old 12h setting only delayed stall detection after a crash by 12 hours.
+    concurrency: syncFullConcurrency,
     lockDuration: 30 * 60 * 1000,
-    lockRenewTime: 10 * 60 * 1000,
     maxStalledCount: 2,
-    stalledInterval: 5 * 60 * 1000,
   });
 
+  const syncDeltaWorker = new Worker(QUEUE_NAMES.SYNC_DELTA, syncProcessor, {
+    connection: getRedisConnection() as any,
+    concurrency: syncDeltaConcurrency,
+    lockDuration: 60 * 1000,
+    maxStalledCount: 2,
+  });
+
+  // 2. Scrape Strategy
+  const maxGlobalWorkers = Number(process.env.MAX_GLOBAL_WORKERS || 0);
+  const globalCap = Number.isFinite(maxGlobalWorkers) && maxGlobalWorkers > 0 ? Math.floor(maxGlobalWorkers) : null;
   const computedScrapeConcurrency = Math.max(1, Math.min(cpus, Math.floor(cpus * 0.75)));
   const configuredScrapeConcurrency = Number(process.env.SCRAPE_CONCURRENCY || 0);
-  const scrapeConcurrencyUncapped =
-    configuredScrapeConcurrency > 0 ? configuredScrapeConcurrency : computedScrapeConcurrency;
+  const scrapeConcurrencyUncapped = configuredScrapeConcurrency > 0 ? configuredScrapeConcurrency : computedScrapeConcurrency;
   const scrapeConcurrency = globalCap ? Math.min(scrapeConcurrencyUncapped, globalCap) : scrapeConcurrencyUncapped;
 
   const scrapeProcessor = async (job: Job<ScrapeJobData>) => {
@@ -160,87 +165,49 @@ export const createWorkers = () => {
   const scrapeWorker = new Worker(QUEUE_NAMES.SCRAPE, scrapeProcessor, {
     connection: getRedisConnection() as any,
     concurrency: scrapeConcurrency,
-    // Scrape jobs can run long (rate-limit waits + retries + anti-bot handling).
-    // Use a longer lock window to reduce false "could not renew lock" failures.
     lockDuration: 30 * 60 * 1000,
     maxStalledCount: 2,
   });
 
-  const notificationWorker = new Worker(
-    QUEUE_NAMES.NOTIFICATIONS,
-    notificationProcessor,
-    {
-      connection: getRedisConnection() as any,
-      concurrency: notificationConcurrency,
-    },
-  );
+  // 3. Notification Strategy
+  const notificationConcurrency = Number(process.env.NOTIFICATION_CONCURRENCY || Math.max(5, cpus * 5));
+  const notificationWorker = new Worker(QUEUE_NAMES.NOTIFICATIONS, notificationProcessor, {
+    connection: getRedisConnection() as any,
+    concurrency: notificationConcurrency,
+  });
 
-  // Attach concurrency for logging purposes in scripts
-  (syncWorker as any).concurrencyValue = cappedSyncConcurrency;
+  // Attach concurrency for logging
+  (syncFullWorker as any).concurrencyValue = syncFullConcurrency;
+  (syncDeltaWorker as any).concurrencyValue = syncDeltaConcurrency;
   (scrapeWorker as any).concurrencyValue = scrapeConcurrency;
   (notificationWorker as any).concurrencyValue = notificationConcurrency;
 
-  syncWorker.on("completed", (job) => {
-    console.log(`[Worker] Sync Job ${job.id} completed!`);
-    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.SYNC, "completed", job.data.tenantId);
-  });
+  const registerEvents = (worker: Worker, queueName: string) => {
+    worker.on("completed", async (job) => {
+      console.log(`[Worker] ${queueName} Job ${job.id} completed!`);
+      const tenantId = job.data.tenantId || (job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined);
+      if (tenantId) await decrementTenantQueueDepth(queueName, tenantId);
+      void OperationalMetricsService.recordQueueLifecycle(queueName, "completed", tenantId);
+    });
 
-  syncWorker.on("failed", (job, err) => {
-    console.error(`[Worker] Sync Job ${job?.id} failed: ${err.message}`);
-    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.SYNC, "failed", job?.data?.tenantId);
-  });
+    worker.on("failed", async (job, err) => {
+      console.error(`[Worker] ${queueName} Job ${job?.id} failed: ${err.message}`);
+      const tenantId = job?.data?.tenantId || (job?.data?.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined);
+      if (tenantId) await decrementTenantQueueDepth(queueName, tenantId);
+      void OperationalMetricsService.recordQueueLifecycle(queueName, "failed", tenantId);
+    });
 
-  syncWorker.on("active", (job) => {
-    const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
-    void OperationalMetricsService.recordQueueLifecycle(
-      QUEUE_NAMES.SYNC,
-      "active",
-      job.data.tenantId,
-      latencyMs,
-    );
-  });
+    worker.on("active", (job) => {
+      const tenantId = job.data.tenantId || (job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined);
+      const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
+      void OperationalMetricsService.recordQueueLifecycle(queueName, "active", tenantId, latencyMs);
+    });
+  };
 
-  scrapeWorker.on("completed", (job) => {
-    console.log(`[Worker] Scrape Job ${job.id} completed!`);
-    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.SCRAPE, "completed", job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined);
-  });
+  registerEvents(syncFullWorker, QUEUE_NAMES.SYNC_FULL);
+  registerEvents(syncDeltaWorker, QUEUE_NAMES.SYNC_DELTA);
+  registerEvents(scrapeWorker, QUEUE_NAMES.SCRAPE);
+  registerEvents(notificationWorker, QUEUE_NAMES.NOTIFICATIONS);
 
-  scrapeWorker.on("failed", (job, err) => {
-    console.error(`[Worker] Scrape Job ${job?.id} failed: ${err.message}`);
-    void OperationalMetricsService.recordQueueLifecycle(
-      QUEUE_NAMES.SCRAPE,
-      "failed",
-      job?.data?.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined,
-    );
-  });
-
-  scrapeWorker.on("active", (job) => {
-    const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
-    void OperationalMetricsService.recordQueueLifecycle(
-      QUEUE_NAMES.SCRAPE,
-      "active",
-      job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined,
-      latencyMs,
-    );
-  });
-
-  notificationWorker.on("completed", () => {
-    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.NOTIFICATIONS, "completed");
-  });
-
-  notificationWorker.on("failed", () => {
-    void OperationalMetricsService.recordQueueLifecycle(QUEUE_NAMES.NOTIFICATIONS, "failed");
-  });
-
-  notificationWorker.on("active", (job) => {
-    const latencyMs = Math.max(0, Date.now() - (job.timestamp || Date.now()));
-    void OperationalMetricsService.recordQueueLifecycle(
-      QUEUE_NAMES.NOTIFICATIONS,
-      "active",
-      undefined,
-      latencyMs,
-    );
-  });
-
-  return { syncWorker, scrapeWorker, notificationWorker };
+  return { syncFullWorker, syncDeltaWorker, scrapeWorker, notificationWorker };
 };

@@ -4,34 +4,46 @@ import { QUEUE_NAMES } from "./types";
 
 // Use global singleton to prevent creating multiple connections in dev mode HMR
 const globalForQueues = global as unknown as {
-  syncQueue?: Queue;
+  syncFullQueue?: Queue;
+  syncDeltaQueue?: Queue;
   notificationQueue?: Queue;
   scrapeQueue?: Queue;
 };
 
 /**
- * Lazy-initialized Sync Queue
+ * Lazy-initialized Full Sync Queue
  */
-export const getSyncQueue = (): Queue => {
-  return (globalForQueues.syncQueue ??= new Queue(QUEUE_NAMES.SYNC, {
+export const getSyncFullQueue = (): Queue => {
+  return (globalForQueues.syncFullQueue ??= new Queue(QUEUE_NAMES.SYNC_FULL, {
     connection: getRedisConnection() as any,
     defaultJobOptions: {
-      attempts: 3, // Allow retries for transient networking errors
-      backoff: {
-        type: "exponential",
-        delay: 10000, // Start with 10s backoff
-      },
-      removeOnComplete: {
-        count: 500, // Keep more completed jobs for audit
-        age: 24 * 3600, // Max 24 hours
-      },
-      removeOnFail: {
-        count: 1000, // Detailed failure history for tech matching
-        age: 7 * 24 * 3600, // Keep failures for a week
-      },
+      attempts: 3,
+      backoff: { type: "exponential", delay: 30000 },
+      removeOnComplete: { count: 100, age: 24 * 3600 },
+      removeOnFail: { count: 500, age: 7 * 24 * 3600 },
     },
   }));
 };
+
+/**
+ * Lazy-initialized Delta Sync Queue
+ */
+export const getSyncDeltaQueue = (): Queue => {
+  return (globalForQueues.syncDeltaQueue ??= new Queue(QUEUE_NAMES.SYNC_DELTA, {
+    connection: getRedisConnection() as any,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5000 },
+      removeOnComplete: { count: 1000, age: 3600 },
+      removeOnFail: { count: 1000, age: 3 * 24 * 3600 },
+    },
+  }));
+};
+
+/**
+ * @deprecated Use getSyncFullQueue or getSyncDeltaQueue
+ */
+export const getSyncQueue = getSyncFullQueue;
 
 /**
  * Lazy-initialized Notification Queue

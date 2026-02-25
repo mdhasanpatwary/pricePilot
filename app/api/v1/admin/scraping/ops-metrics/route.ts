@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import { prisma } from "@/lib/prisma";
 import { getRedisConnection } from "@/lib/queue/connection";
-import { getNotificationQueue, getScrapeQueue, getSyncQueue } from "@/lib/queue/client";
+import { getNotificationQueue, getScrapeQueue, getSyncFullQueue, getSyncDeltaQueue } from "@/lib/queue/client";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { BrowserPool } from "@/lib/services/browser-pool";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
@@ -62,7 +62,7 @@ function percentile(sorted: number[], p: number): number {
 
 async function getQueueSnapshot(
   queueName: string,
-  queue: ReturnType<typeof getSyncQueue>,
+  queue: any,
 ): Promise<QueueSnapshot> {
   const countsRaw = await queue.getJobCounts(
     "waiting",
@@ -87,10 +87,10 @@ async function getQueueSnapshot(
   const waitingJobs = await queue.getJobs(["waiting"], 0, 199, false);
   const now = Date.now();
   const ages = waitingJobs
-    .map((job) => Math.max(0, now - (job.timestamp || now)))
-    .sort((a, b) => a - b);
+    .map((job: any) => Math.max(0, now - (job.timestamp || now)))
+    .sort((a: number, b: number) => a - b);
 
-  const sum = ages.reduce((acc, v) => acc + v, 0);
+  const sum = ages.reduce((acc: number, v: number) => acc + v, 0);
   const avg = ages.length > 0 ? Math.floor(sum / ages.length) : 0;
   const p95 = Math.floor(percentile(ages, 95));
   const max = ages.length > 0 ? ages[ages.length - 1] || 0 : 0;
@@ -266,11 +266,13 @@ async function handleGET() {
     return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
   }
 
-  const [syncQueueSnapshot, scrapeQueueSnapshot, notificationQueueSnapshot, syncLatency, scrapeLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMemoryMb] = await Promise.all([
-    getQueueSnapshot(QUEUE_NAMES.SYNC, getSyncQueue()),
+  const [syncFullSnapshot, syncDeltaSnapshot, scrapeQueueSnapshot, notificationQueueSnapshot, syncFullLatency, syncDeltaLatency, scrapeLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMemoryMb] = await Promise.all([
+    getQueueSnapshot(QUEUE_NAMES.SYNC_FULL, getSyncFullQueue()),
+    getQueueSnapshot(QUEUE_NAMES.SYNC_DELTA, getSyncDeltaQueue()),
     getQueueSnapshot(QUEUE_NAMES.SCRAPE, getScrapeQueue()),
     getQueueSnapshot(QUEUE_NAMES.NOTIFICATIONS, getNotificationQueue()),
-    OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SYNC, 60),
+    OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SYNC_FULL, 60),
+    OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SYNC_DELTA, 60),
     OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.SCRAPE, 60),
     OperationalMetricsService.getQueueLatencySummary(QUEUE_NAMES.NOTIFICATIONS, 60),
     OperationalMetricsService.getActiveGauge(50),
@@ -280,27 +282,31 @@ async function handleGET() {
   ]);
 
   const queues = {
-    [QUEUE_NAMES.SYNC]: syncQueueSnapshot,
+    [QUEUE_NAMES.SYNC_FULL]: syncFullSnapshot,
+    [QUEUE_NAMES.SYNC_DELTA]: syncDeltaSnapshot,
     [QUEUE_NAMES.SCRAPE]: scrapeQueueSnapshot,
     [QUEUE_NAMES.NOTIFICATIONS]: notificationQueueSnapshot,
   };
 
   const activeJobsLive =
-    syncQueueSnapshot.counts.active + scrapeQueueSnapshot.counts.active + notificationQueueSnapshot.counts.active;
+    syncFullSnapshot.counts.active + syncDeltaSnapshot.counts.active + scrapeQueueSnapshot.counts.active + notificationQueueSnapshot.counts.active;
   const activeJobs = activeGauge.total > 0 ? activeGauge.total : activeJobsLive;
 
   const queueDepth =
-    syncQueueSnapshot.depth +
+    syncFullSnapshot.depth +
+    syncDeltaSnapshot.depth +
     scrapeQueueSnapshot.depth +
     notificationQueueSnapshot.depth;
 
   const queueLatencyP95MsRedis = Math.max(
-    syncLatency.p95ApproxMs,
+    syncFullLatency.p95ApproxMs,
+    syncDeltaLatency.p95ApproxMs,
     scrapeLatency.p95ApproxMs,
     notificationLatency.p95ApproxMs,
   );
   const queueLatencyP95MsLive = Math.max(
-    syncQueueSnapshot.latencyMs.p95,
+    syncFullSnapshot.latencyMs.p95,
+    syncDeltaSnapshot.latencyMs.p95,
     scrapeQueueSnapshot.latencyMs.p95,
     notificationQueueSnapshot.latencyMs.p95,
   );
@@ -405,7 +411,8 @@ async function handleGET() {
         queueDepth,
         queueLatencyP95Ms,
         queueLatencyByQueue: {
-          [QUEUE_NAMES.SYNC]: syncLatency,
+          [QUEUE_NAMES.SYNC_FULL]: syncFullLatency,
+          [QUEUE_NAMES.SYNC_DELTA]: syncDeltaLatency,
           [QUEUE_NAMES.SCRAPE]: scrapeLatency,
           [QUEUE_NAMES.NOTIFICATIONS]: notificationLatency,
         },

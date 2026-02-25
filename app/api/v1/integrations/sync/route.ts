@@ -27,19 +27,20 @@ async function handlePOST(req: NextRequest) {
     const { siteId } = validation.data!;
     console.log('[Sync API] Validated siteId:', siteId);
 
-    const { getSyncQueue } = await import("@/lib/queue/client");
+    const { getSyncFullQueue } = await import("@/lib/queue/client");
     const { QUEUE_NAMES } = await import("@/lib/queue/types");
 
-    const queue = getSyncQueue();
+    const queue = getSyncFullQueue();
     const job = await enqueueWithBackpressure(
       queue,
-      QUEUE_NAMES.SYNC,
+      QUEUE_NAMES.SYNC_FULL,
       {
         type: "SOURCE_SYNC",
         siteId,
+        tenantId: session.user.id, // Mandatory for fairness
       },
       {},
-      { producer: "api:v1/integrations/sync", strategy: "reject" },
+      { producer: "api:v1/integrations/sync", strategy: "delay" },
     );
     console.log(`[API] Queued SOURCE_SYNC job ${job.id} for site ${siteId}`);
 

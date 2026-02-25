@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSyncQueue, getNotificationQueue } from "@/lib/queue/client";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
@@ -15,38 +14,41 @@ async function handleGET() {
   // if (session.user.role !== "ADMIN") ...
 
   try {
-    const syncQueue = getSyncQueue();
+    const { getSyncFullQueue, getSyncDeltaQueue, getScrapeQueue, getNotificationQueue } = await import("@/lib/queue/client");
+
+    const syncFullQueue = getSyncFullQueue();
+    const syncDeltaQueue = getSyncDeltaQueue();
+    const scrapeQueue = getScrapeQueue();
     const notifQueue = getNotificationQueue();
 
-    const [syncCounts, notifCounts, activeSyncJobs, activeNotifJobs, failedSyncJobs] = await Promise.all([
-      syncQueue.getJobCounts(),
+    const [fullCounts, deltaCounts, scrapeCounts, notifCounts] = await Promise.all([
+      syncFullQueue.getJobCounts(),
+      syncDeltaQueue.getJobCounts(),
+      scrapeQueue.getJobCounts(),
       notifQueue.getJobCounts(),
-      syncQueue.getJobs(['active', 'waiting']),
-      notifQueue.getJobs(['active']),
-      syncQueue.getJobs(['failed'], 0, 10, false) // Last 10 failures
+    ]);
+
+    const activeJobs = await Promise.all([
+      syncFullQueue.getJobs(['active', 'waiting'], 0, 5),
+      syncDeltaQueue.getJobs(['active', 'waiting'], 0, 5),
+      scrapeQueue.getJobs(['active', 'waiting'], 0, 5),
     ]);
 
     const formatJob = (job: any) => ({
       id: job.id,
       name: job.name,
-      data: job.data,
+      tenantId: job.data.tenantId,
       progress: job.progress,
       timestamp: job.timestamp,
-      failedReason: job.failedReason,
     });
 
     return NextResponse.json({
-      sync: {
-        name: "Sync Queue",
-        counts: syncCounts,
-        activeJobs: activeSyncJobs.map(formatJob),
-        recentFailures: failedSyncJobs.map(formatJob),
-      },
-      notifications: {
-        name: "Notification Queue",
-        counts: notifCounts,
-        activeJobs: activeNotifJobs.map(formatJob),
-      },
+      queues: {
+        syncFull: { name: "Sync FULL", counts: fullCounts, recent: activeJobs[0].map(formatJob) },
+        syncDelta: { name: "Sync DELTA", counts: deltaCounts, recent: activeJobs[1].map(formatJob) },
+        scrape: { name: "Scrape", counts: scrapeCounts, recent: activeJobs[2].map(formatJob) },
+        notifications: { name: "Notifications", counts: notifCounts },
+      }
     });
   } catch (error) {
     console.error("Queue Monitor Error:", error);

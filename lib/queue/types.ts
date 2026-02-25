@@ -1,12 +1,13 @@
 export const QUEUE_NAMES = {
-  SYNC: "sync-queue",
+  SYNC_FULL: "sync-queue-full", // For discovery and large batch syncs
+  SYNC_DELTA: "sync-queue-delta", // For individual product updates or small changes
   NOTIFICATIONS: "notification-queue",
   SCRAPE: "scrape-queue",
 } as const;
 
 export interface SyncJobData {
   siteId?: string;
-  tenantId?: string;
+  tenantId: string; // Now mandatory for fairness grouping
   productId?: string;
   productIds?: string[]; // IDs for chunked processing
   isCron?: boolean;
@@ -15,6 +16,7 @@ export interface SyncJobData {
 }
 
 export interface NotificationJobData {
+  tenantId?: string; // Optional for system-wide notices, but recommended
   type: "EMAIL" | "WEBHOOK" | "CUSTOM_WEBHOOK";
   payload: any;
   recipient: string;

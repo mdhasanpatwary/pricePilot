@@ -5,7 +5,7 @@ import { DiscoveryService } from "./discovery";
 import { prisma } from "@/lib/prisma";
 import { NotificationService } from "./notification";
 import { SystemConfigService } from "@/lib/config";
-import { getSyncQueue } from "@/lib/queue/client";
+import { getSyncFullQueue, getSyncDeltaQueue } from "@/lib/queue/client";
 import { getRedisConnection } from "@/lib/queue/connection";
 import { QUEUE_NAMES } from "@/lib/queue/types";
 import { logger } from "../logger";
@@ -112,15 +112,15 @@ export class SyncOrchestrator {
     }
 
     await enqueueWithBackpressure(
-      getSyncQueue(),
-      QUEUE_NAMES.SYNC,
+      getSyncFullQueue(),
+      QUEUE_NAMES.SYNC_FULL,
       {
         type: "FULL",
         tenantId,
       },
-      { priority: 5 },
-      { producer: "SyncOrchestrator.dispatchFullSync", strategy: "reject" },
-    ); // Lowest priority for mass background syncs
+      { priority: 50 }, // Lower priority for mass background syncs
+      { producer: "SyncOrchestrator.dispatchFullSync", strategy: "delay" },
+    );
     return { success: true, message: "Full sync job queued successfully." };
   }
 
@@ -128,18 +128,21 @@ export class SyncOrchestrator {
    * Dispatch a single site sync job to the queue
    */
   static async dispatchSiteSync(siteId: string, force: boolean = false) {
-    const { getSyncQueue } = await import("@/lib/queue/client");
+    const site = await prisma.site.findUnique({ where: { id: siteId }, select: { tenantId: true } });
+    if (!site) throw new Error("Site not found");
+
     await enqueueWithBackpressure(
-      getSyncQueue(),
-      QUEUE_NAMES.SYNC,
+      getSyncDeltaQueue(),
+      QUEUE_NAMES.SYNC_DELTA,
       {
         type: "SINGLE",
         siteId,
+        tenantId: site.tenantId,
         force,
       },
-      { priority: 2 },
-      { producer: "SyncOrchestrator.dispatchSiteSync", strategy: "reject" },
-    ); // Higher priority for user-triggered single site syncs
+      { priority: 10 }, // Higher priority for user-triggered single site syncs
+      { producer: "SyncOrchestrator.dispatchSiteSync", strategy: "delay" },
+    );
 
     // Record QUEUE event
     metricsCollector.recordSyncLifecycle(siteId, 'QUEUE', { force, source: 'dispatchSiteSync' }).catch(console.error);
@@ -151,17 +154,23 @@ export class SyncOrchestrator {
    * Dispatch a single product sync job to the queue
    */
   static async dispatchProductSync(productId: string) {
-    const { getSyncQueue } = await import("@/lib/queue/client");
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { Site: { select: { tenantId: true } } }
+    });
+    if (!product) throw new Error("Product not found");
+
     await enqueueWithBackpressure(
-      getSyncQueue(),
-      QUEUE_NAMES.SYNC,
+      getSyncDeltaQueue(),
+      QUEUE_NAMES.SYNC_DELTA,
       {
         type: "PRODUCT",
         productId,
+        tenantId: product.Site.tenantId,
       },
-      { priority: 1 },
-      { producer: "SyncOrchestrator.dispatchProductSync", strategy: "reject" },
-    ); // Highest priority for manual one-off syncs
+      { priority: 1 }, // Highest priority for manual one-off syncs
+      { producer: "SyncOrchestrator.dispatchProductSync", strategy: "delay" },
+    );
     return { success: true, message: "Product sync job queued successfully." };
   }
 
@@ -251,24 +260,25 @@ export class SyncOrchestrator {
 
       for (const site of competitorSites) {
         // Optimization: Instead of doing everything here, dispatch individual jobs
-        // to the queue so multiple workers can pick them up in parallel.
+        // to the delta queue so multiple workers can pick them up in parallel.
         await enqueueWithBackpressure(
-          getSyncQueue(),
-          QUEUE_NAMES.SYNC,
+          getSyncDeltaQueue(),
+          QUEUE_NAMES.SYNC_DELTA,
           {
             type: "SINGLE",
             siteId: site.id,
+            tenantId: site.tenantId,
             isCron: isCron,
           },
           {
             jobId: `sync-${site.id}-${syncSessionStart.getTime()}`,
-            priority: isCron ? 4 : 2,
+            priority: isCron ? 20 : 10,
           },
           {
             producer: "SyncOrchestrator.processFullSync",
             strategy: "delay",
-            minDelayMs: 15_000,
-            maxDelayMs: 180_000,
+            minDelayMs: 5000,
+            maxDelayMs: 60000,
           },
         );
 
@@ -988,7 +998,7 @@ export class SyncOrchestrator {
       });
       if (result && result.price) {
         await prisma.product.update({
-          where: { id: productId },
+          where: { id: product.id },
           data: {
             currentPrice: result.price,
             inStock: result.inStock,
@@ -1274,10 +1284,10 @@ export class SyncOrchestrator {
             });
 
             await enqueueWithBackpressure(
-              getSyncQueue(),
-              QUEUE_NAMES.SYNC,
+              getSyncDeltaQueue(), // Corrected queue
+              QUEUE_NAMES.SYNC_DELTA, // Corrected queue name
               {
-                type: "RETRY",
+                type: "RETRY", // Corrected type
                 siteId,
                 tenantId: userProduct.tenantId,
                 productIds: [productId],
