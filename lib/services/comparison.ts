@@ -555,5 +555,14 @@ export class ComparisonService {
     }
 }
 
-// Export singleton instance
-export const comparisonService = new ComparisonService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let comparisonInstance: ComparisonService | null = null;
+export const comparisonService = new Proxy({} as ComparisonService, {
+    get(_target, property) {
+        if (!comparisonInstance) {
+            comparisonInstance = new ComparisonService();
+        }
+        const value = (comparisonInstance as any)[property];
+        return typeof value === "function" ? value.bind(comparisonInstance) : value;
+    },
+});

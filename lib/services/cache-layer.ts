@@ -73,12 +73,17 @@ export class CacheLayer {
     }
 
     private constructor() {
-        this.redis = getRedisConnection();
         // In test mode and Next.js build phase, avoid eager Redis connect/log noise.
         if (process.env.NODE_ENV !== "test" && !IS_NEXT_BUILD_PHASE) {
+            this.redis = getRedisConnection();
             this.checkRedisConnection();
             this.initializePubSub();
             this.startHealthCheck();
+        } else {
+            // Provide a dummy/nullish redis for build phase if needed,
+            // though getRedisConnection() itself should be safe to call if it's just returning a getter.
+            // However, to be extra safe, we only assign it when we know we're in runtime.
+            this.redis = null as any;
         }
     }
 
@@ -698,10 +703,13 @@ export function getCacheLayer(): CacheLayer {
 }
 
 // Lazy proxy avoids import-time side effects in build/dev workers.
+let cacheLayerInstance: CacheLayer | null = null;
 export const cacheLayer = new Proxy({} as CacheLayer, {
     get(_target, property) {
-        const instance = CacheLayer.getInstance();
-        const value = (instance as any)[property];
-        return typeof value === "function" ? value.bind(instance) : value;
+        if (!cacheLayerInstance) {
+            cacheLayerInstance = CacheLayer.getInstance();
+        }
+        const value = (cacheLayerInstance as any)[property];
+        return typeof value === "function" ? value.bind(cacheLayerInstance) : value;
     },
 });

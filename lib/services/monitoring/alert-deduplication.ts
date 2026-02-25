@@ -1,18 +1,18 @@
 /**
  * Alert Deduplication Manager Service
- * 
+ *
  * Prevents duplicate alerts and manages alert lifecycle using Redis for state tracking.
  * Implements 15-minute deduplication windows and maintenance window checking.
- * 
+ *
  * Features:
  * - Alert fingerprint generation (ruleId + tenantId + metricType)
  * - Redis-based deduplication with 15-minute TTL
  * - Alert state tracking (triggered, sent, resolved)
  * - Maintenance window checking
  * - Alert grouping for related alerts
- * 
+ *
  * Requirements: 8.1, 8.2, 8.3, 8.4, 7.4
- * 
+ *
  * @module lib/services/monitoring/alert-deduplication
  */
 
@@ -75,11 +75,11 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Check if an alert should be sent based on deduplication rules
-     * 
+     *
      * Requirements:
      * - 8.1: Only one notification per 15-minute window for same alert
      * - 7.4: Suppress alerts during maintenance windows
-     * 
+     *
      * @param alert - The triggered alert to check
      * @returns True if alert should be sent, false if it should be suppressed
      */
@@ -147,9 +147,9 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Record that an alert has been sent
-     * 
+     *
      * Requirement 8.1: Track alert state to prevent duplicates
-     * 
+     *
      * @param alert - The alert that was sent
      */
     async recordAlertSent(alert: TriggeredAlert): Promise<void> {
@@ -194,9 +194,9 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Record that an alert condition has been resolved
-     * 
+     *
      * Requirement 8.2: Send resolution notification when condition clears
-     * 
+     *
      * @param ruleId - The rule ID that was resolved
      * @param tenantId - Optional tenant ID for tenant-specific rules
      */
@@ -247,9 +247,9 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Check if system is currently in a maintenance window
-     * 
+     *
      * Requirement 7.4: Suppress alerts during maintenance windows
-     * 
+     *
      * @returns True if in maintenance window, false otherwise
      */
     async isInMaintenanceWindow(): Promise<boolean> {
@@ -291,9 +291,9 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Generate alert fingerprint for deduplication
-     * 
+     *
      * Requirement 8.1: Generate fingerprint from ruleId + tenantId + metricType
-     * 
+     *
      * @param alert - The triggered alert
      * @returns Fingerprint string
      */
@@ -309,7 +309,7 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Generate fingerprint from IDs only (for resolution)
-     * 
+     *
      * @param ruleId - Rule ID
      * @param tenantId - Optional tenant ID
      * @returns Fingerprint string
@@ -329,7 +329,7 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Build Redis key for alert state
-     * 
+     *
      * @param ruleId - Rule ID
      * @param fingerprint - Alert fingerprint
      * @returns Redis key string
@@ -340,7 +340,7 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Get alert state from Redis
-     * 
+     *
      * @param key - Redis key
      * @returns Alert state record or null if not found
      */
@@ -368,9 +368,9 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Group related alerts for combined notification
-     * 
+     *
      * Requirement 8.3: Group related alerts into single notification
-     * 
+     *
      * @param alerts - Array of triggered alerts
      * @returns Grouped alerts by tenant and component
      */
@@ -393,7 +393,7 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 
     /**
      * Generate group key for alert grouping
-     * 
+     *
      * @param alert - Triggered alert
      * @returns Group key string
      */
@@ -408,4 +408,14 @@ export class AlertDeduplicationManager implements IAlertDeduplicationManager {
 /**
  * Export singleton instance
  */
-export const alertDeduplicationManager = new AlertDeduplicationManager();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let alertDeduplicationInstance: AlertDeduplicationManager | null = null;
+export const alertDeduplicationManager = new Proxy({} as AlertDeduplicationManager, {
+    get(_target, property) {
+        if (!alertDeduplicationInstance) {
+            alertDeduplicationInstance = new AlertDeduplicationManager();
+        }
+        const value = (alertDeduplicationInstance as any)[property];
+        return typeof value === "function" ? value.bind(alertDeduplicationInstance) : value;
+    },
+});

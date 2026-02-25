@@ -512,4 +512,14 @@ export class UptimeTracker implements IUptimeTracker {
 /**
  * Export singleton instance
  */
-export const uptimeTracker = new UptimeTracker();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let uptimeTrackerInstance: UptimeTracker | null = null;
+export const uptimeTracker = new Proxy({} as UptimeTracker, {
+    get(_target, property) {
+        if (!uptimeTrackerInstance) {
+            uptimeTrackerInstance = new UptimeTracker();
+        }
+        const value = (uptimeTrackerInstance as any)[property];
+        return typeof value === "function" ? value.bind(uptimeTrackerInstance) : value;
+    },
+});

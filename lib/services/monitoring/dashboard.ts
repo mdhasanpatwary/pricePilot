@@ -664,4 +664,14 @@ export class MonitoringDashboardService implements IMonitoringDashboardService {
 /**
  * Export singleton instance
  */
-export const monitoringDashboardService = new MonitoringDashboardService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let monitoringDashboardInstance: MonitoringDashboardService | null = null;
+export const monitoringDashboardService = new Proxy({} as MonitoringDashboardService, {
+    get(_target, property) {
+        if (!monitoringDashboardInstance) {
+            monitoringDashboardInstance = new MonitoringDashboardService();
+        }
+        const value = (monitoringDashboardInstance as any)[property];
+        return typeof value === "function" ? value.bind(monitoringDashboardInstance) : value;
+    },
+});

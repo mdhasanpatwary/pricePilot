@@ -3,16 +3,16 @@ import { logger } from "@/lib/logger";
 
 /**
  * Cache Invalidation Service
- * 
+ *
  * Centralized cache invalidation logic triggered by data changes.
  * Ensures cache consistency when underlying data is modified.
- * 
+ *
  * Features:
  * - Automatic invalidation on data changes
  * - Pattern-based invalidation for bulk operations
  * - Error handling with graceful degradation
  * - Comprehensive logging for debugging
- * 
+ *
  * Requirements: 2.1, 2.2, 2.3, 2.4, 2.6
  */
 
@@ -25,16 +25,16 @@ export class CacheInvalidationService {
 
     /**
      * Invalidate caches after price update
-     * 
+     *
      * When prices are updated, we need to invalidate:
      * - Comparison caches (price differences changed)
      * - Product caches (product data changed)
      * - Price history caches (new price recorded)
      * - Analytics caches (metrics affected)
-     * 
+     *
      * Requirement 2.1: Price update invalidation
      * Requirement 2.6: Error handling for invalidation failures
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param productIds - Array of product IDs that were updated
      */
@@ -82,15 +82,15 @@ export class CacheInvalidationService {
 
     /**
      * Invalidate caches after product sync
-     * 
+     *
      * When products are synced from user's website, we need to invalidate:
      * - Comparison caches (product data may have changed)
      * - Matching caches (new products may match differently)
      * - Analytics caches (product counts/metrics affected)
-     * 
+     *
      * Requirement 2.2: Product sync invalidation
      * Requirement 2.6: Error handling for invalidation failures
-     * 
+     *
      * @param tenantId - Tenant ID
      */
     async onProductSync(tenantId: string): Promise<void> {
@@ -121,15 +121,15 @@ export class CacheInvalidationService {
 
     /**
      * Invalidate caches after match update
-     * 
+     *
      * When product matches are created or updated, we need to invalidate:
      * - Matching caches (match data changed)
      * - Comparison caches (matched products affect comparisons)
      * - Product caches (product match status changed)
-     * 
+     *
      * Requirement 2.3: Match update invalidation
      * Requirement 2.6: Error handling for invalidation failures
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param productId - Product ID that was matched
      */
@@ -164,14 +164,14 @@ export class CacheInvalidationService {
 
     /**
      * Invalidate caches after competitor scrape
-     * 
+     *
      * When competitor products are scraped, we need to invalidate:
      * - Competitor product caches (new data available)
      * - Comparison caches (competitor prices may have changed)
-     * 
+     *
      * Requirement 2.4: Competitor scrape invalidation
      * Requirement 2.6: Error handling for invalidation failures
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param competitorId - Competitor website ID that was scraped
      */
@@ -205,13 +205,13 @@ export class CacheInvalidationService {
 
     /**
      * Invalidate all caches for a tenant
-     * 
+     *
      * Nuclear option - invalidates everything.
      * Use sparingly, typically for major data changes or migrations.
-     * 
+     *
      * Requirement 2.5: Pattern-based invalidation
      * Requirement 2.6: Error handling for invalidation failures
-     * 
+     *
      * @param tenantId - Tenant ID
      */
     async invalidateAll(tenantId: string): Promise<void> {
@@ -235,10 +235,10 @@ export class CacheInvalidationService {
 
     /**
      * Batch invalidation for multiple product updates
-     * 
+     *
      * Optimized version of onPriceUpdate for bulk operations.
      * Groups invalidations to reduce Redis calls.
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param productIds - Array of product IDs
      */
@@ -250,9 +250,9 @@ export class CacheInvalidationService {
 
     /**
      * Invalidate caches for multiple matches
-     * 
+     *
      * Optimized for bulk match operations.
-     * 
+     *
      * @param tenantId - Tenant ID
      * @param productIds - Array of product IDs that were matched
      */
@@ -287,4 +287,14 @@ export class CacheInvalidationService {
 }
 
 // Export singleton instance
-export const cacheInvalidationService = new CacheInvalidationService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let cacheInvalidationInstance: CacheInvalidationService | null = null;
+export const cacheInvalidationService = new Proxy({} as CacheInvalidationService, {
+    get(_target, property) {
+        if (!cacheInvalidationInstance) {
+            cacheInvalidationInstance = new CacheInvalidationService();
+        }
+        const value = (cacheInvalidationInstance as any)[property];
+        return typeof value === "function" ? value.bind(cacheInvalidationInstance) : value;
+    },
+});

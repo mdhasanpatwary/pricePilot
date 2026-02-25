@@ -710,4 +710,14 @@ export class IncidentPreventionService {
 }
 
 // Export singleton instance
-export const incidentPreventionService = new IncidentPreventionService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let incidentPreventionInstance: IncidentPreventionService | null = null;
+export const incidentPreventionService = new Proxy({} as IncidentPreventionService, {
+    get(_target, property) {
+        if (!incidentPreventionInstance) {
+            incidentPreventionInstance = new IncidentPreventionService();
+        }
+        const value = (incidentPreventionInstance as any)[property];
+        return typeof value === "function" ? value.bind(incidentPreventionInstance) : value;
+    },
+});

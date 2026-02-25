@@ -714,4 +714,14 @@ export class MetricsCollector implements IMetricsCollector {
 }
 
 // Export singleton instance
-export const metricsCollector = new MetricsCollector();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let metricsCollectorInstance: MetricsCollector | null = null;
+export const metricsCollector = new Proxy({} as MetricsCollector, {
+    get(_target, property) {
+        if (!metricsCollectorInstance) {
+            metricsCollectorInstance = new MetricsCollector();
+        }
+        const value = (metricsCollectorInstance as any)[property];
+        return typeof value === "function" ? value.bind(metricsCollectorInstance) : value;
+    },
+});

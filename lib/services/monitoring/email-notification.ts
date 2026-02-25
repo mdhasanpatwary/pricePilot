@@ -1,18 +1,18 @@
 /**
  * Email Notification Service for Monitoring Alerts
- * 
+ *
  * Sends alert notifications via email with severity-based formatting,
  * comprehensive alert details, and retry logic with exponential backoff.
- * 
+ *
  * Features:
  * - HTML and text email templates
  * - Severity-based color coding
  * - Dashboard links and remediation steps
  * - Retry logic with exponential backoff (3 attempts: 1s, 2s, 4s)
  * - Graceful error handling
- * 
+ *
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.6
- * 
+ *
  * @module lib/services/monitoring/email-notification
  */
 
@@ -46,9 +46,9 @@ export class EmailNotificationService implements IEmailNotificationService {
 
     /**
      * Send alert notification via email with retry logic
-     * 
+     *
      * Requirements: 4.1, 4.6
-     * 
+     *
      * @param alert - Triggered alert information
      * @param recipients - Array of email addresses
      * @returns True if email sent successfully to at least one recipient
@@ -108,9 +108,9 @@ export class EmailNotificationService implements IEmailNotificationService {
 
     /**
      * Format alert as email content
-     * 
+     *
      * Requirements: 4.2, 4.3, 4.4
-     * 
+     *
      * @param alert - Triggered alert information
      * @returns Email content with subject, HTML body, and text body
      */
@@ -149,22 +149,22 @@ export class EmailNotificationService implements IEmailNotificationService {
     <title>${subject}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    
+
     <!-- Alert Header -->
     <div style="background-color: ${severityColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0; margin-bottom: 0;">
         <h1 style="margin: 0; font-size: 24px; font-weight: 600;">
             ${isResolution ? '✅' : this.getSeverityIcon(alert.severity)} ${severityLabel} ${isResolution ? '' : 'Alert'}
         </h1>
     </div>
-    
+
     <!-- Alert Body -->
     <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
-        
+
         <!-- Alert Name -->
         <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 20px; color: #1a1a1a;">
             ${alert.ruleName}
         </h2>
-        
+
         ${isResolution ? `
         <!-- Resolution Message -->
         <div style="background-color: #d1fae5; border-left: 4px solid #10b981; padding: 16px; margin-bottom: 20px; border-radius: 4px;">
@@ -173,7 +173,7 @@ export class EmailNotificationService implements IEmailNotificationService {
             </p>
         </div>
         ` : ''}
-        
+
         <!-- Alert Details -->
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: white; border-radius: 4px; overflow: hidden;">
             ${isResolution ? `
@@ -252,7 +252,7 @@ export class EmailNotificationService implements IEmailNotificationService {
                 </td>
             </tr>
         </table>
-        
+
         <!-- Remediation Steps -->
         ${remediationSteps.length > 0 ? `
         <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; margin-bottom: 20px; border-radius: 4px;">
@@ -264,14 +264,14 @@ export class EmailNotificationService implements IEmailNotificationService {
             </ol>
         </div>
         ` : ''}
-        
+
         <!-- Action Button -->
         <div style="text-align: center; margin: 30px 0;">
             <a href="${dashboardUrl}" style="display: inline-block; background-color: #0070f3; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                 View Monitoring Dashboard
             </a>
         </div>
-        
+
         <!-- Additional Context -->
         ${Object.keys(alert.context).length > 0 ? `
         <details style="margin-top: 20px; padding: 12px; background-color: white; border-radius: 4px; border: 1px solid #e0e0e0;">
@@ -281,9 +281,9 @@ export class EmailNotificationService implements IEmailNotificationService {
             <pre style="margin-top: 12px; padding: 12px; background-color: #f5f5f5; border-radius: 4px; overflow-x: auto; font-size: 12px; color: #333;">${JSON.stringify(alert.context, null, 2)}</pre>
         </details>
         ` : ''}
-        
+
     </div>
-    
+
     <!-- Footer -->
     <div style="margin-top: 20px; padding: 16px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e0e0e0;">
         <p style="margin: 0 0 8px 0;">
@@ -293,7 +293,7 @@ export class EmailNotificationService implements IEmailNotificationService {
             To manage alert settings, visit the <a href="${dashboardUrl}" style="color: #0070f3; text-decoration: none;">Monitoring Dashboard</a>
         </p>
     </div>
-    
+
 </body>
 </html>
         `.trim();
@@ -344,9 +344,9 @@ This is an automated alert from PricePilot Monitoring System
 
     /**
      * Send email with retry logic and exponential backoff
-     * 
+     *
      * Requirement: 4.6
-     * 
+     *
      * @param recipient - Email address
      * @param subject - Email subject
      * @param htmlBody - Email HTML body
@@ -489,7 +489,7 @@ This is an automated alert from PricePilot Monitoring System
 
     /**
      * Get remediation steps based on alert type
-     * 
+     *
      * Requirement: 4.4
      */
     private getRemediationSteps(alert: TriggeredAlert): string[] {
@@ -572,4 +572,14 @@ This is an automated alert from PricePilot Monitoring System
 }
 
 // Export singleton instance
-export const emailNotificationService = new EmailNotificationService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let emailNotificationInstance: EmailNotificationService | null = null;
+export const emailNotificationService = new Proxy({} as EmailNotificationService, {
+    get(_target, property) {
+        if (!emailNotificationInstance) {
+            emailNotificationInstance = new EmailNotificationService();
+        }
+        const value = (emailNotificationInstance as any)[property];
+        return typeof value === "function" ? value.bind(emailNotificationInstance) : value;
+    },
+});

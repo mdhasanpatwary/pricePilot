@@ -105,12 +105,12 @@ export class AlertConfigurationService implements IAlertConfigurationService {
 
     /**
      * Get effective alert rules for a tenant
-     * 
+     *
      * Returns tenant-specific rules if they exist, otherwise returns global rules.
      * This allows per-tenant customization while falling back to global defaults.
-     * 
+     *
      * Requirement 2.15.3: Allow per-tenant alert customization
-     * 
+     *
      * @param tenantId - Tenant ID to get effective rules for
      * @returns Array of effective alert rules (tenant-specific or global)
      */
@@ -617,4 +617,14 @@ export class AlertConfigurationService implements IAlertConfigurationService {
 /**
  * Export singleton instance
  */
-export const alertConfigurationService = new AlertConfigurationService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let alertConfigurationInstance: AlertConfigurationService | null = null;
+export const alertConfigurationService = new Proxy({} as AlertConfigurationService, {
+    get(_target, property) {
+        if (!alertConfigurationInstance) {
+            alertConfigurationInstance = new AlertConfigurationService();
+        }
+        const value = (alertConfigurationInstance as any)[property];
+        return typeof value === "function" ? value.bind(alertConfigurationInstance) : value;
+    },
+});

@@ -750,4 +750,14 @@ export class NotificationRouter implements INotificationRouter {
 }
 
 // Export singleton instance
-export const notificationRouter = new NotificationRouter();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let notificationRouterInstance: NotificationRouter | null = null;
+export const notificationRouter = new Proxy({} as NotificationRouter, {
+    get(_target, property) {
+        if (!notificationRouterInstance) {
+            notificationRouterInstance = new NotificationRouter();
+        }
+        const value = (notificationRouterInstance as any)[property];
+        return typeof value === "function" ? value.bind(notificationRouterInstance) : value;
+    },
+});

@@ -1,0 +1,476 @@
+
+> price-pilot@0.1.0 build
+> prisma generate && next build
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.4.1) to ./node_modules/@prisma/client in 367ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 14.3s
+  Running TypeScript ...
+  Collecting page data using 7 workers ...
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73061-tojenz',
+  pid: 73061
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73059-qfpv2m',
+  pid: 73059
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73062-aqrpur',
+  pid: 73062
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73063-0byqjl',
+  pid: 73063
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73058-1311vt',
+  pid: 73058
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73057-l3rzad',
+  pid: 73057
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+[RedisSingleton] Created Redis client {
+  role: 'base',
+  processInstanceId: 'redis-proc-73060-ec0xs5',
+  pid: 73060
+}
+Error: 
+    at o (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3318)
+    at /Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3418
+    at Object.initBackend (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3847)
+    at new <anonymous> (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3766)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[root-of-the-server]__5468daec._.js:1:3656)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+    at getOrInstantiateModuleFromParent (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:763:12)
+    at Context.esmImport [as i] (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:228:20)
+    at module evaluation (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/_b0659b0c._.js:34:62556)
+    at instantiateModule (/Applications/MAMP/htdocs/PricePilot/.next/server/chunks/[turbopack]_runtime.js:740:9)
+  Generating static pages using 7 workers (0/251) ...
+  Generating static pages using 7 workers (62/251) 
+  Generating static pages using 7 workers (125/251) 
+  Generating static pages using 7 workers (188/251) 
+✓ Generating static pages using 7 workers (251/251) in 10.0s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /admin
+├ ƒ /admin-docs
+├ ƒ /admin-docs/[...slug]
+├ ƒ /admin-docs/analytics
+├ ƒ /admin-docs/search
+├ ƒ /admin/alert-history
+├ ƒ /admin/alert-settings
+├ ƒ /admin/alerts
+├ ƒ /admin/analytics
+├ ƒ /admin/analytics/alerts
+├ ƒ /admin/analytics/challenges
+├ ƒ /admin/analytics/domains
+├ ƒ /admin/analytics/proxies
+├ ƒ /admin/analytics/scrape-cost
+├ ƒ /admin/analytics/sites
+├ ƒ /admin/api-detection
+├ ƒ /admin/audit
+├ ƒ /admin/business-setup
+├ ƒ /admin/human-simulation
+├ ƒ /admin/maintenance/backups
+├ ƒ /admin/monitoring
+├ ƒ /admin/performance
+├ ƒ /admin/playground
+├ ƒ /admin/proxy-pool
+├ ƒ /admin/rate-limits
+├ ƒ /admin/rate-limits/[tenantId]
+├ ƒ /admin/satisfaction
+├ ƒ /admin/scheduler
+├ ƒ /admin/scraper-profiles
+├ ƒ /admin/scraping-config
+├ ƒ /admin/scraping-monitor
+├ ƒ /admin/scraping-monitor/[siteId]
+├ ƒ /admin/simulator
+├ ƒ /admin/site-profiles
+├ ƒ /admin/tenants
+├ ƒ /admin/users
+├ ƒ /api/admin/rate-limit/cache-metrics
+├ ƒ /api/debug/test-login
+├ ƒ /api/docs
+├ ƒ /api/v1/admin/active-sessions
+├ ƒ /api/v1/admin/alerts
+├ ƒ /api/v1/admin/alerts/[id]/acknowledge
+├ ƒ /api/v1/admin/analytics/challenges
+├ ƒ /api/v1/admin/analytics/domain-health
+├ ƒ /api/v1/admin/analytics/proxies
+├ ƒ /api/v1/admin/analytics/scrape-cost
+├ ƒ /api/v1/admin/analytics/sites
+├ ƒ /api/v1/admin/api-detection/metrics
+├ ƒ /api/v1/admin/api-detection/patterns
+├ ƒ /api/v1/admin/audit-search
+├ ƒ /api/v1/admin/backups
+├ ƒ /api/v1/admin/backups/[filename]
+├ ƒ /api/v1/admin/cache/alerts
+├ ƒ /api/v1/admin/cache/alerts/active
+├ ƒ /api/v1/admin/cache/alerts/config
+├ ƒ /api/v1/admin/challenge-stats
+├ ƒ /api/v1/admin/debug
+├ ƒ /api/v1/admin/debug/tenant/[id]
+├ ƒ /api/v1/admin/diagnostics
+├ ƒ /api/v1/admin/encryption-metrics
+├ ƒ /api/v1/admin/export/analytics
+├ ƒ /api/v1/admin/export/errors
+├ ƒ /api/v1/admin/export/metrics
+├ ƒ /api/v1/admin/export/sessions
+├ ƒ /api/v1/admin/health
+├ ƒ /api/v1/admin/human-simulation-config
+├ ƒ /api/v1/admin/maintenance
+├ ƒ /api/v1/admin/metrics/dashboard
+├ ƒ /api/v1/admin/metrics/tenant/[id]
+├ ƒ /api/v1/admin/performance/archive/audit-logs
+├ ƒ /api/v1/admin/performance/archive/price-history
+├ ƒ /api/v1/admin/performance/archive/stats
+├ ƒ /api/v1/admin/performance/baselines
+├ ƒ /api/v1/admin/performance/baselines/compare
+├ ƒ /api/v1/admin/performance/cache-stats
+├ ƒ /api/v1/admin/performance/index-recommendations
+├ ƒ /api/v1/admin/performance/pool-stats
+├ ƒ /api/v1/admin/performance/regressions
+├ ƒ /api/v1/admin/performance/replication-status
+├ ƒ /api/v1/admin/performance/slow-queries
+├ ƒ /api/v1/admin/proxy-health
+├ ƒ /api/v1/admin/queue-status
+├ ƒ /api/v1/admin/rate-limits
+├ ƒ /api/v1/admin/rate-limits/[tenantId]
+├ ƒ /api/v1/admin/rate-limits/[tenantId]/bypass
+├ ƒ /api/v1/admin/rate-limits/[tenantId]/multiplier
+├ ƒ /api/v1/admin/rate-limits/metrics
+├ ƒ /api/v1/admin/rate-limits/violations
+├ ƒ /api/v1/admin/scheduler
+├ ƒ /api/v1/admin/scraper-health
+├ ƒ /api/v1/admin/scraper-playground
+├ ƒ /api/v1/admin/scraper-profiles
+├ ƒ /api/v1/admin/scrapers
+├ ƒ /api/v1/admin/scraping-metrics
+├ ƒ /api/v1/admin/scraping/engine-metrics
+├ ƒ /api/v1/admin/scraping/ops-metrics
+├ ƒ /api/v1/admin/scraping/tenant-concurrency
+├ ƒ /api/v1/admin/sessions
+├ ƒ /api/v1/admin/sessions/[id]
+├ ƒ /api/v1/admin/sessions/[id]/cancel
+├ ƒ /api/v1/admin/sessions/[id]/pause
+├ ƒ /api/v1/admin/sessions/[id]/resume
+├ ƒ /api/v1/admin/sessions/[id]/retry
+├ ƒ /api/v1/admin/sessions/bulk
+├ ƒ /api/v1/admin/sessions/clear
+├ ƒ /api/v1/admin/sessions/history
+├ ƒ /api/v1/admin/simulator/results
+├ ƒ /api/v1/admin/simulator/results/[id]
+├ ƒ /api/v1/admin/simulator/run
+├ ƒ /api/v1/admin/site-profiles
+├ ƒ /api/v1/admin/site-profiles/[id]
+├ ƒ /api/v1/admin/sites/[id]
+├ ƒ /api/v1/admin/stats
+├ ƒ /api/v1/admin/sync-monitor
+├ ƒ /api/v1/admin/system-config
+├ ƒ /api/v1/admin/system-health
+├ ƒ /api/v1/admin/tenants
+├ ƒ /api/v1/admin/users
+├ ƒ /api/v1/admin/verify-code
+├ ƒ /api/v1/alerts
+├ ƒ /api/v1/alerts/[id]/acknowledge
+├ ƒ /api/v1/analytics/challenges
+├ ƒ /api/v1/analytics/competitor-analysis
+├ ƒ /api/v1/analytics/duplicates
+├ ƒ /api/v1/analytics/history
+├ ƒ /api/v1/analytics/logs
+├ ƒ /api/v1/analytics/price-elasticity
+├ ƒ /api/v1/analytics/proxies/[proxy]
+├ ƒ /api/v1/analytics/reports/download
+├ ƒ /api/v1/analytics/sites/[site]
+├ ƒ /api/v1/analytics/summary
+├ ƒ /api/v1/analytics/tech-intelligence
+├ ƒ /api/v1/analytics/top-failing-proxies
+├ ƒ /api/v1/analytics/top-failing-sites
+├ ƒ /api/v1/approval-delegation
+├ ƒ /api/v1/approval-delegation/[id]
+├ ƒ /api/v1/audit-logs
+├ ƒ /api/v1/auth/[...nextauth]
+├ ƒ /api/v1/auth/change-password
+├ ƒ /api/v1/auth/forgot-password
+├ ƒ /api/v1/auth/register
+├ ƒ /api/v1/auth/reset-password
+├ ƒ /api/v1/auth/verify
+├ ƒ /api/v1/auto-approval-rules
+├ ƒ /api/v1/auto-approval-rules/[id]
+├ ƒ /api/v1/auto-approval-rules/[id]/toggle
+├ ƒ /api/v1/auto-approval-rules/metrics
+├ ƒ /api/v1/comparison/report
+├ ƒ /api/v1/competitor-products/[id]/manual-price
+├ ƒ /api/v1/competitor-products/[id]/price-history
+├ ƒ /api/v1/competitors
+├ ƒ /api/v1/competitors/[id]/advanced-access
+├ ƒ /api/v1/competitors/[id]/api-pattern
+├ ƒ /api/v1/competitors/[id]/detect-api
+├ ƒ /api/v1/competitors/[id]/products
+├ ƒ /api/v1/competitors/[id]/settings
+├ ƒ /api/v1/competitors/progress
+├ ƒ /api/v1/competitors/sync
+├ ƒ /api/v1/competitors/sync/stop
+├ ƒ /api/v1/cron/auto-approval
+├ ƒ /api/v1/cron/cleanup-audit-logs
+├ ƒ /api/v1/cron/cleanup-bulk-snapshots
+├ ƒ /api/v1/cron/cleanup-expired-approvals
+├ ƒ /api/v1/cron/cleanup-notifications
+├ ƒ /api/v1/cron/cleanup-price-history
+├ ƒ /api/v1/cron/cleanup-price-update-logs
+├ ƒ /api/v1/cron/cleanup-scraping-metrics
+├ ƒ /api/v1/cron/cleanup-sessions
+├ ƒ /api/v1/cron/cleanup-sync-logs
+├ ƒ /api/v1/cron/daily-approval-summary
+├ ƒ /api/v1/cron/evaluate-alerts
+├ ƒ /api/v1/cron/global-sync
+├ ƒ /api/v1/cron/process-price-update-retries
+├ ƒ /api/v1/cron/system-heartbeat
+├ ƒ /api/v1/debug/check-all-data
+├ ƒ /api/v1/debug/list-users
+├ ƒ /api/v1/debug/query-performance
+├ ƒ /api/v1/debug/reset-password
+├ ƒ /api/v1/debug/seed-my-data
+├ ƒ /api/v1/debug/session
+├ ƒ /api/v1/documentation/[type]
+├ ƒ /api/v1/documentation/[type]/[...slug]
+├ ƒ /api/v1/documentation/[type]/toc
+├ ƒ /api/v1/documentation/analytics/feedback
+├ ƒ /api/v1/documentation/analytics/metrics
+├ ƒ /api/v1/documentation/analytics/search
+├ ƒ /api/v1/documentation/analytics/view
+├ ƒ /api/v1/documentation/monitoring
+├ ƒ /api/v1/documentation/search
+├ ƒ /api/v1/documentation/suggestions
+├ ƒ /api/v1/documentation/suggestions/[id]/approve
+├ ƒ /api/v1/documentation/suggestions/[id]/reject
+├ ƒ /api/v1/documentation/validate
+├ ƒ /api/v1/downloads/laravel
+├ ƒ /api/v1/downloads/opencart
+├ ƒ /api/v1/exports/competitors
+├ ƒ /api/v1/exports/products
+├ ƒ /api/v1/feedback/by-category
+├ ƒ /api/v1/feedback/recent
+├ ƒ /api/v1/feedback/score
+├ ƒ /api/v1/feedback/should-prompt
+├ ƒ /api/v1/feedback/submit
+├ ƒ /api/v1/feedback/trend
+├ ƒ /api/v1/gdpr/delete
+├ ƒ /api/v1/gdpr/export
+├ ƒ /api/v1/health
+├ ƒ /api/v1/imports/competitors
+├ ƒ /api/v1/imports/products
+├ ƒ /api/v1/integrations
+├ ƒ /api/v1/integrations/sync
+├ ƒ /api/v1/integrations/sync/stop
+├ ƒ /api/v1/matching
+├ ƒ /api/v1/monitoring/alert-rules
+├ ƒ /api/v1/monitoring/alert-rules/[id]
+├ ƒ /api/v1/monitoring/alert-rules/[id]/test
+├ ƒ /api/v1/monitoring/alert-rules/effective
+├ ƒ /api/v1/monitoring/alerts
+├ ƒ /api/v1/monitoring/alerts/[alertId]/acknowledge
+├ ƒ /api/v1/monitoring/alerts/history
+├ ƒ /api/v1/monitoring/channels
+├ ƒ /api/v1/monitoring/channels/[id]
+├ ƒ /api/v1/monitoring/channels/[id]/test
+├ ƒ /api/v1/monitoring/delivery-stats
+├ ƒ /api/v1/monitoring/health
+├ ƒ /api/v1/monitoring/maintenance-window
+├ ƒ /api/v1/monitoring/maintenance-window/[id]
+├ ƒ /api/v1/monitoring/metrics
+├ ƒ /api/v1/monitoring/metrics/by-endpoint
+├ ƒ /api/v1/monitoring/metrics/sync
+├ ƒ /api/v1/monitoring/price-update-stats
+├ ƒ /api/v1/monitoring/test-alert
+├ ƒ /api/v1/monitoring/uptime
+├ ƒ /api/v1/notifications
+├ ƒ /api/v1/price-approvals
+├ ƒ /api/v1/price-approvals/bulk
+├ ƒ /api/v1/price-approvals/count
+├ ƒ /api/v1/price-approvals/history
+├ ƒ /api/v1/price-update/bulk
+├ ƒ /api/v1/price-update/rollback
+├ ƒ /api/v1/price-update/rollback/history
+├ ƒ /api/v1/pricing/evaluate
+├ ƒ /api/v1/products
+├ ƒ /api/v1/products/[id]
+├ ƒ /api/v1/products/[id]/match
+├ ƒ /api/v1/products/bulk
+├ ƒ /api/v1/products/bulk/rollback
+├ ƒ /api/v1/proxy-image
+├ ƒ /api/v1/rules
+├ ƒ /api/v1/scraping/alerts
+├ ƒ /api/v1/scraping/alerts/[id]
+├ ƒ /api/v1/scraping/alerts/[id]/acknowledge
+├ ƒ /api/v1/scraping/attempts
+├ ƒ /api/v1/scraping/attempts/[id]
+├ ƒ /api/v1/scraping/attempts/[id]/screenshot
+├ ƒ /api/v1/scraping/configs
+├ ƒ /api/v1/scraping/configs/[competitorWebsiteId]
+├ ƒ /api/v1/scraping/configs/[competitorWebsiteId]/history
+├ ƒ /api/v1/scraping/configs/[competitorWebsiteId]/test
+├ ƒ /api/v1/scraping/detections
+├ ƒ /api/v1/scraping/metrics/sites
+├ ƒ /api/v1/scraping/metrics/sites/[competitorWebsiteId]
+├ ƒ /api/v1/scraping/metrics/summary
+├ ƒ /api/v1/scraping/proxies
+├ ƒ /api/v1/scraping/proxies/[id]
+├ ƒ /api/v1/scraping/proxies/[id]/health
+├ ƒ /api/v1/scraping/staleness-config
+├ ƒ /api/v1/security/blocked-ips
+├ ƒ /api/v1/security/dashboard
+├ ƒ /api/v1/sync/full
+├ ƒ /api/v1/tenant/alert-rules
+├ ƒ /api/v1/tenant/backup
+├ ƒ /api/v1/tenant/limits
+├ ƒ /api/v1/tenant/maintenance
+├ ƒ /api/v1/tenant/notification-settings
+├ ƒ /api/v1/tenant/scraping-metrics
+├ ƒ /api/v1/tenant/sessions
+├ ƒ /api/v1/tenant/settings
+├ ƒ /api/v1/tenant/site-config
+├ ƒ /api/v1/tenant/site-config/[siteId]
+├ ƒ /api/v1/tenant/team
+├ ƒ /api/v1/user/api-keys
+├ ƒ /api/v1/user/api-keys/[id]
+├ ƒ /api/v1/user/notification-preferences
+├ ƒ /api/v1/webhooks
+├ ƒ /auth/login
+├ ƒ /auth/register
+├ ƒ /dashboard
+├ ƒ /dashboard/activity
+├ ƒ /dashboard/activity/rollback
+├ ƒ /dashboard/alerts
+├ ƒ /dashboard/analytics
+├ ƒ /dashboard/auto-approval-rules
+├ ƒ /dashboard/auto-approval-rules/[id]/edit
+├ ƒ /dashboard/auto-approval-rules/new
+├ ƒ /dashboard/competitors
+├ ƒ /dashboard/connections
+├ ƒ /dashboard/developers/docs
+├ ƒ /dashboard/duplicates
+├ ƒ /dashboard/integrations/laravel
+├ ƒ /dashboard/integrations/opencart
+├ ƒ /dashboard/matching
+├ ƒ /dashboard/metrics
+├ ƒ /dashboard/monitoring
+├ ƒ /dashboard/monitoring/alerts
+├ ƒ /dashboard/monitoring/channels
+├ ƒ /dashboard/monitoring/test
+├ ƒ /dashboard/price-approvals
+├ ƒ /dashboard/price-approvals/history
+├ ƒ /dashboard/products
+├ ƒ /dashboard/rules
+├ ƒ /dashboard/settings
+├ ƒ /dashboard/settings/backups
+├ ƒ /dashboard/settings/delegations
+├ ƒ /dashboard/settings/logs
+├ ƒ /dashboard/settings/privacy
+├ ƒ /dashboard/settings/tickets/attributes
+├ ƒ /dashboard/site-config
+├ ƒ /docs
+├ ƒ /docs/[...slug]
+├ ƒ /docs/search
+├ ○ /icon.png
+├ ƒ /legal/cookies
+├ ƒ /legal/data-retention
+├ ƒ /legal/privacy
+└ ƒ /legal/terms
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -704,4 +704,14 @@ export async function initializeBuiltInAlertRules(): Promise<void> {
 }
 
 // Export singleton instance
-export const alertRulesEvaluator = new AlertRulesEvaluator();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let alertRulesEvaluatorInstance: AlertRulesEvaluator | null = null;
+export const alertRulesEvaluator = new Proxy({} as AlertRulesEvaluator, {
+    get(_target, property) {
+        if (!alertRulesEvaluatorInstance) {
+            alertRulesEvaluatorInstance = new AlertRulesEvaluator();
+        }
+        const value = (alertRulesEvaluatorInstance as any)[property];
+        return typeof value === "function" ? value.bind(alertRulesEvaluatorInstance) : value;
+    },
+});

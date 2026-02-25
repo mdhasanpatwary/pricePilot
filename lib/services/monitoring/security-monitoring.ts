@@ -599,4 +599,14 @@ export class SecurityMonitoringService implements ISecurityMonitoringService {
 }
 
 // Export singleton instance
-export const securityMonitoringService = new SecurityMonitoringService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let securityMonitoringInstance: SecurityMonitoringService | null = null;
+export const securityMonitoringService = new Proxy({} as SecurityMonitoringService, {
+    get(_target, property) {
+        if (!securityMonitoringInstance) {
+            securityMonitoringInstance = new SecurityMonitoringService();
+        }
+        const value = (securityMonitoringInstance as any)[property];
+        return typeof value === "function" ? value.bind(securityMonitoringInstance) : value;
+    },
+});

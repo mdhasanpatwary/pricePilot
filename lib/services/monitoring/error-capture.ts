@@ -476,7 +476,17 @@ export class ErrorCaptureService implements ErrorCaptureMiddleware {
 /**
  * Default singleton instance of ErrorCaptureService
  */
-export const defaultErrorCaptureService = new ErrorCaptureService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let errorCaptureInstance: ErrorCaptureService | null = null;
+export const defaultErrorCaptureService = new Proxy({} as ErrorCaptureService, {
+    get(_target, property) {
+        if (!errorCaptureInstance) {
+            errorCaptureInstance = new ErrorCaptureService();
+        }
+        const value = (errorCaptureInstance as any)[property];
+        return typeof value === "function" ? value.bind(errorCaptureInstance) : value;
+    },
+});
 
 /**
  * Helper function to extract error context from Next.js request

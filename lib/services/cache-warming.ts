@@ -600,4 +600,14 @@ export class CacheWarmingService {
 }
 
 // Export singleton instance
-export const cacheWarmingService = new CacheWarmingService();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let cacheWarmingInstance: CacheWarmingService | null = null;
+export const cacheWarmingService = new Proxy({} as CacheWarmingService, {
+    get(_target, property) {
+        if (!cacheWarmingInstance) {
+            cacheWarmingInstance = new CacheWarmingService();
+        }
+        const value = (cacheWarmingInstance as any)[property];
+        return typeof value === "function" ? value.bind(cacheWarmingInstance) : value;
+    },
+});

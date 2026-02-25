@@ -225,4 +225,14 @@ export class AlertRepository {
 }
 
 // Export singleton instance
-export const alertRepository = new AlertRepository();
+// Lazy proxy avoids import-time side effects in build/dev workers.
+let alertRepositoryInstance: AlertRepository | null = null;
+export const alertRepository = new Proxy({} as AlertRepository, {
+    get(_target, property) {
+        if (!alertRepositoryInstance) {
+            alertRepositoryInstance = new AlertRepository();
+        }
+        const value = (alertRepositoryInstance as any)[property];
+        return typeof value === "function" ? value.bind(alertRepositoryInstance) : value;
+    },
+});
