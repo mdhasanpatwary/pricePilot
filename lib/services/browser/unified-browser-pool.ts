@@ -4,6 +4,8 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { logger } from "@/lib/logger";
 import { getAllUserAgents } from "@/lib/config/user-agents";
 import type { BrowserScrapeConfig } from "@/lib/services/bot-protection/headless-browser-scraper";
+import { randomUUID } from "crypto";
+import { getRedisConnection } from "@/lib/queue/connection";
 
 interface StealthOptions {
   canvas?: boolean;
@@ -116,10 +118,12 @@ const LAUNCH_ARGS = [
 
 const globalForPool = globalThis as typeof globalThis & {
   __pricepilotUnifiedBrowserPool?: BrowserPool;
+  __browserPoolExitListenersAdded?: boolean;
 };
 
 export class BrowserPool {
   private static instance: BrowserPool | null = null;
+  private instanceId = randomUUID();
 
   private domainSessions: Map<string, DomainSession> = new Map();
   private browserSlots: Map<string, BrowserSlot> = new Map();
@@ -157,6 +161,16 @@ export class BrowserPool {
       maxGlobalBrowsers: config?.maxGlobalBrowsers ?? maxGlobalBrowsers,
       maxRssMb: config?.maxRssMb ?? maxRssMb,
     };
+
+    if (!globalForPool.__browserPoolExitListenersAdded) {
+      const shutdownHandler = () => {
+        BrowserPool.shutdown().catch((err) => logger.error("Exit hook shutdown failed", { err }));
+      };
+      process.once("SIGTERM", shutdownHandler);
+      process.once("SIGINT", shutdownHandler);
+      process.once("exit", shutdownHandler);
+      globalForPool.__browserPoolExitListenersAdded = true;
+    }
   }
 
   static getInstance(config?: Partial<BrowserPoolConfig>): BrowserPool {
@@ -521,6 +535,8 @@ export class BrowserPool {
       }
     }
 
+    await this.checkGlobalBrowserCap();
+
     const creationKey = `${domain}:${this.nextBrowserId}`;
     const pending = this.pendingBrowserCreates.get(creationKey);
     if (pending) {
@@ -539,6 +555,33 @@ export class BrowserPool {
     session.browserId = slot.id;
     slot.domains.add(domain);
     return slot;
+  }
+
+  private async checkGlobalBrowserCap(): Promise<void> {
+    const maxGlobalBrowsers = parseInt(process.env.MAX_GLOBAL_BROWSERS || "0", 10);
+    if (maxGlobalBrowsers <= 0) return;
+
+    try {
+      const redis = getRedisConnection();
+      const key = "pp:browsers:active_nodes";
+
+      await redis.hset(key, this.instanceId, this.browserSlots.size);
+      await redis.expire(key, 60);
+
+      const counts = await redis.hgetall(key);
+      let total = 0;
+      for (const val of Object.values(counts)) {
+        total += parseInt(val || "0", 10);
+      }
+
+      // Drop if total is beyond threshold and we are entirely new/have zero share of instances.
+      if (total >= maxGlobalBrowsers && this.browserSlots.size === 0) {
+        throw new Error(`Global browser capacity exhausted (${total}/${maxGlobalBrowsers} across cluster)`);
+      }
+    } catch (error) {
+       if (error instanceof Error && error.message.includes("Global browser capacity exhausted")) throw error;
+       logger.warn("[UnifiedBrowserPool] Failed to check global browser cap", { error });
+    }
   }
 
   private async createBrowserSlot(): Promise<BrowserSlot> {
@@ -1047,6 +1090,15 @@ export class BrowserPool {
 
         if (this.config.maxRssMb > 0) {
           await this.runMemoryGuard();
+        }
+
+        // Heartbeat for global cap
+        const maxGlobalBrowsers = parseInt(process.env.MAX_GLOBAL_BROWSERS || "0", 10);
+        if (maxGlobalBrowsers > 0) {
+          const redis = getRedisConnection();
+          const key = "pp:browsers:active_nodes";
+          await redis.hset(key, this.instanceId, this.browserSlots.size);
+          await redis.expire(key, 60);
         }
       } catch (error) {
         logger.warn("[UnifiedBrowserPool] Cleanup cycle failed", { error });

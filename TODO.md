@@ -22,25 +22,25 @@
 ---
 
 ## 🧪 Production Hardening Experiments (Pending)
-- [ ] Production reliability tuning: worker concurrency optimization.
+- [x] Production reliability tuning: worker concurrency optimization.
   - Scope: set worker concurrency to `1.5x–2x GLOBAL_MAX_ACTIVE` with `GLOBAL_MAX_ACTIVE=10`.
   - Run: `50 jobs / 10 tenants` stress test.
   - Measure: queue wait `p50/p95`, limiter requeue denials, memory RSS peak, throughput.
   - Tune: adjust concurrency up/down to minimize denial churn while maintaining throughput.
   - Deliverable: optimized concurrency value + env/config recommendation with rationale.
 
-- [ ] Chaos resiliency audit: Redis outage recovery validation.
+- [x] Chaos resiliency audit: Redis outage recovery validation.
   - Scope: simulate Redis disconnect during `5–10` active scrape jobs.
   - Verify: stale global permits self-release after lease expiry; no permanently lost jobs; no active permit count above `GLOBAL_MAX_ACTIVE`.
   - Report: counter mismatch incidents + mitigation recommendations (lease expiry window, cleanup cadence, atomic Lua paths).
 
-- [ ] System stress validation: worker memory guard behavior under realistic load.
+- [x] System stress validation: worker memory guard behavior under realistic load.
   - Prereq: Redis preflight passes.
   - Scope: induce high RSS via concurrent browser contexts and heavy scrape jobs.
   - Verify: `BROWSER_POOL_MAX_RSS_MB` enforcement, graceful worker restart, browser/context cleanup, no stale global permits.
   - Deliverable: max safe RSS per worker + recommended guard thresholds.
 
-- [ ] Distributed capacity planning: safe tenant concurrency envelope.
+- [x] Distributed capacity planning: safe tenant concurrency envelope.
   - Fixed worker concurrency target: `15–20`.
   - Run staggered bursts for `10`, `30`, `50` tenants.
   - Measure: queue wait `p50/p95`, requeue denials, max RSS.

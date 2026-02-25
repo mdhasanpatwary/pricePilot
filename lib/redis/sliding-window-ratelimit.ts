@@ -63,7 +63,7 @@ function toNumber(v: unknown): number {
 }
 
 export function createSlidingWindowRateLimiter(opts: {
-  redis: Redis;
+  redis: Redis | (() => Redis);
   prefix: string;
   limit: number;
   windowMs: number;
@@ -72,12 +72,13 @@ export function createSlidingWindowRateLimiter(opts: {
 
   return {
     async limit(identifier: string): Promise<RateLimitResult> {
+      const client = typeof redis === 'function' ? redis() : redis;
       const key = `${prefix}:${identifier}`;
       const now = Date.now();
       const member = `${now}-${Math.random().toString(36).slice(2)}`;
 
       // ioredis eval returns (string|number)[] depending on parser.
-      const raw = (await (redis as any).eval(
+      const raw = (await (client as any).eval(
         SLIDING_WINDOW_LUA,
         1,
         key,

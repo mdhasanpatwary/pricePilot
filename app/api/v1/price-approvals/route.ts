@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
  */
 const actionSchema = z.object({
     action: z.enum(["approve", "reject"]),
-    changeIds: z.array(z.string()).min(1),
+    changeIds: z.array(z.string()).min(1).max(1000, "Maximum of 1000 changes per request"),
 });
 
 async function handlePOST(req: NextRequest) {

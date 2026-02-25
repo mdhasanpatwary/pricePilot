@@ -65,15 +65,8 @@ export class ScrapingScheduler {
     async scheduleAllTenants(): Promise<ScheduleResult> {
         logger.info('Starting scheduled scraping for all tenants');
 
-        const tenants = await prisma.tenant.findMany({
-            select: {
-                id: true,
-                companyName: true,
-            },
-        });
-
         const results: ScheduleResult = {
-            totalTenants: tenants.length,
+            totalTenants: 0,
             totalProducts: 0,
             queued: 0,
             skipped: 0,
@@ -81,24 +74,43 @@ export class ScrapingScheduler {
             tenantResults: [],
         };
 
-        for (const tenant of tenants) {
-            try {
-                const tenantResult = await this.scheduleTenant(tenant.id);
-                results.totalProducts += tenantResult.totalProducts;
-                results.queued += tenantResult.queued;
-                results.skipped += tenantResult.skipped;
-                results.errors += tenantResult.errors;
-                results.tenantResults.push({
-                    tenantId: tenant.id,
-                    tenantName: tenant.companyName,
-                    ...tenantResult,
-                });
-            } catch (error) {
-                logger.error('Failed to schedule scraping for tenant', {
-                    tenantId: tenant.id,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-                results.errors++;
+        let cursor: string | undefined = undefined;
+        let hasMore = true;
+
+        while (hasMore) {
+            const tenants: Array<{ id: string; companyName: string }> = await prisma.tenant.findMany({
+                select: { id: true, companyName: true },
+                take: 50,
+                skip: cursor ? 1 : 0,
+                ...(cursor ? { cursor: { id: cursor } } : {}),
+                orderBy: { id: 'asc' }
+            });
+
+            if (tenants.length === 0) break;
+
+            cursor = tenants[tenants.length - 1].id;
+            hasMore = tenants.length === 50;
+
+            for (const tenant of tenants) {
+                results.totalTenants++;
+                try {
+                    const tenantResult = await this.scheduleTenant(tenant.id);
+                    results.totalProducts += tenantResult.totalProducts;
+                    results.queued += tenantResult.queued;
+                    results.skipped += tenantResult.skipped;
+                    results.errors += tenantResult.errors;
+                    results.tenantResults.push({
+                        tenantId: tenant.id,
+                        tenantName: tenant.companyName,
+                        ...tenantResult,
+                    });
+                } catch (error) {
+                    logger.error('Failed to schedule scraping for tenant', {
+                        tenantId: tenant.id,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                    results.errors++;
+                }
             }
         }
 
@@ -112,58 +124,90 @@ export class ScrapingScheduler {
     async scheduleTenant(tenantId: string): Promise<TenantScheduleResult> {
         logger.info('Scheduling scraping for tenant', { tenantId });
 
-        // Get all competitor products for this tenant
-        const products = await this.getCompetitorProducts(tenantId);
-
         const result: TenantScheduleResult = {
-            totalProducts: products.length,
+            totalProducts: 0,
             queued: 0,
             skipped: 0,
             errors: 0,
         };
 
-        if (products.length === 0) {
-            logger.info('No competitor products found for tenant', { tenantId });
-            return result;
-        }
-
-        // Group products by competitor website for rate limiting
-        const productsByWebsite = this.groupByWebsite(products);
-
-        // Initialize active scrapes set for this tenant
         if (!this.activeScrapes.has(tenantId)) {
             this.activeScrapes.set(tenantId, new Set());
         }
 
-        // Queue scrapes with delays between sites
-        for (const [_, websiteProducts] of productsByWebsite.entries()) {
-            for (const product of websiteProducts) {
-                // Skip if already being scraped
-                if (this.activeScrapes.get(tenantId)?.has(product.id)) {
-                    result.skipped++;
-                    continue;
-                }
+        const stalenessThreshold = new Date();
+        stalenessThreshold.setHours(
+            stalenessThreshold.getHours() - this.config.stalenessThresholdHours
+        );
 
-                // Queue the scrape (concurrency controlled by orchestrator)
-                this.executeScrape(tenantId, product).catch(error => {
-                    logger.error('Background scrape failed', {
-                        tenantId,
-                        productId: product.id,
-                        error: error instanceof Error ? error.message : String(error)
+        let skip = 0;
+        const take = 1000;
+        let reachedBatchLimit = false;
+
+        while (!reachedBatchLimit) {
+            const rawProducts = await prisma.product.findMany({
+                where: {
+                    tenantId,
+                    Site: { type: 'COMPETITOR' },
+                },
+                select: {
+                    id: true,
+                    url: true,
+                    siteId: true,
+                    lastCrawledAt: true,
+                    currentPrice: true,
+                },
+                take,
+                skip,
+                orderBy: this.config.prioritizeStale
+                    ? [{ lastCrawledAt: 'asc' }, { currentPrice: 'asc' }, { id: 'asc' }]
+                    : [{ currentPrice: 'asc' }, { id: 'asc' }],
+            });
+
+            if (rawProducts.length === 0) break;
+
+            result.totalProducts += rawProducts.length;
+
+            const products = rawProducts.map(p => ({
+                id: p.id,
+                url: p.url || '',
+                competitorWebsiteId: p.siteId,
+                lastScrapedAt: p.lastCrawledAt,
+                currentPrice: p.currentPrice ? parseFloat(p.currentPrice.toString()) : null,
+            }));
+
+            const productsByWebsite = this.groupByWebsite(products);
+
+            for (const [_, websiteProducts] of productsByWebsite.entries()) {
+                for (const product of websiteProducts) {
+                    if (this.activeScrapes.get(tenantId)?.has(product.id)) {
+                        result.skipped++;
+                        continue;
+                    }
+
+                    this.executeScrape(tenantId, product).catch(error => {
+                        logger.error('Background scrape failed', {
+                            tenantId,
+                            productId: product.id,
+                            error: error instanceof Error ? error.message : String(error)
+                        });
                     });
-                });
 
-                result.queued++;
+                    result.queued++;
 
-                // Respect max batch size
-                if (result.queued >= this.config.maxBatchSize) {
-                    logger.info('Reached max batch size, stopping queue', {
-                        tenantId,
-                        queued: result.queued,
-                    });
-                    break;
+                    if (result.queued >= this.config.maxBatchSize) {
+                        logger.info('Reached max batch size, stopping queue', {
+                            tenantId,
+                            queued: result.queued,
+                        });
+                        reachedBatchLimit = true;
+                        break;
+                    }
                 }
+                if (reachedBatchLimit) break;
             }
+
+            skip += take;
         }
 
         logger.info('Tenant scraping scheduled', {
@@ -172,48 +216,6 @@ export class ScrapingScheduler {
         });
 
         return result;
-    }
-
-    /**
-     * Get competitor products for a tenant, prioritizing stale data
-     */
-    private async getCompetitorProducts(tenantId: string): Promise<CompetitorProduct[]> {
-        const stalenessThreshold = new Date();
-        stalenessThreshold.setHours(
-            stalenessThreshold.getHours() - this.config.stalenessThresholdHours
-        );
-
-        const products = await prisma.product.findMany({
-            where: {
-                tenantId,
-                Site: {
-                    type: 'COMPETITOR',
-                },
-            },
-            select: {
-                id: true,
-                url: true,
-                siteId: true,
-                lastCrawledAt: true,
-                currentPrice: true,
-            },
-            orderBy: this.config.prioritizeStale
-                ? [
-                    { lastCrawledAt: 'asc' }, // Oldest first
-                    { currentPrice: 'asc' }, // Then by price
-                ]
-                : [
-                    { currentPrice: 'asc' }, // Cheapest first
-                ],
-        });
-
-        return products.map(p => ({
-            id: p.id,
-            url: p.url || '',
-            competitorWebsiteId: p.siteId,
-            lastScrapedAt: p.lastCrawledAt,
-            currentPrice: p.currentPrice ? parseFloat(p.currentPrice.toString()) : null,
-        }));
     }
 
     /**

@@ -6,6 +6,14 @@ datasource db {
   provider = "postgresql"
 }
 
+enum SyncState {
+  IDLE
+  STARTING
+  RUNNING
+  STOPPING
+  STOPPED
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -51,7 +59,7 @@ model AlertRule {
   value       Decimal        @db.Decimal(10, 2)
   isActive    Boolean        @default(true)
   createdAt   DateTime       @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime       @updatedAt
   Tenant      Tenant         @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -94,17 +102,17 @@ model ApiPattern {
 }
 
 model ApprovalDelegation {
-  id                                       String   @id @default(cuid())
-  tenantId                                 String
-  fromUserId                               String
-  toUserId                                 String
-  startDate                                DateTime
-  endDate                                  DateTime
-  isActive                                 Boolean  @default(true)
-  createdAt                                DateTime @default(now())
-  fromUser  User   @relation("ApprovalDelegation_fromUserIdToUser", fields: [fromUserId], references: [id], onDelete: Cascade)
-  Tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  toUser    User   @relation("ApprovalDelegation_toUserIdToUser", fields: [toUserId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  tenantId   String
+  fromUserId String
+  toUserId   String
+  startDate  DateTime
+  endDate    DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  fromUser   User     @relation("ApprovalDelegation_fromUserIdToUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  Tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  toUser     User     @relation("ApprovalDelegation_toUserIdToUser", fields: [toUserId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, fromUserId])
   @@index([tenantId, toUserId, isActive])
@@ -245,7 +253,7 @@ model Brand {
   logoUrl   String?
   website   String?
   createdAt DateTime  @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
   Tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   Product   Product[]
 
@@ -292,7 +300,7 @@ model Category {
   parentId       String?
   level          Int        @default(0)
   createdAt      DateTime   @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime   @updatedAt
   Category       Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
   other_Category Category[] @relation("CategoryToCategory")
   Tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -337,7 +345,7 @@ model DocumentationDocument {
   subcategory             String?                   @db.VarChar(100)
   metadata                Json                      @default("{}")
   createdAt               DateTime                  @default(now())
-  updatedAt               DateTime @updatedAt
+  updatedAt               DateTime                  @updatedAt
   updatedBy               String?
   DocumentationFeedback   DocumentationFeedback[]
   DocumentationPageView   DocumentationPageView[]
@@ -460,7 +468,7 @@ model DowntimeIncident {
   reason    String?
   resolved  Boolean   @default(false)
   createdAt DateTime  @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
 
   @@index([resolved])
   @@index([startTime(sort: Desc)])
@@ -547,7 +555,7 @@ model MonitoringAlertRule {
   threshold              Decimal                   @db.Decimal(10, 2)
   notificationChannels   String[]
   createdAt              DateTime                  @default(now())
-  updatedAt              DateTime @updatedAt
+  updatedAt              DateTime                  @updatedAt
   MonitoringAlertHistory MonitoringAlertHistory[]
   Tenant                 Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -577,7 +585,7 @@ model MonitoringNotificationChannel {
   enabled   Boolean               @default(true)
   config    Json
   createdAt DateTime              @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime              @updatedAt
 
   @@index([enabled])
   @@index([type])
@@ -632,16 +640,16 @@ model PendingPriceChange {
 }
 
 model PriceHistory {
-  id         String   @id @default(cuid())
-  productId  String
-  price      Decimal  @db.Decimal(10, 2)
-  originalPrice Decimal? @db.Decimal(10, 2)
-  originalCurrency String?
-  normalizedPrice Decimal? @db.Decimal(10, 2)
-  exchangeRateUsed Decimal? @db.Decimal(18, 8)
+  id                    String    @id @default(cuid())
+  productId             String
+  price                 Decimal   @db.Decimal(10, 2)
+  originalPrice         Decimal?  @db.Decimal(10, 2)
+  originalCurrency      String?
+  normalizedPrice       Decimal?  @db.Decimal(10, 2)
+  exchangeRateUsed      Decimal?  @db.Decimal(18, 8)
   exchangeRateTimestamp DateTime?
-  recordedAt DateTime @default(now())
-  Product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  recordedAt            DateTime  @default(now())
+  Product               Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, recordedAt])
   @@index([productId, recordedAt(sort: Desc)])
@@ -688,74 +696,74 @@ model PricingRule {
   priority    Int          @default(1)
   isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime     @updatedAt
   Tenant      Tenant       @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
 
 model Product {
-  id                                                     String                  @id @default(cuid())
-  siteId                                                 String
-  tenantId                                               String
-  externalId                                             String?
-  sku                                                    String?
-  url                                                    String?
-  canonicalUrl                                           String?
-  normalizedSlug                                         String?
-  title                                                  String
-  brand                                                  String?
-  model                                                  String?
-  currentPrice                                           Decimal                 @db.Decimal(10, 2)
-  currency                                               String                  @default("USD")
-  originalPrice                                          Decimal?                @db.Decimal(10, 2)
-  originalCurrency                                       String?
-  normalizedPrice                                        Decimal?                @db.Decimal(10, 2)
-  exchangeRateUsed                                       Decimal?                @db.Decimal(18, 8)
-  exchangeRateTimestamp                                  DateTime?
-  lastCrawledAt                                          DateTime?
-  nextScrapeAt                                           DateTime?
-  lastScrapeAttemptAt                                    DateTime?
-  lastScrapeSucceededAt                                  DateTime?
-  lastScrapeFailedAt                                     DateTime?
-  consecutiveScrapeFailures                               Int                     @default(0)
-  businessPriority                                       Int                     @default(0)
-  inStock                                                Boolean                 @default(true)
-  stockLevel                                             Int?
-  createdAt                                              DateTime                @default(now())
-  updatedAt                                              DateTime @updatedAt
-  category                                               String?
-  imageUrl                                               String?
-  specifications                                         Json?
-  brandId                                                String?
-  categoryId                                             String?
-  isManualPrice                                          Boolean                 @default(false)
-  manualPrice                                            Decimal?                @db.Decimal(10, 2)
-  manualPriceEnteredAt                                   DateTime?
-  manualPriceEnteredBy                                   String?
-  lastKnownGoodPrice                                     Decimal?                @db.Decimal(10, 2)
-  lastKnownGoodPriceAt                                   DateTime?               @db.Timestamp(6)
-  lastKnownGoodCurrency                                  String?                 @db.VarChar(10)
-  priceAnomalyActive                                     Boolean                 @default(false)
-  priceAnomalyDetectedAt                                 DateTime?               @db.Timestamp(6)
-  priceAnomalyData                                       Json?
-  geoVariantDetected                                     Boolean                 @default(false)
-  geoVariantDetectedAt                                   DateTime?
-  PendingPriceChange                                     PendingPriceChange[]
-  PriceHistory                                           PriceHistory[]
-  PriceUpdateLog                                         PriceUpdateLog[]
-  PriceUpdateRetryQueue                                  PriceUpdateRetryQueue[]
-  Brand                                                  Brand?                  @relation(fields: [brandId], references: [id])
-  Category                                               Category?               @relation(fields: [categoryId], references: [id])
-  Site                                                   Site                    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  Tenant                                                 Tenant                  @relation(fields: [tenantId], references: [id])
-  matchesAsCompetitor                                    ProductMatch[]          @relation("ProductMatch_competitorProductIdToProduct")
-  matchesAsUser                                          ProductMatch[]          @relation("ProductMatch_userProductIdToProduct")
-  ScrapeAttempt                                          ScrapeAttempt[]
-  ScrapeCostMetric                                       ScrapeCostMetric[]
-  ScrapeRetry                                            ScrapeRetry[]
-  ProductVolatility                                      ProductVolatility?
-  ScrapePriceAnomaly                                     ScrapePriceAnomaly[]
+  id                        String                  @id @default(cuid())
+  siteId                    String
+  tenantId                  String
+  externalId                String?
+  sku                       String?
+  url                       String?
+  canonicalUrl              String?
+  normalizedSlug            String?
+  title                     String
+  brand                     String?
+  model                     String?
+  currentPrice              Decimal                 @db.Decimal(10, 2)
+  currency                  String                  @default("USD")
+  originalPrice             Decimal?                @db.Decimal(10, 2)
+  originalCurrency          String?
+  normalizedPrice           Decimal?                @db.Decimal(10, 2)
+  exchangeRateUsed          Decimal?                @db.Decimal(18, 8)
+  exchangeRateTimestamp     DateTime?
+  lastCrawledAt             DateTime?
+  nextScrapeAt              DateTime?
+  lastScrapeAttemptAt       DateTime?
+  lastScrapeSucceededAt     DateTime?
+  lastScrapeFailedAt        DateTime?
+  consecutiveScrapeFailures Int                     @default(0)
+  businessPriority          Int                     @default(0)
+  inStock                   Boolean                 @default(true)
+  stockLevel                Int?
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  category                  String?
+  imageUrl                  String?
+  specifications            Json?
+  brandId                   String?
+  categoryId                String?
+  isManualPrice             Boolean                 @default(false)
+  manualPrice               Decimal?                @db.Decimal(10, 2)
+  manualPriceEnteredAt      DateTime?
+  manualPriceEnteredBy      String?
+  lastKnownGoodPrice        Decimal?                @db.Decimal(10, 2)
+  lastKnownGoodPriceAt      DateTime?               @db.Timestamp(6)
+  lastKnownGoodCurrency     String?                 @db.VarChar(10)
+  priceAnomalyActive        Boolean                 @default(false)
+  priceAnomalyDetectedAt    DateTime?               @db.Timestamp(6)
+  priceAnomalyData          Json?
+  geoVariantDetected        Boolean                 @default(false)
+  geoVariantDetectedAt      DateTime?
+  PendingPriceChange        PendingPriceChange[]
+  PriceHistory              PriceHistory[]
+  PriceUpdateLog            PriceUpdateLog[]
+  PriceUpdateRetryQueue     PriceUpdateRetryQueue[]
+  Brand                     Brand?                  @relation(fields: [brandId], references: [id])
+  Category                  Category?               @relation(fields: [categoryId], references: [id])
+  Site                      Site                    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  Tenant                    Tenant                  @relation(fields: [tenantId], references: [id])
+  matchesAsCompetitor       ProductMatch[]          @relation("ProductMatch_competitorProductIdToProduct")
+  matchesAsUser             ProductMatch[]          @relation("ProductMatch_userProductIdToProduct")
+  ScrapeAttempt             ScrapeAttempt[]
+  ScrapeCostMetric          ScrapeCostMetric[]
+  ScrapeRetry               ScrapeRetry[]
+  ProductVolatility         ProductVolatility?
+  ScrapePriceAnomaly        ScrapePriceAnomaly[]
 
   @@index([lastKnownGoodPriceAt], map: "idx_product_last_known_good_at")
   @@index([siteId])
@@ -774,29 +782,29 @@ model Product {
 }
 
 model ProductVolatility {
-  id                   String   @id @default(cuid())
-  productId            String   @unique
-  volatilityScore      Float    @default(0)
-  lastPriceChangeAt    DateTime?
-  priceChangeCount30d  Int      @default(0)
-  updatedAt            DateTime @updatedAt
-  createdAt            DateTime @default(now())
-  Product              Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id                  String    @id @default(cuid())
+  productId           String    @unique
+  volatilityScore     Float     @default(0)
+  lastPriceChangeAt   DateTime?
+  priceChangeCount30d Int       @default(0)
+  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime  @default(now())
+  Product             Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([volatilityScore])
   @@index([lastPriceChangeAt])
 }
 
 model ProductMatch {
-  id                String      @id @default(cuid())
-  userProductId     String
+  id                  String      @id @default(cuid())
+  userProductId       String
   competitorProductId String
-  matchType         MatchType   @default(AUTO_SKU)
-  confidenceScore   Decimal     @db.Decimal(5, 2)
-  createdAt         DateTime    @default(now())
-  status            MatchStatus @default(PENDING)
-  competitorProduct Product     @relation("ProductMatch_competitorProductIdToProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
-  userProduct       Product     @relation("ProductMatch_userProductIdToProduct", fields: [userProductId], references: [id], onDelete: Cascade)
+  matchType           MatchType   @default(AUTO_SKU)
+  confidenceScore     Decimal     @db.Decimal(5, 2)
+  createdAt           DateTime    @default(now())
+  status              MatchStatus @default(PENDING)
+  competitorProduct   Product     @relation("ProductMatch_competitorProductIdToProduct", fields: [competitorProductId], references: [id], onDelete: Cascade)
+  userProduct         Product     @relation("ProductMatch_userProductIdToProduct", fields: [userProductId], references: [id], onDelete: Cascade)
 
   @@unique([userProductId, competitorProductId])
   @@index([userProductId, status])
@@ -820,7 +828,7 @@ model ProtectionDetection {
 }
 
 model Proxy {
-  id                 String            @id @default(cuid())
+  id                 String              @id @default(cuid())
   provider           String
   host               String
   port               Int
@@ -828,11 +836,11 @@ model Proxy {
   username           String?
   passwordEncrypted  String?
   region             String?
-  status             String            @default("active")
-  globalSuccessCount Int               @default(0)
-  globalFailureCount Int               @default(0)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime @updatedAt
+  status             String              @default("active")
+  globalSuccessCount Int                 @default(0)
+  globalFailureCount Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   ProxyHealthSummary ProxyHealthSummary?
   ProxySiteHealth    ProxySiteHealth[]
   ScrapeAttempt      ScrapeAttempt[]
@@ -842,19 +850,19 @@ model Proxy {
 }
 
 model ProxyHealthSummary {
-  id                 String   @id @default(cuid())
-  proxyId            String   @unique
-  successRate        Float    @default(0)
-  blockRate          Float    @default(0)
-  avgResponseTime    Float    @default(0)
+  id                 String    @id @default(cuid())
+  proxyId            String    @unique
+  successRate        Float     @default(0)
+  blockRate          Float     @default(0)
+  avgResponseTime    Float     @default(0)
   lastFailureAt      DateTime?
-  totalAttempts      Int      @default(0)
-  successfulAttempts Int      @default(0)
-  blockedAttempts    Int      @default(0)
+  totalAttempts      Int       @default(0)
+  successfulAttempts Int       @default(0)
+  blockedAttempts    Int       @default(0)
   disabledAt         DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  Proxy              Proxy    @relation(fields: [proxyId], references: [id], onDelete: Cascade)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  Proxy              Proxy     @relation(fields: [proxyId], references: [id], onDelete: Cascade)
 
   @@index([blockRate])
   @@index([successRate])
@@ -897,7 +905,7 @@ model ProxySiteHealth {
   lastFailureAt       DateTime?
   cooldownUntil       DateTime?
   createdAt           DateTime  @default(now())
-  updatedAt           DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
   Site                Site      @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
   Proxy               Proxy     @relation(fields: [proxyId], references: [id], onDelete: Cascade)
 
@@ -979,7 +987,7 @@ model RetryQueue {
   lastError     String?
   status        String    @default("PENDING")
   createdAt     DateTime  @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime  @updatedAt
 
   @@index([status, nextRetryAt])
   @@index([tenantId, siteId])
@@ -1054,21 +1062,21 @@ model ScrapeAttempt {
 }
 
 model ScrapePriceAnomaly {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   tenantId            String
   competitorProductId String
   competitorWebsiteId String
-  detectedPrice       Decimal  @db.Decimal(10, 2)
-  currency            String   @default("USD")
+  detectedPrice       Decimal   @db.Decimal(10, 2)
+  currency            String    @default("USD")
   reasons             Json
   details             Json?
-  status              String   @default("PENDING_VERIFICATION")
+  status              String    @default("PENDING_VERIFICATION")
   reviewNotes         String?
   resolvedAt          DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  Product             Product  @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
-  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  Product             Product   @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+  Site                Site      @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([competitorProductId, createdAt])
   @@index([competitorWebsiteId, status])
@@ -1077,19 +1085,19 @@ model ScrapePriceAnomaly {
 }
 
 model ScrapeCostMetric {
-  id                  String   @id @default(cuid())
+  id                  String                @id @default(cuid())
   tenantId            String
   competitorProductId String
   competitorWebsiteId String
   executionTimeMs     Int
-  retryCount          Int      @default(0)
-  proxyUsed           Boolean  @default(false)
+  retryCount          Int                   @default(0)
+  proxyUsed           Boolean               @default(false)
   finalSuccess        Boolean
   scrapeStatus        ScrapeExecutionStatus
   costPerValidScrape  Float?
-  createdAt           DateTime @default(now())
-  Product             Product  @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
-  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  createdAt           DateTime              @default(now())
+  Product             Product               @relation(fields: [competitorProductId], references: [id], onDelete: Cascade)
+  Site                Site                  @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([competitorWebsiteId, createdAt])
   @@index([createdAt])
@@ -1106,7 +1114,7 @@ model ScrapeRetry {
   status        String    @default("PENDING")
   nextAttemptAt DateTime
   createdAt     DateTime  @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime  @updatedAt
   lastAttemptAt DateTime?
   Site          Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
   Tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1139,26 +1147,26 @@ model ScrapingAlert {
 }
 
 model ScrapingConfig {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   tenantId            String
-  competitorWebsiteId String   @unique
-  preferredStrategy   String   @default("http_client")
-  requiresJavascript  Boolean  @default(false)
-  proxyRequired       Boolean  @default(false)
-  baseDelayMs         Int      @default(2000)
-  maxDelayMs          Int      @default(300000)
-  backoffMultiplier   Decimal  @default(2.0) @db.Decimal(3, 2)
-  maxRetries          Int      @default(3)
-  timeoutMs           Int      @default(30000)
+  competitorWebsiteId String    @unique
+  preferredStrategy   String    @default("http_client")
+  requiresJavascript  Boolean   @default(false)
+  proxyRequired       Boolean   @default(false)
+  baseDelayMs         Int       @default(2000)
+  maxDelayMs          Int       @default(300000)
+  backoffMultiplier   Decimal   @default(2.0) @db.Decimal(3, 2)
+  maxRetries          Int       @default(3)
+  timeoutMs           Int       @default(30000)
   priceSelectors      Json
   currencySelector    String?
   fallbackRegex       String?
-  consecutiveFailures Int      @default(0)
+  consecutiveFailures Int       @default(0)
   lastRequestAt       DateTime?
   nextAvailableAt     DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  Site                Site      @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([competitorWebsiteId])
   @@index([tenantId])
@@ -1232,7 +1240,7 @@ model ScrapingSession {
   startTime         DateTime  @default(now())
   endTime           DateTime?
   createdAt         DateTime  @default(now())
-  updatedAt         DateTime @updatedAt
+  updatedAt         DateTime  @updatedAt
 
   @@index([startTime])
   @@index([status])
@@ -1266,52 +1274,53 @@ model SimulationResult {
 }
 
 model Site {
-  id                  String             @id @default(cuid())
-  tenantId            String
-  type                SiteType
-  platform            PlatformType       @default(GENERIC)
-  baseUrl             String
-  apiToken            String?
-  lastSyncAt          DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime @updatedAt
-  isSyncing           Boolean            @default(false)
-  syncProcessed       Int                @default(0)
-  syncStartedAt       DateTime?
-  syncTotal           Int                @default(0)
-  syncLastAction      String?
-  syncToken           String?            @default(cuid()) // Execution token for stronger idempotency
-  currency            String             @default("USD")
-  isAdvancedProtected Boolean            @default(false)
-  lastSecurityBlockAt DateTime?
-  advancedAccessStatus String            @default("NOT_REQUIRED")
-  advancedAccessRequiredAt DateTime?
-  advancedAccessReason String?
-  tenantProxyEnabled   Boolean           @default(false)
-  tenantProxyProtocol  String?
-  tenantProxyHost      String?
-  tenantProxyPort      Int?
-  tenantProxyUsername  String?
+  id                           String                @id @default(cuid())
+  tenantId                     String
+  type                         SiteType
+  platform                     PlatformType          @default(GENERIC)
+  baseUrl                      String
+  apiToken                     String?
+  lastSyncAt                   DateTime?
+  createdAt                    DateTime              @default(now())
+  updatedAt                    DateTime              @updatedAt
+  isSyncing                    Boolean               @default(false)
+  syncState                    SyncState             @default(IDLE)
+  syncProcessed                Int                   @default(0)
+  syncStartedAt                DateTime?
+  syncTotal                    Int                   @default(0)
+  syncLastAction               String?
+  syncToken                    String?               @default(cuid()) // Execution token for stronger idempotency
+  currency                     String                @default("USD")
+  isAdvancedProtected          Boolean               @default(false)
+  lastSecurityBlockAt          DateTime?
+  advancedAccessStatus         String                @default("NOT_REQUIRED")
+  advancedAccessRequiredAt     DateTime?
+  advancedAccessReason         String?
+  tenantProxyEnabled           Boolean               @default(false)
+  tenantProxyProtocol          String?
+  tenantProxyHost              String?
+  tenantProxyPort              Int?
+  tenantProxyUsername          String?
   tenantProxyPasswordEncrypted String?
-  tenantCaptchaEnabled Boolean           @default(false)
-  tenantCaptchaProvider String?
+  tenantCaptchaEnabled         Boolean               @default(false)
+  tenantCaptchaProvider        String?
   tenantCaptchaApiKeyEncrypted String?
-  searchQueryPattern  String?
-  ApiDetectionMetric  ApiDetectionMetric[]
-  ApiPattern          ApiPattern?
-  Product             Product[]
-  ProxySiteHealth     ProxySiteHealth[]
-  ScrapeAttempt       ScrapeAttempt[]
-  ScrapeCostMetric    ScrapeCostMetric[]
-  ScrapePriceAnomaly  ScrapePriceAnomaly[]
-  ScrapeRetry         ScrapeRetry[]
-  ScrapingAlert       ScrapingAlert[]
-  ScrapingConfig      ScrapingConfig?
-  ScrapingCookieJar   ScrapingCookieJar?
-  ScrapingMetric      ScrapingMetric[]
-  StrategyPerformance StrategyPerformance[]
-  Tenant              Tenant             @relation(fields: [tenantId], references: [id])
-  SyncLog             SyncLog[]
+  searchQueryPattern           String?
+  ApiDetectionMetric           ApiDetectionMetric[]
+  ApiPattern                   ApiPattern?
+  Product                      Product[]
+  ProxySiteHealth              ProxySiteHealth[]
+  ScrapeAttempt                ScrapeAttempt[]
+  ScrapeCostMetric             ScrapeCostMetric[]
+  ScrapePriceAnomaly           ScrapePriceAnomaly[]
+  ScrapeRetry                  ScrapeRetry[]
+  ScrapingAlert                ScrapingAlert[]
+  ScrapingConfig               ScrapingConfig?
+  ScrapingCookieJar            ScrapingCookieJar?
+  ScrapingMetric               ScrapingMetric[]
+  StrategyPerformance          StrategyPerformance[]
+  Tenant                       Tenant                @relation(fields: [tenantId], references: [id])
+  SyncLog                      SyncLog[]
 
   @@index([tenantId, type, createdAt(sort: Desc)])
   @@index([tenantId, type, isSyncing])
@@ -1336,19 +1345,19 @@ model SiteProfile {
 }
 
 model DomainProfile {
-  id              String        @id @default(cuid())
-  domain          String        @unique
-  platformType    PlatformType?
-  protectionLevel String        @default("UNKNOWN")
-  avgSuccessRate  Float         @default(0)
-  blockRate       Float         @default(0)
-  avgResponseTime Float         @default(0)
-  needsManualReview Boolean     @default(false)
-  consecutiveFailures Int       @default(0)
-  lastFailureAt   DateTime?
-  availabilityConfig Json?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                  String        @id @default(cuid())
+  domain              String        @unique
+  platformType        PlatformType?
+  protectionLevel     String        @default("UNKNOWN")
+  avgSuccessRate      Float         @default(0)
+  blockRate           Float         @default(0)
+  avgResponseTime     Float         @default(0)
+  needsManualReview   Boolean       @default(false)
+  consecutiveFailures Int           @default(0)
+  lastFailureAt       DateTime?
+  availabilityConfig  Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   @@index([platformType])
   @@index([protectionLevel])
@@ -1356,15 +1365,15 @@ model DomainProfile {
 }
 
 model DomainSearchPattern {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   domain       String
   pattern      String
-  successCount Int      @default(0)
-  failureCount Int      @default(0)
-  successRate  Float    @default(0)
+  successCount Int       @default(0)
+  failureCount Int       @default(0)
+  successRate  Float     @default(0)
   lastUsedAt   DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([domain, pattern])
   @@index([domain])
@@ -1372,16 +1381,16 @@ model DomainSearchPattern {
 }
 
 model DomainFingerprint {
-  id              String   @id @default(cuid())
-  domain          String   @unique
+  id              String    @id @default(cuid())
+  domain          String    @unique
   fingerprintHash String
   fingerprint     Json
-  changeCount     Int      @default(0)
-  lastSeenAt      DateTime @default(now())
+  changeCount     Int       @default(0)
+  lastSeenAt      DateTime  @default(now())
   lastChangedAt   DateTime?
   lastAlertAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([domain])
   @@index([fingerprintHash])
@@ -1389,17 +1398,17 @@ model DomainFingerprint {
 }
 
 model StrategyPerformance {
-  id                 String   @id @default(cuid())
-  tenantId           String
+  id                  String    @id @default(cuid())
+  tenantId            String
   competitorWebsiteId String
-  strategyType       String
-  successRate        Float    @default(0)
-  avgExecutionTimeMs Int      @default(0)
-  lastUsedAt         DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  Site               Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
-  Tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  strategyType        String
+  successRate         Float     @default(0)
+  avgExecutionTimeMs  Int       @default(0)
+  lastUsedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  Site                Site      @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  Tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, competitorWebsiteId, strategyType])
   @@index([competitorWebsiteId])
@@ -1481,7 +1490,7 @@ model Tenant {
   companyName               String
   planType                  PlanType                   @default(BASIC)
   createdAt                 DateTime                   @default(now())
-  updatedAt                 DateTime @updatedAt
+  updatedAt                 DateTime                   @updatedAt
   competitorLimit           Int                        @default(3)
   storeLimit                Int                        @default(1)
   currency                  String                     @default("USD")
@@ -1537,7 +1546,7 @@ model User {
   role                                                   Role                 @default(ADMIN)
   tenantId                                               String
   createdAt                                              DateTime             @default(now())
-  updatedAt                                              DateTime @updatedAt
+  updatedAt                                              DateTime             @updatedAt
   isSuperAdmin                                           Boolean              @default(false)
   emailVerified                                          DateTime?
   name                                                   String?
@@ -1570,7 +1579,7 @@ model UserFeedback {
   resolvedBy      String?
   resolutionNotes String?
   createdAt       DateTime         @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime         @updatedAt
 
   @@index([category])
   @@index([createdAt(sort: Desc)])
@@ -1590,7 +1599,7 @@ model UserFeedbackHistory {
   lastResponseAt DateTime?
   averageRating  Decimal?  @db.Decimal(3, 2)
   createdAt      DateTime  @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime  @updatedAt
 
   @@unique([userId, tenantId])
   @@index([lastPromptedAt])
@@ -1771,23 +1780,23 @@ enum ScrapeExecutionStatus {
 }
 
 model ApiDetectionMetric {
-  id                  String   @id @default(cuid())
-  tenantId            String
-  competitorWebsiteId String
-  date                DateTime @db.Date
-  detectionAttempts   Int      @default(0)
-  successfulDetections Int     @default(0)
-  failedDetections    Int      @default(0)
-  totalDetectionTimeMs BigInt  @default(0)
-  totalExtractionTimeMs BigInt @default(0)
-  totalProductsExtracted Int   @default(0)
-  cacheHits           Int      @default(0)
-  cacheMisses         Int      @default(0)
-  fallbackCount       Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  Tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  Site                Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
+  id                     String   @id @default(cuid())
+  tenantId               String
+  competitorWebsiteId    String
+  date                   DateTime @db.Date
+  detectionAttempts      Int      @default(0)
+  successfulDetections   Int      @default(0)
+  failedDetections       Int      @default(0)
+  totalDetectionTimeMs   BigInt   @default(0)
+  totalExtractionTimeMs  BigInt   @default(0)
+  totalProductsExtracted Int      @default(0)
+  cacheHits              Int      @default(0)
+  cacheMisses            Int      @default(0)
+  fallbackCount          Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  Tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  Site                   Site     @relation(fields: [competitorWebsiteId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, competitorWebsiteId, date])
   @@index([tenantId, date])

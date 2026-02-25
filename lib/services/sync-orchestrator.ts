@@ -189,15 +189,15 @@ export class SyncOrchestrator {
       `[SyncOrchestrator] Attempting to acquire sync locks for tenant ${tenantId}`,
     );
 
-    // Mark only idle sites as syncing to avoid hijacking active individual crawls
     const lockResult = await prisma.site.updateMany({
       where: {
         tenantId,
         type: "COMPETITOR",
-        isSyncing: false,
+        syncState: { in: ["IDLE", "STOPPED"] },
       },
       data: {
         isSyncing: true,
+        syncState: "STARTING",
         syncStartedAt: syncSessionStart,
       },
     });
@@ -296,9 +296,9 @@ export class SyncOrchestrator {
           tenantId,
           type: "COMPETITOR",
           syncStartedAt: syncSessionStart,
-          isSyncing: true
+          syncState: "STARTING"
         },
-        data: { isSyncing: false },
+        data: { isSyncing: false, syncState: "IDLE" },
       });
       throw error;
     }
@@ -377,13 +377,15 @@ export class SyncOrchestrator {
       : new Date();
 
     if (!isResuming) {
-      // Use a more robust atomic operation with explicit WHERE conditions
       const updateResult = await prisma.$transaction(async (tx) => {
-        // First, verify the site exists and check its current state
-        const currentSite = await tx.site.findUnique({
-          where: { id: siteId },
-          select: { isSyncing: true, syncStartedAt: true },
-        });
+        // First, verify the site exists and check its current state with a row lock
+        const sites = await tx.$queryRaw<Array<{isSyncing: boolean, syncStartedAt: Date | null}>>`
+          SELECT "isSyncing", "syncStartedAt"
+          FROM "Site"
+          WHERE id = ${siteId}
+          FOR UPDATE
+        `;
+        const currentSite = sites[0];
 
         if (!currentSite) {
           throw new Error("Site not found");
@@ -397,10 +399,11 @@ export class SyncOrchestrator {
         return await tx.site.updateMany({
           where: {
             id: siteId,
-            isSyncing: force ? undefined : false,
+            syncState: force ? undefined : { in: ["IDLE", "STOPPED"] },
           },
           data: {
             isSyncing: true,
+            syncState: "STARTING",
             syncLastAction: "Booting high-speed crawler...",
             syncProcessed: 0,
             syncTotal: 0,
@@ -437,8 +440,8 @@ export class SyncOrchestrator {
       });
 
       // Verification: Ensure the session is still marked as active in DB
-      const verify = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true, syncStartedAt: true } });
-      if (!verify?.isSyncing || verify.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+      const verify = await prisma.site.findUnique({ where: { id: siteId }, select: { isSyncing: true, syncState: true, syncStartedAt: true } });
+      if (!verify?.isSyncing || verify?.syncState === "STOPPING" || verify?.syncState === "STOPPED" || verify.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
         return { success: true, message: "Resumed session already halted" };
       }
     }
@@ -536,11 +539,13 @@ export class SyncOrchestrator {
         // Check if sync was manually stopped OR session invalidated
         const currentStatus = await prisma.site.findUnique({
           where: { id: siteId },
-          select: { isSyncing: true, syncStartedAt: true },
+          select: { isSyncing: true, syncState: true, syncStartedAt: true },
         });
 
         if (
           !currentStatus?.isSyncing ||
+          currentStatus.syncState === "STOPPING" ||
+          currentStatus.syncState === "STOPPED" ||
           currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()
         ) {
           logger.info(
@@ -571,9 +576,9 @@ export class SyncOrchestrator {
             // Quick termination check inside the batch
             const batchStatus = await prisma.site.findUnique({
               where: { id: siteId },
-              select: { isSyncing: true, syncStartedAt: true },
+              select: { isSyncing: true, syncState: true, syncStartedAt: true },
             });
-            if (!batchStatus?.isSyncing || batchStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+            if (!batchStatus?.isSyncing || batchStatus.syncState === "STOPPING" || batchStatus.syncState === "STOPPED" || batchStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
               throw new Error("ABORTED");
             }
 
@@ -799,6 +804,7 @@ export class SyncOrchestrator {
                   where: { id: siteId },
                   data: {
                     isSyncing: false,
+                    syncState: "STOPPED",
                     syncLastAction:
                       "Advanced anti-bot protection detected. Configure proxy + captcha solver to continue.",
                   },
@@ -825,10 +831,10 @@ export class SyncOrchestrator {
       // Re-check status before proceeding to rules
       const finalStatus = await prisma.site.findUnique({
         where: { id: siteId },
-        select: { isSyncing: true, syncStartedAt: true }
+        select: { isSyncing: true, syncState: true, syncStartedAt: true }
       });
 
-      if (!finalStatus?.isSyncing || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+      if (!finalStatus?.isSyncing || finalStatus.syncState === "STOPPING" || finalStatus.syncState === "STOPPED" || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
         return { success: true, message: "Sync aborted before rules engine" };
       }
 
@@ -934,20 +940,30 @@ export class SyncOrchestrator {
     } finally {
       // Use updateMany to safely update state even if record is gone
       // IMPORTANT: Only reset if the site is still associated with OUR session ID
-      await prisma.site
-        .updateMany({
-          where: {
-            id: siteId,
-            syncStartedAt: syncSessionStart,
-          },
-          data: {
-            isSyncing: false,
-            lastSyncAt: new Date(),
-          },
-        })
-        .catch((e) =>
-          logger.error("Failed to reset sync state:", { error: e }),
-        );
+      try {
+        const siteStatus = await prisma.site.findUnique({
+          where: { id: siteId },
+          select: { syncState: true, syncStartedAt: true },
+        });
+
+        if (siteStatus?.syncStartedAt?.getTime() === syncSessionStart.getTime()) {
+          const finalState = siteStatus.syncState === "STOPPING" ? "STOPPED" : "IDLE";
+
+          await prisma.site.updateMany({
+            where: {
+              id: siteId,
+              syncStartedAt: syncSessionStart,
+            },
+            data: {
+              isSyncing: false,
+              syncState: finalState,
+              lastSyncAt: new Date(),
+            },
+          });
+        }
+      } catch (e) {
+        logger.error("Failed to reset sync state:", { error: e });
+      }
     }
   }
 

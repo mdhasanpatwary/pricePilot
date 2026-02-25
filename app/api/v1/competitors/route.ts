@@ -104,6 +104,7 @@ async function handleGET(req: NextRequest) {
         createdAt: true,
         updatedAt: true,
         isSyncing: true,
+        syncState: true,
         syncProcessed: true,
         syncStartedAt: true,
         syncTotal: true,
@@ -140,26 +141,30 @@ async function handleGET(req: NextRequest) {
   let siteMatchCountMap = new Map<string, number>();
 
   if (competitorIds.length > 0) {
-    const matchCounts = await withDbRetry(() => prisma.$queryRaw<SiteMatchCountRow[]>`
-      SELECT
-        cp."siteId",
-        COUNT(DISTINCT pm."userProductId") AS "matchedCount"
-      FROM "ProductMatch" pm
-      INNER JOIN "Product" cp ON cp.id = pm."competitorProductId"
-      INNER JOIN "Product" up ON up.id = pm."userProductId"
-      INNER JOIN "Site" s ON s.id = up."siteId"
-      WHERE cp."siteId" = ANY(${competitorIds}::text[])
-        AND up."tenantId" = ${tenantId}
-        AND s.type = 'USER'
-      GROUP BY cp."siteId"
-    `, { operationName: 'FetchCompetitorMatchCountsRaw' });
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < competitorIds.length; i += BATCH_SIZE) {
+      const batchIds = competitorIds.slice(i, i + BATCH_SIZE);
+      const matchCounts = await withDbRetry(() => prisma.$queryRaw<SiteMatchCountRow[]>`
+        SELECT
+          cp."siteId",
+          COUNT(DISTINCT pm."userProductId") AS "matchedCount"
+        FROM "ProductMatch" pm
+        INNER JOIN "Product" cp ON cp.id = pm."competitorProductId"
+        INNER JOIN "Product" up ON up.id = pm."userProductId"
+        INNER JOIN "Site" s ON s.id = up."siteId"
+        WHERE cp."siteId" = ANY(${batchIds}::text[])
+          AND up."tenantId" = ${tenantId}
+          AND s.type = 'USER'
+        GROUP BY cp."siteId"
+      `, { operationName: 'FetchCompetitorMatchCountsRaw' });
 
-    siteMatchCountMap = new Map(
-      matchCounts.map((row) => [
-        row.siteId,
-        Number(typeof row.matchedCount === "bigint" ? row.matchedCount : row.matchedCount ?? 0),
-      ])
-    );
+      for (const row of matchCounts) {
+        siteMatchCountMap.set(
+          row.siteId,
+          Number(typeof row.matchedCount === "bigint" ? row.matchedCount : row.matchedCount ?? 0)
+        );
+      }
+    }
   }
 
   const formattedCompetitors = competitorsList.map((site: any) => {
@@ -235,6 +240,7 @@ async function handlePOST(req: NextRequest) {
           type: "COMPETITOR",
           tenantId,
           isSyncing: true, // Start as syncing immediately so UI picks it up
+          syncState: "STARTING",
           syncLastAction: "Initializing crawler...",
           searchQueryPattern,
         },
@@ -249,12 +255,9 @@ async function handlePOST(req: NextRequest) {
           createdAt: true,
           updatedAt: true,
           isSyncing: true,
+          syncState: true,
           syncProcessed: true,
           syncStartedAt: true,
-          syncTotal: true,
-          syncLastAction: true,
-          syncToken: true,
-          currency: true,
           isAdvancedProtected: true,
           lastSecurityBlockAt: true,
           searchQueryPattern: true,
@@ -272,13 +275,14 @@ async function handlePOST(req: NextRequest) {
     const legacySiteId = randomUUID();
     const now = new Date();
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "Site" ("id","tenantId","type","baseUrl","isSyncing","syncLastAction","createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      `INSERT INTO "Site" ("id","tenantId","type","baseUrl","isSyncing","syncState","syncLastAction","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       legacySiteId,
       tenantId,
       "COMPETITOR",
       baseUrl,
       true,
+      "STARTING",
       "Initializing crawler...",
       now,
       now,
@@ -304,11 +308,9 @@ async function handlePOST(req: NextRequest) {
         createdAt: true,
         updatedAt: true,
         isSyncing: true,
+        syncState: true,
         syncProcessed: true,
         syncStartedAt: true,
-        syncTotal: true,
-        syncLastAction: true,
-        syncToken: true,
         currency: true,
         isAdvancedProtected: true,
         lastSecurityBlockAt: true,
@@ -402,7 +404,7 @@ export async function GET(req: NextRequest) {
           where: {
             tenantId,
             type: "COMPETITOR",
-            isSyncing: true,
+            syncState: { notIn: ["IDLE", "STOPPED"] },
           },
           select: { id: true },
         });

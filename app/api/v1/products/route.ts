@@ -96,36 +96,43 @@ async function handleGET(req: NextRequest) {
               baseUrl: true,
             },
           },
-          matchesAsUser: {
-            // Only load the single best (lowest-price) match for the list view.
-            // All matches are available via GET /api/v1/products/[id]/matches.
-            take: 1,
-            orderBy: {
-              competitorProduct: { currentPrice: "asc" },
-            },
-            select: {
-              id: true,
-              competitorProduct: {
-                select: {
-                  url: true,
-                  imageUrl: true,
-                  currentPrice: true,
-                  inStock: true,
-                  Site: {
-                    select: {
-                      baseUrl: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
         },
       }),
     { operationName: "ListProducts" },
   );
 
   const products = paginatedResult.data;
+  const productIds = products.map((p: any) => p.id);
+
+  // Fetch optimal matches per product avoiding N+1 lateral queries
+  let matchesMap = new Map();
+  if (productIds.length > 0) {
+    const rawMatches = await withDbRetry(() => prisma.productMatch.findMany({
+      where: { userProductId: { in: productIds } },
+      orderBy: [
+        { userProductId: "asc" },
+        { competitorProduct: { currentPrice: "asc" } }
+      ],
+      distinct: ["userProductId"],
+      select: {
+        id: true,
+        userProductId: true,
+        competitorProduct: {
+          select: {
+            url: true,
+            imageUrl: true,
+            currentPrice: true,
+            inStock: true,
+            Site: { select: { baseUrl: true } },
+          },
+        },
+      },
+    }), { operationName: "ListProductsBestMatches" });
+
+    for (const match of rawMatches) {
+      matchesMap.set(match.userProductId, match);
+    }
+  }
 
   // Aggregate stats
   const stats = {
@@ -138,7 +145,8 @@ async function handleGET(req: NextRequest) {
 
   // Map to the format expected by the frontend
   const formattedProducts = products.map((product: any) => {
-    const allMatches = product.matchesAsUser.map((m: any) => {
+    const bestMatchRaw = matchesMap.get(product.id);
+    const allMatches = bestMatchRaw ? [(m => {
       let siteName = "Unknown";
       try {
         const urlObj = new URL(m.competitorProduct.Site.baseUrl);
@@ -157,9 +165,9 @@ async function handleGET(req: NextRequest) {
           m.competitorProduct.inStock &&
           parseFloat(m.competitorProduct.currentPrice.toString()) > 0,
       };
-    });
+    })(bestMatchRaw)] : [];
 
-    const bestMatch = product.matchesAsUser[0];
+    const bestMatch = bestMatchRaw;
     const yourPrice = parseFloat(product.currentPrice.toString());
 
     let compPrice: number | null = null;

@@ -5,17 +5,15 @@ import { createSlidingWindowRateLimiter } from "@/lib/redis/sliding-window-ratel
 
 /**
  * Rate limiting for documentation endpoints
- * 
+ *
  * This module provides specialized rate limiting for the dual documentation system:
  * - Tenant docs: 100 requests/minute per IP
  * - Admin docs: 1000 requests/hour per token
  * - Search: 100 requests/minute per IP
  * - Feedback: 10 submissions/hour per user
- * 
+ *
  * @module lib/documentation/rate-limit
  */
-
-const redis = getRedisConnection();
 
 /**
  * Rate limiters for documentation endpoints
@@ -23,7 +21,7 @@ const redis = getRedisConnection();
 export const documentationRateLimiters = {
     // Tenant documentation: 100 requests/minute per IP
     tenantDocs: createSlidingWindowRateLimiter({
-        redis: redis as any,
+        redis: () => getRedisConnection() as any,
         prefix: "ratelimit:docs:tenant",
         limit: 100,
         windowMs: 60 * 1000,
@@ -31,7 +29,7 @@ export const documentationRateLimiters = {
 
     // Admin documentation: 1000 requests/hour per token (authenticated users)
     adminDocs: createSlidingWindowRateLimiter({
-        redis: redis as any,
+        redis: () => getRedisConnection() as any,
         prefix: "ratelimit:docs:admin",
         limit: 1000,
         windowMs: 60 * 60 * 1000,
@@ -39,7 +37,7 @@ export const documentationRateLimiters = {
 
     // Search: 100 requests/minute per IP
     search: createSlidingWindowRateLimiter({
-        redis: redis as any,
+        redis: () => getRedisConnection() as any,
         prefix: "ratelimit:docs:search",
         limit: 100,
         windowMs: 60 * 1000,
@@ -47,7 +45,7 @@ export const documentationRateLimiters = {
 
     // Feedback: 10 submissions/hour per user
     feedback: createSlidingWindowRateLimiter({
-        redis: redis as any,
+        redis: () => getRedisConnection() as any,
         prefix: "ratelimit:docs:feedback",
         limit: 10,
         windowMs: 60 * 60 * 1000,

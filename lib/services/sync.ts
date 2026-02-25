@@ -1393,7 +1393,6 @@ export class SyncService {
 
       const site = await prisma.site.findUnique({
         where: { id: siteId },
-        include: { Product: true },
       });
 
       if (!site) {
@@ -1439,17 +1438,28 @@ export class SyncService {
         throw error;
       }
 
-      const productsToUpdate = (site as any).Product.filter((p: any) => p.externalId);
-
       console.log(
-        `[SyncService] Pushing ${productsToUpdate.length} price updates to ${site.platform}`,
+        `[SyncService] Pushing price updates to ${site.platform} in batches`,
       );
 
-      const results: (boolean | null)[] = [];
       const BATCH_SIZE = 5;
+      let skip = 0;
+      let totalUpdated = 0;
+      let hasMore = true;
 
-      for (let i = 0; i < productsToUpdate.length; i += BATCH_SIZE) {
-        const batch = productsToUpdate.slice(i, i + BATCH_SIZE);
+      while (hasMore) {
+        const batch = await prisma.product.findMany({
+          where: { siteId, externalId: { not: null } },
+          take: BATCH_SIZE,
+          skip: skip,
+          orderBy: { id: 'asc' }
+        });
+
+        if (batch.length === 0) {
+            break;
+        }
+
+        hasMore = batch.length === BATCH_SIZE;
 
         const batchResults = await Promise.all(
           batch.map(async (product: any) => {
@@ -1470,17 +1480,18 @@ export class SyncService {
           }),
         );
 
-        results.push(...batchResults);
+        totalUpdated += batchResults.filter((r) => r !== null).length;
+        skip += BATCH_SIZE;
 
         // Add a small delay between batches to respect server limits
-        if (i + BATCH_SIZE < productsToUpdate.length) {
+        if (hasMore) {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
 
       return {
         success: true,
-        updated: results.filter((r) => r !== null).length,
+        updated: totalUpdated,
       };
     } catch (error) {
       // If already an AppError, re-throw

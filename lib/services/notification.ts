@@ -56,9 +56,12 @@ export class NotificationService {
         select: { email: true },
       });
 
-      for (const admin of admins) {
-        if (admin.email) {
-          await queue.add("email-notification", {
+      // 2. Queue Email notifications for all tenant admins via bulk pipeline (fixes N+1 Redis latency)
+      const emailJobs = admins
+        .filter(admin => admin.email)
+        .map(admin => ({
+          name: "email-notification",
+          data: {
             type: "EMAIL",
             payload: {
               title: options.title,
@@ -66,8 +69,11 @@ export class NotificationService {
               link: options.link,
             },
             recipient: admin.email,
-          });
-        }
+          }
+        }));
+
+      if (emailJobs.length > 0) {
+        await queue.addBulk(emailJobs);
       }
 
       // 3. Queue Custom Webhooks for the tenant
@@ -152,10 +158,10 @@ export class NotificationService {
 
   /**
    * Send a bulk approval summary notification
-   * 
+   *
    * This method sends a single notification summarizing multiple price approvals
    * instead of sending individual notifications for each approval.
-   * 
+   *
    * @param tenantId - The tenant ID
    * @param count - Number of approvals
    * @param changes - Array of price changes with product details

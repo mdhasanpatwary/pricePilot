@@ -1,17 +1,16 @@
 /**
  * MetricsCollector - Aggregates scraping metrics for monitoring and alerting
- * 
+ *
  * This service collects and aggregates metrics from scrape attempts, calculating
  * success rates, response times, and providing breakdowns by protection type and strategy.
- * 
+ *
  * Requirements: 9.1, 9.6
  */
 
 import { prisma } from '@/lib/prisma';
 import { getRedisConnection } from "@/lib/queue/connection";
 
-// Shared Redis connection for real-time counters.
-const redis = getRedisConnection();
+// Redis is sourced locally inside functions to prevent build-time side effects
 
 /**
  * Represents a single scrape metric to be recorded
@@ -70,17 +69,19 @@ export interface SiteMetrics {
 export class MetricsCollector {
     /**
      * Record a scrape attempt metric
-     * 
+     *
      * This method stores the metric in both Redis (for real-time counters) and
      * prepares it for database aggregation.
-     * 
+     *
      * @param metric - The scrape metric to record
      */
     async recordAttempt(metric: ScrapeMetric): Promise<void> {
         try {
             // Update real-time counters in Redis if available
-            if (redis) {
+            try {
                 await this.updateRedisCounters(metric);
+            } catch (e) {
+                // Silently bypass redis failure
             }
 
             // The actual database storage happens via the scrape_attempts table
@@ -98,7 +99,7 @@ export class MetricsCollector {
 
     /**
      * Get success rate for a competitor website within a time window
-     * 
+     *
      * @param competitorWebsiteId - The competitor website ID
      * @param timeWindow - The time window to calculate success rate for
      * @returns Success rate as a percentage (0-100)
@@ -138,7 +139,7 @@ export class MetricsCollector {
 
     /**
      * Get comprehensive metrics summary for a tenant
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param timeWindow - Optional time window (defaults to LAST_24_HOURS)
      * @returns Comprehensive metrics summary
@@ -208,10 +209,11 @@ export class MetricsCollector {
 
     /**
      * Update Redis counters for real-time metrics
-     * 
+     *
      * @param metric - The metric to update counters for
      */
     private async updateRedisCounters(metric: ScrapeMetric): Promise<void> {
+        const redis = getRedisConnection();
         const hour = new Date(metric.timestamp).toISOString().slice(0, 13); // YYYY-MM-DDTHH
         const keyPrefix = `metrics:${metric.tenantId}:${metric.competitorWebsiteId}:${hour}`;
 
@@ -245,9 +247,9 @@ export class MetricsCollector {
 
     /**
      * Update hourly aggregation in database
-     * 
+     *
      * This creates or updates the ScrapingMetric record for the current hour.
-     * 
+     *
      * @param metric - The metric to aggregate
      */
     private async updateHourlyAggregation(metric: ScrapeMetric): Promise<void> {
@@ -329,7 +331,7 @@ export class MetricsCollector {
 
     /**
      * Get per-site metrics for a tenant
-     * 
+     *
      * @param tenantId - The tenant ID
      * @param startDate - Start date for metrics calculation
      * @returns Array of site metrics
@@ -410,7 +412,7 @@ export class MetricsCollector {
 
     /**
      * Get start date for a time window
-     * 
+     *
      * @param timeWindow - The time window
      * @returns Start date for the window
      */

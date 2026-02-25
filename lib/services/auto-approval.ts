@@ -73,25 +73,6 @@ export class AutoApprovalService {
                 );
             }
 
-            // Load all PENDING price changes for tenant with product and match data
-            const pendingChanges = await prisma.pendingPriceChange.findMany({
-                where: {
-                    tenantId,
-                    status: "PENDING",
-                },
-                include: {
-                    Product: {
-                        include: {
-                            matchesAsUser: {
-                                include: {
-                                    competitorProduct: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
-
             let autoApprovedCount = 0;
             const triggeredRuleNames: string[] = [];
 
@@ -102,48 +83,84 @@ export class AutoApprovalService {
                 totalEvaluated: 0,
             };
 
-            // Process each pending change
-            for (const change of pendingChanges) {
-                try {
-                    metricsTracker.totalEvaluated++;
+            let lastId: string | undefined = undefined;
+            const take = 500;
+            let hasMore = true;
 
-                    // Evaluate if change should be auto-approved
-                    const decision = await this.shouldAutoApprove(change, tenantId);
+            while (hasMore) {
+                // Load PENDING price changes in batches to prevent Memory OOM on large tenants
+                const pendingChanges: any[] = await prisma.pendingPriceChange.findMany({
+                    where: {
+                        tenantId,
+                        status: "PENDING",
+                    },
+                    take,
+                    skip: lastId ? 1 : 0,
+                    ...(lastId ? { cursor: { id: lastId } } : {}),
+                    orderBy: { id: 'asc' },
+                    include: {
+                        Product: {
+                            include: {
+                                matchesAsUser: {
+                                    include: {
+                                        competitorProduct: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
 
-                    // If approved, execute auto-approval transaction
-                    if (decision.approved && decision.ruleId && decision.ruleName) {
-                        await this.executeAutoApprovalTransaction(
-                            change,
-                            decision.ruleId,
-                            decision.ruleName
-                        );
-                        autoApprovedCount++;
+                if (pendingChanges.length === 0) {
+                    break;
+                }
 
-                        // Collect rule names that triggered approvals (Requirement 7.1)
-                        triggeredRuleNames.push(decision.ruleName);
+                hasMore = pendingChanges.length === take;
+                lastId = pendingChanges[pendingChanges.length - 1].id;
 
-                        // Track per-rule metrics (Requirement 8.1)
-                        const existing = metricsTracker.ruleMetrics.get(decision.ruleId);
-                        if (existing) {
-                            existing.count++;
+                // Process each pending change
+                for (const change of pendingChanges) {
+                    try {
+                        metricsTracker.totalEvaluated++;
+
+                        // Evaluate if change should be auto-approved
+                        const decision = await this.shouldAutoApprove(change, tenantId);
+
+                        // If approved, execute auto-approval transaction
+                        if (decision.approved && decision.ruleId && decision.ruleName) {
+                            await this.executeAutoApprovalTransaction(
+                                change,
+                                decision.ruleId,
+                                decision.ruleName
+                            );
+                            autoApprovedCount++;
+
+                            // Collect rule names that triggered approvals (Requirement 7.1)
+                            triggeredRuleNames.push(decision.ruleName);
+
+                            // Track per-rule metrics (Requirement 8.1)
+                            const existing = metricsTracker.ruleMetrics.get(decision.ruleId);
+                            if (existing) {
+                                existing.count++;
+                            } else {
+                                metricsTracker.ruleMetrics.set(decision.ruleId, {
+                                    ruleId: decision.ruleId,
+                                    ruleName: decision.ruleName,
+                                    count: 1,
+                                });
+                            }
                         } else {
-                            metricsTracker.ruleMetrics.set(decision.ruleId, {
-                                ruleId: decision.ruleId,
-                                ruleName: decision.ruleName,
-                                count: 1,
-                            });
+                            // Track non-matching changes (Requirement 8.2)
+                            metricsTracker.nonMatchingCount++;
                         }
-                    } else {
-                        // Track non-matching changes (Requirement 8.2)
-                        metricsTracker.nonMatchingCount++;
-                    }
-                } catch (error) {
-                    // Log error but continue processing other changes
-                    if (process.env.NODE_ENV !== "test") {
-                        console.error(
-                            `[AutoApproval] Failed to process change ${change.id}:`,
-                            error
-                        );
+                    } catch (error) {
+                        // Log error but continue processing other changes
+                        if (process.env.NODE_ENV !== "test") {
+                            console.error(
+                                `[AutoApproval] Failed to process change ${change.id}:`,
+                                error
+                            );
+                        }
                     }
                 }
             }

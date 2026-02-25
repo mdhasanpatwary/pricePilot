@@ -1,9 +1,9 @@
 /**
  * Metric Aggregation Job - Hourly rollup of scraping metrics
- * 
+ *
  * This job runs periodically to aggregate scrape attempts into hourly metrics,
  * maintaining real-time counters in Redis and storing aggregated data in the database.
- * 
+ *
  * Requirements: 9.2
  */
 
@@ -16,10 +16,10 @@ const redis = getRedisConnection();
 
 /**
  * Run hourly metric aggregation
- * 
+ *
  * This function aggregates scrape attempts from the last hour into the
  * scraping_metrics table. It can be called by a cron job or scheduler.
- * 
+ *
  * @param hoursBack - Number of hours back to aggregate (default: 1)
  */
 export async function runHourlyAggregation(hoursBack: number = 1): Promise<void> {
@@ -68,7 +68,7 @@ export async function runHourlyAggregation(hoursBack: number = 1): Promise<void>
 
 /**
  * Aggregate metrics for a specific site and hour
- * 
+ *
  * @param tenantId - The tenant ID
  * @param competitorWebsiteId - The competitor website ID
  * @param hourTimestamp - The hour to aggregate (rounded down)
@@ -211,10 +211,10 @@ async function aggregateForSite(
 
 /**
  * Maintain real-time counters in Redis
- * 
+ *
  * This function updates Redis counters for the current hour. It should be called
  * after each scrape attempt to maintain real-time metrics.
- * 
+ *
  * @param tenantId - The tenant ID
  * @param competitorWebsiteId - The competitor website ID
  * @param success - Whether the scrape was successful
@@ -231,6 +231,7 @@ export async function updateRealTimeCounters(
     responseTime: number
 ): Promise<void> {
     try {
+        const redis = getRedisConnection();
         const now = new Date();
         const hour = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
         const keyPrefix = `metrics:${tenantId}:${competitorWebsiteId}:${hour}`;
@@ -269,7 +270,7 @@ export async function updateRealTimeCounters(
 
 /**
  * Get real-time metrics from Redis for the current hour
- * 
+ *
  * @param tenantId - The tenant ID
  * @param competitorWebsiteId - The competitor website ID
  * @returns Real-time metrics for the current hour
@@ -342,7 +343,7 @@ export async function getRealTimeMetrics(
 
 /**
  * Generate protection type and strategy breakdowns from aggregated metrics
- * 
+ *
  * @param tenantId - The tenant ID
  * @param startDate - Start date for the breakdown
  * @param endDate - End date for the breakdown
@@ -401,10 +402,10 @@ export async function generateBreakdowns(
 
 /**
  * Clean up old aggregated metrics
- * 
+ *
  * This function removes aggregated metrics older than the retention period.
  * Should be run periodically (e.g., daily).
- * 
+ *
  * @param retentionDays - Number of days to retain metrics (default: 90)
  */
 export async function cleanupOldMetrics(retentionDays: number = 90): Promise<void> {

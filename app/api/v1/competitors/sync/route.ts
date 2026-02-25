@@ -10,6 +10,7 @@ import {
   syncSiteSchema,
 } from "@/lib/validation";
 import { withDbRetry } from "@/lib/utils/db-retry";
+import { RedisCircuitBreaker } from "@/lib/redis/circuit-breaker";
 
 /**
  * POST /api/competitors/sync
@@ -24,6 +25,13 @@ async function handleSync(req: NextRequest) {
   }
 
   try {
+    if (RedisCircuitBreaker.getInstance().isOpen()) {
+      return NextResponse.json(
+        { error: "Service temporarily degraded. Please try again later." },
+        { status: 503 }
+      );
+    }
+
     // Validate request body
     const validation = await validateBody(req, syncSiteSchema);
 
@@ -55,19 +63,20 @@ async function handleSync(req: NextRequest) {
     const { prisma } = await import("@/lib/prisma");
     const site = await withDbRetry(() => prisma.site.findUnique({
       where: { id: siteId, tenantId: session.user.tenantId },
-      select: { isSyncing: true },
+      select: { isSyncing: true, syncState: true },
     }), { operationName: 'CheckSyncStatus' });
 
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
-    if (site.isSyncing && !force) {
+    if (site.syncState !== "IDLE" && site.syncState !== "STOPPED" && !force) {
       return NextResponse.json(
         {
           error: "Sync is already in progress for this site",
           success: false,
           isSyncing: true,
+          syncState: site.syncState,
         },
         { status: 409 },
       );
@@ -95,6 +104,7 @@ async function handleSync(req: NextRequest) {
       where: { id: siteId, tenantId: session.user.tenantId },
       data: {
         isSyncing: true,
+        syncState: "STARTING",
         syncStartedAt: isResume ? currentSiteStatus!.syncStartedAt : now,
         syncLastAction: isResume ? "Resuming sync session..." : "Queuing sync job...",
         syncProcessed: isResume ? currentSiteStatus!.syncProcessed : 0
@@ -126,6 +136,7 @@ async function handleSync(req: NextRequest) {
               where: { id: siteIdForReset, tenantId: session.user.tenantId },
               data: {
                 isSyncing: false,
+                syncState: "IDLE",
                 syncLastAction: "Queue overloaded. Try again shortly.",
               },
             }),

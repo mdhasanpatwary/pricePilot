@@ -54,87 +54,84 @@ async function handleGET(_req: NextRequest) {
     }), { operationName: 'CountCompetitors' });
 
     // 3. Critical Alerts & Position Summary
-    // Optimization: Select only necessary fields and use DB retry
-    const matches = await withDbRetry(() => prisma.productMatch.findMany({
-      where: {
-        userProduct: { tenantId },
-      },
-      select: {
-        userProduct: {
-          select: {
-            currentPrice: true,
-            category: true,
+    // Optimization: Process matches in batches to avoid OOM for large tenants
+    let skip = 0;
+    const take = 5000;
+    let hasMore = true;
+
+    let totalMatches = 0;
+    let atRiskCount = 0;
+    let totalDifference = 0;
+    let cheapestCount = 0;
+    let neutralCount = 0;
+    let expensiveCount = 0;
+
+    const categoryStats = new Map<string, { total: number; cheapest: number; expensive: number }>();
+
+    while (hasMore) {
+      const batch = await withDbRetry(() => prisma.productMatch.findMany({
+        where: {
+          userProduct: { tenantId },
+        },
+        select: {
+          userProduct: {
+            select: {
+              currentPrice: true,
+              category: true,
+            }
+          },
+          competitorProduct: {
+            select: {
+              currentPrice: true,
+            }
           }
         },
-        competitorProduct: {
-          select: {
-            currentPrice: true,
+        take,
+        skip,
+        // Order by ID is required for stable skip offset
+        orderBy: { id: 'asc' }
+      }), { operationName: 'FetchMatchesForAnalytics' });
+
+      if (batch.length === 0) break;
+      hasMore = batch.length === take;
+      skip += take;
+      totalMatches += batch.length;
+
+      for (const m of batch) {
+        const userPrice = parseFloat(m.userProduct.currentPrice.toString());
+        const compPrice = parseFloat(m.competitorProduct.currentPrice.toString());
+
+        if (userPrice > compPrice) atRiskCount++;
+
+        totalDifference += (compPrice - userPrice);
+
+        if (userPrice < compPrice * 0.95) cheapestCount++;
+        else if (userPrice > compPrice * 1.05) expensiveCount++;
+        else neutralCount++;
+
+        if (m.userProduct.category) {
+          const cat = m.userProduct.category;
+          let stats = categoryStats.get(cat);
+          if (!stats) {
+            stats = { total: 0, cheapest: 0, expensive: 0 };
+            categoryStats.set(cat, stats);
           }
+          stats.total++;
+          if (userPrice < compPrice * 0.95) stats.cheapest++;
+          else if (userPrice > compPrice * 1.05) stats.expensive++;
         }
       }
-    }), { operationName: 'FetchMatchesForAnalytics' });
+    }
 
-    const atRiskCount = matches.filter((m) => {
-      const userPrice = parseFloat(m.userProduct.currentPrice.toString());
-      const compPrice = parseFloat(m.competitorProduct.currentPrice.toString());
-      return userPrice > compPrice;
-    }).length;
-
-    // 4. Market Edge (average price advantage)
-    const totalDifference = matches.reduce((sum, m) => {
-      const userPrice = parseFloat(m.userProduct.currentPrice.toString());
-      const compPrice = parseFloat(m.competitorProduct.currentPrice.toString());
-      return sum + (compPrice - userPrice); // Positive = we're cheaper
-    }, 0);
-
-    const marketEdge =
-      matches.length > 0
-        ? Number((totalDifference / matches.length).toFixed(2))
+    const marketEdge = totalMatches > 0
+        ? Number((totalDifference / totalMatches).toFixed(2))
         : 0;
 
-    // 5. Position Summary
-    const cheapestCount = matches.filter((m) => {
-      const userPrice = parseFloat(m.userProduct.currentPrice.toString());
-      const compPrice = parseFloat(m.competitorProduct.currentPrice.toString());
-      return userPrice < compPrice * 0.95; // 5% cheaper
-    }).length;
-
-    const neutralCount = matches.filter((m) => {
-      const userPrice = parseFloat(m.userProduct.currentPrice.toString());
-      const compPrice = parseFloat(m.competitorProduct.currentPrice.toString());
-      const diff = Math.abs(userPrice - compPrice);
-      return diff <= compPrice * 0.05; // Within 5%
-    }).length;
-
-    const expensiveCount = matches.filter((m) => {
-      const userPrice = parseFloat(m.userProduct.currentPrice.toString());
-      const compPrice = parseFloat(m.competitorProduct.currentPrice.toString());
-      return userPrice > compPrice * 1.05; // 5% more expensive
-    }).length;
-
-    // 6. Category Breakdown
-    const categories = Array.from(
-      new Set(matches.map((m) => m.userProduct.category).filter(Boolean)),
-    );
-    const categoryBreakdown = categories.map((cat) => {
-      const catMatches = matches.filter((m) => m.userProduct.category === cat);
-      const cheapest = catMatches.filter((m) => {
-        const up = parseFloat(m.userProduct.currentPrice.toString());
-        const cp = parseFloat(m.competitorProduct.currentPrice.toString());
-        return up < cp * 0.95;
-      }).length;
-
-      return {
-        name: cat,
-        total: catMatches.length,
-        cheapest,
-        expensive: catMatches.filter((m) => {
-          const up = parseFloat(m.userProduct.currentPrice.toString());
-          const cp = parseFloat(m.competitorProduct.currentPrice.toString());
-          return up > cp * 1.05;
-        }).length,
-      };
-    });
+    // Format category breakdown
+    const categoryBreakdown = Array.from(categoryStats.entries()).map(([name, stats]) => ({
+      name,
+      ...stats
+    }));
 
     return NextResponse.json({
       stats: {
@@ -147,7 +144,7 @@ async function handleGET(_req: NextRequest) {
       positionSummary: {
         cheapest: cheapestCount,
         nearCheapest:
-          matches.length - cheapestCount - neutralCount - expensiveCount,
+          totalMatches - cheapestCount - neutralCount - expensiveCount,
         neutral: neutralCount,
         expensive: expensiveCount,
       },

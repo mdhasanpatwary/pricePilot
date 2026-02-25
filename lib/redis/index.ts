@@ -1,4 +1,5 @@
 import { Redis, type RedisOptions } from "ioredis";
+import { RedisCircuitBreaker } from "./circuit-breaker";
 
 const getRedisUrl = () => {
   if (process.env.REDIS_URL) {
@@ -77,7 +78,13 @@ const createRedisOptions = (role: RedisRole): RedisOptions => ({
 
     if (times > MAX_RETRY_ATTEMPTS) {
       console.error(`❌ Redis (${role}) failed after ${MAX_RETRY_ATTEMPTS} attempts. Giving up.`);
+      RedisCircuitBreaker.getInstance().recordFailure();
       return null;
+    }
+
+    // After 3 retries, start tripping the breaker
+    if (times >= 3) {
+        RedisCircuitBreaker.getInstance().recordFailure();
     }
 
     const delay = Math.min(times * 100, 3000);
@@ -97,10 +104,13 @@ const attachClientEvents = (client: Redis, role: RedisRole): void => {
 
     if (err.code === "ECONNREFUSED") {
       console.error(`❌ Redis (${role}) connection refused. Is Redis running?`);
+      RedisCircuitBreaker.getInstance().recordFailure();
     } else if (err.code === "ENOTFOUND") {
       console.error(`❌ Redis (${role}) host not found. Check REDIS_URL.`);
+      RedisCircuitBreaker.getInstance().recordFailure();
     } else if (err.message.includes("WRONGPASS") || err.message.includes("NOAUTH")) {
       console.error(`❌ Redis (${role}) authentication failed. Check REDIS_URL credentials.`);
+      RedisCircuitBreaker.getInstance().recordFailure();
     } else {
       console.error(`❌ Redis (${role}) error:`, err.message);
     }
@@ -117,6 +127,7 @@ const attachClientEvents = (client: Redis, role: RedisRole): void => {
         logged[role] = true;
       }
     }
+    RedisCircuitBreaker.getInstance().recordSuccess();
   });
 
   client.on("reconnecting", () => {
