@@ -609,6 +609,21 @@ export const BUILT_IN_ALERT_RULES: Omit<AlertRule, 'id'>[] = [
         notificationChannels: [],
         tenantId: null,
     },
+    {
+        name: 'Queue Starvation Detected',
+        description: 'Triggers when jobs have been waiting in queue for more than 1 hour',
+        severity: 'CRITICAL',
+        enabled: true,
+        metricType: 'queue_starvation',
+        condition: {
+            operator: 'GT',
+            aggregation: 'SUM',
+        },
+        timeWindow: 5 * 60, // 5 minutes
+        threshold: 0, // Any starved job triggers alert
+        notificationChannels: [],
+        tenantId: null,
+    },
     // Security-specific alert rules (Requirements 11.1, 11.2, 11.3, 11.4)
     {
         name: 'Brute Force Attack Detection',

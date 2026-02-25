@@ -105,15 +105,23 @@ export class OperationalMetricsService {
       }
 
       if (event === "active" && Number.isFinite(queueLatencyMs) && (queueLatencyMs || 0) >= 0) {
-        const latency = Math.floor(queueLatencyMs || 0);
-        fields.push([`queue:${queueName}:latency:count`, 1]);
-        fields.push([`queue:${queueName}:latency:sumMs`, latency]);
-        // Approximation buckets for p95-like signal.
-        if (latency <= 1000) fields.push([`queue:${queueName}:latency:le:1000`, 1]);
-        else if (latency <= 5000) fields.push([`queue:${queueName}:latency:le:5000`, 1]);
-        else if (latency <= 15000) fields.push([`queue:${queueName}:latency:le:15000`, 1]);
-        else if (latency <= 60000) fields.push([`queue:${queueName}:latency:le:60000`, 1]);
-        else fields.push([`queue:${queueName}:latency:gt:60000`, 1]);
+        // Track latency
+        if (queueLatencyMs !== undefined) {
+          const latency = Math.floor(queueLatencyMs);
+          fields.push([`queue:${queueName}:latency:count`, 1]);
+          fields.push([`queue:${queueName}:latency:sumMs`, latency]);
+
+          if (latency <= 1000) fields.push([`queue:${queueName}:latency:le:1000`, 1]);
+          else if (latency <= 5000) fields.push([`queue:${queueName}:latency:le:5000`, 1]);
+          else if (latency <= 15000) fields.push([`queue:${queueName}:latency:le:15000`, 1]);
+          else if (latency <= 60000) fields.push([`queue:${queueName}:latency:le:60000`, 1]);
+          else fields.push([`queue:${queueName}:latency:gt:60000`, 1]);
+
+          if (tenantId) {
+            fields.push([`tenant:${tenantId}:latency:count`, 1]);
+            fields.push([`tenant:${tenantId}:latency:sumMs`, latency]);
+          }
+        }
       }
 
       await incrFields(key, fields);
@@ -379,6 +387,32 @@ export class OperationalMetricsService {
       p95ApproxMs,
       count,
     };
+  }
+
+  static async getTenantLatencySummary(tenantId: string, windowMinutes: number = 60): Promise<{ avgMs: number; count: number }> {
+    const minutes = Math.max(1, Math.min(24 * 60, Math.floor(windowMinutes)));
+    const nowBucket = bucketNow();
+    const redis = getRedisConnection();
+    const pipeline = redis.pipeline();
+
+    for (let offset = 0; offset < minutes; offset += 1) {
+      pipeline.hgetall(metricKey(nowBucket - offset));
+    }
+
+    const results = await pipeline.exec();
+    let count = 0;
+    let sumMs = 0;
+
+    for (const row of results || []) {
+      if (!row || row[0] || !row[1] || typeof row[1] !== "object") continue;
+      const hash = row[1] as Record<string, string>;
+      count += toNumber(hash[`tenant:${tenantId}:latency:count`]);
+      sumMs += toNumber(hash[`tenant:${tenantId}:latency:sumMs`]);
+    }
+
+    const avgMs = count > 0 ? Math.floor(sumMs / count) : 0;
+
+    return { avgMs, count };
   }
 
   static async getActiveGauge(topTenants: number = 20): Promise<ActiveGaugeSnapshot> {

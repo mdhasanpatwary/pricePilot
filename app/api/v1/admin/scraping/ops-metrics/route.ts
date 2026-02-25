@@ -108,18 +108,27 @@ async function getQueueSnapshot(
   };
 }
 
-async function getRedisMemoryUsageMb(): Promise<number> {
+async function getRedisMetrics(): Promise<{ memoryMb: number, clients: number }> {
   try {
     const redis = getRedisConnection();
-    const info = await redis.info("memory");
-    const match = info.match(/used_memory:(\d+)/);
-    const bytes = match ? Number(match[1]) : 0;
-    return round(bytes / 1024 / 1024, 1);
+    const infoMemory = await redis.info("memory");
+    const infoClients = await redis.info("clients");
+
+    const matchMem = infoMemory.match(/used_memory:(\d+)/);
+    const bytes = matchMem ? Number(matchMem[1]) : 0;
+
+    const matchClients = infoClients.match(/connected_clients:(\d+)/);
+    const clients = matchClients ? Number(matchClients[1]) : 0;
+
+    return {
+      memoryMb: round(bytes / 1024 / 1024, 1),
+      clients
+    };
   } catch (error) {
-    logger.warn("[OpsMetrics] Failed to fetch Redis memory info", {
+    logger.warn("[OpsMetrics] Failed to fetch Redis metrics info", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return 0;
+    return { memoryMb: 0, clients: 0 };
   }
 }
 
@@ -131,6 +140,7 @@ function computeAlerts(params: {
   memoryRssMb: number;
   blockRatePct: number;
   retryRatePct: number;
+  redisClients: number;
 }): { alerts: AlertItem[]; overload: { overloaded: boolean; reasons: string[] } } {
   const thresholds = {
     activeJobs: numEnv("OPS_ALERT_ACTIVE_JOBS", 40),
@@ -140,6 +150,7 @@ function computeAlerts(params: {
     memoryRssMb: numEnv("OPS_ALERT_MEMORY_RSS_MB", 1500),
     blockRatePct: numEnv("OPS_ALERT_BLOCK_RATE_PCT", 30),
     retryRatePct: numEnv("OPS_ALERT_RETRY_RATE_PCT", 25),
+    redisClients: numEnv("OPS_ALERT_REDIS_CLIENTS", 5000), // e.g. Neon/Redis bounds
   };
 
   const alerts: AlertItem[] = [];
@@ -242,6 +253,18 @@ function computeAlerts(params: {
     );
   }
 
+  if (params.redisClients >= thresholds.redisClients) {
+    pushAlert(
+      "redis-clients-high",
+      "warning",
+      "redis_clients",
+      params.redisClients,
+      thresholds.redisClients,
+      `Redis clients (${params.redisClients}) exceeded threshold (${thresholds.redisClients})`,
+      "redis_connection_pressure",
+    );
+  }
+
   const criticalCount = alerts.filter((a) => a.severity === "critical").length;
   const overloaded = criticalCount > 0 || reasons.length >= 3;
 
@@ -270,7 +293,7 @@ async function handleGET() {
   const { TenantConcurrencyLimiter } = await import("@/lib/services/scheduling/tenant-concurrency-limiter");
   const { BrowserPool } = await import("@/lib/services/browser-pool");
 
-  const [syncFullSnapshot, syncDeltaSnapshot, scrapeHighSnapshot, scrapeLowSnapshot, notificationQueueSnapshot, syncFullLatency, syncDeltaLatency, scrapeHighLatency, scrapeLowLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMemoryMb] = await Promise.all([
+  const [syncFullSnapshot, syncDeltaSnapshot, scrapeHighSnapshot, scrapeLowSnapshot, notificationQueueSnapshot, syncFullLatency, syncDeltaLatency, scrapeHighLatency, scrapeLowLatency, notificationLatency, activeGauge, tenantCounters, ops, redisMetrics] = await Promise.all([
     getQueueSnapshot(QUEUE_NAMES.SYNC_FULL, getSyncFullQueue()),
     getQueueSnapshot(QUEUE_NAMES.SYNC_DELTA, getSyncDeltaQueue()),
     getQueueSnapshot(QUEUE_NAMES.SCRAPE_HIGH_PRIO, getScrapeHighPrioQueue()),
@@ -284,7 +307,7 @@ async function handleGET() {
     OperationalMetricsService.getActiveGauge(50),
     new TenantConcurrencyLimiter().getActiveCounters(),
     OperationalMetricsService.getAggregation(60, 15),
-    getRedisMemoryUsageMb(),
+    getRedisMetrics(),
   ]);
 
   const queues = {
@@ -344,13 +367,20 @@ async function handleGET() {
     mergedTenantActive.set(c.tenantId, Math.max(mergedTenantActive.get(c.tenantId) || 0, c.activeJobs));
   }
 
-  const perTenantActive = Array.from(mergedTenantActive.entries())
-    .map(([tenantId, activeJobs]) => ({
-      tenantId,
-      tenantName: tenantNameById.get(tenantId) || "Unknown",
-      activeJobs,
-    }))
-    .sort((a, b) => b.activeJobs - a.activeJobs);
+  const perTenantActive = await Promise.all(
+    Array.from(mergedTenantActive.entries())
+      .map(async ([tenantId, activeJobs]) => {
+        const latency = await OperationalMetricsService.getTenantLatencySummary(tenantId, 60);
+        return {
+          tenantId,
+          tenantName: tenantNameById.get(tenantId) || "Unknown",
+          activeJobs,
+          avgLatencyMs: latency.avgMs,
+        };
+      })
+  );
+
+  perTenantActive.sort((a, b) => b.activeJobs - a.activeJobs);
 
   const pool = BrowserPool.getInstance();
   const poolStats = pool.getStats();
@@ -366,7 +396,8 @@ async function handleGET() {
     heapUsedMb: round(process.memoryUsage().heapUsed / 1024 / 1024, 1),
     heapTotalMb: round(process.memoryUsage().heapTotal / 1024 / 1024, 1),
     externalMb: round(process.memoryUsage().external / 1024 / 1024, 1),
-    redisUsedMb: redisMemoryMb,
+    redisUsedMb: redisMetrics.memoryMb,
+    redisClients: redisMetrics.clients,
   };
 
   const { alerts, overload } = computeAlerts({
@@ -377,6 +408,7 @@ async function handleGET() {
     memoryRssMb: memoryUsage.rssMb,
     blockRatePct: ops.block.blockRatePct,
     retryRatePct: ops.retry.retryRatePct,
+    redisClients: redisMetrics.clients,
   });
 
   return NextResponse.json({
@@ -390,7 +422,7 @@ async function handleGET() {
           queueLatencyByQueue: "Record<queueName, { avgMs, maxMs, p95ApproxMs, count }>",
         },
         tenant: {
-          perTenantActiveJobCount: "Array<{ tenantId, tenantName, activeJobs }>",
+          perTenantActiveJobCount: "Array<{ tenantId, tenantName, activeJobs, avgLatencyMs }>",
         },
         browserPool: {
           totalBrowsers: "number",
@@ -404,6 +436,7 @@ async function handleGET() {
           heapTotalMb: "number",
           externalMb: "number",
           redisUsedMb: "number",
+          redisClients: "number",
         },
         blockRate: {
           total: "number",

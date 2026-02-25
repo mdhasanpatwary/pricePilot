@@ -29,6 +29,7 @@
     "archival": "tsx scripts/run-archival.ts",
     "validate-docs": "tsx scripts/validate-docs-structure.ts",
     "measure-queries": "tsx scripts/measure-query-performance.ts",
+    "test:queue-fairness": "bash scripts/run-nightly-simulations.sh",
     "prepare": "husky"
   },
   "dependencies": {

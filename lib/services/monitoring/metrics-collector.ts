@@ -63,6 +63,7 @@ export interface IMetricsCollector {
     recordPriceUpdate(tenantId: string, success: boolean, productCount: number): Promise<void>;
     recordAuthFailure(ipAddress: string): Promise<void>;
     recordSyncLifecycle(siteId: string, stage: 'QUEUE' | 'START' | 'PROGRESS' | 'STOP' | 'FAIL', metadata?: Record<string, any>): Promise<void>;
+    recordQueueStarvation(queueName: string, starvedJobCount: number, tenantId?: string): Promise<void>;
     getMetrics(metricType: string, timeWindow: number, tenantId?: string): Promise<MetricData>;
 }
 
@@ -256,6 +257,41 @@ export class MetricsCollector implements IMetricsCollector {
         } catch (error) {
             this.handleBackendError(error);
             console.error("Failed to record sync lifecycle:", error);
+        }
+    }
+
+    /**
+     * Record queue starvation event
+     *
+     * @param queueName - Name of the queue
+     * @param starvedJobCount - Number of jobs waiting > 1 hour
+     * @param tenantId - Optional tenant ID
+     */
+    async recordQueueStarvation(
+        queueName: string,
+        starvedJobCount: number,
+        tenantId?: string
+    ): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("queue_starvation", queueName, tenantId);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: starvedJobCount,
+            labels: {
+                queueName,
+                ...(tenantId && { tenantId }),
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record queue starvation:", error);
         }
     }
 
