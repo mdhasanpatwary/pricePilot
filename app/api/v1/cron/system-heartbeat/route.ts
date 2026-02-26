@@ -19,7 +19,7 @@ import { uptimeTracker } from '@/lib/services/monitoring/uptime-tracker';
 import { monitoringDashboardService } from '@/lib/services/monitoring/dashboard';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
-import { withCronAuth } from '@/lib/middleware/cron-auth';
+import { withCronLock } from '@/lib/middleware/cron-auth';
 import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 
 async function handlePOST(_req: NextRequest) {
@@ -83,7 +83,13 @@ async function handlePOST(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withCronAuth(req, handlePOST);
+    return withCronLock(
+        req,
+        "ANALYTICS", // heartbeat is monitoring (fail-soft)
+        "pp:cron:system-heartbeat",
+        handlePOST,
+        60 * 1000, // 1 minute TTL
+    );
 }
 
 /**

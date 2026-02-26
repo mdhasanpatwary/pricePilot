@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { priceUpdateMonitor } from "@/lib/services/price-update-monitor";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { withCronAuth } from "@/lib/middleware/cron-auth";
+import { withCronLock } from "@/lib/middleware/cron-auth";
 
 async function handlePOST(_req: NextRequest) {
 
@@ -107,5 +107,11 @@ async function handlePOST(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    return withCronAuth(req, handlePOST);
+    return withCronLock(
+        req,
+        "CRITICAL", // price update is business-critical (fail-closed)
+        "pp:cron:process-price-update-retries",
+        handlePOST,
+        15 * 60 * 1000, // 15 minute TTL for processing
+    );
 }
