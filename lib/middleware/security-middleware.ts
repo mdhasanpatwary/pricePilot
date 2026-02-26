@@ -111,13 +111,22 @@ export function withSecurity(
 
             return response;
         } catch (error) {
-            logger.error('Security middleware error', {
+            logger.error('Security middleware error - FAILING CLOSED', {
                 error: error instanceof Error ? error.message : String(error),
                 context,
             });
 
-            // Don't block requests on middleware errors
-            return handler(req);
+            // FAIL-CLOSED: Reject request on middleware errors to ensure security
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: {
+                        code: 'SECURITY_MIDDLEWARE_ERROR',
+                        message: 'A security processing error occurred. Access denied for safety.',
+                    },
+                },
+                { status: 500 }
+            );
         }
     };
 }
