@@ -140,12 +140,12 @@ export class ScrapingScheduler {
             stalenessThreshold.getHours() - this.config.stalenessThresholdHours
         );
 
-        let skip = 0;
+        let cursor: string | undefined = undefined;
         const take = 1000;
         let reachedBatchLimit = false;
 
         while (!reachedBatchLimit) {
-            const rawProducts = await prisma.product.findMany({
+            const rawProducts: any[] = await prisma.product.findMany({
                 where: {
                     tenantId,
                     Site: { type: 'COMPETITOR' },
@@ -158,7 +158,8 @@ export class ScrapingScheduler {
                     currentPrice: true,
                 },
                 take,
-                skip,
+                cursor: cursor ? { id: cursor } : undefined,
+                skip: cursor ? 1 : 0,
                 orderBy: this.config.prioritizeStale
                     ? [{ lastCrawledAt: 'asc' }, { currentPrice: 'asc' }, { id: 'asc' }]
                     : [{ currentPrice: 'asc' }, { id: 'asc' }],
@@ -168,7 +169,7 @@ export class ScrapingScheduler {
 
             result.totalProducts += rawProducts.length;
 
-            const products = rawProducts.map(p => ({
+            const products = rawProducts.map((p: any) => ({
                 id: p.id,
                 url: p.url || '',
                 competitorWebsiteId: p.siteId,
@@ -207,7 +208,7 @@ export class ScrapingScheduler {
                 if (reachedBatchLimit) break;
             }
 
-            skip += take;
+            cursor = rawProducts[rawProducts.length - 1].id;
         }
 
         logger.info('Tenant scraping scheduled', {

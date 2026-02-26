@@ -85,8 +85,7 @@ const TIMEZONES = [
 const LOCALES = ["en-US", "en-GB", "en-CA", "en-AU", "fr-FR", "de-DE", "es-ES", "ja-JP"];
 
 const LAUNCH_ARGS = [
-  "--no-sandbox",
-  "--disable-setuid-sandbox",
+  ...(process.env.BROWSER_INSECURE_SANDBOX === "true" ? ["--no-sandbox", "--disable-setuid-sandbox"] : []),
   "--disable-dev-shm-usage",
   "--disable-gpu",
   "--disable-blink-features=AutomationControlled",

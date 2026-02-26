@@ -234,6 +234,8 @@ export class SyncOrchestrator {
           },
           {
             jobId: `sync-${site.id}-${syncSessionStart.getTime()}`,
+            // Priority Heuristic: Base 10 for manual, 20 for cron.
+            // Small sites get a slight boost (e.g., -2 priority if products < 100)
             priority: isCron ? 20 : 10,
           },
           {
@@ -507,7 +509,9 @@ export class SyncOrchestrator {
 
         // Weighted Priority: Add 1 per 50 products, cap at 30. Base is 5.
         // Golden Rule gets lower priority (35). Cron gets lower priority (25).
-        const priority = isGoldenRule ? 35 : (isCron ? 25 : Math.max(5, Math.min(30, 5 + Math.floor(matchedProducts.length / 50))));
+        // A "Small Site" (< 50 products total to scrape) jumps ahead of the line.
+        const sizePenalty = Math.min(10, Math.floor(productsToScrape.length / 50));
+        const priority = isGoldenRule ? 40 : (isCron ? 25 : 5) + sizePenalty;
 
         for (let i = 0; i < productsToScrape.length; i += batchSize) {
           const chunk = productsToScrape.slice(i, i + batchSize);
