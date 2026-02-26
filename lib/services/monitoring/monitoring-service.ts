@@ -62,4 +62,12 @@ export class MonitoringService {
             }
         }
     }
+
+    /**
+     * Record that a tenant is flooding the queue, creating backpressure.
+     */
+    static recordTenantFlood(queueName: string, tenantId: string, depth: number): void {
+        logger.warn(`[MonitoringService] TENANT FLOOD WARNING: Tenant ${tenantId} is dominating ${queueName} with ${depth} jobs.`);
+        metricsCollector.recordSyncLifecycle("system", "QUEUE", { reason: "FLOOD_WARNING", queueName, tenantId, depth }).catch(() => {});
+    }
 }

@@ -9,6 +9,8 @@ import { decrementTenantQueueDepth } from "./backpressure";
 
 const TENANT_ACTIVE_JOBS_PREFIX = "pp:queue:tenant:active:";
 
+export const QUEUE_CONCURRENCY_CAPS: Record<string, number> = {};
+
 const TIER_CONCURRENCY_LIMITS: Record<string, number> = {
   PRO: 15,    // Tier Pro
   PREMIUM: 8, // Tier Premium
@@ -46,18 +48,34 @@ async function tryAcquireTenantSlot(queueName: string, tenantId: string): Promis
   const redis = getRedisConnection();
   const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
 
-  const limit = await getTenantConcurrencyLimit(tenantId);
+  const tierLimit = await getTenantConcurrencyLimit(tenantId);
+  const queueTotalConcurrency = Math.max(1, QUEUE_CONCURRENCY_CAPS[queueName] || 10);
+
+  // No single tenant should consume more than 50% of active workers for a queue type
+  const queueSpecificLimit = Math.max(1, Math.floor(queueTotalConcurrency * 0.5));
+  const effectiveLimit = Math.min(tierLimit, queueSpecificLimit);
 
   // Atomic increment and check
   const current = await redis.incr(key);
   await redis.expire(key, 3600); // 1h safety expiry
 
-  if (current > limit) {
+  if (current > effectiveLimit) {
     // Exceeded, rollback the increment
     await redis.decr(key);
     return false;
   }
   return true;
+}
+
+export async function getTenantActiveJobs(tenantId: string): Promise<Record<string, number>> {
+  const redis = getRedisConnection();
+  const result: Record<string, number> = {};
+  for (const q of Object.values(QUEUE_NAMES)) {
+    const key = `${TENANT_ACTIVE_JOBS_PREFIX}${q}:${tenantId}`;
+    const val = await redis.get(key);
+    result[q] = val ? parseInt(val, 10) : 0;
+  }
+  return result;
 }
 
 async function decrementTenantActive(queueName: string, tenantId: string): Promise<void> {
@@ -236,6 +254,13 @@ export const createWorkers = () => {
   (scrapeHighWorker as any).concurrencyValue = Math.max(1, Math.floor(scrapeConcurrency * 0.7));
   (scrapeLowWorker as any).concurrencyValue = Math.max(1, Math.floor(scrapeConcurrency * 0.3));
   (notificationWorker as any).concurrencyValue = notificationConcurrency;
+
+  // Track the caps for the governor
+  QUEUE_CONCURRENCY_CAPS[QUEUE_NAMES.SYNC_FULL] = syncFullConcurrency;
+  QUEUE_CONCURRENCY_CAPS[QUEUE_NAMES.SYNC_DELTA] = syncDeltaConcurrency;
+  QUEUE_CONCURRENCY_CAPS[QUEUE_NAMES.SCRAPE_HIGH_PRIO] = Math.max(1, Math.floor(scrapeConcurrency * 0.7));
+  QUEUE_CONCURRENCY_CAPS[QUEUE_NAMES.SCRAPE_LOW_PRIO] = Math.max(1, Math.floor(scrapeConcurrency * 0.3));
+  QUEUE_CONCURRENCY_CAPS[QUEUE_NAMES.NOTIFICATIONS] = notificationConcurrency;
 
   const registerEvents = (worker: Worker, queueName: string) => {
     worker.on("completed", async (job) => {

@@ -164,6 +164,31 @@ export async function enqueueWithBackpressure<TData extends { tenantId?: string 
     jobOptions.delay = (jobOptions.delay || 0) + tenantDelay;
   }
 
+  // 3. Flood Detection (Phase 8)
+  const isCriticalDepth = globalSnapshot.depth > globalThreshold * 0.8;
+  const isDominating = tenantDepth > Math.max(10, globalSnapshot.depth * 0.5);
+
+  if (isCriticalDepth && isDominating) {
+    logger.warn(`[QueueBackpressure] Flood detected for tenant ${tenantId} on queue ${queue.name}`);
+
+    // Lazy import to avoid circular dependency
+    void import("@/lib/services/monitoring/monitoring-service").then(({ MonitoringService }) => {
+       MonitoringService.recordTenantFlood(queue.name, tenantId, tenantDepth);
+    });
+
+    if (decision.strategy === "reject") {
+       throw new QueueBackpressureError(
+         `Queue flooded by tenant ${tenantId}`,
+         queue.name,
+         globalSnapshot.depth,
+         globalThreshold
+       );
+    } else {
+       // Extreme delay to force tenant to back off
+       jobOptions.delay = (jobOptions.delay || 0) + maxDelayMs;
+    }
+  }
+
   // Inject groupId for BullMQ fairness
   (jobOptions as any).removeOnComplete = jobOptions.removeOnComplete ?? true;
   const finalOptions: JobsOptions = {
