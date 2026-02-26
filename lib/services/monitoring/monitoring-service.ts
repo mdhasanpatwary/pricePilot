@@ -37,7 +37,8 @@ export class MonitoringService {
                 for (const job of waitingJobs) {
                     const age = now - (job.timestamp || now);
                     if (age > STARVATION_THRESHOLD_MS) {
-                        const tenantId = job.opts.groupId || job.data?.tenantId || 'system';
+                        const groupId = (job.opts as any).groupId as string | undefined;
+                        const tenantId = groupId || job.data?.tenantId || 'system';
                         tenantStarvations.set(tenantId, (tenantStarvations.get(tenantId) || 0) + 1);
                         totalStarved++;
                     }

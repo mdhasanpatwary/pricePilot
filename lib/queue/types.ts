@@ -11,6 +11,8 @@ export interface SyncJobData {
   tenantId: string; // Now mandatory for fairness grouping
   productId?: string;
   productIds?: string[]; // IDs for chunked processing
+  syncSessionStart?: number; // Session tracker for chunk finalization
+  isGoldenRule?: boolean; // Determines if proxy/rate limit rules apply aggressively
   isCron?: boolean;
   force?: boolean;
   type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE" | "SOURCE_SYNC" | "RETRY" | "PRODUCT";

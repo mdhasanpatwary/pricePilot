@@ -90,7 +90,12 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     } else if (job.data.type === "CHUNK") {
       if (!job.data.siteId || !job.data.productIds)
         throw new Error("Missing data for chunk sync");
-      await SyncOrchestrator.processChunkSync(job.data.siteId, job.data.productIds);
+      await SyncOrchestrator.processChunkSync(
+        job.data.siteId,
+        job.data.productIds,
+        job.data.syncSessionStart,
+        job.data.isGoldenRule
+      );
     } else if (job.data.type === "SOURCE_SYNC") {
       if (!job.data.siteId) throw new Error("SiteID required for source sync");
       const { SyncService } = await import("@/lib/services/sync");
