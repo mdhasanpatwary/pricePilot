@@ -164,7 +164,7 @@ type SyncUiEvent =
   | { type: "START_FAILED" }
   | { type: "STOP_REQUEST" }
   | { type: "STOP_FAILED" }
-  | { type: "BACKEND_SNAPSHOT"; backendSyncing: boolean };
+  | { type: "BACKEND_SNAPSHOT"; backendSyncing: boolean; backendSyncState?: string };
 
 function transitionSyncUiState(current: SyncUiState, event: SyncUiEvent): SyncUiState {
   switch (event.type) {
@@ -177,6 +177,9 @@ function transitionSyncUiState(current: SyncUiState, event: SyncUiEvent): SyncUi
     case "STOP_FAILED":
       return current === "STOPPING" ? "RUNNING" : current;
     case "BACKEND_SNAPSHOT":
+      if (event.backendSyncState === "STOPPING") return "STOPPING";
+      if (event.backendSyncState === "STOPPED") return "STOPPED";
+
       if (event.backendSyncing) {
         return current === "STOPPING" ? "STOPPING" : "RUNNING";
       }
@@ -270,7 +273,7 @@ export default function CompetitorsPage() {
     });
   }, []);
 
-  const reconcileSyncUiState = useCallback((sites: Array<{ id: string; isSyncing?: boolean }>) => {
+  const reconcileSyncUiState = useCallback((sites: Array<{ id: string; isSyncing?: boolean; syncState?: string }>) => {
     const siteIds = new Set(sites.map((site) => site.id));
 
     setSyncUiStateBySite((prev) => {
@@ -282,6 +285,7 @@ export default function CompetitorsPage() {
         const derived = transitionSyncUiState(current, {
           type: "BACKEND_SNAPSHOT",
           backendSyncing: Boolean(site.isSyncing),
+          backendSyncState: site.syncState,
         });
         next[site.id] = derived;
         if (!changed && prev[site.id] !== derived) {
@@ -373,7 +377,11 @@ export default function CompetitorsPage() {
             logs: existingById.get(competitor.id)?.logs || competitor.logs || [],
           }));
         });
-        reconcileSyncUiState(incomingCompetitors.map((site) => ({ id: site.id, isSyncing: site.isSyncing })));
+        reconcileSyncUiState(incomingCompetitors.map((site: any) => ({
+          id: site.id,
+          isSyncing: site.isSyncing,
+          syncState: site.syncState
+        })));
       } else {
         toast.error("Failed to load competitors");
       }
@@ -438,7 +446,11 @@ export default function CompetitorsPage() {
           };
         })
       );
-      reconcileSyncUiState(snapshots.map((site) => ({ id: site.id, isSyncing: site.isSyncing })));
+      reconcileSyncUiState(snapshots.map((site: any) => ({
+        id: site.id,
+        isSyncing: site.isSyncing,
+        syncState: site.syncState
+      })));
 
       return {
         changed,
@@ -1202,213 +1214,213 @@ export default function CompetitorsPage() {
                     const showStopAction = uiSyncState === "RUNNING" || uiSyncState === "STOPPING";
 
                     return (
-                    <tr
-                      key={comp.id}
-                      className={cn(
-                        "border-b border-border/50 hover:bg-muted/30 transition-colors",
-                        isSyncActive && "bg-primary/2",
-                      )}
-                    >
-                      <td className="py-5 px-6">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "w-10 h-10 rounded-md flex items-center justify-center transition-all",
-                              isSyncActive
-                                ? "bg-primary/20 text-primary animate-pulse"
-                                : "bg-muted text-muted-foreground/50",
-                            )}
-                          >
-                            <Globe
+                      <tr
+                        key={comp.id}
+                        className={cn(
+                          "border-b border-border/50 hover:bg-muted/30 transition-colors",
+                          isSyncActive && "bg-primary/2",
+                        )}
+                      >
+                        <td className="py-5 px-6">
+                          <div className="flex items-center gap-3">
+                            <div
                               className={cn(
-                                "w-5 h-5",
-                                isSyncActive && "animate-spin-slow",
+                                "w-10 h-10 rounded-md flex items-center justify-center transition-all",
+                                isSyncActive
+                                  ? "bg-primary/20 text-primary animate-pulse"
+                                  : "bg-muted text-muted-foreground/50",
                               )}
-                            />
-                          </div>
-                          <div>
-                            <div className="text-foreground font-semibold">
-                              {comp.name}
+                            >
+                              <Globe
+                                className={cn(
+                                  "w-5 h-5",
+                                  isSyncActive && "animate-spin-slow",
+                                )}
+                              />
                             </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                {new URL(comp.url).hostname}
+                            <div>
+                              <div className="text-foreground font-semibold">
+                                {comp.name}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-[10px] text-muted-foreground font-mono">
+                                  {new URL(comp.url).hostname}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-5 px-6 text-center">
-                        {isSyncActive ? (
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-1" />
-                            <span className="font-mono text-xs font-bold text-primary animate-pulse">
-                              {comp.syncTotal && comp.syncTotal > 0
-                                ? `${comp.syncProcessed} / ${comp.syncTotal}`
-                                : uiSyncState === "STOPPING"
-                                  ? "Stopping..."
-                                  : "Starting..."}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center">
-                            <span className="font-bold text-foreground text-xs">
-                              ({comp.products.toLocaleString()} / {comp.totalUserProducts?.toLocaleString() || "0"})
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-5 px-6">
-                        {comp.isAdvancedProtected ? (
-                          <div className="flex items-center gap-2 group cursor-help">
-                            <div className="flex -space-x-1">
-                              <ShieldAlert className="w-5 h-5 text-warning fill-warning/20 drop-shadow-[0_0_8px_rgba(var(--warning-rgb),0.4)]" />
+                        </td>
+                        <td className="py-5 px-6 text-center">
+                          {isSyncActive ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-1" />
+                              <span className="font-mono text-xs font-bold text-primary animate-pulse">
+                                {comp.syncTotal && comp.syncTotal > 0
+                                  ? `${comp.syncProcessed} / ${comp.syncTotal}`
+                                  : uiSyncState === "STOPPING"
+                                    ? "Stopping..."
+                                    : "Starting..."}
+                              </span>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold text-warning leading-tight">Advanced</span>
-                              <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-tighter">Golden Rule</span>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center">
+                              <span className="font-bold text-foreground text-xs">
+                                ({comp.products.toLocaleString()} / {comp.totalUserProducts?.toLocaleString() || "0"})
+                              </span>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                            <ShieldCheck className="w-5 h-5 text-success/70" />
-                            <span className="text-[10px] font-semibold text-muted-foreground uppercase">Standard</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-5 px-6">
-                        <span
-                          className={cn(
-                            "text-[10px] font-bold px-2 py-0.5 rounded-full border tracking-wide uppercase flex items-center gap-1.5 w-fit",
-                            displayStatus === "ACTIVE"
-                              ? "bg-success/5 border-success/10 text-success"
-                              : isSyncActive
-                                ? "bg-primary/10 border-primary/20 text-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary-rgb),0.1)]"
-                                : displayStatus === "STOPPED"
-                                  ? "bg-danger/10 border-danger/20 text-danger"
-                                  : displayStatus === "NO MATCHES"
-                                  ? "bg-warning/10 border-warning/20 text-warning"
-                                  : "bg-muted border-border text-muted-foreground",
                           )}
-                        >
-                          {isSyncActive && (
-                            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                        </td>
+                        <td className="py-5 px-6">
+                          {comp.isAdvancedProtected ? (
+                            <div className="flex items-center gap-2 group cursor-help">
+                              <div className="flex -space-x-1">
+                                <ShieldAlert className="w-5 h-5 text-warning fill-warning/20 drop-shadow-[0_0_8px_rgba(var(--warning-rgb),0.4)]" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-warning leading-tight">Advanced</span>
+                                <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-tighter">Golden Rule</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
+                              <ShieldCheck className="w-5 h-5 text-success/70" />
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase">Standard</span>
+                            </div>
                           )}
-                          {displayStatus}
-                        </span>
-                      </td>
-                      <td className="py-5 px-6">
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">
-                              {isSyncActive ? "Sync Progress" : "Site Health"}
-                            </span>
-                            <span className="text-[9px] font-black text-muted-foreground">
-                              {isSyncActive
-                                ? comp.syncTotal && comp.syncTotal > 0
-                                  ? `${Math.round((comp.syncProcessed! / comp.syncTotal) * 100)}%`
-                                  : "0%"
-                                : `${comp.health}%`}
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden relative">
-                            <div
-                              className={cn(
-                                "h-full rounded-full transition-all duration-700 ease-out",
-                                isSyncActive
-                                  ? "bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.4)]"
-                                  : "bg-success",
-                              )}
-                              style={{
-                                width: isSyncActive
-                                  ? comp.syncTotal && comp.syncTotal > 0
-                                    ? `${(comp.syncProcessed! / comp.syncTotal) * 100}%`
-                                    : "5%"
-                                  : `${comp.health}%`,
-                              }}
-                            />
-                            {isSyncActive && (
-                              <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
-                            )}
-                          </div>
-                          {isSyncActive &&
-                            comp.syncStartedAt &&
-                            comp.syncProcessed! > 0 && (
-                              <p className="text-[8px] font-medium text-muted-foreground/60 italic">
-                                Est:{" "}
-                                {(() => {
-                                  const start = new Date(
-                                    comp.syncStartedAt,
-                                  ).getTime();
-                                  const elapsed = Date.now() - start;
-                                  const perItem = elapsed / comp.syncProcessed!;
-                                  const remaining =
-                                    (comp.syncTotal! - comp.syncProcessed!) *
-                                    perItem;
-                                  const seconds = Math.round(remaining / 1000);
-                                  return seconds > 60
-                                    ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-                                    : `${seconds}s`;
-                                })()}{" "}
-                                remaining
-                              </p>
-                            )}
-                        </div>
-                      </td>
-                      <td className="py-5 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2 text-muted-foreground">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openSettings(comp)}
-                            className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
-                            title="Configure Search Pattern"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </Button>
-                          <button
-                            onClick={() =>
-                              showStopAction
-                                ? handleStopSync(comp.id)
-                                : handleSyncSite(comp.id)
-                            }
-                            disabled={isActionBusy}
+                        </td>
+                        <td className="py-5 px-6">
+                          <span
                             className={cn(
-                              "p-2 rounded-md transition-all group",
-                              showStopAction
-                                ? "bg-danger/10 text-danger hover:bg-danger/20"
-                                : "hover:bg-primary/10 hover:text-primary",
-                              isActionBusy && "opacity-50 cursor-not-allowed",
+                              "text-[10px] font-bold px-2 py-0.5 rounded-full border tracking-wide uppercase flex items-center gap-1.5 w-fit",
+                              displayStatus === "ACTIVE"
+                                ? "bg-success/5 border-success/10 text-success"
+                                : isSyncActive
+                                  ? "bg-primary/10 border-primary/20 text-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary-rgb),0.1)]"
+                                  : displayStatus === "STOPPED"
+                                    ? "bg-danger/10 border-danger/20 text-danger"
+                                    : displayStatus === "NO MATCHES"
+                                      ? "bg-warning/10 border-warning/20 text-warning"
+                                      : "bg-muted border-border text-muted-foreground",
                             )}
-                            title={
-                              showStopAction ? "Stop Crawler" : "Force Sync"
-                            }
                           >
-                            {showStopAction ? (
-                              <X className="w-4 h-4 animate-pulse" />
-                            ) : (
-                              <Zap className="w-4 h-4 transition-transform group-active:scale-95" />
+                            {isSyncActive && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
                             )}
-                          </button>
-                          <a
-                            href={comp.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 hover:bg-muted rounded-md transition-all"
-                            title="View Website"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                          <button
-                            onClick={() => handleDelete(comp.id)}
-                            className="p-2 hover:bg-danger/10 rounded-md hover:text-danger transition-all"
-                            title="Remove Tracker"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                            {displayStatus}
+                          </span>
+                        </td>
+                        <td className="py-5 px-6">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">
+                                {isSyncActive ? "Sync Progress" : "Site Health"}
+                              </span>
+                              <span className="text-[9px] font-black text-muted-foreground">
+                                {isSyncActive
+                                  ? comp.syncTotal && comp.syncTotal > 0
+                                    ? `${Math.round((comp.syncProcessed! / comp.syncTotal) * 100)}%`
+                                    : "0%"
+                                  : `${comp.health}%`}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden relative">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all duration-700 ease-out",
+                                  isSyncActive
+                                    ? "bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.4)]"
+                                    : "bg-success",
+                                )}
+                                style={{
+                                  width: isSyncActive
+                                    ? comp.syncTotal && comp.syncTotal > 0
+                                      ? `${(comp.syncProcessed! / comp.syncTotal) * 100}%`
+                                      : "5%"
+                                    : `${comp.health}%`,
+                                }}
+                              />
+                              {isSyncActive && (
+                                <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                              )}
+                            </div>
+                            {isSyncActive &&
+                              comp.syncStartedAt &&
+                              comp.syncProcessed! > 0 && (
+                                <p className="text-[8px] font-medium text-muted-foreground/60 italic">
+                                  Est:{" "}
+                                  {(() => {
+                                    const start = new Date(
+                                      comp.syncStartedAt,
+                                    ).getTime();
+                                    const elapsed = Date.now() - start;
+                                    const perItem = elapsed / comp.syncProcessed!;
+                                    const remaining =
+                                      (comp.syncTotal! - comp.syncProcessed!) *
+                                      perItem;
+                                    const seconds = Math.round(remaining / 1000);
+                                    return seconds > 60
+                                      ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+                                      : `${seconds}s`;
+                                  })()}{" "}
+                                  remaining
+                                </p>
+                              )}
+                          </div>
+                        </td>
+                        <td className="py-5 px-6 text-right">
+                          <div className="flex items-center justify-end gap-2 text-muted-foreground">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openSettings(comp)}
+                              className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+                              title="Configure Search Pattern"
+                            >
+                              <Settings className="w-4 h-4" />
+                            </Button>
+                            <button
+                              onClick={() =>
+                                showStopAction
+                                  ? handleStopSync(comp.id)
+                                  : handleSyncSite(comp.id)
+                              }
+                              disabled={isActionBusy}
+                              className={cn(
+                                "p-2 rounded-md transition-all group",
+                                showStopAction
+                                  ? "bg-danger/10 text-danger hover:bg-danger/20"
+                                  : "hover:bg-primary/10 hover:text-primary",
+                                isActionBusy && "opacity-50 cursor-not-allowed",
+                              )}
+                              title={
+                                showStopAction ? "Stop Crawler" : "Force Sync"
+                              }
+                            >
+                              {showStopAction ? (
+                                <X className="w-4 h-4 animate-pulse" />
+                              ) : (
+                                <Zap className="w-4 h-4 transition-transform group-active:scale-95" />
+                              )}
+                            </button>
+                            <a
+                              href={comp.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 hover:bg-muted rounded-md transition-all"
+                              title="View Website"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                            <button
+                              onClick={() => handleDelete(comp.id)}
+                              className="p-2 hover:bg-danger/10 rounded-md hover:text-danger transition-all"
+                              title="Remove Tracker"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })
                 )}
@@ -1477,53 +1489,53 @@ export default function CompetitorsPage() {
                   >
                     {activeSyncSites.length > 0 ? (
                       activeSyncSites.map((site) => (
-                          <div key={site.id} className="space-y-0.5">
-                            {/* Real Database Logs */}
-                            {(site.logs || [])
-                              .slice()
-                              .reverse()
-                              .map((log: any, _idx: number) => (
-                                <div
-                                  key={log.id}
-                                  className="group flex gap-3 px-2 py-0.5 hover:bg-white/5 transition-colors border-l-2 border-transparent hover:border-primary/40"
+                        <div key={site.id} className="space-y-0.5">
+                          {/* Real Database Logs */}
+                          {(site.logs || [])
+                            .slice()
+                            .reverse()
+                            .map((log: any, _idx: number) => (
+                              <div
+                                key={log.id}
+                                className="group flex gap-3 px-2 py-0.5 hover:bg-white/5 transition-colors border-l-2 border-transparent hover:border-primary/40"
+                              >
+                                <span className="text-white/20 shrink-0 select-none w-16">
+                                  {new Date(log.createdAt).toLocaleTimeString(
+                                    [],
+                                    { hour12: false },
+                                  )}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "font-black shrink-0 w-12",
+                                    log.level === "SUCCESS"
+                                      ? "text-green-500"
+                                      : log.level === "ERROR"
+                                        ? "text-red-500"
+                                        : log.level === "WARN"
+                                          ? "text-amber-500"
+                                          : "text-blue-500",
+                                  )}
                                 >
-                                  <span className="text-white/20 shrink-0 select-none w-16">
-                                    {new Date(log.createdAt).toLocaleTimeString(
-                                      [],
-                                      { hour12: false },
-                                    )}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "font-black shrink-0 w-12",
-                                      log.level === "SUCCESS"
-                                        ? "text-green-500"
-                                        : log.level === "ERROR"
-                                          ? "text-red-500"
-                                          : log.level === "WARN"
-                                            ? "text-amber-500"
-                                            : "text-blue-500",
-                                    )}
-                                  >
-                                    {log.level}
-                                  </span>
-                                  <span className="text-white/80 break-all">
-                                    {log.message}
-                                  </span>
-                                </div>
-                              ))}
-
-                            {/* Fallback if no logs yet */}
-                            {(!site.logs || site.logs.length === 0) && (
-                              <div className="flex gap-3 px-2 py-0.5 text-white/40 italic">
-                                <span className="animate-pulse">_</span>
-                                <span>
-                                  Establishing secure tunnel to {site.name}...
+                                  {log.level}
+                                </span>
+                                <span className="text-white/80 break-all">
+                                  {log.message}
                                 </span>
                               </div>
-                            )}
-                          </div>
-                        ))
+                            ))}
+
+                          {/* Fallback if no logs yet */}
+                          {(!site.logs || site.logs.length === 0) && (
+                            <div className="flex gap-3 px-2 py-0.5 text-white/40 italic">
+                              <span className="animate-pulse">_</span>
+                              <span>
+                                Establishing secure tunnel to {site.name}...
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))
                     ) : (
                       <div className="h-full flex items-center justify-center text-white/20 uppercase tracking-widest text-[10px]">
                         System Standby - No Active Crawlers

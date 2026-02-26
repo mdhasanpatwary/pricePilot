@@ -27,6 +27,7 @@ async function handleGET(_req: NextRequest) {
       syncLastAction: true,
       syncStartedAt: true,
       lastSyncAt: true,
+      syncState: true,
     },
     orderBy: { id: "desc" },
   });

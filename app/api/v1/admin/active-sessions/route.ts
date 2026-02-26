@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { requireAdmin } from "@/lib/auth/wrappers";
 
 interface ActiveSession {
     id: string;
@@ -28,21 +28,9 @@ interface MonitorStats {
  * 
  * Requirements: 8.9, 7.1, 7.2, 7.3, 7.4, 7.7
  */
-async function handleGET() {
+async function handleGET(_req: NextRequest) {
     try {
-        // Authentication check
-        const session = await getCachedSession();
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        // Check if user is super admin or regular admin
-        const user = session.user as any;
-        const isAdmin = user.role === "ADMIN" || user.isSuperAdmin === true;
-
-        if (!isAdmin) {
-            return NextResponse.json({ error: "Unauthorized - Admin access required" }, { status: 401 });
-        }
+        // Auth checks handled by requireAdmin wrapper
 
         // Fetch active scraping sessions (sites that are currently syncing)
         const activeSites = await prisma.site.findMany({
@@ -216,5 +204,5 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-    return withRequestContextAndRateLimit(req, 'read', handleGET);
+    return withRequestContextAndRateLimit(req, 'read', requireAdmin(handleGET));
 }

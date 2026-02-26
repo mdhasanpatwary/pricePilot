@@ -21,7 +21,10 @@ const ALLOWED_WRAPPERS = [
     'withInternalGate',
     'withRequestContextOnly',
     'withRateLimit',
-    'withCronAuth'
+    'withCronAuth',
+    'requireAdmin',
+    'requireTenantContext',
+    'requireAuth'
 ];
 
 const ALLOWLIST = [

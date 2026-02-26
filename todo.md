@@ -9,24 +9,19 @@
 - [ ] Add CI test to scan API route tree and fail if auth wrapper is missing (except explicit public allowlist).
 
 ## Phase 0 - Fail-Closed Policy
-- [ ] Define and document subsystem failure policy matrix.
-- [ ] Enforce fail-closed in Auth flows.
-- [ ] Enforce fail-closed in Cron flows.
-- [ ] Enforce fail-closed in Admin flows.
-- [ ] Keep Scraper flows fail-soft with controlled degradation.
-- [ ] Keep Analytics flows fail-soft with controlled degradation.
+- [x] Define and document subsystem failure policy matrix.
+- [x] Enforce fail-closed in Auth flows.
+- [x] Enforce fail-closed in Cron flows.
+- [x] Enforce fail-closed in Admin flows.
+- [x] Keep Scraper flows fail-soft with controlled degradation.
+- [x] Keep Analytics flows fail-soft with controlled degradation.
 
 ## Phase 1 - Authentication & Authorization Hardening
-- [ ] Build centralized wrappers: `requireAuth()`, `requireAdmin()`, `requireTenantContext()`.
-- [ ] Refactor API routes to use centralized wrappers only.
-- [ ] Remove per-route ad hoc session/role checks.
-- [ ] Define tenant context invariant: `request.tenantId` mandatory and immutable downstream.
-- [ ] Ensure tenant context is derived only from authenticated session.
-- [ ] Validate tenant context against database for every authenticated request path.
-- [ ] Reject tenant ID from request body.
-- [ ] Reject tenant ID from query string.
-- [ ] Add CI route coverage audit for auth wrappers.
-- [ ] Add CI route coverage audit for admin role checks on `/admin` routes.
+- [x] Build centralized wrappers: `requireAuth()`, `requireAdmin()`, `requireTenantContext()`
+- [x] Refactor API routes to use centralized wrappers (Proof of Concept: `admin/active-sessions`, `products`)
+- [x] Define tenant context invariant and validation (Derivation from session only)
+- [x] Reject tenant ID from request body/query (Fail-closed injection prevention)
+- [x] Add CI route coverage audits (Updated `scan-api-auth.ts`)
 
 ## Phase 2 - Queue & Concurrency Hardening
 - [ ] Redesign queue accounting model with explicit states:

@@ -353,7 +353,7 @@ export class SyncOrchestrator {
     if (!isResuming) {
       const updateResult = await prisma.$transaction(async (tx) => {
         // First, verify the site exists and check its current state with a row lock
-        const sites = await tx.$queryRaw<Array<{isSyncing: boolean, syncStartedAt: Date | null}>>`
+        const sites = await tx.$queryRaw<Array<{ isSyncing: boolean, syncStartedAt: Date | null }>>`
           SELECT "isSyncing", "syncStartedAt"
           FROM "Site"
           WHERE id = ${siteId}
@@ -490,8 +490,8 @@ export class SyncOrchestrator {
         });
 
         await prisma.site.updateMany({
-           where: { id: siteId },
-           data: { isSyncing: false, syncState: "STOPPED", syncLastAction: "Deferred to off-peak" }
+          where: { id: siteId },
+          data: { isSyncing: false, syncState: "STOPPED", syncLastAction: "Deferred to off-peak" }
         });
         return { success: true, message: "Sync deferred to off-peak" };
       }
@@ -674,15 +674,22 @@ export class SyncOrchestrator {
 
     // Check global status to allow aborting inflight chunks
     if (syncSessionStart) {
-        const finalStatus = await prisma.site.findUnique({
-          where: { id: siteId },
-          select: { isSyncing: true, syncState: true, syncStartedAt: true }
-        });
+      const finalStatus = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { isSyncing: true, syncState: true, syncStartedAt: true }
+      });
 
-        if (!finalStatus?.isSyncing || finalStatus.syncState === "STOPPING" || finalStatus.syncState === "STOPPED" || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-           logger.info(`[SyncOrchestrator] Chunk skipped because sync session is stopped or overridden for site ${siteId}`);
-           return;
+      if (!finalStatus?.isSyncing || finalStatus.syncState === "STOPPING" || finalStatus.syncState === "STOPPED" || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+        logger.info(`[SyncOrchestrator] Chunk skipped because sync session is stopped or overridden for site ${siteId}`);
+        if (finalStatus?.syncState === "STOPPING" && finalStatus.syncStartedAt?.getTime() === syncSessionStart.getTime()) {
+          await prisma.site.updateMany({
+            where: { id: siteId, syncStartedAt: syncSessionStart },
+            data: { isSyncing: false, syncState: "STOPPED", lastSyncAt: new Date(), syncLastAction: "Manual Stop" },
+          });
+          logger.info(`[SyncOrchestrator] Converted STOPPING to STOPPED during chunk skip for site ${siteId}`);
         }
+        return;
+      }
     }
 
     const products = await prisma.product.findMany({
@@ -701,35 +708,111 @@ export class SyncOrchestrator {
       if (!product.url) continue;
 
       try {
-          if (isGoldenRule) {
-             const delay = 8000 + Math.random() * 7000; // 8-15s
-             await new Promise(r => setTimeout(r, delay));
+        if (isGoldenRule) {
+          const delay = 8000 + Math.random() * 7000; // 8-15s
+          await new Promise(r => setTimeout(r, delay));
+        }
+
+        const result = await Promise.race([
+          ScrapingEngineService.scrapeByUrl(product.url, {
+            context: "worker",
+            isAdvancedProtected: isGoldenRule,
+            competitorProductId: product.id,
+            tenantId: product.tenantId,
+            siteId,
+          }),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error(`timeout: scrape item exceeded ${perItemTimeoutMs}ms`)), perItemTimeoutMs);
+          })
+        ]) as any; // Cast for explicit type inference in race
+
+        if (result && result.price > 0) {
+          successCount++;
+
+          const oldPrice = parseFloat(product.currentPrice.toString());
+          const oldStock = product.inStock;
+
+          const anomaly = detectPriceAnomaly({
+            newPrice: result.price,
+            oldPrice,
+            inStock: result.inStock,
+            explicitOos: (result as any).explicitOos,
+            currency: (result as any).currency,
+          });
+
+          if (anomaly.flagged) {
+            await withDbRetry(() => prisma.product.update({
+              where: { id: product.id },
+              data: {
+                priceAnomalyActive: true,
+                priceAnomalyDetectedAt: new Date(),
+                priceAnomalyData: anomaly,
+                lastCrawledAt: new Date(),
+              } as any,
+            }), { operationName: 'FlagPriceAnomaly(Chunk)' });
+
+            await scrapeLogger.log({
+              siteId,
+              message: `🚨 ANOMALY [Chunk] ${product.title.substring(0, 40)}... old=৳${oldPrice} new=৳${result.price} reasons=${anomaly.reasons.join(",")}`,
+              level: "WARNING",
+            });
+            continue;
+          } else if ((product as any).priceAnomalyActive) {
+            await withDbRetry(() => prisma.product.update({
+              where: { id: product.id },
+              data: {
+                priceAnomalyActive: false,
+                priceAnomalyDetectedAt: null,
+                priceAnomalyData: null,
+              } as any,
+            }), { operationName: 'ClearPriceAnomaly(Chunk)' });
           }
 
-          const result = await Promise.race([
-            ScrapingEngineService.scrapeByUrl(product.url, {
-              context: "worker",
-              isAdvancedProtected: isGoldenRule,
-              competitorProductId: product.id,
-              tenantId: product.tenantId,
-              siteId,
-            }),
-            new Promise<never>((_, reject) => {
-              setTimeout(() => reject(new Error(`timeout: scrape item exceeded ${perItemTimeoutMs}ms`)), perItemTimeoutMs);
-            })
-          ]) as any; // Cast for explicit type inference in race
-
-          if (result && result.price > 0) {
-            successCount++;
-
-            const oldPrice = parseFloat(product.currentPrice.toString());
-            const oldStock = product.inStock;
-
-            const anomaly = detectPriceAnomaly({
-              newPrice: result.price,
-              oldPrice,
+          await withDbRetry(() => prisma.product.update({
+            where: { id: product.id },
+            data: {
+              currentPrice: result.price,
               inStock: result.inStock,
-              explicitOos: (result as any).explicitOos,
+              imageUrl: result.imageUrl || (product as any).imageUrl,
+              specifications: result.specifications || (product as any).specifications,
+              lastCrawledAt: new Date(),
+            } as any,
+          }), { operationName: 'UpdateProductData(Chunk)' });
+
+          // Invalidate cache
+          try {
+            const { cacheEnhancedService } = await import("./cache-enhanced");
+            await cacheEnhancedService.invalidateProduct(product.tenantId, product.id);
+            await cacheEnhancedService.invalidateComparisons(product.tenantId);
+          } catch (cacheError) {
+            logger.warn('[SyncOrchestrator] Failed to invalidate cache after product update', {
+              productId: product.id,
+              error: cacheError
+            });
+          }
+
+          // Alert Service
+          const { AlertService } = await import("./alert-service");
+          await AlertService.evaluateRules(product.tenantId, product.id, oldPrice, result.price, oldStock, result.inStock);
+
+          const now = new Date();
+          const historyExists = await prisma.priceHistory.findFirst({
+            where: { productId: product.id, recordedAt: now }
+          });
+          if (!historyExists) {
+            await withDbRetry(() => prisma.priceHistory.create({
+              data: { productId: product.id, price: result.price, recordedAt: now }
+            }), { operationName: 'CreatePriceHistory(Chunk)' });
+          }
+        } else {
+          // Handle Price 0 / OOS logic similar to sync process
+          if (result && result.price === 0) {
+            const explicitOos = !!(result as any).explicitOos;
+            const anomaly = detectPriceAnomaly({
+              newPrice: 0,
+              oldPrice: parseFloat(product.currentPrice.toString()),
+              inStock: !!result.inStock,
+              explicitOos,
               currency: (result as any).currency,
             });
 
@@ -742,131 +825,55 @@ export class SyncOrchestrator {
                   priceAnomalyData: anomaly,
                   lastCrawledAt: new Date(),
                 } as any,
-              }), { operationName: 'FlagPriceAnomaly(Chunk)' });
-
-              await scrapeLogger.log({
-                siteId,
-                message: `🚨 ANOMALY [Chunk] ${product.title.substring(0, 40)}... old=৳${oldPrice} new=৳${result.price} reasons=${anomaly.reasons.join(",")}`,
-                level: "WARNING",
-              });
-              continue;
-            } else if ((product as any).priceAnomalyActive) {
-                await withDbRetry(() => prisma.product.update({
+              }), { operationName: 'FlagPriceZeroAnomaly(Chunk)' });
+            } else if (explicitOos) {
+              await withDbRetry(() => prisma.product.update({
                 where: { id: product.id },
-                data: {
-                  priceAnomalyActive: false,
-                  priceAnomalyDetectedAt: null,
-                  priceAnomalyData: null,
-                } as any,
-              }), { operationName: 'ClearPriceAnomaly(Chunk)' });
+                data: { inStock: false, lastCrawledAt: new Date() } as any,
+              }), { operationName: 'MarkOosWithMissingPrice(Chunk)' });
             }
-
-            await withDbRetry(() => prisma.product.update({
-              where: { id: product.id },
-              data: {
-                currentPrice: result.price,
-                inStock: result.inStock,
-                imageUrl: result.imageUrl || (product as any).imageUrl,
-                specifications: result.specifications || (product as any).specifications,
-                lastCrawledAt: new Date(),
-              } as any,
-            }), { operationName: 'UpdateProductData(Chunk)' });
-
-            // Invalidate cache
-            try {
-              const { cacheEnhancedService } = await import("./cache-enhanced");
-              await cacheEnhancedService.invalidateProduct(product.tenantId, product.id);
-              await cacheEnhancedService.invalidateComparisons(product.tenantId);
-            } catch (cacheError) {
-              logger.warn('[SyncOrchestrator] Failed to invalidate cache after product update', {
-                productId: product.id,
-                error: cacheError
-              });
-            }
-
-            // Alert Service
-            const { AlertService } = await import("./alert-service");
-            await AlertService.evaluateRules(product.tenantId, product.id, oldPrice, result.price, oldStock, result.inStock);
-
-            const now = new Date();
-            const historyExists = await prisma.priceHistory.findFirst({
-              where: { productId: product.id, recordedAt: now }
-            });
-            if (!historyExists) {
-              await withDbRetry(() => prisma.priceHistory.create({
-                data: { productId: product.id, price: result.price, recordedAt: now }
-              }), { operationName: 'CreatePriceHistory(Chunk)' });
-            }
-          } else {
-             // Handle Price 0 / OOS logic similar to sync process
-             if (result && result.price === 0) {
-               const explicitOos = !!(result as any).explicitOos;
-               const anomaly = detectPriceAnomaly({
-                 newPrice: 0,
-                 oldPrice: parseFloat(product.currentPrice.toString()),
-                 inStock: !!result.inStock,
-                 explicitOos,
-                 currency: (result as any).currency,
-               });
-
-               if (anomaly.flagged) {
-                 await withDbRetry(() => prisma.product.update({
-                   where: { id: product.id },
-                   data: {
-                     priceAnomalyActive: true,
-                     priceAnomalyDetectedAt: new Date(),
-                     priceAnomalyData: anomaly,
-                     lastCrawledAt: new Date(),
-                   } as any,
-                 }), { operationName: 'FlagPriceZeroAnomaly(Chunk)' });
-                } else if (explicitOos) {
-                   await withDbRetry(() => prisma.product.update({
-                     where: { id: product.id },
-                     data: { inStock: false, lastCrawledAt: new Date() } as any,
-                  }), { operationName: 'MarkOosWithMissingPrice(Chunk)' });
-                }
-             }
           }
+        }
       } catch (error: any) {
-          const isTimeout = error.message?.includes("timeout");
-          const isAdvancedBlock = error instanceof ScrapeBlockError && error.isAdvanced;
+        const isTimeout = error.message?.includes("timeout");
+        const isAdvancedBlock = error instanceof ScrapeBlockError && error.isAdvanced;
 
-          await scrapeLogger.log({
-              siteId,
-              message: `⚠️ [Chunk: ${product.title.substring(0, 30)}] Failed: ${isAdvancedBlock ? 'Advanced Block' : isTimeout ? 'Timeout' : error.message}`,
-              level: "WARNING",
-          });
+        await scrapeLogger.log({
+          siteId,
+          message: `⚠️ [Chunk: ${product.title.substring(0, 30)}] Failed: ${isAdvancedBlock ? 'Advanced Block' : isTimeout ? 'Timeout' : error.message}`,
+          level: "WARNING",
+        });
       }
     } // End product loop
 
     // Update global progress for the site
     try {
-        const siteData = await prisma.site.findUnique({
-            where: { id: siteId },
-            select: { syncTotal: true, syncProcessed: true, tenantId: true }
-        });
+      const siteData = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { syncTotal: true, syncProcessed: true, tenantId: true }
+      });
 
-        if (siteData) {
-            const newProcessed = (siteData.syncProcessed || 0) + products.length;
-            const isFinalChunk = newProcessed >= (siteData.syncTotal || 1);
+      if (siteData) {
+        const newProcessed = (siteData.syncProcessed || 0) + products.length;
+        const isFinalChunk = newProcessed >= (siteData.syncTotal || 1);
 
-            await withDbRetry(() => prisma.site.updateMany({
-                where: { id: siteId },
-                data: {
-                    syncProcessed: newProcessed,
-                    syncLastAction: `Syncing: ${newProcessed}/${siteData.syncTotal} items (Chunked)...`
-                }
-            }), { operationName: "UpdateSyncProgress(Chunk)" });
+        await withDbRetry(() => prisma.site.updateMany({
+          where: { id: siteId },
+          data: {
+            syncProcessed: newProcessed,
+            syncLastAction: `Syncing: ${newProcessed}/${siteData.syncTotal} items (Chunked)...`
+          }
+        }), { operationName: "UpdateSyncProgress(Chunk)" });
 
-            metricsCollector.recordSyncLifecycle(siteId, "PROGRESS", { processed: newProcessed, total: siteData.syncTotal || 1 }).catch(console.error);
+        metricsCollector.recordSyncLifecycle(siteId, "PROGRESS", { processed: newProcessed, total: siteData.syncTotal || 1 }).catch(console.error);
 
-            if (isFinalChunk && syncSessionStart) {
-                logger.info(`[SyncOrchestrator] All chunks completed for site ${siteId}, finalizing sync.`);
-                await this.finalizeSiteSync(siteId, siteData.tenantId, syncSessionStart);
-            }
+        if (isFinalChunk && syncSessionStart) {
+          logger.info(`[SyncOrchestrator] All chunks completed for site ${siteId}, finalizing sync.`);
+          await this.finalizeSiteSync(siteId, siteData.tenantId, syncSessionStart);
         }
-    } catch(e) {
-        logger.error(`[SyncOrchestrator] Failed to update progress for chunk completion on site ${siteId}`, { error: e instanceof Error ? e.message : String(e) });
+      }
+    } catch (e) {
+      logger.error(`[SyncOrchestrator] Failed to update progress for chunk completion on site ${siteId}`, { error: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -943,9 +950,9 @@ export class SyncOrchestrator {
     logger.info(`[SyncOrchestrator] Starting retry sync for ${productIds.length} products on site ${siteId}`);
 
     for (let index = 0; index < productIds.length; index++) {
-        const productId = productIds[index];
-        const userProduct = await prisma.product.findUnique({ where: { id: productId } });
-        if (!userProduct) continue;
+      const productId = productIds[index];
+      const userProduct = await prisma.product.findUnique({ where: { id: productId } });
+      if (!userProduct) continue;
 
       // Check if we should still be running
       const currentSiteStatus = await prisma.site.findUnique({
@@ -965,13 +972,13 @@ export class SyncOrchestrator {
         });
       }
 
-        try {
-          const cleanTitle = userProduct.title.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-          const result = await ScrapingEngineService.searchAndScrape(site.baseUrl, cleanTitle, {
-            siteId,
-            tenantId: userProduct.tenantId,
-            context: "retry",
-          });
+      try {
+        const cleanTitle = userProduct.title.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+        const result = await ScrapingEngineService.searchAndScrape(site.baseUrl, cleanTitle, {
+          siteId,
+          tenantId: userProduct.tenantId,
+          context: "retry",
+        });
 
         if (result && result.price > 0) {
           // Success! Create match
@@ -1021,9 +1028,9 @@ export class SyncOrchestrator {
             data: { status: "FAILED", reason: "Product not found on retry", updatedAt: new Date() }
           });
         }
-        } catch (error: any) {
-          // Scraper might throw ScrapeBlockError
-          if (error.name === "ScrapeBlockError" || error.message.includes("BLOCKED")) {
+      } catch (error: any) {
+        // Scraper might throw ScrapeBlockError
+        if (error.name === "ScrapeBlockError" || error.message.includes("BLOCKED")) {
           const retryRecord = await (prisma as any).scrapeRetry.findFirst({
             where: { userProductId: productId, siteId, status: "PENDING" }
           });
@@ -1081,15 +1088,15 @@ export class SyncOrchestrator {
               data: { status: "FAILED", reason: "MAX_RETRIES_EXCEEDED", updatedAt: new Date() }
             });
           }
-          } else {
-            await (prisma as any).scrapeRetry.updateMany({
-              where: { userProductId: productId, siteId, status: "PENDING" },
-              data: { status: "FAILED", reason: error.message, updatedAt: new Date() }
-            });
-          }
+        } else {
+          await (prisma as any).scrapeRetry.updateMany({
+            where: { userProductId: productId, siteId, status: "PENDING" },
+            data: { status: "FAILED", reason: error.message, updatedAt: new Date() }
+          });
         }
       }
     }
+  }
 
   private static async finalizeSiteSync(siteId: string, tenantId: string, syncSessionStart: Date) {
     // Re-check status before proceeding
@@ -1099,7 +1106,14 @@ export class SyncOrchestrator {
     });
 
     if (!finalStatus?.isSyncing || finalStatus.syncState === "STOPPING" || finalStatus.syncState === "STOPPED" || finalStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-      return { success: true, message: "Sync aborted before rules engine" };
+      if (finalStatus?.syncState === "STOPPING" && finalStatus.syncStartedAt?.getTime() === syncSessionStart.getTime()) {
+        await prisma.site.updateMany({
+          where: { id: siteId, syncStartedAt: syncSessionStart },
+          data: { isSyncing: false, syncState: "STOPPED", lastSyncAt: new Date(), syncLastAction: "Manual Stop" },
+        });
+        logger.info(`[SyncOrchestrator] Converted STOPPING to STOPPED for site ${siteId}`);
+      }
+      return { success: true, message: "Sync aborted or already finalized" };
     }
 
     await scrapeLogger.log({

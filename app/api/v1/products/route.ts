@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling } from "@/lib/middleware/global-error-handler";
-import { UnauthorizedError } from "@/lib/utils/error-handler";
 import { withCache } from "@/lib/middleware/api-cache";
 import { paginateCursor, getCursorPaginationParams } from "@/lib/utils/pagination";
 import { sanitizeProducts } from "@/lib/middleware/sanitize-response";
-import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { requireTenantContext, type TenantContext } from "@/lib/auth/wrappers";
 import { getTenantCurrency } from "@/lib/tenant/cached-tenant";
 import { withDbRetry } from "@/lib/utils/db-retry";
 
-async function handleGET(req: NextRequest) {
-  const session = await getCachedSession();
-
-  if (!session?.user) {
-    throw new UnauthorizedError('Authentication required to access products');
-  }
-
-  const tenantId = session.user.tenantId;
+async function handleGET(req: NextRequest, { tenantId }: TenantContext) {
+  // Auth and tenant validation handled by requireTenantContext wrapper
 
   // Parse query parameters
   const searchParams = req.nextUrl.searchParams;
@@ -237,12 +230,9 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // 1. Initialize Request Context & Rate Limiting (Outermost)
-  // 2. Apply Caching (Inner)
-  // 3. Execute Handler
-  return withRequestContextAndRateLimit(req, "read", (req) => {
+  return withRequestContextAndRateLimit(req, "read", requireTenantContext(async (req, context) => {
     const cachedHandler = withCache(
-      (req) => withErrorHandling(handleGET)(req),
+      (req) => withErrorHandling((r) => handleGET(r, context))(req),
       {
         ttl: 300, // 5 minutes
         keyPrefix: 'api:products',
@@ -251,5 +241,5 @@ export async function GET(req: NextRequest) {
       }
     );
     return cachedHandler(req);
-  });
+  }));
 }

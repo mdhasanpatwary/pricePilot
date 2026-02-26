@@ -129,11 +129,11 @@ export class DiscoveryService {
       try {
         const currentStatus = await prisma.site.findUnique({
           where: { id: siteId },
-          select: { isSyncing: true, syncStartedAt: true },
+          select: { isSyncing: true, syncState: true, syncStartedAt: true },
         });
 
-        if (!currentStatus?.isSyncing || currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
-          console.log(`[DiscoveryService] Aborting discovery (Session invalidated).`);
+        if (!currentStatus?.isSyncing || currentStatus.syncState === "STOPPING" || currentStatus.syncStartedAt?.getTime() !== syncSessionStart.getTime()) {
+          console.log(`[DiscoveryService] Aborting discovery (Session invalidated or stop requested).`);
           return { discoveredCount, aborted: true };
         }
 
