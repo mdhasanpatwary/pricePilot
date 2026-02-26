@@ -132,6 +132,7 @@ export class BrowserPool {
   private pendingBrowserCreates: Map<string, Promise<BrowserSlot>> = new Map();
 
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
   private stealthConfigured = false;
   private initialized = false;
   private nextBrowserId = 1;
@@ -195,6 +196,7 @@ export class BrowserPool {
       Math.min(this.config.maxContextsPerDomain, this.config.maxGlobalContexts),
     );
     this.startCleanup();
+    this.startHeartbeat();
 
     if (!this.initialized) {
       logger.info("[UnifiedBrowserPool] Initialized", {
@@ -456,6 +458,19 @@ export class BrowserPool {
       this.cleanupInterval = null;
     }
 
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+
+    // Attempt to clear our heartbeat from Redis before shutting down
+    try {
+      const redis = getRedisConnection();
+      await redis.hdel("pp:browsers:active_nodes", this.instanceId).catch(() => {});
+    } catch {
+      // Ignored
+    }
+
     const closeTasks: Promise<void>[] = [];
 
     for (const [domain, session] of this.domainSessions.entries()) {
@@ -558,15 +573,14 @@ export class BrowserPool {
   }
 
   private async checkGlobalBrowserCap(): Promise<void> {
-    const maxGlobalBrowsers = parseInt(process.env.MAX_GLOBAL_BROWSERS || "0", 10);
-    if (maxGlobalBrowsers <= 0) return;
+    const maxGlobalBrowsers = parseInt(process.env.MAX_GLOBAL_BROWSERS || "20", 10);
 
     try {
       const redis = getRedisConnection();
       const key = "pp:browsers:active_nodes";
 
+      // Register/Update our presence
       await redis.hset(key, this.instanceId, this.browserSlots.size);
-      await redis.expire(key, 60);
 
       const counts = await redis.hgetall(key);
       let total = 0;
@@ -574,14 +588,39 @@ export class BrowserPool {
         total += parseInt(val || "0", 10);
       }
 
-      // Drop if total is beyond threshold and we are entirely new/have zero share of instances.
-      if (total >= maxGlobalBrowsers && this.browserSlots.size === 0) {
+      // If we are at or over the cap, and this isn't just updating an existing slot, block launch
+      if (total >= maxGlobalBrowsers) {
+        logger.warn("[UnifiedBrowserPool] Global browser capacity reached", {
+          total,
+          maxGlobalBrowsers,
+          nodes: Object.keys(counts).length
+        });
         throw new Error(`Global browser capacity exhausted (${total}/${maxGlobalBrowsers} across cluster)`);
       }
     } catch (error) {
        if (error instanceof Error && error.message.includes("Global browser capacity exhausted")) throw error;
        logger.warn("[UnifiedBrowserPool] Failed to check global browser cap", { error });
     }
+  }
+
+  private startHeartbeat(): void {
+    if (this.heartbeatInterval) return;
+
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        const redis = getRedisConnection();
+        const key = "pp:browsers:active_nodes";
+
+        // Update our instance share
+        await redis.hset(key, this.instanceId, this.browserSlots.size);
+        await redis.expire(key, 60); // 1 minute TTL for the whole hash is okay if all nodes update it
+
+        // Also update an individual heartbeat key for zombie detection
+        await redis.set(`pp:browsers:node_heartbeat:${this.instanceId}`, Date.now(), "EX", 30);
+      } catch (error) {
+        logger.warn("[UnifiedBrowserPool] Heartbeat failed", { error });
+      }
+    }, 15000); // 15 seconds
   }
 
   private async createBrowserSlot(): Promise<BrowserSlot> {

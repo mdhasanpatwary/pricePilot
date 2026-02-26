@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { subDays } from "date-fns";
+import { MonitoringService } from "@/lib/services/monitoring/monitoring-service";
 
 export class MaintenanceService {
   /**
@@ -85,6 +86,16 @@ export class MaintenanceService {
       console.log(
         "✅ [Maintenance] Data retention cleanup completed successfully.",
       );
+
+      // 7. Run System Monitoring & Cleanup
+      console.log("📊 [Maintenance] Running system monitoring & cleanup...");
+      try {
+        await MonitoringService.detectStarvation();
+        await MonitoringService.cleanupZombieBrowsers();
+      } catch (monitorError) {
+        console.error("❌ [Maintenance] Monitoring tasks failed:", monitorError);
+        // Don't fail the whole maintenance run if monitoring fails
+      }
 
       // Track last run in system config
       await prisma.systemConfig.upsert({

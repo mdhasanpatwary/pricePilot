@@ -1,4 +1,5 @@
 import { getSyncFullQueue, getSyncDeltaQueue, getScrapeHighPrioQueue, getScrapeLowPrioQueue, getNotificationQueue } from "@/lib/queue/client";
+import { getRedisConnection } from "@/lib/queue/connection";
 import { metricsCollector } from "./metrics-collector";
 import { logger } from "@/lib/logger";
 
@@ -60,6 +61,32 @@ export class MonitoringService {
                     error: error instanceof Error ? error.message : String(error)
                 });
             }
+        }
+    }
+
+    /**
+     * Detect and cleanup "zombie" browser nodes from the cluster global semaphore.
+     * Prunes nodes that haven't updated their individual heartbeat in the last 60 seconds.
+     */
+    static async cleanupZombieBrowsers(): Promise<void> {
+        try {
+            const redis = getRedisConnection();
+            const key = "pp:browsers:active_nodes";
+            const counts = await redis.hgetall(key);
+
+            for (const instanceId of Object.keys(counts)) {
+                const heartbeatKey = `pp:browsers:node_heartbeat:${instanceId}`;
+                const exists = await redis.exists(heartbeatKey);
+
+                if (!exists) {
+                    logger.warn(`[MonitoringService] Pruning zombie browser node: ${instanceId}`);
+                    await redis.hdel(key, instanceId);
+                }
+            }
+        } catch (error) {
+            logger.error(`[MonitoringService] Failed to cleanup zombie browsers`, {
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
