@@ -5,7 +5,7 @@
 - [x] Remove scraper/debug playground endpoints from production code paths.
 - [x] Add `INTERNAL_MODE=true` gate for internal diagnostics.
 - [x] Enforce strict admin middleware on all internal diagnostics endpoints.
-- [ ] Ensure production build excludes debug routes entirely.
+- [x] Ensure production build excludes debug routes entirely.
 - [ ] Add CI test to scan API route tree and fail if auth wrapper is missing (except explicit public allowlist).
 
 ## Phase 0 - Fail-Closed Policy

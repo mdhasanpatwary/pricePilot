@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import path from "path";
 
 const nextConfig: NextConfig = {
   images: {
@@ -119,6 +120,19 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+  },
+  webpack: (config, { webpack, dev, isServer }) => {
+    // In production builds, replace debug and playground routes with a no-op handler.
+    // This ensures that sensitive debug code is entirely excluded from the production bundle.
+    if (!dev && isServer) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /\/app\/api\/.*(debug|playground).*\/route\.ts$/,
+          path.resolve(__dirname, "lib/production-noop.ts")
+        )
+      );
+    }
+    return config;
   },
 };
 
