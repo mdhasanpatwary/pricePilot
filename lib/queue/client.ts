@@ -9,6 +9,7 @@ const globalForQueues = global as unknown as {
   notificationQueue?: Queue;
   scrapeHighQueue?: Queue;
   scrapeLowQueue?: Queue;
+  deadLetterQueue?: Queue;
 };
 
 /**
@@ -87,6 +88,21 @@ export const getScrapeLowPrioQueue = (): Queue => {
     defaultJobOptions: {
       attempts: 1,
       removeOnFail: { count: 5000, age: 7 * 24 * 3600 },
+    },
+  }));
+};
+
+/**
+ * Dead-letter queue – receives permanently failed jobs for later inspection.
+ * Jobs are added explicitly when we classify a failure as terminal.
+ */
+export const getDeadLetterQueue = (): Queue => {
+  return (globalForQueues.deadLetterQueue ??= new Queue(QUEUE_NAMES.DEAD_LETTER, {
+    connection: getRedisConnection() as any,
+    defaultJobOptions: {
+      removeOnComplete: { count: 500, age: 7 * 24 * 3600 },
+      removeOnFail: { count: 1000, age: 30 * 24 * 3600 },
+      attempts: 1, // we don't retry DLQ entries
     },
   }));
 };

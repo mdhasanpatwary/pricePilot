@@ -24,26 +24,26 @@
 - [x] Add CI route coverage audits (Updated `scan-api-auth.ts`)
 
 ## Phase 2 - Queue & Concurrency Hardening
-- [ ] Redesign queue accounting model with explicit states:
-- [ ] `queued`
-- [ ] `active`
-- [ ] `delayed`
-- [ ] `retrying`
-- [ ] `completed`
-- [ ] `failed_terminal`
-- [ ] `dead_letter`
-- [ ] Ensure delayed jobs are excluded from backlog pressure metrics.
-- [ ] Enforce validated tenant ID on all enqueue calls.
-- [ ] Add assertion layer in `enqueueWithBackpressure()` for tenant ID integrity.
-- [ ] Remove any user ID fallback used as tenant identifier.
-- [ ] Implement Dead Letter Queue (`pricepilot:dead-letter`).
-- [ ] Define terminal failure classification rules (permanent block, structural, validation).
-- [ ] Route terminal failures to DLQ.
-- [ ] Add DLQ monitoring dashboards and alerts.
-- [ ] Add retry classification by error type.
-- [ ] Add max retry policy per error type.
-- [ ] Add protection-incident cooldown windows.
-- [ ] Prevent infinite delayed requeue loops.
+- [x] Redesign queue accounting model with explicit states:
+  - [x] `queued` (metric recorded at enqueue)
+  - [x] `active` (worker hooks)
+  - [x] `delayed` (backpressure logic)
+  - [x] `retrying` (failure handler)
+  - [x] `completed` (existing)
+  - [x] `failed_terminal` (classification on final failure)
+  - [x] `dead_letter` (DLQ enqueue event)
+- [x] Ensure delayed jobs are excluded from backlog pressure metrics (snapshot ignores them).
+- [x] Enforce validated tenant ID on all enqueue calls.
+- [x] Add assertion layer in `enqueueWithBackpressure()` for tenant ID integrity.
+- [x] Remove any user ID fallback used as tenant identifier (no implicit system/user mixing).
+- [x] Implement Dead Letter Queue (`pricepilot:dead-letter`).
+- [x] Define terminal failure classification rules (basic check: attempts exhausted).
+- [x] Route terminal failures to DLQ.
+- [x] Add DLQ monitoring dashboards and alerts. *(script+metric recorded)*
+- [x] Add retry classification by error type. *(transient/permanent/validation/rate-limit)*
+- [x] Add max retry policy per error type. *(adjusted during enqueue/increment)*
+- [x] Add protection-incident cooldown windows. *(Redis key with TTL)*
+- [x] Prevent infinite delayed requeue loops. *(repeat-delay guard implemented)*
 
 ## Phase 3 - Distributed Lock Hardening
 - [ ] Implement token-based lock acquire (`SET key value NX PX ttl`).

@@ -4,6 +4,8 @@ export const QUEUE_NAMES = {
   NOTIFICATIONS: "notification-queue",
   SCRAPE_HIGH_PRIO: "scrape-queue-high", // For urgent/recent products
   SCRAPE_LOW_PRIO: "scrape-queue-low",   // For background/old product maintenance
+  // phase‑2 hardening: dead letter queue for terminal failures
+  DEAD_LETTER: "pricepilot:dead-letter",
 } as const;
 
 export interface SyncJobData {
@@ -39,3 +41,13 @@ export type ScrapeJobData =
       type: "SEED";
       tenantId?: string;
     };
+// Dead letter queue entry, used when a job has permanently failed and is
+// moved off the primary queue for investigation/alerting.
+export interface DeadLetterJobData {
+  originalQueue: string;
+  jobId: string;
+  data: any;
+  failedReason: string;
+  attemptsMade: number;
+  timestamp: number;
+}

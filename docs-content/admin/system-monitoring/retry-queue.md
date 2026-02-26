@@ -153,6 +153,7 @@ model RetryQueue {
   nextRetryAt     DateTime
   lastAttemptAt   DateTime?
   lastError       String?
+  errorType       String?  // TRANSIENT|PERMANENT|VALIDATION|RATE_LIMIT classification
   status          String   @default("PENDING") // PENDING, IN_PROGRESS, SUCCESS, FAILED
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -167,8 +168,23 @@ model RetryQueue {
 ```
 PENDING → IN_PROGRESS → SUCCESS
                       ↓
-                    FAILED (after max retries)
+                    FAILED (after max retries or permanent/validation error)
 ```
+
+## Error Classification & Retry Limits
+
+When an item is added the service categorizes the failure (transient, rate-limit,
+validation, permanent).  The `maxRetries` field is then capped based on the
+error type – validation/permanent issues never retry and rate‑limit errors only
+get a few attempts.  This information is recorded in the `errorType` column and
+visible to operators.
+
+## Monitoring
+
+In addition to the built‑in lifecycle metrics, a helper script
+`scripts/monitor-dlq.ts` can poll the dead‑letter queue and emit a length
+metric.  Set up a cron job or alert on the resulting `dlq:<queue>:length`
+metric to detect runaway failures.
 
 ## Monitoring
 

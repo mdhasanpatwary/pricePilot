@@ -6,7 +6,16 @@ const DOMAIN_BLOCK_PREFIX = "pp:ops:block:minute:";
 const ACTIVE_GAUGE_KEY = "pp:ops:gauge:active";
 const RETENTION_SECONDS = 7 * 24 * 60 * 60;
 
-export type QueueLifecycleEvent = "active" | "completed" | "failed";
+export type QueueLifecycleEvent =
+  | "queued"
+  | "active"
+  | "delayed"
+  | "retrying"
+  | "completed"
+  | "failed"
+  | "failed_terminal"
+  | "dead_letter"
+  | "cooldown";
 export type RetryEvent = "enqueued" | "claimed" | "success" | "requeued" | "failed";
 
 interface RetrySummary {
@@ -125,7 +134,10 @@ export class OperationalMetricsService {
       }
 
       await incrFields(key, fields);
-      await this.adjustActiveGauge(queueName, event, tenantId);
+      // only certain events should affect the active‑job gauge
+      if (["active", "completed", "failed", "failed_terminal", "dead_letter"].includes(event)) {
+        await this.adjustActiveGauge(queueName, event, tenantId);
+      }
     } catch (error) {
       logger.debug("[OperationalMetrics] Failed to record queue lifecycle", {
         queueName,
@@ -140,6 +152,8 @@ export class OperationalMetricsService {
     event: QueueLifecycleEvent,
     tenantId?: string,
   ): Promise<void> {
+    // delta only increments for active; all other tracked lifecycle transitions that
+    // reach this helper are effectively a job leaving the active state
     const delta = event === "active" ? 1 : -1;
     const redis = getRedisConnection();
     const lua = `
@@ -186,6 +200,23 @@ export class OperationalMetricsService {
     } catch (error) {
       logger.debug("[OperationalMetrics] Failed to record retry metric", {
         event,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Record the current length of a queue that is being used as a DLQ.
+   */
+  static async recordDLQLength(queueName: string, length: number): Promise<void> {
+    try {
+      const bucket = bucketNow();
+      const key = metricKey(bucket);
+      await incrFields(key, [[`dlq:${queueName}:length`, length]]);
+    } catch (error) {
+      logger.debug("[OperationalMetrics] Failed to record DLQ length", {
+        queueName,
+        length,
         error: error instanceof Error ? error.message : String(error),
       });
     }

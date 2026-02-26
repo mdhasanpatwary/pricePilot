@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "../logger";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
+import { classifyRetryError, maxRetriesForError } from "@/lib/queue/retry-utils";
 
 /**
  * Retry Queue Service
@@ -20,6 +21,8 @@ export interface RetryQueueItem {
     nextRetryAt: Date;
     lastAttemptAt: Date | null;
     lastError: string | null;
+    // phase‑2: classification of the underlying failure so we can decide policy
+    errorType?: "TRANSIENT" | "PERMANENT" | "VALIDATION" | "RATE_LIMIT";
     status: 'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILED';
     createdAt: Date;
     updatedAt: Date;
@@ -71,6 +74,11 @@ export class RetryQueueService {
             maxRetries = 4,
         } = options;
 
+        // classify the failure so we can apply type-specific policies
+        const errType = classifyRetryError(error);
+        const typeMax = maxRetriesForError(errType);
+        const effectiveMax = Math.min(maxRetries, typeMax);
+
         // Check if item already exists in queue
         const existing = await prisma.retryQueue.findFirst({
             where: {
@@ -84,7 +92,24 @@ export class RetryQueueService {
         });
 
         if (existing) {
-            // Update existing item
+            // if the latest error now classifies as permanent/validation we bail out
+            if (errType === 'PERMANENT' || errType === 'VALIDATION' || effectiveMax === 0) {
+                // mark existing as failed
+                const failed = await prisma.retryQueue.update({
+                    where: { id: existing.id },
+                    data: {
+                        lastError: error,
+                        errorType: errType,
+                        status: 'FAILED',
+                        updatedAt: new Date(),
+                    },
+                });
+                logger.warn('[RetryQueue] Permanent error encountered, marking existing item FAILED');
+                void OperationalMetricsService.recordRetryEvent('failed');
+                return failed as RetryQueueItem;
+            }
+
+            // Update existing item normally
             const retryCount = existing.retryCount + 1;
             const nextRetryAt = this.calculateNextRetryTime(retryCount);
 
@@ -96,7 +121,9 @@ export class RetryQueueService {
                     retryCount,
                     nextRetryAt,
                     lastError: error,
-                    status: retryCount >= maxRetries ? 'FAILED' : 'PENDING',
+                    errorType: errType,
+                    maxRetries: effectiveMax,
+                    status: retryCount >= effectiveMax ? 'FAILED' : 'PENDING',
                     updatedAt: new Date(),
                 },
             });
@@ -118,14 +145,20 @@ export class RetryQueueService {
                 productId,
                 url,
                 retryCount: 0,
-                maxRetries,
+                maxRetries: effectiveMax,
                 nextRetryAt,
                 lastError: error,
-                status: 'PENDING',
+                errorType: errType,
+                status: effectiveMax === 0 ? 'FAILED' : 'PENDING',
             },
         });
 
-        void OperationalMetricsService.recordRetryEvent('enqueued');
+        if (effectiveMax === 0) {
+            logger.warn(`[RetryQueue] Error classified as ${errType}; item created in FAILED state`);
+            void OperationalMetricsService.recordRetryEvent('failed');
+        } else {
+            void OperationalMetricsService.recordRetryEvent('enqueued');
+        }
 
         return item as RetryQueueItem;
     }
@@ -307,11 +340,22 @@ export class RetryQueueService {
             return;
         }
 
+        const errType = classifyRetryError(error);
+        // if new error is permanent we fail immediately regardless of count
+        if (errType === 'PERMANENT' || errType === 'VALIDATION') {
+            await this.markFailed(id, error);
+            return;
+        }
+
         const newRetryCount = item.retryCount + 1;
         const nextRetryAt = this.calculateNextRetryTime(newRetryCount);
 
+        // update maxRetries if classification suggests a smaller cap
+        const typeMax = maxRetriesForError(errType);
+        const effectiveMax = Math.min(item.maxRetries, typeMax);
+
         // Mark as FAILED if max retries exceeded
-        const status = newRetryCount >= item.maxRetries ? 'FAILED' : 'PENDING';
+        const status = newRetryCount >= effectiveMax ? 'FAILED' : 'PENDING';
 
         await prisma.retryQueue.update({
             where: { id },
@@ -319,13 +363,15 @@ export class RetryQueueService {
                 retryCount: newRetryCount,
                 nextRetryAt,
                 lastError: error,
+                errorType: errType,
+                maxRetries: effectiveMax,
                 status,
                 updatedAt: new Date(),
             },
         });
 
         if (status === 'FAILED') {
-            logger.warn(`[RetryQueue] Item ${id} exceeded max retries (${item.maxRetries}), marked as FAILED`);
+            logger.warn(`[RetryQueue] Item ${id} exceeded max retries (${effectiveMax}), marked as FAILED`);
             void OperationalMetricsService.recordRetryEvent('failed');
         } else {
             logger.info(`[RetryQueue] Item ${id} retry count incremented to ${newRetryCount}, next retry at ${nextRetryAt.toISOString()}`);

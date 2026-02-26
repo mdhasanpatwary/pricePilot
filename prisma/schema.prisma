@@ -985,6 +985,7 @@ model RetryQueue {
   nextRetryAt   DateTime
   lastAttemptAt DateTime?
   lastError     String?
+  errorType     String?   // classification added in phase2
   status        String    @default("PENDING")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

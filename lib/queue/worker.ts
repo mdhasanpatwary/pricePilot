@@ -1,11 +1,12 @@
 import { Worker, Job } from "bullmq";
 import { getRedisConnection } from "./connection";
 import { QUEUE_NAMES } from "@/lib/queue/types";
-import { SyncJobData, NotificationJobData, ScrapeJobData } from "./types";
+import { SyncJobData, NotificationJobData, ScrapeJobData, DeadLetterJobData } from "./types";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { ScrapeJobProcessor } from "@/lib/services/scheduling/scrape-job-processor";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 import { decrementTenantQueueDepth } from "./backpressure";
+import { getDeadLetterQueue } from "./client";
 
 const TENANT_ACTIVE_JOBS_PREFIX = "pp:queue:tenant:active:";
 
@@ -19,7 +20,8 @@ const TIER_CONCURRENCY_LIMITS: Record<string, number> = {
 };
 
 async function getTenantConcurrencyLimit(tenantId: string): Promise<number> {
-  if (tenantId === "system") return TIER_CONCURRENCY_LIMITS.system;
+  // treat missing tenant as system for internal tasks
+  if (!tenantId || tenantId === "system") return TIER_CONCURRENCY_LIMITS.system;
 
   const redis = getRedisConnection();
   const cacheKey = `pp:tier:limit:${tenantId}`;
@@ -44,11 +46,11 @@ async function getTenantConcurrencyLimit(tenantId: string): Promise<number> {
   }
 }
 
-async function tryAcquireTenantSlot(queueName: string, tenantId: string): Promise<boolean> {
+async function tryAcquireTenantSlot(queueName: string, tenantId: string | undefined): Promise<boolean> {
   const redis = getRedisConnection();
   const key = `${TENANT_ACTIVE_JOBS_PREFIX}${queueName}:${tenantId}`;
 
-  const tierLimit = await getTenantConcurrencyLimit(tenantId);
+  const tierLimit = await getTenantConcurrencyLimit(tenantId || "system");
   const queueTotalConcurrency = Math.max(1, QUEUE_CONCURRENCY_CAPS[queueName] || 10);
 
   // No single tenant should consume more than 50% of active workers for a queue type
@@ -88,15 +90,15 @@ async function decrementTenantActive(queueName: string, tenantId: string): Promi
 // Processor for Sync Jobs
 const syncProcessor = async (job: Job<SyncJobData>) => {
   const { data } = job;
-  const tenantId = data.tenantId || "system";
+  const tenantId = data.tenantId; // should always be supplied by producer
   console.log(
     `[Worker] Processing Sync Job ${job.id} (Tenant: ${tenantId}, Type: ${job.data.type})`,
   );
 
   // 1. Enforce Per-Tenant Concurrency (Atomic)
   if (!(await tryAcquireTenantSlot(job.queueName, tenantId))) {
-     console.warn(`[Worker] Tenant ${tenantId} reached concurrency limit on ${job.queueName}. Deferring job.`);
-     throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
+    console.warn(`[Worker] Tenant ${tenantId} reached concurrency limit on ${job.queueName}. Deferring job.`);
+    throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
   }
 
   try {
@@ -221,7 +223,7 @@ export const createWorkers = () => {
     // However, for consistency with our fair-share goals:
     const tenantId = job.data.type === "SCRAPE_PRODUCT" ? job.data.tenantId : "system";
     if (!(await tryAcquireTenantSlot(job.queueName, tenantId))) {
-       throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
+      throw new Error("TENANT_CONCURRENCY_LIMIT_REACHED");
     }
 
     try {
@@ -276,9 +278,38 @@ export const createWorkers = () => {
 
     worker.on("failed", async (job, err) => {
       console.error(`[Worker] ${queueName} Job ${job?.id} failed: ${err.message}`);
-      const tenantId = job?.data?.tenantId || (job?.data?.type === "SCRAPE_PRODUCT" ? job.data.tenantId : undefined);
+      const tenantId = job?.data?.tenantId;
       if (tenantId) await decrementTenantQueueDepth(queueName, tenantId);
       void OperationalMetricsService.recordQueueLifecycle(queueName, "failed", tenantId);
+
+      if (!job) return;
+
+      // determine if this was the terminal failure (no retries left)
+      const attemptsAllowed = job.opts?.attempts ?? 1;
+      const isTerminal = job.attemptsMade >= attemptsAllowed;
+
+      if (isTerminal) {
+        void OperationalMetricsService.recordQueueLifecycle(queueName, "failed_terminal", tenantId);
+
+        // move payload to dead letter queue for investigation later
+        try {
+          const dlq = getDeadLetterQueue();
+          await dlq.add("DLQ", {
+            originalQueue: queueName,
+            jobId: job.id,
+            data: job.data,
+            failedReason: err?.message || String(err),
+            attemptsMade: job.attemptsMade,
+            timestamp: Date.now(),
+          } as DeadLetterJobData);
+          void OperationalMetricsService.recordQueueLifecycle(queueName, "dead_letter", tenantId);
+        } catch (e) {
+          console.error("[Worker] Failed to push job to dead-letter queue", e);
+        }
+      } else {
+        // job will be retried, record for metrics
+        void OperationalMetricsService.recordQueueLifecycle(queueName, "retrying", tenantId);
+      }
     });
 
     worker.on("active", (job) => {

@@ -1,6 +1,7 @@
 import type { JobsOptions, Queue } from "bullmq";
 
 import { logger } from "@/lib/logger";
+import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 import { getRedisConnection } from "@/lib/queue/connection";
 
 const QUEUE_DEPTH_METRIC_PREFIX = "pp:queue:depth:rolling:";
@@ -20,12 +21,13 @@ export interface QueueBackpressureDecision {
 }
 
 export interface QueueDepthSnapshot {
-  depth: number;
+  depth: number; // total jobs *excluding* delayed entries
   counts: {
     waiting: number;
     active: number;
     prioritized: number;
     waitingChildren: number;
+    delayed: number; // newly tracked state for debugging/alerts
   };
 }
 
@@ -60,6 +62,18 @@ function getMetricWindowMs(): number {
   return parsePositiveInt(process.env.QUEUE_DEPTH_METRIC_WINDOW_MS, DEFAULT_METRIC_WINDOW_MS);
 }
 
+function getCooldownWindowMs(): number {
+  // how long a tenant stays in protected cooldown after a flood incident
+  // default 5 minutes
+  return parsePositiveInt(process.env.QUEUE_COOLDOWN_WINDOW_MS, 5 * 60 * 1000);
+}
+
+function getMaxRepeatDelayCount(): number {
+  // number of backpressure-induced delays allowed in the rolling window before
+  // we assume an enqueue loop and reject the job.
+  return parsePositiveInt(process.env.QUEUE_MAX_REPEAT_DELAY_COUNT, 10);
+}
+
 export function calculateDelayMs(depth: number, threshold: number, minDelayMs: number, maxDelayMs: number): number {
   const overflow = Math.max(1, depth - threshold);
   // Exponential backoff for queue depth overflow
@@ -85,16 +99,23 @@ async function recordQueueDepthMetric(queueName: string, depth: number): Promise
 }
 
 export async function getQueueDepthSnapshot(queue: Queue): Promise<QueueDepthSnapshot> {
-  const counts = await queue.getJobCounts("waiting", "active", "prioritized", "waiting-children");
+  const counts = await queue.getJobCounts(
+    "waiting",
+    "active",
+    "prioritized",
+    "waiting-children",
+    "delayed",
+  );
   const waiting = counts.waiting ?? 0;
   const active = counts.active ?? 0;
   const prioritized = counts.prioritized ?? 0;
   const waitingChildren = counts["waiting-children"] ?? 0;
-  const depth = waiting + active + prioritized + waitingChildren;
+  const delayed = counts.delayed ?? 0;
+  const depth = waiting + active + prioritized + waitingChildren; // intentionally excludes delayed jobs
 
   return {
     depth,
-    counts: { waiting, active, prioritized, waitingChildren },
+    counts: { waiting, active, prioritized, waitingChildren, delayed },
   };
 }
 
@@ -119,14 +140,18 @@ export async function decrementTenantQueueDepth(queueName: string, tenantId: str
   if (val < 0) await redis.set(key, 0); // Correct drift
 }
 
-export async function enqueueWithBackpressure<TData extends { tenantId?: string }>(
+export async function enqueueWithBackpressure<TData extends { tenantId: string }>(
   queue: Queue,
   name: string,
   data: TData,
   jobOptions: JobsOptions = {},
   decision: QueueBackpressureDecision,
 ) {
-  const tenantId = data.tenantId || "system";
+  // phase‑2 hardening: require an explicit tenantId, no fallbacks allowed
+  if (!data || typeof data.tenantId !== "string" || data.tenantId.trim() === "") {
+    throw new Error("enqueueWithBackpressure requires a valid tenantId on job data");
+  }
+  const tenantId = data.tenantId;
   const minDelayMs = parsePositiveInt(String(decision.minDelayMs ?? 1000), 1000);
   const maxDelayMs = parsePositiveInt(String(decision.maxDelayMs ?? 300000), 300000); // 5 min max
 
@@ -137,6 +162,29 @@ export async function enqueueWithBackpressure<TData extends { tenantId?: string 
   const tenantDepth = await getTenantQueueDepth(queue.name, tenantId);
 
   await recordQueueDepthMetric(queue.name, globalSnapshot.depth);
+
+  // phase‑2 enhancement: enforce cooldown window if previously flooded
+  const redis = getRedisConnection();
+  const cooldownKey = `pp:queue:cooldown:${queue.name}:${tenantId}`;
+  const inCooldown = await redis.ttl(cooldownKey);
+  if (inCooldown > 0) {
+    logger.warn("[QueueBackpressure] Tenant in cooldown", {
+      queue: queue.name,
+      tenantId,
+      remainingMs: inCooldown * 1000,
+    });
+    void OperationalMetricsService.recordQueueLifecycle(queue.name, "cooldown", tenantId);
+    if (decision.strategy === "reject") {
+      throw new QueueBackpressureError(
+        `Tenant ${tenantId} is in cooldown`,
+        queue.name,
+        globalSnapshot.depth,
+        globalThreshold,
+      );
+    } else {
+      jobOptions.delay = (jobOptions.delay || 0) + maxDelayMs;
+    }
+  }
 
   // 1. Global Backpressure
   if (globalSnapshot.depth > globalThreshold) {
@@ -176,6 +224,9 @@ export async function enqueueWithBackpressure<TData extends { tenantId?: string 
        MonitoringService.recordTenantFlood(queue.name, tenantId, tenantDepth);
     });
 
+    // place tenant into cooldown window
+    await redis.set(cooldownKey, "1", "PX", getCooldownWindowMs());
+
     if (decision.strategy === "reject") {
        throw new QueueBackpressureError(
          `Queue flooded by tenant ${tenantId}`,
@@ -189,6 +240,27 @@ export async function enqueueWithBackpressure<TData extends { tenantId?: string 
     }
   }
 
+  // 4. repeated-delay guard: if this job has been delayed too often in a short
+  // window we assume the producer is stuck in a loop and reject it.
+  if (jobOptions.delay && jobOptions.delay > 0) {
+    const delayKey = `pp:queue:delays:${queue.name}:${tenantId}`;
+    const repeat = await redis.incr(delayKey);
+    await redis.expire(delayKey, 60); // 1-minute window
+    if (repeat > getMaxRepeatDelayCount()) {
+      logger.warn("[QueueBackpressure] Repeated backpressure loop detected", {
+        queue: queue.name,
+        tenantId,
+        count: repeat,
+      });
+      throw new QueueBackpressureError(
+        `Repeated delay loop for tenant ${tenantId}`,
+        queue.name,
+        globalSnapshot.depth,
+        globalThreshold,
+      );
+    }
+  }
+
   // Inject groupId for BullMQ fairness
   (jobOptions as any).removeOnComplete = jobOptions.removeOnComplete ?? true;
   const finalOptions: JobsOptions = {
@@ -197,6 +269,12 @@ export async function enqueueWithBackpressure<TData extends { tenantId?: string 
   } as any;
 
   const job = await queue.add(name, data as any, finalOptions);
+
+  // record lifecycle events: queued and possibly delayed
+  void OperationalMetricsService.recordQueueLifecycle(queue.name, "queued", tenantId);
+  if (finalOptions.delay && finalOptions.delay > 0) {
+    void OperationalMetricsService.recordQueueLifecycle(queue.name, "delayed", tenantId);
+  }
 
   // Track tenant depth (increment on add)
   await incrementTenantQueueDepth(queue.name, tenantId);
