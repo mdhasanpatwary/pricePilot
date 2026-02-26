@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCachedSession } from "@/lib/auth/cached-session";
+import { withInternalGate } from "@/lib/middleware/internal-gate";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 async function handlePOST() {
   try {
     const session = await getCachedSession();
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    }
-
-    const tenantId = session.user.tenantId;
+    const tenantId = session!.user.tenantId;
     const results = [];
 
     // 1. Create User Site (Your Store) - dynamic import
@@ -24,7 +20,7 @@ async function handlePOST() {
         baseUrl: "https://mystore.com",
         apiToken: "my-api-token",
       },
-      session.user.id
+      session!.user.id
     );
     results.push("✓ Created user site");
 
@@ -334,5 +330,5 @@ async function handlePOST() {
 }
 
 export async function POST(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "auth", handlePOST);
+  return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", handlePOST));
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withRateLimit } from "@/lib/middleware/ratelimit";
+import { withInternalGate } from "@/lib/middleware/internal-gate";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 import {
   validateBody,
   validationErrorResponse,
@@ -42,5 +43,5 @@ async function handlePOST(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withRateLimit(req, 'write', handlePOST);
+  return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "write", handlePOST));
 }

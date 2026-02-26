@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCachedSession } from "@/lib/auth/cached-session";
+import { withInternalGate } from "@/lib/middleware/internal-gate";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 export const dynamic = "force-dynamic";
@@ -10,12 +10,6 @@ export const dynamic = "force-dynamic";
  * Centrally fetches system-wide diagnostics, logs, and inconsistencies.
  */
 async function handleGET(req: NextRequest) {
-  const session = await getCachedSession();
-
-  if (!session?.user?.isSuperAdmin) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const searchParams = req.nextUrl.searchParams;
     const timeframe = parseInt(searchParams.get("timeframe") || "24"); // Hours
@@ -127,5 +121,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "auth", handleGET);
+  return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", handleGET));
 }

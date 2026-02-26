@@ -1,8 +1,8 @@
 /**
  * Query Performance Metrics API
- * 
+ *
  * Provides real-time query performance metrics for monitoring and debugging.
- * 
+ *
  * GET /api/v1/debug/query-performance
  * GET /api/v1/debug/query-performance?format=json
  * GET /api/v1/debug/query-performance?reset=true
@@ -10,8 +10,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getPerformanceTracker } from '@/lib/middleware/query-performance-tracker';
+import { withInternalGate } from '@/lib/middleware/internal-gate';
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         const searchParams = req.nextUrl.searchParams;
         const format = searchParams.get('format') || 'json';
@@ -117,4 +119,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", handleGET));
 }

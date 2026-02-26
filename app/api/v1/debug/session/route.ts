@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCachedSession } from "@/lib/auth/cached-session";
+import { withInternalGate } from "@/lib/middleware/internal-gate";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { getCachedSession } from "@/lib/auth/cached-session";
 
 async function handleGET() {
   try {
     const session = await getCachedSession();
-
-    if (!session?.user) {
-      return NextResponse.json({
-        error: "Not logged in",
-        session: null
-      });
-    }
-
-    const tenantId = session.user.tenantId;
+    const tenantId = session!.user.tenantId;
 
     // Count products for this tenant
     const totalProducts = await prisma.product.count({
@@ -49,7 +42,7 @@ async function handleGET() {
 
     return NextResponse.json({
       session: {
-        user: session.user,
+        user: session!.user,
         tenantId
       },
       database: {
@@ -68,5 +61,5 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "auth", handleGET);
+  return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", handleGET));
 }

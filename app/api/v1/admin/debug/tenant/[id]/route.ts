@@ -2,47 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sessionTracker } from '@/lib/services/session-tracker';
 import { metricsAggregator } from '@/lib/services/metrics-aggregator';
 import { prisma } from '@/lib/prisma';
-import { getCachedSession } from "@/lib/auth/cached-session";
+import { withInternalGate } from '@/lib/middleware/internal-gate';
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-/**
- * GET /api/v1/admin/debug/tenant/[id]
- * Get comprehensive debug view for a specific tenant
- *
- * Returns:
- * - Active sessions
- * - Recent errors grouped by type
- * - Resource usage
- * - Configuration
- * - Stale data indicators
- *
- * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 9.1, 9.2, 9.3, 9.4, 9.5
- */
 async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        // Authentication check
-        const session = await getCachedSession();
-        if (!session?.user) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
-        // Check if user is super admin or regular admin
-        const user = session.user as any;
-        const isAdmin = user.role === 'ADMIN' || user.isSuperAdmin === true;
-
-        if (!isAdmin) {
-            return NextResponse.json(
-                { error: 'Unauthorized - Admin access required' },
-                { status: 401 }
-            );
-        }
-
         const { id: tenantId } = await params;
 
         // Get tenant information
@@ -242,5 +209,5 @@ export async function GET(
     req: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    return withRequestContextAndRateLimit(req, "auth", (r) => handleGET(r, context));
+    return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", (rr) => handleGET(rr, context)));
 }

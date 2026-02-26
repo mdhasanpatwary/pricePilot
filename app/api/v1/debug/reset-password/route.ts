@@ -1,13 +1,10 @@
-/**
- * Debug endpoint to reset admin password
- * DELETE THIS IN PRODUCTION!
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { withInternalGate } from '@/lib/middleware/internal-gate';
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
     try {
         const { email, password } = await req.json();
 
@@ -67,4 +64,8 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "write", handlePOST));
 }

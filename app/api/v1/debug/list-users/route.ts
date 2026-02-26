@@ -1,12 +1,9 @@
-/**
- * Debug endpoint to list all users
- * DELETE THIS IN PRODUCTION!
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withInternalGate } from '@/lib/middleware/internal-gate';
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function GET(_req: NextRequest) {
+async function handleGET(_req: NextRequest) {
     try {
         const users = await prisma.user.findMany({
             select: {
@@ -43,4 +40,8 @@ export async function GET(_req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", handleGET));
 }

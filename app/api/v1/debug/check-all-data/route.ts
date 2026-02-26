@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCachedSession } from "@/lib/auth/cached-session";
+import { withInternalGate } from "@/lib/middleware/internal-gate";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 async function handleGET() {
   try {
-    const session = await getCachedSession();
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    }
-
     // Get ALL data across all tenants
     const allTenants = await prisma.tenant.findMany({
       select: { id: true, companyName: true }
@@ -51,10 +45,6 @@ async function handleGET() {
     });
 
     return NextResponse.json({
-      currentUser: {
-        email: session.user.email,
-        tenantId: session.user.tenantId
-      },
       summary: {
         totalTenants: allTenants.length,
         totalSites: allSites.length,
@@ -75,5 +65,5 @@ async function handleGET() {
 }
 
 export async function GET(req: NextRequest) {
-  return withRequestContextAndRateLimit(req, "auth", handleGET);
+  return withInternalGate(req, (r) => withRequestContextAndRateLimit(r, "auth", handleGET));
 }
