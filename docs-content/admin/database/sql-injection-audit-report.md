@@ -2,6 +2,8 @@
 title: "SQL Injection Audit Report"
 description: "SQL injection vulnerability audit report"
 category: "database"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["sql-injection", "security", "audit"]
 audience: "admin"
 ---

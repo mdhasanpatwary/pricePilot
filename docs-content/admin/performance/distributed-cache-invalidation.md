@@ -2,6 +2,8 @@
 title: "Distributed Cache Invalidation"
 description: "Invalidating caches across distributed systems"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "distributed", "invalidation"]
 audience: "admin"
 ---

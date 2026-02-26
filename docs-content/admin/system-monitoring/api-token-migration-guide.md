@@ -2,6 +2,8 @@
 title: "API Token Migration Guide"
 description: "Guide for migrating API tokens to new encryption system"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["api", "tokens", "migration"]
 audience: "admin"
 ---

@@ -124,6 +124,10 @@ const syncProcessor = async (job: Job<SyncJobData>) => {
     } else if (job.data.type === "PRODUCT") {
       if (!job.data.productId) throw new Error("ProductID required for product sync");
       await SyncOrchestrator.syncProduct(job.data.productId);
+    } else if (job.data.type === "STORE_SYNC") {
+      if (!job.data.siteId) throw new Error("SiteID required for store sync");
+      const { SyncService } = await import("@/lib/services/sync");
+      await SyncService.syncProductsToStore(job.data.siteId);
     } else if (job.data.type === "MAINTENANCE") {
       const { MaintenanceService } = await import("@/lib/services/maintenance");
       await MaintenanceService.runDataRetention();

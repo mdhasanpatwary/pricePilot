@@ -4,6 +4,8 @@ description: "Best practices for input validation in price updates"
 category: "pricing"
 tags: ["validation", "security", "best-practices"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Input Validation Guide

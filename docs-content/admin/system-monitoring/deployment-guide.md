@@ -2,6 +2,8 @@
 title: "Deployment Guide"
 description: "Complete guide for deploying PricePilot"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["deployment", "guide", "operations"]
 audience: "admin"
 ---

@@ -2,6 +2,8 @@
 title: "Cache Invalidation Patterns"
 description: "Patterns and strategies for cache invalidation"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "invalidation", "patterns"]
 audience: "admin"
 ---

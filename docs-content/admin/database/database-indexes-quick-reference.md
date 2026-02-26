@@ -2,6 +2,8 @@
 title: "Database Indexes Quick Reference"
 description: "Quick reference for database indexes"
 category: "database"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["database", "indexes", "quick-reference"]
 audience: "admin"
 ---

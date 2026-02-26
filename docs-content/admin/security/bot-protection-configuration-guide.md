@@ -2,6 +2,8 @@
 title: "Bot Protection Configuration Guide"
 description: "Configuring bot protection features"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["bot-protection", "configuration", "security"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/bot-protection-configuration-guide.md"]

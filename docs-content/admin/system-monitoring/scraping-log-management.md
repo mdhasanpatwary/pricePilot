@@ -2,6 +2,8 @@
 title: "Scraping Log Management"
 description: "Managing and analyzing scraping logs"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["scraping", "logs", "management"]
 audience: "admin"
 ---

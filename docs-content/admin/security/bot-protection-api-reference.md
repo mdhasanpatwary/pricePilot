@@ -2,6 +2,8 @@
 title: "Bot Protection API Reference"
 description: "API reference for bot protection features"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["bot-protection", "api", "security"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/bot-protection-api-reference.md"]

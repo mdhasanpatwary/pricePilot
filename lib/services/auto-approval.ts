@@ -102,6 +102,8 @@ export class AutoApprovalService {
                         Product: {
                             include: {
                                 matchesAsUser: {
+                                    orderBy: { confidenceScore: "desc" },
+                                    take: 1,
                                     include: {
                                         competitorProduct: true,
                                     },
@@ -115,6 +117,22 @@ export class AutoApprovalService {
                     break;
                 }
 
+                // Load enabled rules for tenant once (Requirement 3.1)
+                // This is an optimization for Phase 13 to avoid N+1 rule lookups
+                const rules = await prisma.autoApprovalRule.findMany({
+                    where: {
+                        tenantId,
+                        enabled: true,
+                    },
+                    orderBy: {
+                        priority: "asc",
+                    },
+                });
+
+                if (rules.length === 0) {
+                    break; // No enabled rules, no auto-approvals possible
+                }
+
                 hasMore = pendingChanges.length === take;
                 lastId = pendingChanges[pendingChanges.length - 1].id;
 
@@ -124,7 +142,12 @@ export class AutoApprovalService {
                         metricsTracker.totalEvaluated++;
 
                         // Evaluate if change should be auto-approved
-                        const decision = await this.shouldAutoApprove(change, tenantId);
+                        // FIX: Pass rules and pre-loaded product to avoid N+1 queries
+                        const decision = await this.shouldAutoApprove(
+                            change,
+                            tenantId,
+                            rules
+                        );
 
                         // If approved, execute auto-approval transaction
                         if (decision.approved && decision.ruleId && decision.ruleName) {
@@ -559,13 +582,15 @@ export class AutoApprovalService {
      *
      * @param change - The pending price change to evaluate
      * @param tenantId - The tenant ID for rule lookup
+     * @param rules - Pre-loaded auto-approval rules (Optional, for Phase 13 optimization)
      * @returns Object with approval decision and reason
      *
      * Requirements: 3.1, 3.2, 3.3, 3.5
      */
     static async shouldAutoApprove(
-        change: PendingPriceChange,
-        tenantId: string
+        change: PendingPriceChange & { Product?: any },
+        tenantId: string,
+        rules?: any[]
     ): Promise<AutoApprovalDecision> {
         try {
             // Validate inputs
@@ -603,9 +628,9 @@ export class AutoApprovalService {
                 };
             }
 
-            // Load enabled rules for tenant, ordered by priority ascending
+            // Load enabled rules for tenant if not provided
             // Lower priority numbers are evaluated first (Requirement 3.1)
-            const rules = await prisma.autoApprovalRule.findMany({
+            const activeRules = rules || await prisma.autoApprovalRule.findMany({
                 where: {
                     tenantId,
                     enabled: true, // Skip disabled rules (Requirement 3.5)
@@ -616,24 +641,31 @@ export class AutoApprovalService {
             });
 
             // If no rules, return not approved (Requirement 3.3)
-            if (rules.length === 0) {
+            if (activeRules.length === 0) {
                 return {
                     approved: false,
                     reason: "No enabled auto-approval rules found",
                 };
             }
 
-            // Load product with match data
-            const product = await prisma.product.findUnique({
-                where: { id: change.productId },
-                include: {
-                    matchesAsUser: {
-                        include: {
-                            competitorProduct: true,
+            // Load product with match data if not already included in change
+            let product = change.Product as ProductWithMatches;
+
+            if (!product) {
+                const fetchedProduct = await prisma.product.findUnique({
+                    where: { id: change.productId },
+                    include: {
+                        matchesAsUser: {
+                            orderBy: { confidenceScore: "desc" },
+                            take: 1,
+                            include: {
+                                competitorProduct: true,
+                            },
                         },
                     },
-                },
-            });
+                });
+                product = fetchedProduct as ProductWithMatches;
+            }
 
             if (!product) {
                 return {
@@ -643,7 +675,7 @@ export class AutoApprovalService {
             }
 
             // Evaluate rules in priority order with short-circuit (Requirement 3.2)
-            for (const rule of rules) {
+            for (const rule of activeRules) {
                 const matches = await this.evaluateRule(rule, change, product);
 
                 if (matches) {

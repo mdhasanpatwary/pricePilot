@@ -2,6 +2,8 @@
 title: "Email Notification Integration Examples"
 description: "Examples of email notification integrations"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["email", "notifications", "integration"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/email-notification-integration-examples.md"]

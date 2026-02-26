@@ -2,6 +2,8 @@
 title: "Security Headers"
 description: "Security headers configuration and usage"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["security", "headers", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/security-headers.md"]

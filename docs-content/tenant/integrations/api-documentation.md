@@ -4,6 +4,8 @@ description: "Complete PricePilot API reference with endpoints, authentication, 
 category: "integrations"
 tags: ["api", "reference", "endpoints", "authentication"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # PricePilot API Documentation

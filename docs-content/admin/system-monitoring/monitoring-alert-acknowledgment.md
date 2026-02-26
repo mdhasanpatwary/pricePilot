@@ -2,6 +2,8 @@
 title: "Monitoring Alert Acknowledgment"
 description: "Acknowledging and managing monitoring alerts"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "alerts", "acknowledgment"]
 audience: "admin"
 ---

@@ -4,6 +4,8 @@ description: "Optimize bulk price approval workflows for efficiency"
 category: "pricing"
 tags: ["bulk-operations", "approval", "optimization"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Bulk Approval Optimization

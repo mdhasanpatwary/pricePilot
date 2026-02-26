@@ -2,6 +2,8 @@
 title: "Monitoring System"
 description: "Complete monitoring system documentation"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "system", "documentation"]
 audience: "admin"
 ---

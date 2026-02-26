@@ -4,6 +4,8 @@ description: "Testing price update API integrations"
 category: "integrations"
 tags: ["api", "testing", "integration"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Price Update API Testing Guide

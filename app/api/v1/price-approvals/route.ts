@@ -5,6 +5,9 @@ import { z } from "zod";
 import { paginateCursor, getCursorPaginationParams } from "@/lib/utils/pagination";
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+import { enqueueWithBackpressure } from "@/lib/queue/backpressure";
+import { QUEUE_NAMES } from "@/lib/queue/types";
+import { getSyncDeltaQueue } from "@/lib/queue/client";
 
 /**
  * GET /api/v1/price-approvals
@@ -174,7 +177,6 @@ async function handlePOST(req: NextRequest) {
         }
 
         const { RulesEngine } = await import("@/lib/services/rules-engine");
-        const { SyncService } = await import("@/lib/services/sync");
 
         let result;
         if (action === "approve") {
@@ -210,13 +212,28 @@ async function handlePOST(req: NextRequest) {
                 select: { id: true, platform: true },
             });
 
-            await Promise.all(
-                userSites
-                    .filter(s => s.platform === "OPENCART" || s.platform === "LARAVEL")
-                    .map(s => SyncService.syncProductsToStore(s.id).catch(err =>
-                        console.error(`[API] Store sync failed for site ${s.id}:`, err)
-                    ))
-            );
+            // Trigger store sync in background for each site
+            // Requirement 2.10.4: Offload to background queue to avoid timeouts
+            for (const site of userSites) {
+                if (site.platform === "OPENCART" || site.platform === "LARAVEL") {
+                    await enqueueWithBackpressure(
+                        getSyncDeltaQueue(),
+                        QUEUE_NAMES.SYNC_DELTA,
+                        {
+                            type: "STORE_SYNC",
+                            siteId: site.id,
+                            tenantId: session.user.tenantId,
+                        },
+                        {
+                            jobId: `store-sync-${site.id}-${Date.now()}`,
+                            priority: 5, // Higher priority for user-initiated approvals
+                        },
+                        { producer: "api.price-approvals.post", strategy: "delay" }
+                    ).catch(err =>
+                        console.error(`[API] Failed to enqueue store sync for site ${site.id}:`, err)
+                    );
+                }
+            }
 
             return NextResponse.json({
                 success: true,

@@ -2,6 +2,8 @@
 title: "Site Profile Examples"
 description: "Examples of site profiles for scraping"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["scraping", "profiles", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/competitors/site-profile-examples.md"]

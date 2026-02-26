@@ -4,6 +4,8 @@ description: "Quick reference for preventing SQL injection in product queries"
 category: "products"
 tags: ["security", "sql-injection", "quick-reference"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # SQL Injection Prevention - Quick Reference Card

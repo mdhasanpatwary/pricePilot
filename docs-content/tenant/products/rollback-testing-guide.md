@@ -4,6 +4,8 @@ description: "Testing rollback functionality for product changes"
 category: "products"
 tags: ["rollback", "testing", "products"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Rollback Testing Guide

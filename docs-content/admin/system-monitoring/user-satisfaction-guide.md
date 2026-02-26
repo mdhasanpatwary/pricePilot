@@ -2,6 +2,8 @@
 title: "User Satisfaction Guide"
 description: "User satisfaction metrics and feedback"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["metrics", "satisfaction", "monitoring"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/user-satisfaction-guide.md"]
@@ -321,5 +323,5 @@ For questions about the satisfaction tracking system:
 
 ---
 
-**Last Updated**: February 2026  
+**Last Updated**: February 2026
 **Version**: 1.5

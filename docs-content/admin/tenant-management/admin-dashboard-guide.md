@@ -2,9 +2,10 @@
 title: "Admin Dashboard Guide"
 description: "Complete guide to using the PricePilot admin dashboard for tenant management, system monitoring, and configuration"
 category: "tenant-management"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["admin", "dashboard", "management", "monitoring", "configuration"]
 audience: "admin"
-lastReviewed: "2024-02-05"
 relatedDocs: ["tenant-operations", "health-checks", "security-checklist"]
 ---
 
@@ -60,7 +61,7 @@ Click on any tenant to view detailed information:
   status: "active",
   plan: "professional",
   createdAt: "2024-01-01T00:00:00Z",
-  
+
   // Usage statistics
   stats: {
     products: 1250,
@@ -68,7 +69,7 @@ Click on any tenant to view detailed information:
     priceUpdates: 450,
     apiRequests: 15000
   },
-  
+
   // Configuration
   settings: {
     maxProducts: 2000,
@@ -76,7 +77,7 @@ Click on any tenant to view detailed information:
     scrapingFrequency: "hourly",
     features: ["autoApproval", "bulkUpdates", "apiAccess"]
   },
-  
+
   // Health metrics
   health: {
     lastSync: "2024-02-05T10:30:00Z",
@@ -749,14 +750,14 @@ Control platform-wide features:
   trialTenants: 20,
   suspendedTenants: 3,
   cancelledTenants: 2,
-  
+
   byPlan: {
     free: 50,
     starter: 60,
     professional: 35,
     enterprise: 5
   },
-  
+
   growth: {
     newThisMonth: 15,
     churnThisMonth: 2,
@@ -775,7 +776,7 @@ Control platform-wide features:
   scrapingJobsToday: 5000,
   priceUpdatesToday: 1200,
   apiRequestsToday: 150000,
-  
+
   averages: {
     productsPerTenant: 833,
     competitorsPerTenant: 5.3,
@@ -806,14 +807,14 @@ Control platform-wide features:
 {
   mrr: 45000, // Monthly Recurring Revenue
   arr: 540000, // Annual Recurring Revenue
-  
+
   byPlan: {
     free: 0,
     starter: 12000, // 60 * $200/month
     professional: 28000, // 35 * $800/month
     enterprise: 5000 // 5 * $1000/month
   },
-  
+
   growth: {
     mrrGrowth: 0.05, // 5% month-over-month
     newMrr: 3000,
@@ -906,8 +907,8 @@ Generate and download reports:
 **Solutions:**
 1. Verify admin role in database:
    ```sql
-   SELECT email, role, "isSuperAdmin" 
-   FROM users 
+   SELECT email, role, "isSuperAdmin"
+   FROM users
    WHERE email = 'your-email@example.com';
    ```
 2. Check session validity
@@ -989,6 +990,6 @@ For admin dashboard issues:
 
 ---
 
-**Last Updated:** February 5, 2024  
-**Version:** 1.5.0  
+**Last Updated:** February 5, 2024
+**Version:** 1.5.0
 **Maintained By:** Platform Engineering Team

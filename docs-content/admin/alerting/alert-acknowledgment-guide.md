@@ -2,6 +2,8 @@
 title: "Alert Acknowledgment Guide"
 description: "Guide for acknowledging alerts"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["alerts", "acknowledgment", "monitoring"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/alert-acknowledgment-guide.md"]

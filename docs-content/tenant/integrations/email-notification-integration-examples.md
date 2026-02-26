@@ -5,6 +5,8 @@ category: "integrations"
 tags: ["email", "notifications", "examples"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/alerting/email-notification-integration-examples.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Email Notification Integration Examples

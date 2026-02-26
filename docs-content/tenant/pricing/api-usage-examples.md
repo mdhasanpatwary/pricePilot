@@ -4,6 +4,8 @@ description: "Practical examples of using the PricePilot API"
 category: "pricing"
 tags: ["api", "examples", "tutorial"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # PricePilot API Usage Examples

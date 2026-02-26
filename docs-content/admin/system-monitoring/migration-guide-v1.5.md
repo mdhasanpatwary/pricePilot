@@ -2,6 +2,8 @@
 title: "Migration Guide v1.5"
 description: "Migration guide for version 1.5"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["migration", "upgrade", "deployment"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/migration-guide-v1.5.md"]

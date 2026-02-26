@@ -39,14 +39,16 @@ export class RulesEngine {
       });
 
       // Batched processing to handle large datasets (Memory Optimization)
-      let processedCount = 0;
-      const BATCH_SIZE = 100;
+      let lastId: string | undefined = undefined;
+      let totalProcessed = 0;
+      const BATCH_SIZE = 500; // Increased batch size for better throughput
 
       const recommendations: PriceRecommendation[] = [];
 
       while (true) {
         // Get batch of user products with their matches
-        const products = await prisma.product.findMany({
+        // Requirement 2.10.4: Use cursor-based pagination for scalability
+        const products: any[] = await prisma.product.findMany({
           where: {
             tenantId,
             Site: { type: "USER" },
@@ -59,12 +61,16 @@ export class RulesEngine {
             },
           },
           take: BATCH_SIZE,
-          skip: processedCount,
+          skip: lastId ? 1 : 0,
+          ...(lastId ? { cursor: { id: lastId } } : {}),
+          orderBy: { id: 'asc' },
         });
 
         if (products.length === 0) {
           break; // No more products to process
         }
+
+        lastId = products[products.length - 1].id;
 
         for (const product of products) {
           const recommendation = await this.evaluateProduct(product, rules, tenantId);
@@ -73,11 +79,11 @@ export class RulesEngine {
           }
         }
 
-        processedCount += products.length;
+        totalProcessed += products.length;
 
         // Safety break for extremely large datasets during dev/testing
         // In production, this might be handled by a queue worker instead
-        if (processedCount > 50000) {
+        if (totalProcessed > 50000) {
           console.warn(`[RulesEngine] Processed 50k products, stopping safely.`);
           break;
         }

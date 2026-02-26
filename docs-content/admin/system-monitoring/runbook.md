@@ -2,6 +2,8 @@
 title: "Operations Runbook"
 description: "Operational procedures and runbook"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["operations", "runbook", "procedures"]
 audience: "admin"
 ---

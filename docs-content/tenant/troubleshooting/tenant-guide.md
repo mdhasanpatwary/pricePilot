@@ -4,6 +4,8 @@ description: "Complete guide for PricePilot tenants"
 category: "troubleshooting"
 tags: ["tenant", "guide", "overview"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Tenant Dashboard User Guide

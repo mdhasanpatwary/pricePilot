@@ -2,6 +2,8 @@
 title: "Retry Logic"
 description: "Understanding retry logic and behavior"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["retry", "logic", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/retry-logic.md"]

@@ -2,6 +2,8 @@
 title: "Redis Free Tier Guide"
 description: "Using Redis free tier for development"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["redis", "free-tier", "development"]
 audience: "admin"
 ---

@@ -2,6 +2,8 @@
 title: "Admin Dashboard Deployment"
 description: "Deploying and configuring the admin dashboard"
 category: "database"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["admin", "dashboard", "deployment"]
 audience: "admin"
 ---

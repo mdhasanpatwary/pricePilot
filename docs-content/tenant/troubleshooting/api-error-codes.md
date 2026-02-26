@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["api", "errors", "troubleshooting"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/system-monitoring/api-error-codes.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # PricePilot API Error Codes Reference

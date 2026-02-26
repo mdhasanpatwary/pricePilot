@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["authentication", "troubleshooting", "quick-reference"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/security/authentication-troubleshooting-quick-reference.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Authentication Troubleshooting Quick Reference

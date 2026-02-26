@@ -2,10 +2,10 @@
 title: "Performance Optimization Guide"
 description: "Best practices for optimizing PricePilot system performance"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["performance", "optimization", "scaling"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["caching-strategies", "health-checks"]
 ---
 

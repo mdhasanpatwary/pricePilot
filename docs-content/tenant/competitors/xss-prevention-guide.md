@@ -4,6 +4,8 @@ description: "Comprehensive guide to preventing cross-site scripting attacks"
 category: "competitors"
 tags: ["security", "xss", "guide"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # XSS Prevention Guide

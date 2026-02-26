@@ -2,6 +2,8 @@
 title: "Authentication Troubleshooting Quick Reference"
 description: "Quick reference for authentication issues"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["authentication", "troubleshooting", "security"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/authentication-troubleshooting-quick-reference.md"]

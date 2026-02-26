@@ -2,6 +2,8 @@
 title: "Auto Approval Admin Guide"
 description: "Administrative guide for auto-approval system configuration"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["auto-approval", "admin", "configuration"]
 audience: "admin"
 ---

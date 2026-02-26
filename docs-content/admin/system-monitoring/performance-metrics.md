@@ -2,10 +2,10 @@
 title: "Performance Metrics"
 description: "Monitor and analyze PricePilot system performance metrics"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["performance", "metrics", "monitoring"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["health-checks", "optimization-guide"]
 ---
 

@@ -2,6 +2,8 @@
 title: "Security Headers Quick Reference"
 description: "Quick reference for security headers"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["security", "headers", "reference"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/security-headers-quick-reference.md"]

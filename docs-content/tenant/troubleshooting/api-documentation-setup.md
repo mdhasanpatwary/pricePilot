@@ -4,6 +4,8 @@ description: "Setting up and accessing API documentation"
 category: "troubleshooting"
 tags: ["api", "setup", "documentation"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # API Documentation Setup

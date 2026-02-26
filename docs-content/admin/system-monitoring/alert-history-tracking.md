@@ -2,6 +2,8 @@
 title: "Alert History Tracking"
 description: "Tracking and analyzing alert history"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["alerts", "history", "monitoring"]
 audience: "admin"
 ---

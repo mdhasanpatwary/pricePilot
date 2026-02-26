@@ -2,6 +2,8 @@
 title: "Alert Notifications"
 description: "Configuring and managing alert notifications"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["alerts", "notifications", "configuration"]
 audience: "admin"
 ---

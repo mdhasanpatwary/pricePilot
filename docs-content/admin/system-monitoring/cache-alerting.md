@@ -2,6 +2,8 @@
 title: "Cache Alerting"
 description: "Setting up alerts for cache performance and issues"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "alerts", "monitoring"]
 audience: "admin"
 ---

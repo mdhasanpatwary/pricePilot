@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["retry", "reliability", "guide"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/system-monitoring/retry-logic.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Retry Logic Documentation

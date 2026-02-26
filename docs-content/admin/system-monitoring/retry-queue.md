@@ -2,6 +2,8 @@
 title: "Retry Queue"
 description: "Retry queue system for failed operations"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["retry", "queue", "reliability"]
 audience: "admin"
 ---

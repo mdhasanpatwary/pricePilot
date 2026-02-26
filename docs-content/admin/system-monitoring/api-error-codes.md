@@ -2,6 +2,8 @@
 title: "API Error Codes"
 description: "Complete reference of API error codes"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["api", "errors", "reference"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/api-error-codes.md"]

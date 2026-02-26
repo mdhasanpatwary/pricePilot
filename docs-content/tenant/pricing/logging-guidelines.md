@@ -4,6 +4,8 @@ description: "Guidelines for understanding system logs and audit trails"
 category: "pricing"
 tags: ["logging", "audit", "troubleshooting"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Logging Guidelines

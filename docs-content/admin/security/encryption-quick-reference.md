@@ -2,6 +2,8 @@
 title: "Encryption Quick Reference"
 description: "Quick reference for encryption features"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["encryption", "security", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/encryption-quick-reference.md"]

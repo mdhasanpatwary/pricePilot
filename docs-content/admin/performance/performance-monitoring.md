@@ -2,6 +2,8 @@
 title: "Performance Monitoring"
 description: "Monitoring system performance metrics"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["performance", "monitoring", "metrics"]
 audience: "admin"
 ---

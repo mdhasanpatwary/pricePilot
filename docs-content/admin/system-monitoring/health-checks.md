@@ -2,10 +2,10 @@
 title: "System Health Checks"
 description: "Monitor and maintain PricePilot system health"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["monitoring", "health", "uptime", "diagnostics"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["performance-metrics", "alert-configuration"]
 ---
 

@@ -2,10 +2,10 @@
 title: "Database Backup and Restore"
 description: "Procedures for backing up and restoring PricePilot database"
 category: "database"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["database", "backup", "restore", "disaster-recovery"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["schema-management", "tenant-operations"]
 ---
 

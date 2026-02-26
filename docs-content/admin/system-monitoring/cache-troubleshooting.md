@@ -2,6 +2,8 @@
 title: "Cache Troubleshooting"
 description: "Troubleshooting common cache issues"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "troubleshooting", "issues"]
 audience: "admin"
 ---

@@ -4,6 +4,8 @@ description: "Guide for understanding and working with bot protection features"
 category: "pricing"
 tags: ["bot-protection", "security", "guide"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Bot Protection User Guide

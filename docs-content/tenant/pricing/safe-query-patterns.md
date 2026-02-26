@@ -4,6 +4,8 @@ description: "Patterns for safely querying and filtering price data"
 category: "pricing"
 tags: ["queries", "best-practices", "safety"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Safe Query Patterns Guide

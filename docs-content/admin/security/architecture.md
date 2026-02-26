@@ -2,6 +2,8 @@
 title: "System Architecture"
 description: "PricePilot system architecture and design"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["architecture", "design", "system"]
 audience: "admin"
 ---

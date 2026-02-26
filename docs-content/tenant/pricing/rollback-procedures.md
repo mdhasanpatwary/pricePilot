@@ -4,6 +4,8 @@ description: "How to rollback price changes when needed"
 category: "pricing"
 tags: ["rollback", "pricing", "procedures"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Rollback Procedures

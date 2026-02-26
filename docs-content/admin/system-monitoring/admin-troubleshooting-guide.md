@@ -2,6 +2,8 @@
 title: "Admin Troubleshooting Guide"
 description: "Comprehensive troubleshooting guide for system administrators"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["troubleshooting", "admin", "guide"]
 audience: "admin"
 ---

@@ -2,10 +2,10 @@
 title: "API Security"
 description: "Security best practices for PricePilot API endpoints"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["security", "api", "authentication", "authorization"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["authentication-config", "tenant-operations"]
 ---
 

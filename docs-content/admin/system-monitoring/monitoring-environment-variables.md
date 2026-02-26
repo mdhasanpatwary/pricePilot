@@ -2,6 +2,8 @@
 title: "Monitoring Environment Variables"
 description: "Environment variables for monitoring configuration"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "environment", "configuration"]
 audience: "admin"
 ---

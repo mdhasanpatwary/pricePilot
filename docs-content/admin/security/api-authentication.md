@@ -2,6 +2,8 @@
 title: "API Authentication"
 description: "API authentication methods and setup"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["api", "authentication", "security"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/api-authentication.md"]

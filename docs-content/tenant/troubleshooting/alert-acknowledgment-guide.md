@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["alerts", "guide", "notifications"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/alerting/alert-acknowledgment-guide.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Alert Acknowledgment Guide

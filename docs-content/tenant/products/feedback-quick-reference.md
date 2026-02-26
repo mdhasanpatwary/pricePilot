@@ -4,6 +4,8 @@ description: "Quick reference for providing feedback on product matching"
 category: "products"
 tags: ["feedback", "products", "quick-reference"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # User Feedback System - Quick Reference

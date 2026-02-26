@@ -2,10 +2,10 @@
 title: "Database Schema Management"
 description: "Guide to managing PricePilot database schema and migrations"
 category: "database"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["database", "schema", "migrations", "prisma"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["backup-restore", "health-checks"]
 ---
 

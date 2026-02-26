@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["cache", "quick-reference", "guide"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/performance/cache-quick-reference.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Cache Quick Reference Guide

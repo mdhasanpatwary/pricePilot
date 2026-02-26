@@ -2,6 +2,8 @@
 title: "Alert Acknowledgment Quick Reference"
 description: "Quick reference for acknowledging system alerts"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["alerts", "monitoring", "quick-reference"]
 audience: "admin"
 ---

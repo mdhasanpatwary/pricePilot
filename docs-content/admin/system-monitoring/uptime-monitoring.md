@@ -2,6 +2,8 @@
 title: "Uptime Monitoring"
 description: "Monitoring system uptime and availability"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["uptime", "monitoring", "availability"]
 audience: "admin"
 ---

@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["security", "headers", "quick-reference"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/security/security-headers-quick-reference.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Security Headers Quick Reference

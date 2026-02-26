@@ -2,6 +2,8 @@
 title: "Monitoring Alert Configuration"
 description: "Configuring monitoring alerts"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "alerts", "setup"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/monitoring-alert-configuration.md"]

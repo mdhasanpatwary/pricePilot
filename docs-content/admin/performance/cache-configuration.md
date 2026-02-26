@@ -2,6 +2,8 @@
 title: "Cache Configuration"
 description: "Cache configuration and optimization"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "configuration", "optimization"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/cache-configuration.md"]

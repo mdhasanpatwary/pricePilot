@@ -4,6 +4,8 @@ description: "Accessibility features and guidelines for PricePilot"
 category: "troubleshooting"
 tags: ["accessibility", "wcag", "guide"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Accessibility Guide for Admin Dashboard

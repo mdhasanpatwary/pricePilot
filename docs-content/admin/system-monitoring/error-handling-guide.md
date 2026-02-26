@@ -2,6 +2,8 @@
 title: "Error Handling Guide"
 description: "Guide to error handling and recovery"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["errors", "handling", "monitoring"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/error-handling-guide.md"]

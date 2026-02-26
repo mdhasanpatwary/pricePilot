@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, TrendingUp, Clock, Database, AlertCircle } from "lucide-react";
@@ -42,11 +42,7 @@ export function ApiDetectionMetricsContent() {
     const [aggregated, setAggregated] = useState<AggregatedMetrics | null>(null);
     const [dateRange, setDateRange] = useState<"7d" | "30d" | "90d">("30d");
 
-    useEffect(() => {
-        fetchMetrics();
-    }, [dateRange]);
-
-    const fetchMetrics = async () => {
+    const fetchMetrics = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch(`/api/v1/admin/api-detection/metrics?range=${dateRange}`);
@@ -60,7 +56,11 @@ export function ApiDetectionMetricsContent() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [dateRange]);
+
+    useEffect(() => {
+        fetchMetrics();
+    }, [fetchMetrics]);
 
     const formatTime = (ms: number) => {
         if (ms < 1000) return `${Math.round(ms)}ms`;

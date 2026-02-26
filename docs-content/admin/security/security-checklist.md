@@ -2,6 +2,8 @@
 title: "Security Checklist"
 description: "Security checklist for deployments"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["security", "checklist", "deployment"]
 audience: "admin"
 ---

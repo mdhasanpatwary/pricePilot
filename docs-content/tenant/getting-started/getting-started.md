@@ -4,6 +4,8 @@ description: "Complete introduction to PricePilot - learn the basics and get sta
 category: "getting-started"
 tags: ["getting-started", "introduction", "basics", "tutorial"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Getting Started with PricePilot

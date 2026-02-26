@@ -4,6 +4,8 @@ description: "Using the rollback interface to revert price changes"
 category: "pricing"
 tags: ["rollback", "ui", "guide"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Rollback UI Implementation Guide

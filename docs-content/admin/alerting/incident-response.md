@@ -2,10 +2,10 @@
 title: "Incident Response"
 description: "Procedures for responding to system incidents and alerts"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["incident", "response", "troubleshooting"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["alert-configuration", "health-checks"]
 ---
 

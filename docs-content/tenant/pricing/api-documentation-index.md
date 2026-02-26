@@ -4,6 +4,8 @@ description: "Complete index of PricePilot API documentation"
 category: "pricing"
 tags: ["api", "reference", "index"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # PricePilot API Documentation Index

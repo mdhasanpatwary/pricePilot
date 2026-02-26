@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["monitoring", "alerts", "configuration"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/alerting/monitoring-alert-configuration.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 > **Note:** This is a simplified version for tenants. For technical details, administrators can refer to the [admin documentation](/admin-docs/alerting/monitoring-alert-configuration.md).

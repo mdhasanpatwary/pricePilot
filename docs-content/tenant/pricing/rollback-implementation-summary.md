@@ -5,6 +5,8 @@ category: "pricing"
 tags: ["rollback", "implementation", "overview"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/system-monitoring/rollback-implementation-summary.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Rollback Implementation Summary

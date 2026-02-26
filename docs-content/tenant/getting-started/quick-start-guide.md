@@ -4,6 +4,8 @@ description: "Get up and running with PricePilot in 5 minutes - minimal steps to
 category: "getting-started"
 tags: ["quick-start", "tutorial", "setup", "beginner"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Quick Start Guide

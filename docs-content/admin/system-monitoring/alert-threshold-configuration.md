@@ -2,6 +2,8 @@
 title: "Alert Threshold Configuration"
 description: "Setting up alert thresholds for system metrics"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["alerts", "thresholds", "configuration"]
 audience: "admin"
 ---

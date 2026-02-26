@@ -2,10 +2,10 @@
 title: "Alert Configuration"
 description: "Configure and manage system alerts in PricePilot"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["alerts", "monitoring", "configuration"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["incident-response", "health-checks"]
 ---
 

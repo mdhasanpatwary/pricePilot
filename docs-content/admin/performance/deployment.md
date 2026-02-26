@@ -2,6 +2,8 @@
 title: "Deployment"
 description: "Deployment procedures and best practices"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["deployment", "operations", "procedures"]
 audience: "admin"
 ---

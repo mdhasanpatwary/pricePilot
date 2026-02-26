@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["alerts", "notifications", "quick-reference"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/alerting/alert-notifications-quick-reference.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Alert Notifications - Quick Reference

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Trash2, Play, ExternalLink, CheckCircle, XCircle } from "lucide-react";
@@ -51,11 +51,7 @@ export function ApiPatternManagementContent() {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const { toast } = useToast();
 
-    useEffect(() => {
-        fetchPatterns();
-    }, []);
-
-    const fetchPatterns = async () => {
+    const fetchPatterns = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch("/api/v1/admin/api-detection/patterns");
@@ -73,9 +69,13 @@ export function ApiPatternManagementContent() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
 
-    const handleInvalidate = async (pattern: ApiPattern) => {
+    useEffect(() => {
+        fetchPatterns();
+    }, [fetchPatterns]);
+
+    const handleInvalidate = useCallback(async (pattern: ApiPattern) => {
         setActionLoading(pattern.id);
         try {
             const response = await fetch(
@@ -105,9 +105,9 @@ export function ApiPatternManagementContent() {
             setActionLoading(null);
             setShowDeleteDialog(false);
         }
-    };
+    }, [fetchPatterns, toast]);
 
-    const handleRedetect = async (pattern: ApiPattern) => {
+    const handleRedetect = useCallback(async (pattern: ApiPattern) => {
         setActionLoading(pattern.id);
         try {
             const response = await fetch(
@@ -140,7 +140,7 @@ export function ApiPatternManagementContent() {
         } finally {
             setActionLoading(null);
         }
-    };
+    }, [fetchPatterns, toast]);
 
     const getConfidenceBadge = (score: number) => {
         if (score >= 80) return <Badge className="bg-green-500">High</Badge>;

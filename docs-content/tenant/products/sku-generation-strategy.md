@@ -4,6 +4,8 @@ description: "Strategies for generating and managing product SKUs"
 category: "products"
 tags: ["sku", "products", "strategy"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Smart SKU Generation Strategy

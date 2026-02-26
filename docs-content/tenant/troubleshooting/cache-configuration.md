@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["cache", "configuration", "performance"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/performance/cache-configuration.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 > **Note:** This is a simplified version for tenants. For technical details, administrators can refer to the [admin documentation](/admin-docs/performance/cache-configuration.md).

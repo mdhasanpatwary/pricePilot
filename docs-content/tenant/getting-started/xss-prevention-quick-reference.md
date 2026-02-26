@@ -4,6 +4,8 @@ description: "Quick reference guide for preventing cross-site scripting attacks"
 category: "getting-started"
 tags: ["security", "xss", "quick-reference"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # XSS Prevention Quick Reference

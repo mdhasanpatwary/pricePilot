@@ -2,6 +2,8 @@
 title: "Stealth Scraping"
 description: "Stealth scraping techniques and configuration"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["scraping", "stealth", "techniques"]
 audience: "admin"
 ---

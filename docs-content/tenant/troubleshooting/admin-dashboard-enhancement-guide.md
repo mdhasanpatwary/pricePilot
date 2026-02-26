@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["dashboard", "guide", "features"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/system-monitoring/admin-dashboard-enhancement-guide.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Admin Dashboard Enhancement User Guide

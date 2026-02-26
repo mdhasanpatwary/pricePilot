@@ -2,6 +2,8 @@
 title: "CORS Quick Reference"
 description: "Quick reference for CORS configuration"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cors", "security", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/cors-quick-reference.md"]

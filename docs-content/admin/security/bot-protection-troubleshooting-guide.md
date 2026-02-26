@@ -2,6 +2,8 @@
 title: "Bot Protection Troubleshooting Guide"
 description: "Troubleshooting bot protection issues"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["bot-protection", "troubleshooting", "security"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/bot-protection-troubleshooting-guide.md"]

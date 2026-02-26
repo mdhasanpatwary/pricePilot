@@ -15,7 +15,7 @@ export interface SyncJobData {
   isGoldenRule?: boolean; // Determines if proxy/rate limit rules apply aggressively
   isCron?: boolean;
   force?: boolean;
-  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE" | "SOURCE_SYNC" | "RETRY" | "PRODUCT";
+  type: "FULL" | "SINGLE" | "CHUNK" | "MAINTENANCE" | "SOURCE_SYNC" | "RETRY" | "PRODUCT" | "STORE_SYNC";
 }
 
 export interface NotificationJobData {

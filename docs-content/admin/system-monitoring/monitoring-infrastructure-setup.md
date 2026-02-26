@@ -2,6 +2,8 @@
 title: "Monitoring Infrastructure Setup"
 description: "Setting up monitoring infrastructure"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "infrastructure", "setup"]
 audience: "admin"
 ---

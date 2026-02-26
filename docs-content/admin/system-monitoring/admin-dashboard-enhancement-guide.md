@@ -2,6 +2,8 @@
 title: "Admin Dashboard Enhancement Guide"
 description: "Guide for dashboard enhancements"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["dashboard", "admin", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/admin-dashboard-enhancement-guide.md"]

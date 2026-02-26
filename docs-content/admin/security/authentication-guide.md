@@ -2,6 +2,8 @@
 title: "Authentication Guide"
 description: "Authentication system configuration and management"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["authentication", "security", "guide"]
 audience: "admin"
 ---

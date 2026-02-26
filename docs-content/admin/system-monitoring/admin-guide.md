@@ -2,6 +2,8 @@
 title: "Admin Guide"
 description: "Comprehensive administrative guide"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["admin", "guide", "operations"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/admin-guide.md"]

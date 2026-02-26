@@ -2,6 +2,8 @@
 title: "GDPR Compliance Guide"
 description: "GDPR compliance features and guidelines"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["gdpr", "compliance", "security"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/gdpr-compliance-guide.md"]

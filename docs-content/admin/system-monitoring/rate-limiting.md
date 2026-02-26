@@ -2,6 +2,8 @@
 title: "Rate Limiting"
 description: "Rate limiting configuration and monitoring"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["rate-limiting", "security", "configuration"]
 audience: "admin"
 ---

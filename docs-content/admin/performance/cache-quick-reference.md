@@ -2,6 +2,8 @@
 title: "Cache Quick Reference"
 description: "Quick reference for cache operations"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "quick-reference", "operations"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/cache-quick-reference.md"]

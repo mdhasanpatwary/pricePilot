@@ -2,8 +2,7 @@ import { Page } from "playwright";
 import { logger } from "../logger";
 import { BrowserPool } from "./browser-pool";
 import { prisma } from "@/lib/prisma";
-import { TECH_BRANDS } from "../data/brands";
-import { siteProfileManager, type SiteSearchAdapterKey } from "../config/site-profiles";
+import { siteProfileManager } from "../config/site-profiles";
 import { CacheService } from "./cache";
 import { TechProductValidator } from "./validation";
 import { HumanSimulation } from "./human-simulation";
@@ -21,7 +20,6 @@ import { sessionTracker } from "./session-tracker";
 import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
 import { SystemConfigService } from "@/lib/config";
 import { detectOpenCartFromUrlAndHtml } from "./platform-detector";
-import { SearchPatternLearningService } from "./search-pattern-learning-service";
 
 interface ScrapedProduct {
   title: string;
@@ -3347,11 +3345,6 @@ export class ScraperService {
   }
 
   private extractBrandToken(query: string): string | null {
-    const normalized = query.toLowerCase();
-    for (const [, brand] of Object.entries(TECH_BRANDS)) {
-      const aliasHit = brand.aliases.find((alias) => normalized.includes(alias.toLowerCase()));
-      if (aliasHit) return aliasHit;
-    }
     const firstWord = query.split(/\s+/).find(Boolean) || "";
     return firstWord.length >= 2 ? firstWord : null;
   }
@@ -3584,14 +3577,6 @@ export class ScraperService {
         }
       }
 
-      const normalizedDomain = SearchPatternLearningService.normalizeDomain(hostname);
-      if (!explicitPattern) {
-        try {
-          learnedPattern = await SearchPatternLearningService.getBestPatternForDomain(normalizedDomain);
-        } catch {
-          learnedPattern = null;
-        }
-      }
 
       const searchCandidates: Array<{
         searchUrl: string;
@@ -3858,15 +3843,7 @@ export class ScraperService {
           );
         }
 
-        try {
-          await SearchPatternLearningService.recordAttempt({
-            domain: normalizedDomain,
-            pattern: candidate.patternForLearning,
-            success: Boolean(productLink),
-          });
-        } catch {
-          // Best-effort; ignore DB errors so discovery doesn't break.
-        }
+        // Search pattern recording removed (legacy)
 
         if (productLink) {
           logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
@@ -4004,7 +3981,7 @@ export class ScraperService {
     weightedTokens?: { model?: string; brand?: string; size?: string },
   ): Promise<string | null> {
     // Pass TECH_BRANDS to the browser context
-    return await page.evaluate(({ q, brands, wt }) => {
+    return await page.evaluate(({ q, wt }) => {
       const candidates: Array<{
         href: string;
         text: string;
@@ -4241,30 +4218,7 @@ export class ScraperService {
           score += 5;
         }
 
-        // 5. Brand Match Bonus (20% Weight)
-        if (q && brands) {
-          let queryBrand: string | null = null;
-          const qClean = clean(q);
-
-          // Identify brand in query
-          for (const [key, data] of Object.entries(brands as Record<string, { aliases: string[] }>)) {
-            if (data.aliases.some(alias => qClean.includes(clean(alias)))) {
-              queryBrand = key;
-              break;
-            }
-          }
-
-          if (queryBrand) {
-            const brandData = (brands as any)[queryBrand];
-            // Check if link text contains the brand
-            const linkHasBrand = brandData.aliases.some((alias: string) => clean(lowerText).includes(clean(alias)));
-
-            if (linkHasBrand) {
-              score += 20;
-              reasons.push(`Brand Match(${queryBrand})`);
-            }
-          }
-        }
+        // Brand matching logic removed (legacy)
 
         // 6. Position Score (Small bias to top results)
         // Top 5 results get a small boost
@@ -4289,18 +4243,18 @@ export class ScraperService {
       // Return top candidate or null
       return candidates.length > 0 ? candidates[0].href : null;
 
-    }, { q: query, brands: TECH_BRANDS, wt: weightedTokens || {} });
+    }, { q: query, wt: weightedTokens || {} });
   }
 
   private async evaluateAdapterProductLink(
     page: Page,
     query: string,
     hostname: string,
-    adapter?: SiteSearchAdapterKey,
+    adapter?: string,
   ): Promise<string | null> {
     if (!adapter) return null;
 
-    const handlers: Record<SiteSearchAdapterKey, () => Promise<string | null>> = {
+    const handlers: Record<string, () => Promise<string | null>> = {
       startech: () => this.evaluateStartechProductLink(page, query, hostname),
       ryans: () => this.evaluateRyansProductLink(page, query, hostname),
       techland: () => this.evaluateTechlandProductLink(page, query, hostname),

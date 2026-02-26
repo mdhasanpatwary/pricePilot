@@ -2,6 +2,8 @@
 title: "Rollback Implementation Summary"
 description: "Technical summary of rollback implementation"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["rollback", "implementation", "technical"]
 audience: "admin"
 relatedDocs: ["/docs/pricing/rollback-implementation-summary.md"]

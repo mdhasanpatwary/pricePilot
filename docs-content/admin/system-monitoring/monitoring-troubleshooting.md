@@ -2,6 +2,8 @@
 title: "Monitoring Troubleshooting"
 description: "Troubleshooting monitoring system issues"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "troubleshooting", "issues"]
 audience: "admin"
 ---

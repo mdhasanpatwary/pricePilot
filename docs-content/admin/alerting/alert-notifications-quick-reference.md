@@ -2,6 +2,8 @@
 title: "Alert Notifications Quick Reference"
 description: "Quick reference for alert notifications"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["alerts", "notifications", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/alert-notifications-quick-reference.md"]

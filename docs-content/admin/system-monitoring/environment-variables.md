@@ -2,6 +2,8 @@
 title: "Environment Variables"
 description: "Environment variable configuration"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["configuration", "environment", "deployment"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/environment-variables.md"]

@@ -2,6 +2,8 @@
 title: "Email Notifications"
 description: "Email notification system overview"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["email", "notifications", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/email-notifications.md"]

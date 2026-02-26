@@ -2,6 +2,8 @@
 title: "Cache Monitoring"
 description: "Monitoring cache performance and health"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["cache", "monitoring", "performance"]
 audience: "admin"
 ---

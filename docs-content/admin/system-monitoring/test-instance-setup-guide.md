@@ -2,6 +2,8 @@
 title: "Test Instance Setup Guide"
 description: "Setting up test instances"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["testing", "deployment", "configuration"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/test-instance-setup-guide.md"]

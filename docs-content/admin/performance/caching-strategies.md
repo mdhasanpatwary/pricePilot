@@ -2,10 +2,10 @@
 title: "Caching Strategies"
 description: "Comprehensive guide to caching implementation in PricePilot"
 category: "performance"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["caching", "redis", "performance"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["optimization-guide", "health-checks"]
 ---
 

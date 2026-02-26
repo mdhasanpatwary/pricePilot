@@ -4,6 +4,8 @@ description: "Examples of API requests and responses for common operations"
 category: "pricing"
 tags: ["api", "examples", "tutorial"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # API Request/Response Examples

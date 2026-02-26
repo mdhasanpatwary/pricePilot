@@ -2,6 +2,8 @@
 title: "Data Cleanup Jobs"
 description: "Automated data cleanup and retention policies"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["data", "cleanup", "automation"]
 audience: "admin"
 ---

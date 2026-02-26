@@ -2,6 +2,8 @@
 title: "Redis Configuration"
 description: "Configuring Redis for PricePilot"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["redis", "configuration", "cache"]
 audience: "admin"
 ---

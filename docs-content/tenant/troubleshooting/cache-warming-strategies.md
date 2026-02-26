@@ -4,6 +4,8 @@ description: "Strategies for warming caches to improve performance"
 category: "troubleshooting"
 tags: ["cache", "performance", "optimization"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Cache Warming Strategies

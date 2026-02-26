@@ -5,6 +5,8 @@ category: "troubleshooting"
 tags: ["bot-protection", "troubleshooting", "guide"]
 audience: "tenant"
 relatedDocs: ["/admin-docs/security/bot-protection-troubleshooting-guide.md"]
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Bot Protection Troubleshooting Guide

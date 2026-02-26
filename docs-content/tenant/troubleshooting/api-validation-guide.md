@@ -4,6 +4,8 @@ description: "Understanding API validation errors and how to fix them"
 category: "troubleshooting"
 tags: ["api", "validation", "troubleshooting"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # API Validation Guide

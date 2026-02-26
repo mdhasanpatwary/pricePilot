@@ -2,6 +2,8 @@
 title: "API Monitoring"
 description: "Monitoring API usage and performance"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["api", "monitoring", "metrics"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/api-monitoring.md"]

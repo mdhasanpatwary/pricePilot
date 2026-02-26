@@ -2,6 +2,8 @@
 title: "Admin API Reference"
 description: "API reference for administrative operations"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["api", "reference", "admin"]
 audience: "admin"
 relatedDocs: ["/docs/integrations/admin-api-reference.md"]

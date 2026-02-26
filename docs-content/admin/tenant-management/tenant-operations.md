@@ -2,6 +2,8 @@
 title: "Tenant Operations Guide"
 description: "Complete guide for managing tenants in PricePilot - creation, configuration, and lifecycle management"
 category: "tenant-management"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["tenant", "management", "operations", "admin"]
 audience: "admin"
 ---

@@ -2,6 +2,8 @@
 title: "Upstash Dashboard Setup"
 description: "Setting up Upstash Redis dashboard"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["upstash", "redis", "setup"]
 audience: "admin"
 ---

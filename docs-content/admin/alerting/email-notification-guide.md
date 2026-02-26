@@ -2,6 +2,8 @@
 title: "Email Notification Guide"
 description: "Complete guide to email notifications"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["email", "notifications", "setup"]
 audience: "admin"
 relatedDocs: ["/docs/troubleshooting/email-notification-guide.md"]

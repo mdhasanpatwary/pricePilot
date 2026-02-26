@@ -2,6 +2,8 @@
 title: "Redis Memory Configuration"
 description: "Optimizing Redis memory configuration"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["redis", "memory", "optimization"]
 audience: "admin"
 ---

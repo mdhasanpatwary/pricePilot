@@ -2,6 +2,8 @@
 title: "Monitoring System Overview"
 description: "Overview of the PricePilot monitoring system"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "overview", "readme"]
 audience: "admin"
 ---

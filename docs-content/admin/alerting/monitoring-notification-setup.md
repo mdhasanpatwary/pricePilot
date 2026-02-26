@@ -2,6 +2,8 @@
 title: "Monitoring Notification Setup"
 description: "Setting up monitoring notifications"
 category: "alerting"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["monitoring", "notifications", "setup"]
 audience: "admin"
 ---

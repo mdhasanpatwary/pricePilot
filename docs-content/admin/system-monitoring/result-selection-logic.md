@@ -2,6 +2,8 @@
 title: "Result Selection Logic"
 description: "Logic for selecting and prioritizing results"
 category: "system-monitoring"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 tags: ["logic", "selection", "algorithms"]
 audience: "admin"
 ---

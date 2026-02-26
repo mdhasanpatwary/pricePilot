@@ -2,10 +2,10 @@
 title: "Authentication Configuration"
 description: "Configure and manage authentication and authorization in PricePilot"
 category: "security"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 subcategory: null
 tags: ["security", "authentication", "authorization", "tokens"]
-author: "PricePilot Team"
-lastReviewed: "2024-01-15"
 relatedDocs: ["api-security", "tenant-operations"]
 ---
 

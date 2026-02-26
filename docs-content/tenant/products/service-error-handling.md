@@ -4,6 +4,8 @@ description: "Understanding and handling service errors"
 category: "products"
 tags: ["errors", "troubleshooting", "services"]
 audience: "tenant"
+author: "PricePilot Team"
+lastReviewed: "2024-05-20"
 ---
 
 # Service Error Handling Documentation
