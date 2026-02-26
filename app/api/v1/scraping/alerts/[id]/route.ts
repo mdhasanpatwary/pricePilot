@@ -1,10 +1,10 @@
 /**
  * Scraping Alerts API - Delete alert
- * 
+ *
  * DELETE /api/v1/scraping/alerts/:id
- * 
+ *
  * Deletes an alert from the system
- * 
+ *
  * Requirements: 12.1
  */
 
@@ -12,18 +12,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { invalidateCache } from "@/lib/middleware/api-cache";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-/**
- * DELETE /api/v1/scraping/alerts/:id
- * 
- * Delete an alert
- * 
- * Requirements: 12.1
- */
-export async function DELETE(
+async function handleDELETE(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+
+/**
+ * DELETE /api/v1/scraping/alerts/:id
+ *
+ * Delete an alert
+ *
+ * Requirements: 12.1
+ */
     try {
         // Await params
         const { id: alertId } = await params;
@@ -127,4 +129,8 @@ export async function DELETE(
             { status: 500 }
         );
     }
+}
+
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "write", (r) => handleDELETE(r, context));
 }

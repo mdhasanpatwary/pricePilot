@@ -7,11 +7,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handlePOST(req: NextRequest) {
 
 /**
  * Request account deletion
  */
-export async function POST(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -59,10 +61,7 @@ export async function POST(req: NextRequest) {
     }
 }
 
-/**
- * Cancel account deletion
- */
-export async function DELETE(_req: NextRequest) {
+async function handleDELETE(_req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -90,4 +89,12 @@ export async function DELETE(_req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
+}
+
+export async function DELETE(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handleDELETE);
 }

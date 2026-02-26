@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { cacheAlertingService } from "@/lib/services/cache-alerting";
 import { logger } from "@/lib/logger";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(_request: NextRequest) {
 
 /**
  * GET /api/v1/admin/cache/alerts/config
  * Get current alert configuration
  */
-export async function GET(_request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -49,7 +51,7 @@ export async function GET(_request: NextRequest) {
 /**
  * PUT /api/v1/admin/cache/alerts/config
  * Update alert configuration
- * 
+ *
  * Body:
  * {
  *   "enabled": boolean,
@@ -59,7 +61,8 @@ export async function GET(_request: NextRequest) {
  *   "notificationChannels": string[]
  * }
  */
-export async function PUT(request: NextRequest) {
+
+async function handlePUT(request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -125,4 +128,12 @@ export async function PUT(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function PUT(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePUT);
 }

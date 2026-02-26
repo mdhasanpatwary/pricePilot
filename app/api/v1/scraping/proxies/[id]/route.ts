@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { encryptForStorage } from "@/lib/services/encryption/field-encryption";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
 function hasProxyAdminAccess(session: any): boolean {
     const role = String(session?.user?.role || '').toUpperCase();
@@ -37,7 +38,7 @@ const updateProxySchema = z.object({
  *
  * Get a specific proxy by ID
  */
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -144,7 +145,7 @@ export async function GET(
  *
  * Update a proxy
  */
-export async function PUT(
+async function handlePUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -304,7 +305,7 @@ export async function PUT(
  *
  * Delete a proxy
  */
-export async function DELETE(
+async function handleDELETE(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -367,4 +368,16 @@ export async function DELETE(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "read", (r) => handleGET(r, context));
+}
+
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "write", (r) => handlePUT(r, context));
+}
+
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "write", (r) => handleDELETE(r, context));
 }

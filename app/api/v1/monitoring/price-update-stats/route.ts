@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { priceUpdateMonitor } from "@/lib/services/price-update-monitor";
 import { logger } from "@/lib/logger";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(req: NextRequest) {
 
 /**
  * Get Price Update Statistics
- * 
+ *
  * Returns detailed statistics about price update success rates,
  * failure patterns, and performance metrics.
- * 
+ *
  * **Query Parameters:**
  * - timeWindow: Time window in seconds (default: 86400 = 24 hours)
- * 
+ *
  * **Response:**
  * ```json
  * {
@@ -33,10 +36,9 @@ import { getCachedSession } from "@/lib/auth/cached-session";
  *   }
  * }
  * ```
- * 
+ *
  * @route GET /api/v1/monitoring/price-update-stats
  */
-export async function GET(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -86,4 +88,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

@@ -8,11 +8,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -108,4 +110,8 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "read", (r) => handleGET(r, context));
 }

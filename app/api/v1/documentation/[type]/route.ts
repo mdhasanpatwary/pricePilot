@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { documentationService } from '@/lib/documentation/service';
 import { rateLimitTenantDocs, rateLimitAdminDocs, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextOnly } from "@/lib/middleware/with-request-context";
+
+async function handleGET(
+    request: NextRequest,
+    { params }: { params: Promise<{ type: string }> }
+) {
 
 /**
  * GET /api/v1/documentation/:type
  * List documents by type with optional filtering
  */
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ type: string }> }
-) {
     try {
         const { type } = await params;
 
@@ -116,4 +118,8 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ type: string }> }) {
+    return withRequestContextOnly(req, (r) => handleGET(r, context));
 }

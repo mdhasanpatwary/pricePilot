@@ -1,6 +1,6 @@
 /**
  * API endpoints for managing specific delegations
- * 
+ *
  * PATCH  /api/v1/approval-delegation/[id] - Update delegation dates
  * DELETE /api/v1/approval-delegation/[id] - Revoke delegation
  */
@@ -9,6 +9,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApprovalDelegationService } from '@/lib/services/approval-delegation';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handlePATCH(
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
 
 const updateDelegationSchema = z.object({
     startDate: z.string().datetime(),
@@ -19,10 +25,6 @@ const updateDelegationSchema = z.object({
  * PATCH /api/v1/approval-delegation/[id]
  * Update delegation dates
  */
-export async function PATCH(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
     try {
         const session = await getCachedSession();
 
@@ -72,11 +74,7 @@ export async function PATCH(
     }
 }
 
-/**
- * DELETE /api/v1/approval-delegation/[id]
- * Revoke a delegation
- */
-export async function DELETE(
+async function handleDELETE(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -112,4 +110,12 @@ export async function DELETE(
             { status: 500 }
         );
     }
+}
+
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "write", (r) => handlePATCH(r, context));
+}
+
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "write", (r) => handleDELETE(r, context));
 }

@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 /**
  * Cron Job: Cleanup Old Bulk Operation Snapshots
  * 
@@ -14,7 +15,7 @@ import { logger } from '@/lib/logger';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         // Verify cron secret for security
         const authHeader = req.headers.get('authorization');
@@ -68,4 +69,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

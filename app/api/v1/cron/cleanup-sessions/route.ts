@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 /**
  * Session Cleanup Cron Job
  * 
@@ -10,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SessionManager } from '@/lib/utils/session-manager';
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         // Verify cron secret
         const authHeader = req.headers.get('authorization');
@@ -43,4 +44,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

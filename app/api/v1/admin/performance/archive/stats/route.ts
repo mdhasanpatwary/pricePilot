@@ -10,8 +10,11 @@ import { optimizedPrisma } from '@/lib/database/optimized-prisma';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
 const archiveManager = new ArchiveManager(optimizedPrisma);
+
+async function handleGET(_request: NextRequest) {
 
 /**
  * GET /api/v1/admin/performance/archive/stats
@@ -24,7 +27,6 @@ const archiveManager = new ArchiveManager(optimizedPrisma);
  * - totalArchiveSizeBytes: Total size of archive tables in bytes
  * - oldestArchivedRecord: Date of oldest archived record
  */
-export async function GET(_request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -72,4 +74,8 @@ export async function GET(_request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

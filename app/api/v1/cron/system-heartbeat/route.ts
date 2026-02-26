@@ -19,32 +19,11 @@ import { uptimeTracker } from '@/lib/services/monitoring/uptime-tracker';
 import { monitoringDashboardService } from '@/lib/services/monitoring/dashboard';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { withCronAuth } from '@/lib/middleware/cron-auth';
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 
-/**
- * POST handler for system heartbeat cron job
- */
-export async function POST(req: NextRequest) {
+async function handlePOST(_req: NextRequest) {
     try {
-        // Verify cron secret
-        const authHeader = req.headers.get('authorization');
-        const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
-
-        if (authHeader !== expectedAuth) {
-            logger.warn('Unauthorized system heartbeat attempt', {
-                authHeader: authHeader ? 'present' : 'missing',
-            });
-
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: {
-                        code: 'UNAUTHORIZED',
-                        message: 'Invalid cron secret',
-                    },
-                },
-                { status: 401 }
-            );
-        }
 
         // Perform health checks
         const startTime = Date.now();
@@ -101,6 +80,10 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withCronAuth(req, handlePOST);
 }
 
 /**
@@ -226,15 +209,17 @@ async function performHealthChecks(): Promise<{
 /**
  * GET handler - not allowed
  */
-export async function GET() {
-    return NextResponse.json(
-        {
-            success: false,
-            error: {
-                code: 'METHOD_NOT_ALLOWED',
-                message: 'Only POST requests are allowed',
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, async () => {
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    code: 'METHOD_NOT_ALLOWED',
+                    message: 'Only POST requests are allowed',
+                },
             },
-        },
-        { status: 405 }
-    );
+            { status: 405 }
+        );
+    });
 }

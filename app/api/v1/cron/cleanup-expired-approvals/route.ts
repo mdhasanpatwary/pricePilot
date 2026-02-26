@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 import { NextRequest, NextResponse } from "next/server";
 import { RulesEngine } from "@/lib/services/rules-engine";
 
@@ -6,7 +7,7 @@ import { RulesEngine } from "@/lib/services/rules-engine";
  * Clean up expired pending price changes
  * This should be called by a cron job (e.g., daily)
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         // Verify cron secret for security
         const authHeader = req.headers.get("authorization");
@@ -28,4 +29,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

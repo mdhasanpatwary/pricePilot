@@ -4,8 +4,10 @@ import { DocumentationType } from '@prisma/client';
 import { SearchError, formatErrorResponse } from '@/lib/documentation/errors';
 import { rateLimitSearch, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
 import { validateSearchParams } from '@/lib/documentation/security';
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
+
     const requestId = crypto.randomUUID();
 
     try {
@@ -100,4 +102,8 @@ export async function GET(request: NextRequest) {
         const errorResponse = formatErrorResponse(error as Error, requestId);
         return NextResponse.json(errorResponse, { status: 500 });
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

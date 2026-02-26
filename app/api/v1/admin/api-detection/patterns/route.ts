@@ -1,13 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(_req: NextRequest) {
 
 /**
  * GET /api/v1/admin/api-detection/patterns
- * 
+ *
  * Get all cached API patterns for the tenant
  */
-export async function GET() {
     try {
         const session = await getCachedSession();
         if (!session?.user) {
@@ -64,4 +66,8 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

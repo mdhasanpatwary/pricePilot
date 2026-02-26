@@ -1,8 +1,8 @@
 /**
  * Competitor Product Price History API
- * 
+ *
  * Endpoints for retrieving price history with gap information.
- * 
+ *
  * Requirements: 14.6
  */
 
@@ -13,18 +13,20 @@ import {
 } from '@/lib/services/bot-protection/price-history-maintenance';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-/**
- * GET /api/v1/competitor-products/:id/price-history
- * 
- * Get price history with gap information for a competitor product
- * 
- * Requirements: 14.6
- */
-export async function GET(
+async function handleGET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+
+/**
+ * GET /api/v1/competitor-products/:id/price-history
+ *
+ * Get price history with gap information for a competitor product
+ *
+ * Requirements: 14.6
+ */
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -92,4 +94,8 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "read", (r) => handleGET(r, context));
 }

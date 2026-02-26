@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyticsService } from '@/lib/documentation/analytics';
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handlePOST(request: NextRequest) {
 
 /**
  * POST /api/v1/documentation/analytics/search
  * Track search query
  */
-export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { query, type, resultsCount } = body;
@@ -67,4 +69,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

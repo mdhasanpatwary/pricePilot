@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AutoApprovalService } from "@/lib/services/auto-approval";
@@ -59,7 +60,7 @@ import { AutoApprovalService } from "@/lib/services/auto-approval";
  * 
  * Requirements: 5.1, 5.2, 5.5
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         // Verify cron secret for security (Requirement 5.1)
         const authHeader = req.headers.get("authorization");
@@ -158,4 +159,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

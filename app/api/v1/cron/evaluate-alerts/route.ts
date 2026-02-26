@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 /**
  * Alert Evaluation Cron Job
  * 
@@ -41,7 +42,7 @@ const LOCK_TTL = 60; // 1 minute lock TTL
  * Note: Cron jobs don't need rate limiting as they're authenticated via CRON_SECRET
  * and called by Vercel's cron scheduler, not by users
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     // Verify cron secret for security
     const authHeader = req.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -351,4 +352,8 @@ async function getAlertNotificationChannels(ruleId: string): Promise<string[]> {
         });
         return [];
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

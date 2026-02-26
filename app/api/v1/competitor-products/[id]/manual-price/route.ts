@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handlePOST(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
 
 /**
  * Manual Price Entry API
@@ -23,10 +29,6 @@ const manualPriceSchema = z.object({
     currency: z.string().optional().default('USD'),
 });
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -180,4 +182,8 @@ export async function POST(
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "write", (r) => handlePOST(r, context));
 }

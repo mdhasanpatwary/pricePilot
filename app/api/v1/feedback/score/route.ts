@@ -5,8 +5,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserSatisfactionService } from '@/lib/services/user-satisfaction';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
+
     try {
         const session = await getCachedSession();
 
@@ -48,4 +50,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

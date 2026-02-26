@@ -1,16 +1,18 @@
 /**
  * Replication Status API Endpoint
- * 
+ *
  * GET /api/v1/admin/performance/replication-status
- * 
+ *
  * Returns current replication lag status and routing statistics for all
  * configured read replicas.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getReadReplicaRouter } from '@/lib/services/read-replica-router';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function GET(_request: NextRequest) {
+async function handleGET(_request: NextRequest) {
+
     try {
         const router = getReadReplicaRouter();
 
@@ -89,4 +91,8 @@ export async function GET(_request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

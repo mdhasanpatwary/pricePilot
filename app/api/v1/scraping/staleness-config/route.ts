@@ -1,8 +1,8 @@
 /**
  * Staleness Configuration API
- * 
+ *
  * Endpoints for managing staleness threshold configuration.
- * 
+ *
  * Requirements: 14.4
  */
 
@@ -13,15 +13,17 @@ import {
 } from '@/lib/services/bot-protection/staleness-config';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handleGET(_request: NextRequest) {
 
 /**
  * GET /api/v1/scraping/staleness-config
- * 
+ *
  * Get current staleness threshold configuration
- * 
+ *
  * Requirements: 14.4
  */
-export async function GET(_request: NextRequest) {
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -70,12 +72,13 @@ export async function GET(_request: NextRequest) {
 
 /**
  * PUT /api/v1/scraping/staleness-config
- * 
+ *
  * Update staleness threshold configuration
- * 
+ *
  * Requirements: 14.4
  */
-export async function PUT(request: NextRequest) {
+
+async function handlePUT(request: NextRequest) {
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -168,4 +171,12 @@ export async function PUT(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function PUT(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePUT);
 }

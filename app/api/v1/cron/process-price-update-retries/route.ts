@@ -2,31 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { priceUpdateMonitor } from "@/lib/services/price-update-monitor";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { withCronAuth } from "@/lib/middleware/cron-auth";
+
+async function handlePOST(_req: NextRequest) {
 
 /**
  * Process Price Update Retry Queue
- * 
+ *
  * Cron job that processes failed price updates and retries them automatically.
  * Runs every 15 minutes to ensure high success rates.
- * 
+ *
  * **Schedule:** Every 15 minutes
  * **Purpose:** Achieve >99% price update success rate
- * 
+ *
  * **Process:**
  * 1. Get all tenants with pending retries
  * 2. Process retry queue for each tenant
  * 3. Log results and metrics
- * 
+ *
  * @route POST /api/v1/cron/process-price-update-retries
  */
-export async function POST(req: NextRequest) {
     try {
-        // Verify cron secret
-        const authHeader = req.headers.get("authorization");
-        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-            logger.warn("Unauthorized retry queue processing attempt");
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
 
         logger.info("Starting price update retry queue processing");
 
@@ -108,4 +104,8 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withCronAuth(req, handlePOST);
 }

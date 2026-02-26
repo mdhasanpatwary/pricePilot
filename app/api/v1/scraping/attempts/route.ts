@@ -11,8 +11,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { scrapeFailureTypeSchema } from "@/lib/validation/schemas";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
+
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -256,4 +258,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

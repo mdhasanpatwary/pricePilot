@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyticsService } from '@/lib/documentation/analytics';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(request: NextRequest) {
 
 /**
  * GET /api/v1/documentation/analytics/metrics
  * Get analytics metrics (admin only)
  */
-export async function GET(request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -116,4 +118,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

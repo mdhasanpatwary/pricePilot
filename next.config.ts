@@ -121,6 +121,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Next.js 16 requires explicit Turbopack config when custom webpack config exists.
+  turbopack: {},
   webpack: (config, { webpack, dev, isServer }) => {
     // In production builds, replace debug and playground routes with a no-op handler.
     // This ensures that sensitive debug code is entirely excluded from the production bundle.

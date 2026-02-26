@@ -1,6 +1,6 @@
 /**
  * API endpoints for managing approval delegations
- * 
+ *
  * GET    /api/v1/approval-delegation - List all delegations for tenant
  * POST   /api/v1/approval-delegation - Create a new delegation
  */
@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApprovalDelegationService } from '@/lib/services/approval-delegation';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 const createDelegationSchema = z.object({
     toUserId: z.string().uuid(),
@@ -16,11 +17,12 @@ const createDelegationSchema = z.object({
     endDate: z.string().datetime(),
 });
 
+async function handleGET() {
+
 /**
  * GET /api/v1/approval-delegation
  * List all delegations for the authenticated user's tenant
  */
-export async function GET() {
     try {
         const session = await getCachedSession();
 
@@ -51,11 +53,11 @@ export async function GET() {
     }
 }
 
-/**
- * POST /api/v1/approval-delegation
- * Create a new delegation
- */
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+async function handlePOST(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -103,4 +105,8 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

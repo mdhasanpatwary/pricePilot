@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { documentationService } from '@/lib/documentation/service';
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 
-export async function GET(
+async function handleGET(
     _request: NextRequest,
     { params }: { params: Promise<{ type: string }> }
 ) {
+
     try {
         const { type } = await params;
 
@@ -38,4 +40,8 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ type: string }> }) {
+    return withRequestContextOnly(req, (r) => handleGET(r, context));
 }

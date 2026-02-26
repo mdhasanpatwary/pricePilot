@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ApiDetectionMetrics } from "@/lib/services/api-detection/api-detection-metrics";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(request: NextRequest) {
 
 /**
  * GET /api/v1/admin/api-detection/metrics
- * 
+ *
  * Get API detection metrics for all competitor websites
- * 
+ *
  * Query params:
  * - range: "7d" | "30d" | "90d" (default: "30d")
  */
-export async function GET(request: NextRequest) {
     try {
         const session = await getCachedSession();
         if (!session?.user) {
@@ -125,4 +127,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

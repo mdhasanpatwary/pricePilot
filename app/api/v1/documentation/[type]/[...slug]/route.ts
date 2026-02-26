@@ -3,15 +3,17 @@ import { documentationService } from '@/lib/documentation/service';
 import { checkAdminAccess, NotFoundError, formatErrorResponse } from '@/lib/documentation/errors';
 import { rateLimitTenantDocs, rateLimitAdminDocs, addRateLimitHeaders } from '@/lib/documentation/rate-limit';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
+
+async function handleGET(
+    request: NextRequest,
+    { params }: { params: Promise<{ type: string; slug: string[] }> }
+) {
 
 /**
  * GET /api/v1/documentation/:type/:slug
  * Get a single document by type and slug
  */
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ type: string; slug: string[] }> }
-) {
     const requestId = crypto.randomUUID();
 
     try {
@@ -114,4 +116,8 @@ export async function GET(
 
         return NextResponse.json(errorResponse, { status: statusCode });
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ type: string; slug: string[] }> }) {
+    return withRequestContextOnly(req, (r) => handleGET(r, context));
 }

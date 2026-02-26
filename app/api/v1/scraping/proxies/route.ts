@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { encryptForStorage } from "@/lib/services/encryption/field-encryption";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 function hasProxyAdminAccess(session: any): boolean {
     const role = String(session?.user?.role || '').toUpperCase();
@@ -36,7 +37,7 @@ const createProxySchema = z.object({
  *
  * List all proxies with optional filtering
  */
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
     try {
         const session = await getCachedSession();
         if (!session?.user) {
@@ -135,12 +136,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-/**
- * POST /api/v1/scraping/proxies
- *
- * Create a new proxy
- */
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     try {
         const session = await getCachedSession();
         if (!session?.user) {
@@ -270,4 +266,12 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

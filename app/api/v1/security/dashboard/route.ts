@@ -9,13 +9,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { incidentPreventionService } from '@/lib/services/security/incident-prevention';
 import { securityMonitoringService } from '@/lib/services/monitoring/security-monitoring';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(req: NextRequest) {
 
 /**
  * GET /api/v1/security/dashboard
  *
  * Get security dashboard data including incidents, blocked IPs, and statistics
  */
-export async function GET(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -60,4 +62,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { EmailService } from "@/lib/services/email";
@@ -71,7 +72,7 @@ import { EmailService } from "@/lib/services/email";
  * Requirements: 2.10.2
  * Task: 11.6 - Create email notification cron jobs
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
     try {
         // Verify cron secret for security
         const authHeader = req.headers.get("authorization");
@@ -187,4 +188,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextOnly(req, handleGET);
 }

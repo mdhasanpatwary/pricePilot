@@ -1,6 +1,6 @@
 /**
  * Performance Baselines API
- * 
+ *
  * Endpoints for managing performance baselines and detecting regressions.
  */
 
@@ -8,12 +8,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 import { PerformanceBaselineManager } from '@/lib/services/performance-baseline-manager';
 import { logger } from '@/lib/logger';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handleGET(_request: NextRequest) {
 
 /**
  * GET /api/v1/admin/performance/baselines
  * Get all performance baselines
  */
-export async function GET(_request: NextRequest) {
     try {
         const poolManager = getConnectionPoolManager();
         const pool = poolManager.getPool();
@@ -43,11 +45,7 @@ export async function GET(_request: NextRequest) {
     }
 }
 
-/**
- * POST /api/v1/admin/performance/baselines
- * Establish new baseline or update existing
- */
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     try {
         const body = await request.json();
         const { queryFingerprint, queryName, sql, params, isCritical } = body;
@@ -96,11 +94,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-/**
- * DELETE /api/v1/admin/performance/baselines
- * Delete a baseline
- */
-export async function DELETE(request: NextRequest) {
+async function handleDELETE(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const queryFingerprint = searchParams.get('queryFingerprint');
@@ -143,4 +137,16 @@ export async function DELETE(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
+}
+
+export async function DELETE(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handleDELETE);
 }

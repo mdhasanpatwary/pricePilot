@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { cacheAlertingService } from "@/lib/services/cache-alerting";
 import { logger } from "@/lib/logger";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(request: NextRequest) {
 
 /**
  * GET /api/v1/admin/cache/alerts
  * Get cache alert history
- * 
+ *
  * Query Parameters:
  * - limit: Number of alerts to return (default: 100)
  * - active: Filter for active alerts only (default: false)
  */
-export async function GET(request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -61,11 +63,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-/**
- * DELETE /api/v1/admin/cache/alerts
- * Clear cache alert history
- */
-export async function DELETE(_request: NextRequest) {
+async function handleDELETE(_request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -107,4 +105,12 @@ export async function DELETE(_request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function DELETE(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handleDELETE);
 }

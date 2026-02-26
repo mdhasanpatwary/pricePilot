@@ -2,26 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { AutoApprovalService } from "@/lib/services/auto-approval";
 import { AppError } from "@/lib/utils/error-handler";
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handleGET(req: NextRequest): Promise<NextResponse> {
 
 /**
  * GET /api/v1/auto-approval-rules/metrics
- * 
+ *
  * Get auto-approval metrics for the authenticated tenant
- * 
+ *
  * Query Parameters:
  * - startDate: ISO date string (optional, defaults to 30 days ago)
  * - endDate: ISO date string (optional, defaults to today)
- * 
+ *
  * Returns:
  * - totalAutoApproved: Total number of auto-approved changes
  * - totalNonMatching: Total number of changes that didn't match any rule
  * - totalEvaluated: Total number of changes evaluated
  * - autoApprovalPercentage: Percentage of changes auto-approved
  * - perRuleMetrics: Array of per-rule trigger counts
- * 
+ *
  * Requirements: 8.1, 8.2, 8.5
  */
-export async function GET(req: NextRequest): Promise<NextResponse> {
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -148,4 +150,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

@@ -1,3 +1,4 @@
+import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
@@ -5,7 +6,7 @@ import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 export const maxDuration = 300; // 5 minutes max duration for Vercel functions (Pro plan)
 export const dynamic = "force-dynamic";
 
-async function handleGET(req: NextRequest) {
+async function handleGlobalSync(req: NextRequest) {
   // Verify Vercel Cron Secret for security
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -52,7 +53,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // Cron jobs don't need rate limiting as they're authenticated via CRON_SECRET
-  // and called by Vercel's cron scheduler, not by users
-  return handleGET(req);
+    return withRequestContextOnly(req, handleGlobalSync);
 }

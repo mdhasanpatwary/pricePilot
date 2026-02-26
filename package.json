@@ -30,6 +30,7 @@
     "validate-docs": "tsx scripts/validate-docs-structure.ts",
     "measure-queries": "tsx scripts/measure-query-performance.ts",
     "test:queue-fairness": "bash scripts/run-nightly-simulations.sh",
+    "test:api-security": "npx tsx scripts/scan-api-auth.ts",
     "prepare": "husky"
   },
   "dependencies": {

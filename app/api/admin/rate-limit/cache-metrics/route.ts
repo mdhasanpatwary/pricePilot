@@ -5,11 +5,12 @@
  * Requires super admin authentication.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getCacheMetrics } from "@/lib/services/rate-limit-admin";
 import { logger } from "@/lib/logger";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
 /**
  * GET /api/admin/rate-limit/cache-metrics
@@ -18,19 +19,16 @@ import { logger } from "@/lib/logger";
  *
  * @returns Cache hit/miss statistics and hit rates
  */
-export async function GET() {
+async function handleGET(_req: NextRequest) {
     try {
-        // Authenticate user
-        const session = await getServerSession(authOptions);
+                const session = await getServerSession(authOptions);
 
+        // Ensure user is authenticated
         if (!session?.user) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: {
-                        code: "UNAUTHORIZED",
-                        message: "Authentication required",
-                    },
+                    error: { code: "UNAUTHORIZED", message: "Authentication required" },
                 },
                 { status: 401 }
             );
@@ -100,4 +98,8 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

@@ -1,8 +1,8 @@
 /**
  * Slow Queries API Endpoint
- * 
+ *
  * GET /api/v1/admin/performance/slow-queries
- * 
+ *
  * Returns the top slowest queries with execution statistics and optimization
  * recommendations.
  */
@@ -10,8 +10,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getQueryAnalyzer } from '@/lib/services/query-analyzer';
 import { getOptimizedPrisma } from '@/lib/database/optimized-prisma';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
+
     try {
         const searchParams = request.nextUrl.searchParams;
         const limit = parseInt(searchParams.get('limit') || '20', 10);
@@ -98,4 +100,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

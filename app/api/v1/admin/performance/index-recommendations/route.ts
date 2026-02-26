@@ -1,16 +1,18 @@
 /**
  * Index Recommendations API Endpoint
- * 
+ *
  * GET /api/v1/admin/performance/index-recommendations
- * 
+ *
  * Returns index optimization recommendations including missing indexes,
  * unused indexes, and index usage statistics.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getIndexManager } from '@/lib/services/index-manager';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
+
     try {
         const searchParams = request.nextUrl.searchParams;
         const includeUnused = searchParams.get('includeUnused') !== 'false';
@@ -117,4 +119,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

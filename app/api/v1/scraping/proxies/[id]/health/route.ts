@@ -1,8 +1,8 @@
 /**
  * Proxy Health API Endpoint
- * 
+ *
  * Provides detailed health information for a specific proxy.
- * 
+ *
  * Requirements: 2.4
  */
 
@@ -10,22 +10,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ProxyManager } from '@/lib/services/bot-protection/proxy-manager';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(
+    _request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
 
 /**
  * GET /api/v1/scraping/proxies/:id/health
- * 
+ *
  * Get detailed health information for a specific proxy
- * 
+ *
  * Returns:
  * - Global success rate
  * - Site-specific success rates
  * - Last success/failure timestamps
  * - Blocked status and cooldown info
  */
-export async function GET(
-    _request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
     let proxyId: string | undefined;
     try {
         const session = await getCachedSession();
@@ -96,4 +98,8 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "auth", (r) => handleGET(r, context));
 }

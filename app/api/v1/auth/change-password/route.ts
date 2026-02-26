@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 import { SessionManager } from '@/lib/utils/session-manager';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
@@ -26,11 +27,12 @@ const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
-    // Check authentication
-    const session = await getCachedSession();
+    // Session is guaranteed by withRequestContextAndRateLimit
+    const session = await getCachedSession(); // Still need to get session for user ID
     if (!session?.user?.id) {
+      // This case should ideally be handled by the middleware, but as a fallback
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -173,4 +175,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

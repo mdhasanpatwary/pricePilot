@@ -1,14 +1,16 @@
 /**
  * Documentation Content Validation API
- * 
+ *
  * POST /api/v1/documentation/validate
  * Validates documentation content before creation or update
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateDocumentContent, formatValidationErrors } from '@/lib/documentation/validation';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
+
     try {
         const body = await request.json();
         const { content, type } = body;
@@ -66,4 +68,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

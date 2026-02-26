@@ -12,6 +12,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { DocumentationSuggestionStatus } from '@prisma/client';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handleGET(request: NextRequest) {
 
 /**
  * GET /api/v1/documentation/suggestions
@@ -19,7 +22,6 @@ import { getCachedSession } from "@/lib/auth/cached-session";
  * List documentation suggestions with optional filtering
  * Requires admin authentication
  */
-export async function GET(request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -138,7 +140,8 @@ export async function GET(request: NextRequest) {
  * Create a new documentation suggestion manually
  * Requires admin authentication
  */
-export async function POST(request: NextRequest) {
+
+async function handlePOST(request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -247,4 +250,12 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

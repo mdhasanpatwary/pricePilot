@@ -1,6 +1,6 @@
 /**
  * Admin Tenants API
- * 
+ *
  * Provides tenant list for admin operations.
  * Requires super admin authentication.
  */
@@ -9,14 +9,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handleGET(_req: NextRequest) {
 
 /**
  * GET /api/v1/admin/tenants
- * 
+ *
  * List all tenants (super admin only)
  */
-export async function GET(_req: NextRequest) {
-  try {
+    try {
     const session = await getCachedSession();
 
     if (!session?.user) {
@@ -74,12 +76,7 @@ export async function GET(_req: NextRequest) {
   }
 }
 
-/**
- * POST /api/v1/admin/tenants
- * 
- * Create a new tenant (super admin only)
- */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
     const session = await getCachedSession();
 
@@ -145,12 +142,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * PATCH /api/v1/admin/tenants
- * 
- * Update a tenant (super admin only)
- */
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
   try {
     const session = await getCachedSession();
 
@@ -223,12 +215,7 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-/**
- * DELETE /api/v1/admin/tenants
- * 
- * Delete a tenant (super admin only)
- */
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
   try {
     const session = await getCachedSession();
 
@@ -381,4 +368,20 @@ export async function DELETE(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return withRequestContextAndRateLimit(req, "read", handleGET);
+}
+
+export async function POST(req: NextRequest) {
+  return withRequestContextAndRateLimit(req, "write", handlePOST);
+}
+
+export async function PATCH(req: NextRequest) {
+  return withRequestContextAndRateLimit(req, "write", handlePATCH);
+}
+
+export async function DELETE(req: NextRequest) {
+  return withRequestContextAndRateLimit(req, "write", handleDELETE);
 }

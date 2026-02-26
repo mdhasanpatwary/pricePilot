@@ -1,10 +1,10 @@
 /**
  * GET /api/v1/scraping/metrics/sites/:competitorWebsiteId
- * 
+ *
  * Returns detailed metrics for a specific competitor site including
  * success rate, attempt counts, response times, protection type breakdown,
  * strategy breakdown, and recent attempt history.
- * 
+ *
  * Requirements: 9.1, 9.2, 9.3, 9.6
  */
 
@@ -12,11 +12,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { metricsCollector, TimeWindow } from '@/lib/services/bot-protection/metrics-collector';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function GET(
+async function handleGET(
     request: NextRequest,
     { params }: { params: Promise<{ competitorWebsiteId: string }> }
 ) {
+
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -258,6 +260,10 @@ export async function GET(
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest, context: { params: Promise<{ competitorWebsiteId: string }> }) {
+    return withRequestContextAndRateLimit(req, "read", (r) => handleGET(r, context));
 }
 
 /**

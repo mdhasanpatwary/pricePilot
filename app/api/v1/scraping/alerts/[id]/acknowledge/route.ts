@@ -12,6 +12,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCachedSession } from "@/lib/auth/cached-session";
 import { invalidateCache } from "@/lib/middleware/api-cache";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
+
+async function handlePOST(
+    _request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
 
 /**
  * POST /api/v1/scraping/alerts/:id/acknowledge
@@ -20,10 +26,6 @@ import { invalidateCache } from "@/lib/middleware/api-cache";
  *
  * Requirements: 12.1
  */
-export async function POST(
-    _request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
     try {
         // Await params
         const { id: alertId } = await params;
@@ -168,4 +170,8 @@ export async function POST(
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "auth", (r) => handlePOST(r, context));
 }

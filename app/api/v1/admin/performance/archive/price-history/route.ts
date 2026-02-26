@@ -10,8 +10,11 @@ import { optimizedPrisma } from '@/lib/database/optimized-prisma';
 import { ArchiveManager } from '@/lib/services/archive-manager';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
 const archiveManager = new ArchiveManager(optimizedPrisma);
+
+async function handleGET(request: NextRequest) {
 
 /**
  * GET /api/v1/admin/performance/archive/price-history
@@ -26,7 +29,6 @@ const archiveManager = new ArchiveManager(optimizedPrisma);
  * - limit: Number of records to return (default: 100, max: 1000)
  * - offset: Number of records to skip (default: 0)
  */
-export async function GET(request: NextRequest) {
     try {
         // Check authentication
         const session = await getCachedSession();
@@ -144,4 +146,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

@@ -1,16 +1,18 @@
 /**
  * Connection Pool Statistics API Endpoint
- * 
+ *
  * GET /api/v1/admin/performance/pool-stats
- * 
+ *
  * Returns current connection pool statistics including utilization,
  * health status, and connection metrics.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function GET(_request: NextRequest) {
+async function handleGET(_request: NextRequest) {
+
     try {
         const poolManager = getConnectionPoolManager();
 
@@ -103,4 +105,8 @@ export async function GET(_request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

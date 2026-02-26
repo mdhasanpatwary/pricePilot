@@ -1,18 +1,20 @@
 /**
  * GET /api/v1/scraping/metrics/summary
- * 
+ *
  * Returns comprehensive metrics summary for the authenticated tenant
  * including total attempts, success rate, protection type breakdown,
  * strategy breakdown, and per-site metrics.
- * 
+ *
  * Requirements: 9.1, 9.6
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { metricsCollector, TimeWindow } from '@/lib/services/bot-protection/metrics-collector';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
+
     try {
         // Authenticate user
         const session = await getCachedSession();
@@ -95,4 +97,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

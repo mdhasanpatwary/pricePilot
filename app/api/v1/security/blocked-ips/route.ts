@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { incidentPreventionService } from '@/lib/services/security/incident-prevention';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 const blockIPSchema = z.object({
     ipAddress: z.string().regex(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^(?:[A-F0-9]{1,4}:){7}[A-F0-9]{1,4}$/i, 'Invalid IP address'),
@@ -25,7 +26,7 @@ const unblockIPSchema = z.object({
  *
  * Block an IP address
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -78,12 +79,11 @@ export async function POST(req: NextRequest) {
     }
 }
 
-/**
- * DELETE /api/v1/security/blocked-ips
- *
- * Unblock an IP address
- */
-export async function DELETE(req: NextRequest) {
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
+}
+
+async function handleDELETE(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -133,4 +133,8 @@ export async function DELETE(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function DELETE(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handleDELETE);
 }

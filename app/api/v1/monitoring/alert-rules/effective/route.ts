@@ -1,9 +1,9 @@
 /**
  * Effective Alert Rules API
- * 
+ *
  * Returns the effective alert rules for a tenant, considering both
  * tenant-specific overrides and global defaults.
- * 
+ *
  * Requirements: 2.15.3
  */
 
@@ -11,13 +11,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { alertConfigurationService } from '@/lib/services/monitoring/alert-configuration';
 import { logger } from '@/lib/logger';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handleGET(req: NextRequest) {
 
 /**
  * GET /api/v1/monitoring/alert-rules/effective
- * 
+ *
  * Get effective alert rules for the authenticated user's tenant
  */
-export async function GET(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -66,4 +68,8 @@ export async function GET(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

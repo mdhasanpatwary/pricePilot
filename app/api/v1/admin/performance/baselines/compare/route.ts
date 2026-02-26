@@ -1,6 +1,6 @@
 /**
  * Performance Baseline Comparison API
- * 
+ *
  * Compare current performance against established baselines.
  */
 
@@ -8,12 +8,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 import { PerformanceBaselineManager } from '@/lib/services/performance-baseline-manager';
 import { logger } from '@/lib/logger';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handlePOST(request: NextRequest) {
 
 /**
  * POST /api/v1/admin/performance/baselines/compare
  * Compare current performance against baseline
  */
-export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { queryFingerprint, sql, params } = body;
@@ -74,4 +76,8 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }

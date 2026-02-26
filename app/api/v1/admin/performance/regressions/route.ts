@@ -1,6 +1,6 @@
 /**
  * Performance Regressions API
- * 
+ *
  * Endpoints for viewing and managing performance regressions.
  */
 
@@ -8,12 +8,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getConnectionPoolManager } from '@/lib/services/connection-pool-manager';
 import { PerformanceBaselineManager } from '@/lib/services/performance-baseline-manager';
 import { logger } from '@/lib/logger';
+import { withRequestContextAndRateLimit } from '@/lib/middleware/with-request-context';
+
+async function handleGET(request: NextRequest) {
 
 /**
  * GET /api/v1/admin/performance/regressions
  * Get recent performance regressions
  */
-export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const limit = parseInt(searchParams.get('limit') || '10', 10);
@@ -44,4 +46,8 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function GET(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "read", handleGET);
 }

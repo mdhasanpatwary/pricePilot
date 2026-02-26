@@ -1,6 +1,6 @@
 /**
  * Approve Documentation Suggestion API
- * 
+ *
  * POST /api/v1/documentation/suggestions/:id/approve
  */
 
@@ -8,8 +8,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { DocumentationSuggestionStatus } from '@prisma/client';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
-export async function POST(
+async function handlePOST(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -97,4 +98,8 @@ export async function POST(
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    return withRequestContextAndRateLimit(req, "auth", (r) => handlePOST(r, context));
 }

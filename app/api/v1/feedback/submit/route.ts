@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { UserSatisfactionService } from '@/lib/services/user-satisfaction';
 import { z } from 'zod';
 import { getCachedSession } from "@/lib/auth/cached-session";
+import { withRequestContextAndRateLimit } from "@/lib/middleware/with-request-context";
 
 const feedbackSchema = z.object({
     rating: z.number().min(1).max(5),
@@ -29,7 +30,7 @@ const feedbackSchema = z.object({
     context: z.record(z.string(), z.any()).optional(),
 });
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
     try {
         const session = await getCachedSession();
 
@@ -78,4 +79,8 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+export async function POST(req: NextRequest) {
+    return withRequestContextAndRateLimit(req, "write", handlePOST);
 }
