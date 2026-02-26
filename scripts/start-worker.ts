@@ -301,12 +301,13 @@ async function start() {
     releaseWorkerLock = await acquireWorkerLock();
     if (!releaseWorkerLock) {
       process.exit(0);
-      return;
     }
 
     let started = false;
-    let syncWorker: any = null;
-    let scrapeWorker: any = null;
+    let syncFullWorker: any = null;
+    let syncDeltaWorker: any = null;
+    let scrapeHighWorker: any = null;
+    let scrapeLowWorker: any = null;
     let notificationWorker: any = null;
     let degraded = false;
     let isShuttingDown = false;
@@ -338,8 +339,10 @@ async function start() {
       await validateRedisHardening();
 
       const created = createWorkers();
-      syncWorker = created.syncWorker as any;
-      scrapeWorker = (created as any).scrapeWorker as any;
+      syncFullWorker = created.syncFullWorker as any;
+      syncDeltaWorker = created.syncDeltaWorker as any;
+      scrapeHighWorker = created.scrapeHighWorker as any;
+      scrapeLowWorker = created.scrapeLowWorker as any;
       notificationWorker = created.notificationWorker as any;
 
       // Schedule internal crons/maintenance only once on worker start.
@@ -355,17 +358,20 @@ async function start() {
         }
       }
 
-      console.log("✅ Workers active:");
       console.log(
-        `   - Sync Queue (Concurrency: ${(syncWorker as any).concurrencyValue})`,
+        `   - Sync Full Queue (Concurrency: ${syncFullWorker.concurrencyValue})`,
       );
-      if (scrapeWorker) {
-        console.log(
-          `   - Scrape Queue (Concurrency: ${(scrapeWorker as any).concurrencyValue})`,
-        );
-      }
       console.log(
-        `   - Notification Queue (Concurrency: ${(notificationWorker as any).concurrencyValue})`,
+        `   - Sync Delta Queue (Concurrency: ${syncDeltaWorker.concurrencyValue})`,
+      );
+      console.log(
+        `   - Scrape High Queue (Concurrency: ${scrapeHighWorker.concurrencyValue})`,
+      );
+      console.log(
+        `   - Scrape Low Queue (Concurrency: ${scrapeLowWorker.concurrencyValue})`,
+      );
+      console.log(
+        `   - Notification Queue (Concurrency: ${notificationWorker.concurrencyValue})`,
       );
 
       started = true;
@@ -395,17 +401,19 @@ async function start() {
         globalBudgetCleanupTimer = null;
       }
       try {
-        if (syncWorker) await syncWorker.close();
+        if (syncFullWorker) await syncFullWorker.close();
+        if (syncDeltaWorker) await syncDeltaWorker.close();
       } catch { }
       try {
-        if (scrapeWorker) await scrapeWorker.close();
+        if (scrapeHighWorker) await scrapeHighWorker.close();
+        if (scrapeLowWorker) await scrapeLowWorker.close();
       } catch { }
       try {
         if (notificationWorker) await notificationWorker.close();
       } catch { }
       // Best-effort: close the shared Playwright pool to avoid lingering Chromium processes.
       try {
-        const { BrowserPool } = await import("../lib/services/browser-pool");
+        const { BrowserPool } = await import("../lib/services/browser/unified-browser-pool");
         await BrowserPool.shutdown();
       } catch { }
       await releaseWorkerLock?.();
