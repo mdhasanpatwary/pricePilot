@@ -69,23 +69,28 @@ export class MonitoringService {
      * Prunes nodes that haven't updated their individual heartbeat in the last 60 seconds.
      */
     static async cleanupZombieBrowsers(): Promise<void> {
+        // With the new heartbeat-based approach each node writes an individual key
+        // with an expiration.  Redis will automatically evict entries when a node
+        // stops sending heartbeats, so there is nothing to prune from a shared
+        // structure anymore.  We instead do a sanity check to clean up any malformed
+        // heartbeat values that may have been written by older versions or during a
+        // partial upgrade.
         try {
             const redis = getRedisConnection();
-            const key = "pp:browsers:active_nodes";
-            const counts = await redis.hgetall(key);
-
-            for (const instanceId of Object.keys(counts)) {
-                const heartbeatKey = `pp:browsers:node_heartbeat:${instanceId}`;
-                const exists = await redis.exists(heartbeatKey);
-
-                if (!exists) {
-                    logger.warn(`[MonitoringService] Pruning zombie browser node: ${instanceId}`);
-                    await redis.hdel(key, instanceId);
+            const keys = (await redis.keys("pp:browsers:node_heartbeat:*")) as string[];
+            for (const k of keys) {
+                const raw = await redis.get(k);
+                if (!raw) continue; // already expired
+                try {
+                    JSON.parse(raw);
+                } catch {
+                    logger.warn(`[MonitoringService] Removing invalid heartbeat key: ${k}`);
+                    await redis.del(k);
                 }
             }
         } catch (error) {
             logger.error(`[MonitoringService] Failed to cleanup zombie browsers`, {
-                error: error instanceof Error ? error.message : String(error)
+                error: error instanceof Error ? error.message : String(error),
             });
         }
     }

@@ -37,6 +37,7 @@ interface ScrapedProduct {
 
 interface ScrapeProductOptions {
   isAdvancedProtected?: boolean;
+  tenantId?: string;
 }
 
 export class ScrapeBlockError extends Error {
@@ -745,7 +746,8 @@ export class ScraperService {
       // Use RetryStrategy to handle retries with exponential backoff
       return await this.retryStrategy.executeWithRetry(
         async (context: RetryContext) => {
-          return this._scrapeProductPageInternal(url, context);
+          // pass tenantId from options if available
+          return this._scrapeProductPageInternal(url, context, options?.tenantId);
         },
         (error: Error) => {
           // Maintain compatibility with existing ScrapeBlockError (Requirement 8.3)
@@ -971,7 +973,7 @@ export class ScraperService {
         // Use RetryStrategy to handle retries with exponential backoff
         const result = await this.retryStrategy.executeWithRetry(
           async (context: RetryContext) => {
-            return this._scrapeProductPageInternalWithTracking(url, context, sessionId);
+            return this._scrapeProductPageInternalWithTracking(url, context, sessionId, tenantId);
           },
           (error: Error) => {
             // Record error in session
@@ -1079,7 +1081,8 @@ export class ScraperService {
    */
   private async _scrapeProductPageInternal(
     url: string,
-    retryContext: RetryContext
+    retryContext: RetryContext,
+    tenantId?: string
   ): Promise<ScrapedProduct | null> {
     const proxyResult = await this.getNextProxy();
     const proxyUrl = proxyResult.url;
@@ -1115,7 +1118,7 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname);
+      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname, tenantId);
       page = await context.newPage();
     } catch (error) {
       logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
@@ -1716,7 +1719,8 @@ export class ScraperService {
   private async _scrapeProductPageInternalWithTracking(
     url: string,
     retryContext: RetryContext,
-    sessionId: string
+    sessionId: string,
+    tenantId?: string
   ): Promise<ScrapedProduct | null> {
     const navigationStartTime = Date.now();
 
@@ -1762,11 +1766,9 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname);
+      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname, tenantId);
       page = await context.newPage();
     } catch (error) {
-      logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
-      await sessionTracker.recordError(sessionId, error as Error);
       // Release concurrent slot before throwing
       this.concurrencyLimiter.releaseSlot(hostname);
       siteProfileManager.releaseConcurrentSlot(hostname);

@@ -2,6 +2,7 @@ import { chromium as playwrightChromium, Browser, BrowserContext, Page } from "p
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { logger } from "@/lib/logger";
+import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 import { getAllUserAgents } from "@/lib/config/user-agents";
 import type { BrowserScrapeConfig } from "@/lib/services/bot-protection/headless-browser-scraper";
 import { randomUUID } from "crypto";
@@ -236,23 +237,37 @@ export class BrowserPool {
     proxy?: { server: string; username?: string; password?: string },
     stealthOptions?: StealthOptions,
     hostname?: string,
+    tenantId?: string,
   ): Promise<BrowserContext> {
     const domain = this.normalizeDomain(hostname);
-    return this.getContext(domain, { userAgent, proxy, stealthOptions });
+    return this.getContext(domain, { userAgent, proxy, stealthOptions }, tenantId);
   }
 
-  async getContext(domain: string, options: ContextOptions = {}): Promise<BrowserContext> {
+  async getContext(domain: string, options: ContextOptions = {}, tenantId?: string): Promise<BrowserContext> {
     const normalizedDomain = this.normalizeDomain(domain);
 
     if (!this.initialized) {
       await this.init(this.config.maxGlobalContexts);
     }
 
+    // record a memory snapshot for each acquisition; helps correlate
+    // high‑memory conditions with specific jobs (Phase 4 metric)
+    try {
+      await OperationalMetricsService.recordMemorySnapshot(this.getRssMb());
+    } catch {
+      // non-fatal
+    }
+
     return this.withDomainLock(normalizedDomain, async () => {
       const session = this.ensureDomainSession(normalizedDomain);
       session.lastUsedAt = new Date();
 
-      const contextKey = this.getContextKey(options.userAgent, options.proxy, options.stealthMode);
+      const contextKey = this.getContextKey(
+        options.userAgent,
+        options.proxy,
+        options.stealthMode,
+        tenantId,
+      );
       const pooled = session.contexts.get(contextKey);
 
       if (pooled && !pooled.inUse) {
@@ -462,10 +477,10 @@ export class BrowserPool {
       this.heartbeatInterval = null;
     }
 
-    // Attempt to clear our heartbeat from Redis before shutting down
+    // Attempt to clear our individual heartbeat key before shutting down
     try {
       const redis = getRedisConnection();
-      await redis.hdel("pp:browsers:active_nodes", this.instanceId).catch(() => {});
+      await redis.del(`pp:browsers:node_heartbeat:${this.instanceId}`).catch(() => {});
     } catch {
       // Ignored
     }
@@ -576,23 +591,33 @@ export class BrowserPool {
 
     try {
       const redis = getRedisConnection();
-      const key = "pp:browsers:active_nodes";
+      // Aggregate active browser counts by inspecting each node's heartbeat key instead
+      // rather than relying on a shared hash.  Keys expire if a node stops sending updates,
+      // so zombies are automatically ignored.
+      const heartbeatPattern = "pp:browsers:node_heartbeat:*";
 
-      // Register/Update our presence
-      await redis.hset(key, this.instanceId, this.browserSlots.size);
-
-      const counts = await redis.hgetall(key);
+      // `keys` is acceptable here since the expected number of nodes is small; the pattern is
+      // narrow and this method is called infrequently (only when a new browser is about to be
+      // created). We purposely avoid storing mutable shared hashes to prevent stale counts.
+      const nodeKeys: string[] = (await redis.keys(heartbeatPattern)) as string[];
       let total = 0;
-      for (const val of Object.values(counts)) {
-        total += parseInt(val || "0", 10);
+      for (const k of nodeKeys) {
+        const raw = await redis.get(k);
+        if (!raw) continue; // expired or removed
+        try {
+          const obj = JSON.parse(raw);
+          total += parseInt(obj.count, 10) || 0;
+        } catch {
+          // ignore malformed heartbeat value
+        }
       }
 
-      // If we are at or over the cap, and this isn't just updating an existing slot, block launch
+      // If we are at or over the cap, block launch
       if (total >= maxGlobalBrowsers) {
         logger.warn("[UnifiedBrowserPool] Global browser capacity reached", {
           total,
           maxGlobalBrowsers,
-          nodes: Object.keys(counts).length
+          nodes: nodeKeys.length,
         });
         throw new Error(`Global browser capacity exhausted (${total}/${maxGlobalBrowsers} across cluster)`);
       }
@@ -608,14 +633,19 @@ export class BrowserPool {
     this.heartbeatInterval = setInterval(async () => {
       try {
         const redis = getRedisConnection();
-        const key = "pp:browsers:active_nodes";
+        // Update our instance heartbeat key.  We encode the current browser count as JSON so
+        // the aggregation logic can simply read and parse the value.  TTL is slightly longer
+        // than the heartbeat interval to tolerate jitter; expired keys are ignored by capacity
+        // calculations, fulfilling the "expiry-based node aggregation" requirement.
+        const heartbeatKey = `pp:browsers:node_heartbeat:${this.instanceId}`;
+        await redis.set(heartbeatKey, JSON.stringify({ count: this.browserSlots.size }), "EX", 30);
 
-        // Update our instance share
-        await redis.hset(key, this.instanceId, this.browserSlots.size);
-        await redis.expire(key, 60); // 1 minute TTL for the whole hash is okay if all nodes update it
-
-        // Also update an individual heartbeat key for zombie detection
-        await redis.set(`pp:browsers:node_heartbeat:${this.instanceId}`, Date.now(), "EX", 30);
+        // Optionally record this count as a metric for later analysis
+        try {
+          await OperationalMetricsService.recordBrowserCount(this.instanceId, this.browserSlots.size);
+        } catch {
+          // Metrics failures are non-fatal
+        }
       } catch (error) {
         logger.warn("[UnifiedBrowserPool] Heartbeat failed", { error });
       }
@@ -900,11 +930,13 @@ export class BrowserPool {
     userAgent?: string,
     proxy?: { server: string; username?: string; password?: string },
     stealthMode?: boolean,
+    tenantId?: string,
   ): string {
     const ua = userAgent || "default";
     const proxyServer = proxy?.server || "none";
     const stealth = stealthMode === false ? "nostealth" : "stealth";
-    return `${ua.substring(0, 24)}_${proxyServer}_${stealth}`;
+    const tenantTag = tenantId ? tenantId.substring(0, 8) : "global";
+    return `${ua.substring(0, 24)}_${proxyServer}_${stealth}_${tenantTag}`;
   }
 
   private getTotalContexts(): number {
@@ -1130,14 +1162,6 @@ export class BrowserPool {
           await this.runMemoryGuard();
         }
 
-        // Heartbeat for global cap
-        const maxGlobalBrowsers = parseInt(process.env.MAX_GLOBAL_BROWSERS || "0", 10);
-        if (maxGlobalBrowsers > 0) {
-          const redis = getRedisConnection();
-          const key = "pp:browsers:active_nodes";
-          await redis.hset(key, this.instanceId, this.browserSlots.size);
-          await redis.expire(key, 60);
-        }
       } catch (error) {
         logger.warn("[UnifiedBrowserPool] Cleanup cycle failed", { error });
       }

@@ -156,6 +156,24 @@ function parsePositiveInt(input: string | undefined, fallback: number, min: numb
   return Math.max(min, Math.floor(parsed));
 }
 
+/**
+ * Instead of exiting immediately, optionally wait a random delay within the
+ * configured restart window.  This spreads worker restarts across a window when
+ * multiple instances hit a memory guard around the same time.
+ */
+function scheduleRestart(reason: string): void {
+  const windowMs = parsePositiveInt(process.env.WORKER_RESTART_WINDOW_MS, 0, 0);
+  if (windowMs > 0) {
+    const delay = Math.floor(Math.random() * windowMs);
+    console.warn(`[WorkerMemoryGuard] scheduling restart in ${delay}ms (reason=${reason})`);
+    setTimeout(() => {
+      gracefulShutdown(1).catch(() => {});
+    }, delay);
+  } else {
+    void gracefulShutdown(1);
+  }
+}
+
 async function validateRedisHardening(): Promise<void> {
   const redis = getRedisConnection() as any;
 
@@ -295,6 +313,15 @@ async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
 }
 
 async function start() {
+  // apply optional startup jitter so that rolling restarts (e.g. during
+  // deployments or memory-based exits) don't all hit at once.
+  const restartWindow = parsePositiveInt(process.env.WORKER_RESTART_WINDOW_MS, 0, 0);
+  if (restartWindow > 0) {
+    const delay = Math.floor(Math.random() * restartWindow);
+    console.log(`[Worker] applying startup jitter ${delay}ms (window=${restartWindow}ms)`);
+    await new Promise((r) => setTimeout(r, delay));
+  }
+
   let releaseWorkerLock: (() => Promise<void>) | null = null;
 
   try {
@@ -423,12 +450,14 @@ async function start() {
     const startWorkerRssGuard = () => {
       const maxRssMb = parsePositiveInt(process.env.WORKER_MAX_RSS_MB, 0, 0);
       const warnRssMb = parsePositiveInt(process.env.WORKER_RSS_WARN_MB, Math.max(1024, Math.floor(maxRssMb * 0.75)), 256);
+      const deltaMb = parsePositiveInt(process.env.WORKER_RSS_DELTA_MB, 0, 0);
       const intervalMs = parsePositiveInt(process.env.WORKER_RSS_MONITOR_INTERVAL_MS, 30000, 5000);
 
       if (maxRssMb <= 0) {
         return;
       }
 
+      let previousRss = 0;
       workerRssMonitorTimer = setInterval(() => {
         const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
         if (rssMb >= warnRssMb) {
@@ -439,13 +468,26 @@ async function start() {
           });
         }
 
-        if (rssMb > maxRssMb) {
+          if (rssMb > maxRssMb) {
           console.error("[WorkerMemoryGuard] RSS limit exceeded, triggering graceful restart", {
             rssMb,
             maxRssMb,
           });
-          void gracefulShutdown(1);
+          scheduleRestart("rss_cap");
+          return;
         }
+
+        if (deltaMb > 0 && previousRss > 0 && rssMb - previousRss >= deltaMb) {
+          console.error("[WorkerMemoryGuard] RSS delta threshold breached, triggering graceful restart", {
+            previousRss,
+            rssMb,
+            deltaMb,
+          });
+          scheduleRestart("rss_delta");
+          return;
+        }
+
+        previousRss = rssMb;
       }, intervalMs);
     };
 

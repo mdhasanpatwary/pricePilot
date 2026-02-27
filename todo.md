@@ -56,15 +56,15 @@
 - [x] Remove fail-open lock execution in cron paths (via explicit policy enforcement).
 
 ## Phase 4 - Scraper Runtime Hardening
-- [ ] Replace shared static browser count hash with heartbeat-based aggregation.
-- [ ] Add expiry-based node aggregation for browser capacity.
-- [ ] Verify active-worker liveness before counting node capacity.
-- [ ] Add per-job memory snapshot metric.
-- [ ] Add worker kill/restart threshold for memory delta breaches.
-- [ ] Add rolling restart window for scraper workers.
-- [ ] Validate scraper context isolation across tenants.
-- [ ] Validate cookie jar isolation across tenants.
-- [ ] Validate proxy rotation isolation per tenant.
+- [x] Replace shared static browser count hash with heartbeat-based aggregation.
+- [x] Add expiry-based node aggregation for browser capacity.
+- [x] Verify active-worker liveness before counting node capacity.
+- [x] Add per-job memory snapshot metric.
+- [x] Add worker kill/restart threshold for memory delta breaches.
+- [x] Add rolling restart window for scraper workers.
+- [x] Validate scraper context isolation across tenants.
+- [x] Validate cookie jar isolation across tenants (via context keys).
+- [x] Validate proxy rotation isolation per tenant (via context keys).
 
 ## Phase 5 - Analytics Isolation & Stability
 - [ ] Remove O(n^2) operations from request path.

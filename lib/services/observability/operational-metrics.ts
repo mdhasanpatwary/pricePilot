@@ -222,6 +222,45 @@ export class OperationalMetricsService {
     }
   }
 
+  /**
+   * Record the number of browsers currently held by a given node.  Used to build
+   * per-node capacity dashboards and to satisfy Phase 4 scraper hardening metrics.
+   */
+  static async recordBrowserCount(nodeId: string, count: number): Promise<void> {
+    try {
+      const bucket = bucketNow();
+      const key = metricKey(bucket);
+      const redis = getRedisConnection();
+      await redis.hset(key, `browser:node:${nodeId}`, count);
+      await redis.expire(key, RETENTION_SECONDS);
+    } catch (error) {
+      logger.debug("[OperationalMetrics] Failed to record browser count", {
+        nodeId,
+        count,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Record a snapshot of process memory (RSS) associated with a unit of work.
+   * In the scraper this is invoked whenever a context is acquired so that we
+   * can correlate job failures with sudden memory spikes.
+   */
+  static async recordMemorySnapshot(rssMb: number): Promise<void> {
+    try {
+      const bucket = bucketNow();
+      const key = metricKey(bucket);
+      await incrFields(key, [[`memory:rss:count`, 1]]);
+      await incrFields(key, [[`memory:rss:sumMb`, rssMb]]);
+    } catch (error) {
+      logger.debug("[OperationalMetrics] Failed to record memory snapshot", {
+        rssMb,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   static async recordDomainAttempt(domain: string, blocked: boolean): Promise<void> {
     try {
       const normalized = normalizeDomain(domain);
