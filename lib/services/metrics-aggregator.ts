@@ -379,7 +379,7 @@ export class MetricsAggregator {
             }
 
             // Get active sessions for tenant
-            const activeSessions = await sessionTracker.getActiveSessions(tenantId);
+            const activeSessions = await sessionTracker.getActiveSessions({ tenantId });
             const activeSessionsCount = activeSessions.length;
 
             // Get metrics from last 24 hours

@@ -303,30 +303,30 @@ export class SessionTracker {
      * @param tenantId - Optional tenant filter
      * @returns Array of active sessions
      */
-    async getActiveSessions(tenantId?: string): Promise<ScrapingSessionData[]> {
+    async getActiveSessions(filters?: SessionFilters): Promise<ScrapingSessionData[]> {
         try {
-            // Try to get from Redis first for real-time data
-            const redisSessionIds = tenantId
-                ? await redisSessionManager.getTenantSessions(tenantId)
-                : await redisSessionManager.getAllActiveSessions();
-
-            if (redisSessionIds.length > 0) {
-                // Fetch full session data from database
-                const sessions = await Promise.all(
-                    redisSessionIds.map(id => sessionRepository.getSession(id))
-                );
-                return sessions.filter((s): s is ScrapingSessionData => s !== null);
+            // If there is a tenant filter and redis is available, try to use it for
+            // real-time results.  Redis lookups do not support pagination so we only
+            // use them when a straight tenant+cursor query is requested (we ignore
+            // cursor/limit when reading from redis).
+            if (filters?.tenantId) {
+                const redisSessionIds = await redisSessionManager.getTenantSessions(filters.tenantId);
+                if (redisSessionIds.length > 0 && !filters.cursor && !filters.limit && !filters.offset) {
+                    const sessions = await Promise.all(
+                        redisSessionIds.map(id => sessionRepository.getSession(id))
+                    );
+                    return sessions.filter((s): s is ScrapingSessionData => s !== null);
+                }
             }
 
-            // Fallback to database if Redis is empty
-            return await sessionRepository.getActiveSessions({ tenantId });
+            // Fallback to database for any other scenarios (or if redis returned empty)
+            return await sessionRepository.getActiveSessions(filters || {});
         } catch (error) {
             logger.error('[SessionTracker] Error getting active sessions', {
                 error,
-                tenantId,
+                filters,
             });
-            // Fallback to database
-            return await sessionRepository.getActiveSessions({ tenantId });
+            return await sessionRepository.getActiveSessions(filters || {});
         }
     }
 

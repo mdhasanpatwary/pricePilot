@@ -33,8 +33,8 @@ async function handleGET(
             );
         }
 
-        // Get active sessions for this tenant
-        const activeSessions = await sessionTracker.getActiveSessions(tenantId);
+        // Get active sessions for this tenant (cursor/limit may be added later)
+        const activeSessions = await sessionTracker.getActiveSessions({ tenantId });
 
         // Get recent session history (last 24 hours)
         const oneDayAgo = new Date();

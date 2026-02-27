@@ -195,7 +195,18 @@ export interface SessionFilters {
     startDate?: Date;
     endDate?: Date;
     limit?: number;
+    /**
+     * Offset-based pagination is deprecated in favor of cursor-based keyset pagination.
+     * Leave undefined when using a cursor.  The API will still accept it for backward
+     * compatibility but new callers should prefer `cursor` instead of `offset`.
+     */
     offset?: number;
+    /**
+     * Cursor for keyset pagination.  When supplied the query will return rows after the
+     * provided cursor and ignore `offset`.  The cursor value is a base64 encoded string
+     * that encodes the last-seen `startTime` and `id` (for deterministic ordering).
+     */
+    cursor?: string;
 }
 
 // Time Series Data

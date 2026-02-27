@@ -77,7 +77,8 @@ export class MonitoringService {
         // partial upgrade.
         try {
             const redis = getRedisConnection();
-            const keys = (await redis.keys("pp:browsers:node_heartbeat:*")) as string[];
+            const { scanKeys } = await import('@/lib/utils/redis');
+            const keys = await scanKeys(redis, "pp:browsers:node_heartbeat:*");
             for (const k of keys) {
                 const raw = await redis.get(k);
                 if (!raw) continue; // already expired

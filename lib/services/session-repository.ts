@@ -126,12 +126,41 @@ export class SessionRepository {
                 where.status = filters.status;
             }
 
-            const sessions = await prisma.scrapingSession.findMany({
+            let queryConfig: any = {
                 where,
-                orderBy: { startTime: 'desc' },
+                orderBy: [
+                    { startTime: 'desc' },
+                    { id: 'desc' }
+                ],
                 take: filters?.limit || 100,
-                skip: filters?.offset || 0,
-            });
+            };
+
+            // keyset pagination using cursor overrides offset
+            if (filters?.cursor) {
+                const { decodeCursor } = await import('@/lib/utils/cursor-pagination');
+                const decoded = decodeCursor(filters.cursor);
+                if (decoded) {
+                    // startTime < cursor.timestamp OR (startTime = cursor.timestamp AND id < cursor.id)
+                    queryConfig.where.AND = [
+                        {
+                            OR: [
+                                { startTime: { lt: new Date(decoded.timestamp) } },
+                                {
+                                    AND: [
+                                        { startTime: new Date(decoded.timestamp) },
+                                        { id: { lt: decoded.id } },
+                                    ],
+                                },
+                            ],
+                        },
+                    ];
+                }
+            } else if (filters?.offset) {
+                // legacy offset support for backwards compatibility
+                queryConfig.skip = filters.offset;
+            }
+
+            const sessions = await prisma.scrapingSession.findMany(queryConfig);
 
             return sessions.map(s => this.mapToSessionData(s));
         } catch (error) {
@@ -165,12 +194,39 @@ export class SessionRepository {
                 }
             }
 
-            const sessions = await prisma.scrapingSession.findMany({
+            let queryConfig: any = {
                 where,
-                orderBy: { startTime: 'desc' },
+                orderBy: [
+                    { startTime: 'desc' },
+                    { id: 'desc' }
+                ],
                 take: filters.limit || 100,
-                skip: filters.offset || 0,
-            });
+            };
+
+            if (filters?.cursor) {
+                const { decodeCursor } = await import('@/lib/utils/cursor-pagination');
+                const decoded = decodeCursor(filters.cursor);
+                if (decoded) {
+                    queryConfig.where.AND = [
+                        {
+                            OR: [
+                                { startTime: { lt: new Date(decoded.timestamp) } },
+                                {
+                                    AND: [
+                                        { startTime: new Date(decoded.timestamp) },
+                                        { id: { lt: decoded.id } },
+                                    ],
+                                },
+                            ],
+                        },
+                    ];
+                }
+            } else if (filters.offset) {
+                // legacy offset support
+                queryConfig.skip = filters.offset;
+            }
+
+            const sessions = await prisma.scrapingSession.findMany(queryConfig);
 
             return sessions.map(s => this.mapToSessionData(s));
         } catch (error) {

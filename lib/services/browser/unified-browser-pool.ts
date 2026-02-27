@@ -599,7 +599,8 @@ export class BrowserPool {
       // `keys` is acceptable here since the expected number of nodes is small; the pattern is
       // narrow and this method is called infrequently (only when a new browser is about to be
       // created). We purposely avoid storing mutable shared hashes to prevent stale counts.
-      const nodeKeys: string[] = (await redis.keys(heartbeatPattern)) as string[];
+      const { scanKeys } = await import('@/lib/utils/redis');
+      const nodeKeys: string[] = await scanKeys(redis, heartbeatPattern);
       let total = 0;
       for (const k of nodeKeys) {
         const raw = await redis.get(k);

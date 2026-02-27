@@ -150,7 +150,8 @@ export class RedisSessionManager {
      */
     async getAllActiveSessions(): Promise<string[]> {
         try {
-            const keys = await this.redis.keys("session:*");
+            const { scanKeys } = await import('@/lib/utils/redis');
+            const keys = await scanKeys(this.redis, "session:*");
             return keys.map(key => key.replace("session:", ""));
         } catch (error) {
             logger.error("[RedisSessionManager] Error getting all active sessions", { error });
@@ -206,9 +207,10 @@ export class RedisSessionManager {
      */
     async clearAllSessions(): Promise<void> {
         try {
-            const sessionKeys = await this.redis.keys("session:*");
-            const tenantKeys = await this.redis.keys("tenant:*:sessions");
-            const metricsKeys = await this.redis.keys("metrics:realtime");
+            const { scanKeys } = await import('@/lib/utils/redis');
+            const sessionKeys = await scanKeys(this.redis, "session:*");
+            const tenantKeys = await scanKeys(this.redis, "tenant:*:sessions");
+            const metricsKeys = await scanKeys(this.redis, "metrics:realtime");
 
             const allKeys = [...sessionKeys, ...tenantKeys, ...metricsKeys];
 

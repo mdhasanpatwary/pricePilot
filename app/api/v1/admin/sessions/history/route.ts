@@ -47,15 +47,18 @@ async function handleGET(request: NextRequest) {
         const startDateStr = searchParams.get('startDate');
         const endDateStr = searchParams.get('endDate');
         const limitStr = searchParams.get('limit');
-        const offsetStr = searchParams.get('offset');
+        const cursor = searchParams.get('cursor') || undefined;
 
         // Build filters
         const filters: SessionFilters = {
             tenantId,
             status,
             limit: limitStr ? parseInt(limitStr, 10) : 100,
-            offset: offsetStr ? parseInt(offsetStr, 10) : 0,
         };
+
+        if (cursor) {
+            filters.cursor = cursor;
+        }
 
         // Parse dates if provided
         if (startDateStr) {
@@ -72,7 +75,7 @@ async function handleGET(request: NextRequest) {
             }
         }
 
-        // Validate limit and offset
+        // Validate limit
         if (filters.limit && (filters.limit < 1 || filters.limit > 1000)) {
             return NextResponse.json(
                 {
@@ -83,28 +86,33 @@ async function handleGET(request: NextRequest) {
             );
         }
 
-        if (filters.offset && filters.offset < 0) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: 'Invalid offset parameter (must be >= 0)',
-                },
-                { status: 400 }
-            );
-        }
-
         // Get session history
         const sessions = await sessionTracker.getSessionHistory(filters);
 
-        // Get total count for pagination (without limit/offset)
-        const countFilters: SessionFilters = {
-            tenantId: filters.tenantId,
-            status: filters.status,
-            startDate: filters.startDate,
-            endDate: filters.endDate,
-        };
-        const allSessions = await sessionTracker.getSessionHistory(countFilters);
-        const totalCount = allSessions.length;
+        // Compute total count efficiently using prisma instead of fetching all sessions
+        let totalCount = 0;
+        try {
+            const countWhere: any = {};
+            if (tenantId) countWhere.tenantId = tenantId;
+            if (status) countWhere.status = status;
+            if (filters.startDate || filters.endDate) {
+                countWhere.startTime = {};
+                if (filters.startDate) countWhere.startTime.gte = filters.startDate;
+                if (filters.endDate) countWhere.startTime.lte = filters.endDate;
+            }
+            totalCount = await prisma.scrapingSession.count({ where: countWhere });
+        } catch (_err) {
+            // If count fails, fall back to length of retrieved sessions
+            totalCount = sessions.length;
+        }
+
+        // determine next cursor
+        let nextCursor: string | null = null;
+        if (sessions.length === filters.limit && sessions.length > 0) {
+            const last = sessions[sessions.length - 1];
+            const { encodeCursor } = await import('@/lib/utils/cursor-pagination');
+            nextCursor = encodeCursor({ timestamp: last.startTime.getTime(), id: last.id });
+        }
 
         return NextResponse.json({
             success: true,
@@ -113,8 +121,7 @@ async function handleGET(request: NextRequest) {
                 pagination: {
                     total: totalCount,
                     limit: filters.limit || 100,
-                    offset: filters.offset || 0,
-                    hasMore: (filters.offset || 0) + sessions.length < totalCount,
+                    nextCursor,
                 },
             },
         });

@@ -129,10 +129,27 @@ export class CacheLayer {
      * Handle invalidation event from another instance
      * Requirement 7.2: Distributed cache invalidation propagation
      */
+    /**
+     * Utility to scan Redis using non-blocking SCAN command instead of KEYS.
+     * Returns all matching keys but iterates in batches to avoid blocking the server.
+     */
+    private async scanKeys(pattern: string): Promise<string[]> {
+        const results: string[] = [];
+        let cursor = '0';
+        do {
+            const [newCursor, keys] = await (this.redis as any).scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+            cursor = newCursor;
+            if (keys && keys.length) {
+                results.push(...keys);
+            }
+        } while (cursor !== '0');
+        return results;
+    }
+
     private async handleRemoteInvalidation(event: InvalidationEvent): Promise<void> {
         try {
             const fullPattern = this.buildKey(event.pattern);
-            const keys = await this.redis.keys(fullPattern);
+            const keys = await this.scanKeys(fullPattern);
 
             if (keys.length > 0) {
                 await this.redis.del(...keys);
@@ -485,7 +502,7 @@ export class CacheLayer {
 
         try {
             const fullPattern = this.buildKey(pattern);
-            const keys = await this.redis.keys(fullPattern);
+            const keys = await this.scanKeys(fullPattern);
 
             if (keys.length === 0) {
                 return 0;
@@ -675,7 +692,7 @@ export class CacheLayer {
      */
     async clearAll(): Promise<void> {
         try {
-            const keys = await this.redis.keys(`${this.CACHE_PREFIX}*`);
+            const keys = await this.scanKeys(`${this.CACHE_PREFIX}*`);
 
             if (keys.length > 0) {
                 await this.redis.del(...keys);

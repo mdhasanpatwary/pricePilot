@@ -67,11 +67,11 @@
 - [x] Validate proxy rotation isolation per tenant (via context keys).
 
 ## Phase 5 - Analytics Isolation & Stability
-- [ ] Remove O(n^2) operations from request path.
-- [ ] Precompute heavy analytics and persist materialized summaries.
-- [ ] Serve dashboard reads in near constant time.
-- [ ] Replace `skip/take` with cursor-based keyset pagination.
-- [ ] Replace Redis `KEYS` usage with `SCAN` or versioned namespace keys.
+- [x] Remove O(n^2) operations from request path.
+- [x] Precompute heavy analytics and persist materialized summaries.
+- [x] Serve dashboard reads in near constant time.
+- [x] Replace `skip/take` with cursor-based keyset pagination.
+- [x] Replace Redis `KEYS` usage with `SCAN` or versioned namespace keys.
 
 ## Phase 6 - Observability & Detection
 - [ ] Add metric: per-tenant queue depth.

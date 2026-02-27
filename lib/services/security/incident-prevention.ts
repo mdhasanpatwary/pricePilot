@@ -675,10 +675,11 @@ export class IncidentPreventionService {
                 incidentsByThreatLevel[incident.threatLevel]++;
             }
 
-            // Count blocked IPs
+            // Count blocked IPs (use SCAN instead of KEYS to avoid blocking Redis)
             let blockedIPs = 0;
             if (this.redis) {
-                const keys = await this.redis.keys('security:blocked:*');
+                const { scanKeys } = await import('@/lib/utils/redis');
+                const keys = await scanKeys(this.redis, 'security:blocked:*');
                 blockedIPs = keys.length;
             }
 
