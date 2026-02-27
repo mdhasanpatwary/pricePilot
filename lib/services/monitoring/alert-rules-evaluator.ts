@@ -624,6 +624,67 @@ export const BUILT_IN_ALERT_RULES: Omit<AlertRule, 'id'>[] = [
         notificationChannels: [],
         tenantId: null,
     },
+    // Phase 6 - Observability & Detection (Requirements TBD)
+    {
+        name: 'Queue Depth Upward Drift',
+        description: 'Triggers when queue depth shows sustained increases within 1 hour',
+        severity: 'WARNING',
+        enabled: true,
+        metricType: 'queue_depth',
+        condition: {
+            operator: 'GT',
+            aggregation: 'AVG',
+        },
+        timeWindow: 60 * 60, // 1 hour window
+        threshold: 300, // Alert if average depth > 300 jobs
+        notificationChannels: [],
+        tenantId: null,
+    },
+    {
+        name: 'Retry Spike by Job Type',
+        description: 'Triggers when retry count for a specific job type exceeds threshold',
+        severity: 'WARNING',
+        enabled: true,
+        metricType: 'retry_count',
+        condition: {
+            operator: 'GT',
+            aggregation: 'SUM',
+        },
+        timeWindow: 5 * 60, // 5 minutes
+        threshold: 50, // 50+ retries in 5 minutes
+        notificationChannels: [],
+        tenantId: null,
+    },
+    {
+        name: 'DLQ Threshold Breach',
+        description: 'Triggers when dead-letter queue exceeds safe threshold',
+        severity: 'CRITICAL',
+        enabled: true,
+        metricType: 'dlq_length',
+        condition: {
+            operator: 'GT',
+            aggregation: 'MAX',
+        },
+        timeWindow: 5 * 60, // 5 minutes
+        threshold: 100, // Alert if DLQ ever exceeds 100 messages
+        notificationChannels: [],
+        tenantId: null,
+    },
+    {
+        name: 'Memory Slope Increase',
+        description: 'Triggers when worker memory usage shows sustained growth over 1 hour',
+        severity: 'WARNING',
+        enabled: true,
+        metricType: 'memory_rss',
+        condition: {
+            operator: 'GT',
+            aggregation: 'AVG',
+        },
+        timeWindow: 60 * 60, // 1 hour window
+        threshold: 1024, // Alert if average RSS > 1GB
+        notificationChannels: [],
+        tenantId: null,
+    },
     // Security-specific alert rules (Requirements 11.1, 11.2, 11.3, 11.4)
     {
         name: 'Brute Force Attack Detection',

@@ -74,17 +74,17 @@
 - [x] Replace Redis `KEYS` usage with `SCAN` or versioned namespace keys.
 
 ## Phase 6 - Observability & Detection
-- [ ] Add metric: per-tenant queue depth.
-- [ ] Add metric: delayed vs active job ratio.
+- [x] Add metric: per-tenant queue depth.
+- [x] Add metric: delayed vs active job ratio.
 - [x] Add metric: retry rate per job type.
-- [ ] Add metric: worker RSS memory.
-- [ ] Add metric: browser count per node.
-- [ ] Add metric: cron execution duration.
-- [ ] Add metric: DLQ growth rate.
-- [ ] Add alert: tenant queue depth upward drift.
-- [ ] Add alert: retry spike by job type.
-- [ ] Add alert: DLQ threshold breach.
-- [ ] Add alert: memory slope increase over 1h.
+- [x] Add metric: worker RSS memory.
+- [x] Add metric: browser count per node.
+- [x] Add metric: cron execution duration.
+- [x] Add metric: DLQ growth rate.
+- [x] Add alert: tenant queue depth upward drift.
+- [x] Add alert: retry spike by job type.
+- [x] Add alert: DLQ threshold breach.
+- [x] Add alert: memory slope increase over 1h.
 
 ## Phase 7 - Security Hardening Layer
 - [ ] Enforce rate limits by tenant, IP, and endpoint class.

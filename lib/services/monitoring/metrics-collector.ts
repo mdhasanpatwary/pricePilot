@@ -64,6 +64,16 @@ export interface IMetricsCollector {
     recordAuthFailure(ipAddress: string): Promise<void>;
     recordSyncLifecycle(siteId: string, stage: 'QUEUE' | 'START' | 'PROGRESS' | 'STOP' | 'FAIL', metadata?: Record<string, any>): Promise<void>;
     recordQueueStarvation(queueName: string, starvedJobCount: number, tenantId?: string): Promise<void>;
+
+    // Phase‑6 observability metrics
+    recordQueueDepth(queueName: string, depth: number, tenantId?: string): Promise<void>;
+    recordDelayedActiveRatio(queueName: string, ratio: number, tenantId?: string): Promise<void>;
+    recordRetry(queueName: string, amount: number, tenantId?: string): Promise<void>;
+    recordMemorySnapshot(rssMb: number): Promise<void>;
+    recordBrowserCount(nodeId: string, count: number): Promise<void>;
+    recordCronDuration(jobKey: string, durationMs: number): Promise<void>;
+    recordDLQLength(queueName: string, length: number): Promise<void>;
+
     getMetrics(metricType: string, timeWindow: number, tenantId?: string): Promise<MetricData>;
 }
 
@@ -415,8 +425,227 @@ export class MetricsCollector implements IMetricsCollector {
         }
     }
 
+    /**     * Record queue depth (Phase 6 observability)
+     *
+     * @param queueName - Name of the queue
+     * @param depth - Current queue depth
+     * @param tenantId - Optional tenant ID for per-tenant metrics
+     */
+    async recordQueueDepth(
+        queueName: string,
+        depth: number,
+        tenantId?: string
+    ): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("queue_depth", queueName, tenantId);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: depth,
+            labels: {
+                queueName,
+                ...(tenantId && { tenantId }),
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record queue depth:", error);
+        }
+    }
+
     /**
-     * Retrieve metrics for a given type and time window
+     * Record delayed vs active job ratio (Phase 6 observability)
+     *
+     * @param queueName - Name of the queue
+     * @param ratio - Ratio of delayed jobs to active jobs (delayed / active)
+     * @param tenantId - Optional tenant ID for per-tenant metrics
+     */
+    async recordDelayedActiveRatio(
+        queueName: string,
+        ratio: number,
+        tenantId?: string
+    ): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("queue_delayed_ratio", queueName, tenantId);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: ratio,
+            labels: {
+                queueName,
+                ...(tenantId && { tenantId }),
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record delayed/active ratio:", error);
+        }
+    }
+
+    /**
+     * Record retry event count (Phase 6 observability)
+     *
+     * @param queueName - Name of the queue
+     * @param amount - Number of retry events
+     * @param tenantId - Optional tenant ID for per-tenant metrics
+     */
+    async recordRetry(
+        queueName: string,
+        amount: number,
+        tenantId?: string
+    ): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("retry_count", queueName, tenantId);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: amount,
+            labels: {
+                queueName,
+                ...(tenantId && { tenantId }),
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record retry count:", error);
+        }
+    }
+
+    /**
+     * Record memory RSS snapshot (Phase 6 observability)
+     *
+     * @param rssMb - Current RSS memory in megabytes
+     */
+    async recordMemorySnapshot(rssMb: number): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("memory_rss", "workers");
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: rssMb,
+            labels: {
+                unit: "mb",
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record memory snapshot:", error);
+        }
+    }
+
+    /**
+     * Record browser count per node (Phase 6 observability)
+     *
+     * @param nodeId - Identifier of the node/worker
+     * @param count - Number of browsers currently running on this node
+     */
+    async recordBrowserCount(nodeId: string, count: number): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("browser_count", nodeId);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: count,
+            labels: {
+                nodeId,
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record browser count:", error);
+        }
+    }
+
+    /**
+     * Record cron job execution duration (Phase 6 observability)
+     *
+     * @param jobKey - Identifier for the cron job
+     * @param durationMs - Execution duration in milliseconds
+     */
+    async recordCronDuration(jobKey: string, durationMs: number): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("cron_duration", jobKey);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: durationMs,
+            labels: {
+                jobKey,
+                unit: "ms",
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record cron duration:", error);
+        }
+    }
+
+    /**
+     * Record DLQ length snapshot (Phase 6 observability)
+     *
+     * @param queueName - Name of the dead-letter queue
+     * @param length - Current number of messages in the DLQ
+     */
+    async recordDLQLength(queueName: string, length: number): Promise<void> {
+        if (!this.backend || this.isDisabled()) return;
+
+        const timestamp = Date.now();
+        const key = this.buildKey("dlq_length", queueName);
+
+        const dataPoint: MetricDataPoint = {
+            timestamp,
+            value: length,
+            labels: {
+                queueName,
+            },
+        };
+
+        try {
+            await this.zaddPoint(key, timestamp, JSON.stringify(dataPoint));
+            await this.expireKey(key, this.DETAILED_TTL);
+        } catch (error) {
+            this.handleBackendError(error);
+            console.error("Failed to record DLQ length:", error);
+        }
+    }
+
+    /**     * Retrieve metrics for a given type and time window
      *
      * @param metricType - Type of metric to retrieve
      * @param timeWindow - Time window in seconds
