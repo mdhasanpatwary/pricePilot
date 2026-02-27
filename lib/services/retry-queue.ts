@@ -105,7 +105,7 @@ export class RetryQueueService {
                     },
                 });
                 logger.warn('[RetryQueue] Permanent error encountered, marking existing item FAILED');
-                void OperationalMetricsService.recordRetryEvent('failed');
+                void OperationalMetricsService.recordRetryEvent('failed', 1, 'retry');
                 return failed as RetryQueueItem;
             }
 
@@ -128,7 +128,7 @@ export class RetryQueueService {
                 },
             });
 
-            void OperationalMetricsService.recordRetryEvent('requeued');
+            void OperationalMetricsService.recordRetryEvent('requeued', 1, 'retry');
 
             return updated as RetryQueueItem;
         }
@@ -155,9 +155,9 @@ export class RetryQueueService {
 
         if (effectiveMax === 0) {
             logger.warn(`[RetryQueue] Error classified as ${errType}; item created in FAILED state`);
-            void OperationalMetricsService.recordRetryEvent('failed');
+            void OperationalMetricsService.recordRetryEvent('failed', 1, 'retry');
         } else {
-            void OperationalMetricsService.recordRetryEvent('enqueued');
+            void OperationalMetricsService.recordRetryEvent('enqueued', 1, 'retry');
         }
 
         return item as RetryQueueItem;
@@ -261,7 +261,7 @@ export class RetryQueueService {
 
         logger.info(`[RetryQueue] Claimed ${claimed.length}/${batchSize} items for processing`);
         if (claimed.length > 0) {
-            void OperationalMetricsService.recordRetryEvent('claimed', claimed.length);
+            void OperationalMetricsService.recordRetryEvent('claimed', claimed.length, 'retry');
         }
         return claimed;
     }
@@ -300,7 +300,7 @@ export class RetryQueueService {
         });
 
         logger.info(`[RetryQueue] Marked item ${id} as SUCCESS`);
-        void OperationalMetricsService.recordRetryEvent('success');
+        void OperationalMetricsService.recordRetryEvent('success', 1, 'retry');
     }
 
     /**
@@ -321,7 +321,7 @@ export class RetryQueueService {
         });
 
         logger.warn(`[RetryQueue] Marked item ${id} as permanently FAILED: ${error}`);
-        void OperationalMetricsService.recordRetryEvent('failed');
+        void OperationalMetricsService.recordRetryEvent('failed', 1, 'retry');
     }
 
     /**
@@ -372,10 +372,10 @@ export class RetryQueueService {
 
         if (status === 'FAILED') {
             logger.warn(`[RetryQueue] Item ${id} exceeded max retries (${effectiveMax}), marked as FAILED`);
-            void OperationalMetricsService.recordRetryEvent('failed');
+            void OperationalMetricsService.recordRetryEvent('failed', 1, 'retry');
         } else {
             logger.info(`[RetryQueue] Item ${id} retry count incremented to ${newRetryCount}, next retry at ${nextRetryAt.toISOString()}`);
-            void OperationalMetricsService.recordRetryEvent('requeued');
+            void OperationalMetricsService.recordRetryEvent('requeued', 1, 'retry');
         }
     }
 

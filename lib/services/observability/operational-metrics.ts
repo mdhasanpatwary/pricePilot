@@ -191,15 +191,29 @@ export class OperationalMetricsService {
     );
   }
 
-  static async recordRetryEvent(event: RetryEvent, amount: number = 1): Promise<void> {
+  /**
+   * Record a retry event, optionally scoped to a specific queue.
+   *
+   * The key written to Redis will be either `retry:<event>` or
+   * `retry:<queueName>:<event>` when a queue name is provided. This allows
+   * us to calculate per-queue retry rates in addition to the global rate
+   * (Phase 6 requirement).
+   */
+  static async recordRetryEvent(
+    event: RetryEvent,
+    amount: number = 1,
+    queueName?: string,
+  ): Promise<void> {
     try {
       if (!Number.isFinite(amount) || amount <= 0) return;
       const bucket = bucketNow();
       const key = metricKey(bucket);
-      await incrFields(key, [[`retry:${event}`, Math.floor(amount)]]);
+      const field = queueName ? `retry:${queueName}:${event}` : `retry:${event}`;
+      await incrFields(key, [[field, Math.floor(amount)]]);
     } catch (error) {
       logger.debug("[OperationalMetrics] Failed to record retry metric", {
         event,
+        queueName,
         error: error instanceof Error ? error.message : String(error),
       });
     }
