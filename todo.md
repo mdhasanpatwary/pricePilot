@@ -76,7 +76,7 @@
 ## Phase 6 - Observability & Detection
 - [ ] Add metric: per-tenant queue depth.
 - [ ] Add metric: delayed vs active job ratio.
-- [ ] Add metric: retry rate per job type.
+- [x] Add metric: retry rate per job type.
 - [ ] Add metric: worker RSS memory.
 - [ ] Add metric: browser count per node.
 - [ ] Add metric: cron execution duration.
