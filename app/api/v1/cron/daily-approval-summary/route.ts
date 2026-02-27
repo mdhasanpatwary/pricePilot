@@ -1,4 +1,5 @@
 import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { EmailService } from "@/lib/services/email";
@@ -191,5 +192,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRequestContextOnly(req, handleGET);
+    return withRequestContextOnly(req, withCronInstrumentation('daily-approval-summary', handleGET));
 }

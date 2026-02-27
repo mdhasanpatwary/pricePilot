@@ -9,6 +9,8 @@ import {
   isEncryptedString,
 } from "@/lib/services/encryption/field-encryption";
 
+import { isUrlSafe } from "@/lib/utils/url-validator";
+
 export class WebhookService {
   /**
    * Dispatch a webhook event for a specific tenant
@@ -22,6 +24,16 @@ export class WebhookService {
     });
 
     for (const webhook of webhooks) {
+      // Validate URL before processing
+      if (!isUrlSafe(webhook.url)) {
+        logger.error(`[WebhookService] SSRF ATTEMPT BLOCKED: Skipping unsafe webhook URL`, {
+          tenantId,
+          webhookId: webhook.id,
+          url: webhook.url,
+        });
+        continue;
+      }
+
       await this.sendWebhook(webhook, event, payload);
     }
   }

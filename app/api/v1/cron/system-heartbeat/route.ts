@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 import { uptimeTracker } from '@/lib/services/monitoring/uptime-tracker';
 import { monitoringDashboardService } from '@/lib/services/monitoring/dashboard';
 import { prisma } from '@/lib/prisma';
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
         req,
         "ANALYTICS", // heartbeat is monitoring (fail-soft)
         "pp:cron:system-heartbeat",
-        handlePOST,
+        withCronInstrumentation('system-heartbeat', handlePOST),
         60 * 1000, // 1 minute TTL
     );
 }

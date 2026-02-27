@@ -84,6 +84,8 @@ export interface SecurityPolicy {
     autoBlockThreshold: number; // reputation score threshold
     blockDuration: number; // milliseconds
     permanentBlockThreshold: number; // incidents before permanent block
+    maxTenantsPerIP: number;
+    tenantTrackingWindow: number;
 }
 
 /**
@@ -99,6 +101,8 @@ export class IncidentPreventionService {
         autoBlockThreshold: 30, // block if reputation < 30
         blockDuration: 60 * 60 * 1000, // 1 hour
         permanentBlockThreshold: 5, // 5 incidents = permanent block
+        maxTenantsPerIP: 5, // Max distinct tenants an IP can access in a window
+        tenantTrackingWindow: 10 * 60 * 1000, // 10 minutes
     };
 
     constructor() {
@@ -354,6 +358,9 @@ export class IncidentPreventionService {
                 policy.authFailureWindow
             );
 
+            // Check for multi-tenant scanning
+            const tenantCount = await this.getTenantAccessCount(context.ipAddress);
+
             // Determine threat level
             let threatLevel = ThreatLevel.NONE;
             const actions: ResponseAction[] = [ResponseAction.LOG];
@@ -375,6 +382,10 @@ export class IncidentPreventionService {
                 threatLevel = ThreatLevel.MEDIUM;
                 actions.push(ResponseAction.REQUIRE_CAPTCHA, ResponseAction.WARN);
                 reason = `Medium reputation score (${reputation.score})`;
+            } else if (tenantCount >= policy.maxTenantsPerIP) {
+                threatLevel = ThreatLevel.CRITICAL;
+                actions.push(ResponseAction.BLOCK_PERMANENT, ResponseAction.NOTIFY_ADMIN);
+                reason = `Multi-tenant scanning detected (${tenantCount} tenants)`;
             } else if (authFailures > 0) {
                 threatLevel = ThreatLevel.LOW;
                 actions.push(ResponseAction.WARN);
@@ -427,6 +438,11 @@ export class IncidentPreventionService {
             }
 
             await this.updateIPReputation(context.ipAddress, reputationDelta);
+
+            // Track tenant access for scanner detection
+            if (context.tenantId) {
+                await this.trackTenantAccess(context.ipAddress, context.tenantId);
+            }
 
             // Execute response actions
             for (const action of actions) {
@@ -706,6 +722,34 @@ export class IncidentPreventionService {
                 blockedIPs: 0,
                 averageReputationScore: 100,
             };
+        }
+    }
+
+    /**
+     * Track tenant access from IP address
+     */
+    private async trackTenantAccess(ipAddress: string, tenantId: string): Promise<void> {
+        if (!this.redis) return;
+        try {
+            const key = `security:tenant_access:${ipAddress}`;
+            await this.redis.sadd(key, tenantId);
+            await this.redis.expire(key, Math.ceil(this.DEFAULT_POLICY.tenantTrackingWindow / 1000));
+        } catch (error) {
+            logger.error('Failed to track tenant access', { error, ipAddress, tenantId });
+        }
+    }
+
+    /**
+     * Get count of distinct tenants accessed by an IP
+     */
+    private async getTenantAccessCount(ipAddress: string): Promise<number> {
+        if (!this.redis) return 0;
+        try {
+            const key = `security:tenant_access:${ipAddress}`;
+            return await this.redis.scard(key);
+        } catch (error) {
+            logger.error('Failed to get tenant access count', { error, ipAddress });
+            return 0;
         }
     }
 }

@@ -1,4 +1,5 @@
 import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 /**
  * Cron Job: Cleanup Old Audit Logs
  * 
@@ -93,5 +94,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRequestContextOnly(req, handleGET);
+    return withRequestContextOnly(req, withCronInstrumentation('cleanup-audit-logs', handleGET));
 }

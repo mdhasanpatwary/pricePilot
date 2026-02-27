@@ -654,6 +654,7 @@ model PriceHistory {
   @@unique([productId, recordedAt])
   @@index([productId, recordedAt(sort: Desc)])
   @@index([recordedAt])
+  @@index([productId, recordedAt, price]) // Composite for faster time-series ranges
 }
 
 model PriceUpdateLog {

@@ -28,6 +28,7 @@ import {
   simulateNetworkTimeoutFlood,
   simulateAntiBotSpike,
   simulateHighScaleTenant,
+  simulateDbUnavailable,
 } from "@/lib/testing/failure-scenarios";
 
 // Map scenario types to handler functions
@@ -41,6 +42,7 @@ const SCENARIO_HANDLERS: Record<
   "network-timeout": simulateNetworkTimeoutFlood,
   "anti-bot-spike": simulateAntiBotSpike,
   "high-scale-tenant": simulateHighScaleTenant,
+  "db-unavailable": simulateDbUnavailable,
 };
 
 /**

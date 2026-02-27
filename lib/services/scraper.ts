@@ -20,6 +20,7 @@ import { sessionTracker } from "./session-tracker";
 import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
 import { SystemConfigService } from "@/lib/config";
 import { detectOpenCartFromUrlAndHtml } from "./platform-detector";
+import { isUrlSafe } from "../utils/url-validator";
 
 interface ScrapedProduct {
   title: string;
@@ -124,6 +125,8 @@ const DEFAULT_STRATEGY = (baseUrl: string, query: string) =>
 // Get user agents from centralized configuration
 const USER_AGENTS = getAllUserAgents();
 
+import { withChaosAwareness } from "../testing/chaos-simulator";
+
 export class ScraperService {
   private static readonly warningThrottleMs = 5 * 60 * 1000;
   private static warningLastSeen = new Map<string, number>();
@@ -159,7 +162,15 @@ export class ScraperService {
     if (!trimmed || trimmed.startsWith("data:")) return undefined;
 
     try {
-      return new URL(trimmed, pageUrl).toString();
+      const absoluteUrl = new URL(trimmed, pageUrl).toString();
+
+      // Secondary check: ensure normalized URL is safe
+      if (!isUrlSafe(absoluteUrl)) {
+        logger.warn('[ScraperService] SSRF Blocked: Unsafe normalized image URL', { url: absoluteUrl });
+        return undefined;
+      }
+
+      return absoluteUrl;
     } catch {
       return undefined;
     }
@@ -1118,7 +1129,9 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname, tenantId);
+      context = await withChaosAwareness("browser-crash", async () => {
+        return await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname, tenantId);
+      });
       page = await context.newPage();
     } catch (error) {
       logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
@@ -3661,9 +3674,11 @@ export class ScraperService {
           await page.waitForTimeout(Math.random() * 1000 + 500);
         }
 
-        const response = await page.goto(searchUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: 30000,
+        const response = await withChaosAwareness("network-timeout", async () => {
+          return await page.goto(searchUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+          });
         });
         const status = response?.status() ?? 0;
         if (status === 404) {

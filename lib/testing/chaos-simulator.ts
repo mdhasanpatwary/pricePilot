@@ -10,6 +10,7 @@ import { getRedisConnection } from "@/lib/redis";
 
 export type ChaosScenarioType =
   | "redis-unavailable"
+  | "db-unavailable"
   | "worker-crash"
   | "browser-crash"
   | "network-timeout"

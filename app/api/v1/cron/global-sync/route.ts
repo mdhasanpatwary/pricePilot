@@ -1,4 +1,5 @@
 import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
@@ -53,5 +54,5 @@ async function handleGlobalSync(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRequestContextOnly(req, handleGlobalSync);
+  return withRequestContextOnly(req, withCronInstrumentation('global-sync', handleGlobalSync));
 }

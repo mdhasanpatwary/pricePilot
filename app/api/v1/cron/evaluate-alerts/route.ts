@@ -1,4 +1,5 @@
 import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 /**
  * Alert Evaluation Cron Job
  * 
@@ -355,5 +356,5 @@ async function getAlertNotificationChannels(ruleId: string): Promise<string[]> {
 }
 
 export async function GET(req: NextRequest) {
-    return withRequestContextOnly(req, handleGET);
+    return withRequestContextOnly(req, withCronInstrumentation('evaluate-alerts', handleGET));
 }

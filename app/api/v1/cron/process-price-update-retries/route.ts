@@ -3,8 +3,7 @@ import { priceUpdateMonitor } from "@/lib/services/price-update-monitor";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { withCronLock } from "@/lib/middleware/cron-auth";
-
-async function handlePOST(_req: NextRequest) {
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 
 /**
  * Process Price Update Retry Queue
@@ -22,6 +21,7 @@ async function handlePOST(_req: NextRequest) {
  *
  * @route POST /api/v1/cron/process-price-update-retries
  */
+async function handlePOST(_req: NextRequest) {
     try {
 
         logger.info("Starting price update retry queue processing");
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
         req,
         "CRITICAL", // price update is business-critical (fail-closed)
         "pp:cron:process-price-update-retries",
-        handlePOST,
+        withCronInstrumentation('process-price-update-retries', handlePOST),
         15 * 60 * 1000, // 15 minute TTL for processing
     );
 }

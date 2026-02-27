@@ -1,5 +1,6 @@
 import { getRedisConnection } from "@/lib/queue/connection";
 import { logger } from "@/lib/logger";
+import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 
 const METRIC_PREFIX = "pp:ops:metric:minute:";
 const DOMAIN_BLOCK_PREFIX = "pp:ops:block:minute:";
@@ -134,6 +135,12 @@ export class OperationalMetricsService {
       }
 
       await incrFields(key, fields);
+
+      // Phase 6 Migration: Delegate specific events to MetricsCollector
+      if (event === "retrying") {
+        void metricsCollector.recordRetry(queueName, 1, tenantId);
+      }
+
       // only certain events should affect the active‑job gauge
       if (["active", "completed", "failed", "failed_terminal", "dead_letter"].includes(event)) {
         await this.adjustActiveGauge(queueName, event, tenantId);
@@ -227,6 +234,9 @@ export class OperationalMetricsService {
       const bucket = bucketNow();
       const key = metricKey(bucket);
       await incrFields(key, [[`dlq:${queueName}:length`, length]]);
+
+      // Phase 6 Migration: Delegate to MetricsCollector
+      await metricsCollector.recordDLQLength(queueName, length);
     } catch (error) {
       logger.debug("[OperationalMetrics] Failed to record DLQ length", {
         queueName,
@@ -247,6 +257,9 @@ export class OperationalMetricsService {
       const redis = getRedisConnection();
       await redis.hset(key, `browser:node:${nodeId}`, count);
       await redis.expire(key, RETENTION_SECONDS);
+
+      // Phase 6 Migration: Delegate to MetricsCollector
+      await metricsCollector.recordBrowserCount(nodeId, count);
     } catch (error) {
       logger.debug("[OperationalMetrics] Failed to record browser count", {
         nodeId,
@@ -267,6 +280,9 @@ export class OperationalMetricsService {
       const key = metricKey(bucket);
       await incrFields(key, [[`memory:rss:count`, 1]]);
       await incrFields(key, [[`memory:rss:sumMb`, rssMb]]);
+
+      // Phase 6 Migration: Delegate to MetricsCollector
+      await metricsCollector.recordMemorySnapshot(rssMb);
     } catch (error) {
       logger.debug("[OperationalMetrics] Failed to record memory snapshot", {
         rssMb,

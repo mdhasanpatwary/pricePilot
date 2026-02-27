@@ -83,6 +83,25 @@ export function withSecurity(
                 );
             }
 
+            // --- INJECTION DETECTION ---
+            const suspiciousPattern = await detectSuspiciousPatterns(req);
+            if (suspiciousPattern) {
+                logger.warn('Suspicious pattern detected', {
+                    ipAddress: context.ipAddress,
+                    endpoint: context.endpoint,
+                    pattern: suspiciousPattern,
+                });
+
+                // Log and handle the security event
+                await incidentPreventionService.handleSecurityEvent('suspicious_pattern', {
+                    ...context,
+                    additionalData: { pattern: suspiciousPattern }
+                });
+
+                // If critical threat detected by incident service during handling, it might block the IP.
+                // For now, we allow the check to continue to analyze threat level normally.
+            }
+
             // Analyze threat level
             const { threatLevel, actions: _actions, reason } = await incidentPreventionService.analyzeThreat(
                 context
@@ -129,6 +148,50 @@ export function withSecurity(
             );
         }
     };
+}
+
+/**
+ * Detect suspicious injection patterns in request
+ */
+async function detectSuspiciousPatterns(req: NextRequest): Promise<string | null> {
+    const url = new URL(req.url);
+    const searchParams = url.searchParams.toString().toLowerCase();
+
+    // Patterns to look for
+    const patterns = [
+        // XSS
+        { name: 'XSS:Script', regex: /<script|javascript:|onerror=|onload=|eval\(|alert\(/i },
+        // SQLi
+        { name: 'SQLi:Basic', regex: /' OR '1'='1|-- |UNION SELECT|DROP TABLE|INSERT INTO/i },
+        // Path Traversal
+        { name: 'PathTraversal', regex: /\.\.\/|\.\.\\|%2e%2e%2f/i },
+    ];
+
+    // 1. Check Query Parameters
+    for (const pattern of patterns) {
+        if (pattern.regex.test(searchParams)) {
+            return pattern.name;
+        }
+    }
+
+    // 2. Check Body for POST/PUT/PATCH (limited check for performance)
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        try {
+            // Clone request to read body without consuming it for the main handler
+            const clonedReq = req.clone();
+            const body = await clonedReq.text();
+
+            for (const pattern of patterns) {
+                if (pattern.regex.test(body)) {
+                    return `${pattern.name}:Body`;
+                }
+            }
+        } catch (e) {
+            // Ignore body read errors
+        }
+    }
+
+    return null;
 }
 
 /**

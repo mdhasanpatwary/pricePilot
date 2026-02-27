@@ -5,8 +5,9 @@ import { SyncJobData, NotificationJobData, ScrapeJobData, DeadLetterJobData } fr
 import { SyncOrchestrator } from "@/lib/services/sync-orchestrator";
 import { ScrapeJobProcessor } from "@/lib/services/scheduling/scrape-job-processor";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
-import { decrementTenantQueueDepth } from "./backpressure";
+import { decrementTenantQueueDepth, getQueueDepthSnapshot } from "./backpressure";
 import { getDeadLetterQueue } from "./client";
+import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
 
 const TENANT_ACTIVE_JOBS_PREFIX = "pp:queue:tenant:active:";
 
@@ -324,6 +325,48 @@ export const createWorkers = () => {
   registerEvents(scrapeHighWorker, QUEUE_NAMES.SCRAPE_HIGH_PRIO);
   registerEvents(scrapeLowWorker, QUEUE_NAMES.SCRAPE_LOW_PRIO);
   registerEvents(notificationWorker, QUEUE_NAMES.NOTIFICATIONS);
+
+  // Phase 6: Periodic Queue Health Monitoring
+  // Samples queue ratios every 30 seconds for all workers
+  setInterval(async () => {
+    const workers = [
+      { w: syncFullWorker, n: QUEUE_NAMES.SYNC_FULL },
+      { w: syncDeltaWorker, n: QUEUE_NAMES.SYNC_DELTA },
+      { w: scrapeHighWorker, n: QUEUE_NAMES.SCRAPE_HIGH_PRIO },
+      { w: scrapeLowWorker, n: QUEUE_NAMES.SCRAPE_LOW_PRIO },
+      { w: notificationWorker, n: QUEUE_NAMES.NOTIFICATIONS },
+    ];
+
+    for (const { n } of workers) {
+      try {
+        const {
+          getSyncFullQueue,
+          getSyncDeltaQueue,
+          getScrapeHighPrioQueue,
+          getScrapeLowPrioQueue,
+          getNotificationQueue
+        } = await import("./client");
+
+        const getQueueByName = (name: string) => {
+          switch (name) {
+            case QUEUE_NAMES.SYNC_FULL: return getSyncFullQueue();
+            case QUEUE_NAMES.SYNC_DELTA: return getSyncDeltaQueue();
+            case QUEUE_NAMES.SCRAPE_HIGH_PRIO: return getScrapeHighPrioQueue();
+            case QUEUE_NAMES.SCRAPE_LOW_PRIO: return getScrapeLowPrioQueue();
+            case QUEUE_NAMES.NOTIFICATIONS: return getNotificationQueue();
+            default: throw new Error(`Unknown queue: ${name}`);
+          }
+        };
+
+        const queue = getQueueByName(n);
+        const snapshot = await getQueueDepthSnapshot(queue);
+        const ratio = snapshot.counts.active > 0 ? snapshot.counts.delayed / snapshot.counts.active : 0;
+        void metricsCollector.recordDelayedActiveRatio(n, ratio);
+      } catch (err) {
+        // non-fatal
+      }
+    }
+  }, 30000);
 
   return {
     syncFullWorker,

@@ -10,6 +10,7 @@ import { withRequestContextOnly } from '@/lib/middleware/with-request-context';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SessionManager } from '@/lib/utils/session-manager';
+import { withCronInstrumentation } from '@/lib/middleware/cron-instrumentation';
 
 async function handleGET(req: NextRequest) {
     try {
@@ -47,5 +48,5 @@ async function handleGET(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-    return withRequestContextOnly(req, handleGET);
+    return withRequestContextOnly(req, withCronInstrumentation('cleanup-sessions', handleGET));
 }

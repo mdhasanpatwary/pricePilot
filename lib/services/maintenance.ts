@@ -83,11 +83,69 @@ export class MaintenanceService {
         );
       }
 
+      // 7. Enforce GDPR Deletion & Anonymization
+      console.log("🔒 [Maintenance] Running GDPR compliance tasks...");
+      try {
+        const { GDPRService } = await import("@/lib/services/gdpr-service");
+
+        // Find users marked for deletion who have passed the grace period
+        const thirtyDaysAgo = subDays(now, 30);
+        const deletionRequests = await prisma.tenantAuditLog.findMany({
+          where: {
+            action: 'GDPR_DELETION_REQUESTED',
+            createdAt: { lt: thirtyDaysAgo },
+            // We need to ensure we don't re-process if already deleted, 
+            // but the GDPRService.permanentlyDeleteAccount handles "User not found"
+          },
+          select: { userId: true },
+        });
+
+        for (const request of deletionRequests) {
+          try {
+            await GDPRService.permanentlyDeleteAccount(request.userId);
+            console.log(`🗑️ [Maintenance] Permanently deleted user: ${request.userId}`);
+          } catch (deleteError: any) {
+            if (deleteError.message !== 'User not found') {
+              console.error(`❌ [Maintenance] Failed to delete user ${request.userId}:`, deleteError);
+            }
+          }
+        }
+
+        // Batch process active users to anonymize logs (memory-efficient)
+        let lastUserId: string | undefined;
+        const BATCH_SIZE = 50;
+
+        while (true) {
+          const users = await prisma.user.findMany({
+            take: BATCH_SIZE,
+            skip: lastUserId ? 1 : 0,
+            cursor: lastUserId ? { id: lastUserId } : undefined,
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          });
+
+          if (users.length === 0) break;
+
+          for (const user of users) {
+            try {
+              await GDPRService.anonymizeAuditLogs(user.id);
+            } catch (anonError) {
+              console.error(`❌ [Maintenance] Failed to anonymize logs for user ${user.id}:`, anonError);
+            }
+          }
+
+          lastUserId = users[users.length - 1].id;
+          if (users.length < BATCH_SIZE) break;
+        }
+      } catch (gdprError) {
+        console.error("❌ [Maintenance] GDPR compliance tasks failed:", gdprError);
+      }
+
       console.log(
         "✅ [Maintenance] Data retention cleanup completed successfully.",
       );
 
-      // 7. Run System Monitoring & Cleanup
+      // 8. Run System Monitoring & Cleanup
       console.log("📊 [Maintenance] Running system monitoring & cleanup...");
       try {
         await MonitoringService.detectStarvation();

@@ -9,6 +9,7 @@ import {
   updateUserSchema,
   validationErrorResponse,
 } from "@/lib/validation";
+import { getCursorPaginationParams } from "@/lib/utils/pagination";
 import bcrypt from "bcryptjs";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 
@@ -22,14 +23,20 @@ async function getTeamMembers(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
-  const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
-  const skip = (page - 1) * limit;
+  const {
+    cursor,
+    limit,
+    sortBy = "id",
+    sortOrder = "desc",
+  } = getCursorPaginationParams(new URL(req.url).searchParams);
 
-  const [members, totalCount] = await Promise.all([
-    (prisma as any).user.findMany({
-      where: { tenantId: session.user.tenantId },
+  const { paginateCursor } = await import("@/lib/utils/pagination");
+
+  const result = await paginateCursor(
+    (prisma as any).user,
+    { tenantId: session.user.tenantId },
+    { cursor, limit, sortBy, sortOrder },
+    {
       select: {
         id: true,
         email: true,
@@ -38,23 +45,19 @@ async function getTeamMembers(req: NextRequest) {
         createdAt: true,
         emailVerified: true,
       },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
-    }),
-    (prisma as any).user.count({
-      where: { tenantId: session.user.tenantId },
-    }),
-  ]);
+    }
+  );
+
+  // Decrypt names for display
+  const { decryptForUse } = await import("@/lib/services/encryption/field-encryption");
+  const decryptedData = result.data.map((member: any) => ({
+    ...member,
+    name: member.name ? decryptForUse(member.name) : null,
+  }));
 
   return NextResponse.json({
-    data: members,
-    meta: {
-      totalCount,
-      totalPages: Math.ceil(totalCount / limit),
-      currentPage: page,
-      limit,
-    },
+    data: decryptedData,
+    pagination: result.pagination,
   });
 }
 
@@ -92,11 +95,14 @@ async function addTeamMember(req: NextRequest) {
 
   const passwordHash = await bcrypt.hash(password, 12);
 
+  const { encryptForStorage } = await import("@/lib/services/encryption/field-encryption");
+  const encryptedName = name ? encryptForStorage(name) : null;
+
   const newUser = await (prisma as any).user.create({
     data: {
       email,
       passwordHash,
-      name,
+      name: encryptedName,
       role: role as any,
       tenantId: session.user.tenantId,
       emailVerified: new Date(), // Auto-verify internally added users
@@ -150,8 +156,9 @@ async function updateTeamMember(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  const { encryptForStorage } = await import("@/lib/services/encryption/field-encryption");
   const updateData: any = {};
-  if (name) updateData.name = name;
+  if (name) updateData.name = encryptForStorage(name);
   if (role) updateData.role = role as any;
   if (password) {
     updateData.passwordHash = await bcrypt.hash(password, 12);

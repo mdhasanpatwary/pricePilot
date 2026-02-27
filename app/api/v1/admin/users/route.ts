@@ -8,6 +8,7 @@ import {
   validationErrorResponse,
   updateUserSchema,
 } from "@/lib/validation";
+import { getCursorPaginationParams } from "@/lib/utils/pagination";
 import { recordAuditLog, getIpAddress } from "@/lib/audit";
 import bcrypt from "bcryptjs";
 
@@ -22,13 +23,20 @@ async function handleGET(_req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(_req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
-  const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
-  const skip = (page - 1) * limit;
+  const {
+    cursor,
+    limit,
+    sortBy = "id",
+    sortOrder = "desc",
+  } = getCursorPaginationParams(new URL(_req.url).searchParams);
 
-  const [users, totalCount] = await Promise.all([
-    (prisma as any).user.findMany({
+  const { paginateCursor } = await import("@/lib/utils/pagination");
+
+  const result = await paginateCursor(
+    (prisma as any).user,
+    {},
+    { cursor, limit, sortBy, sortOrder },
+    {
       include: {
         tenant: {
           select: { companyName: true },
@@ -37,17 +45,14 @@ async function handleGET(_req: NextRequest) {
           select: { sessions: true },
         },
       },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
-    }),
-    (prisma as any).user.count(),
-  ]);
+    }
+  );
 
-  const formattedUsers = users.map((u: any) => ({
+  const { decryptForUse } = await import("@/lib/services/encryption/field-encryption");
+  const formattedUsers = result.data.map((u: any) => ({
     id: u.id,
     email: u.email,
-    name: u.name,
+    name: u.name ? decryptForUse(u.name) : null,
     role: u.role,
     tenantName: u.tenant.companyName,
     tenantId: u.tenantId,
@@ -58,12 +63,7 @@ async function handleGET(_req: NextRequest) {
 
   return NextResponse.json({
     data: formattedUsers,
-    meta: {
-      totalCount,
-      totalPages: Math.ceil(totalCount / limit),
-      currentPage: page,
-      limit,
-    },
+    pagination: result.pagination,
   });
 }
 
@@ -85,8 +85,9 @@ async function handlePATCH(req: NextRequest) {
 
   const { id, name, role, password } = validation.data!;
 
+  const { encryptForStorage } = await import("@/lib/services/encryption/field-encryption");
   const updateData: any = {};
-  if (name !== undefined) updateData.name = name;
+  if (name !== undefined) updateData.name = name ? encryptForStorage(name) : null;
   if (role !== undefined) updateData.role = role as any;
   if (password) {
     updateData.passwordHash = await bcrypt.hash(password, 12);

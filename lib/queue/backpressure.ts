@@ -3,6 +3,8 @@ import type { JobsOptions, Queue } from "bullmq";
 import { logger } from "@/lib/logger";
 import { OperationalMetricsService } from "@/lib/services/observability/operational-metrics";
 import { getRedisConnection } from "@/lib/queue/connection";
+import { metricsCollector } from "@/lib/services/monitoring/metrics-collector";
+import { withChaosAwareness } from "../testing/chaos-simulator";
 
 const QUEUE_DEPTH_METRIC_PREFIX = "pp:queue:depth:rolling:";
 const QUEUE_DEPTH_LATEST_KEY = "pp:queue:depth:latest";
@@ -147,138 +149,143 @@ export async function enqueueWithBackpressure<TData extends { tenantId: string }
   jobOptions: JobsOptions = {},
   decision: QueueBackpressureDecision,
 ) {
-  // phase‑2 hardening: require an explicit tenantId, no fallbacks allowed
-  if (!data || typeof data.tenantId !== "string" || data.tenantId.trim() === "") {
-    throw new Error("enqueueWithBackpressure requires a valid tenantId on job data");
-  }
-  const tenantId = data.tenantId;
-  const minDelayMs = parsePositiveInt(String(decision.minDelayMs ?? 1000), 1000);
-  const maxDelayMs = parsePositiveInt(String(decision.maxDelayMs ?? 300000), 300000); // 5 min max
-
-  const globalThreshold = getMaxQueueDepth();
-  const tenantThreshold = getMaxTenantQueueDepth();
-
-  const globalSnapshot = await getQueueDepthSnapshot(queue);
-  const tenantDepth = await getTenantQueueDepth(queue.name, tenantId);
-
-  await recordQueueDepthMetric(queue.name, globalSnapshot.depth);
-
-  // phase‑2 enhancement: enforce cooldown window if previously flooded
-  const redis = getRedisConnection();
-  const cooldownKey = `pp:queue:cooldown:${queue.name}:${tenantId}`;
-  const inCooldown = await redis.ttl(cooldownKey);
-  if (inCooldown > 0) {
-    logger.warn("[QueueBackpressure] Tenant in cooldown", {
-      queue: queue.name,
-      tenantId,
-      remainingMs: inCooldown * 1000,
-    });
-    void OperationalMetricsService.recordQueueLifecycle(queue.name, "cooldown", tenantId);
-    if (decision.strategy === "reject") {
-      throw new QueueBackpressureError(
-        `Tenant ${tenantId} is in cooldown`,
-        queue.name,
-        globalSnapshot.depth,
-        globalThreshold,
-      );
-    } else {
-      jobOptions.delay = (jobOptions.delay || 0) + maxDelayMs;
+  return withChaosAwareness("redis-unavailable", async () => {
+    // phase‑2 hardening: require an explicit tenantId, no fallbacks allowed
+    if (!data || typeof data.tenantId !== "string" || data.tenantId.trim() === "") {
+      throw new Error("enqueueWithBackpressure requires a valid tenantId on job data");
     }
-  }
+    const tenantId = data.tenantId;
+    const minDelayMs = parsePositiveInt(String(decision.minDelayMs ?? 1000), 1000);
+    const maxDelayMs = parsePositiveInt(String(decision.maxDelayMs ?? 300000), 300000); // 5 min max
 
-  // 1. Global Backpressure
-  if (globalSnapshot.depth > globalThreshold) {
-    logger.warn("[QueueBackpressure] Global queue depth exceeded", {
-      queue: queue.name,
-      depth: globalSnapshot.depth,
-      threshold: globalThreshold,
-    });
-    // Global overflow always uses delay to avoid dropping data
-    const delay = calculateDelayMs(globalSnapshot.depth, globalThreshold, minDelayMs, maxDelayMs);
-    jobOptions.delay = (jobOptions.delay || 0) + delay;
-  }
+    const globalThreshold = getMaxQueueDepth();
+    const tenantThreshold = getMaxTenantQueueDepth();
 
-  // 2. Tenant FAIR-SHARE Backpressure
-  if (tenantDepth > tenantThreshold) {
-    logger.info("[QueueBackpressure] Tenant fair-share depth exceeded", {
-      queue: queue.name,
-      tenantId,
-      depth: tenantDepth,
-      threshold: tenantThreshold,
-    });
+    const globalSnapshot = await getQueueDepthSnapshot(queue);
+    const tenantDepth = await getTenantQueueDepth(queue.name, tenantId);
 
-    // Apply exponential delay for the specific tenant
-    const tenantDelay = calculateDelayMs(tenantDepth, tenantThreshold, minDelayMs * 2, maxDelayMs);
-    jobOptions.delay = (jobOptions.delay || 0) + tenantDelay;
-  }
+    await recordQueueDepthMetric(queue.name, globalSnapshot.depth);
 
-  // 3. Flood Detection (Phase 8)
-  const isCriticalDepth = globalSnapshot.depth > globalThreshold * 0.8;
-  const isDominating = tenantDepth > Math.max(10, globalSnapshot.depth * 0.5);
+    // Phase 6 Integration: Record queue depth for alerting
+    void metricsCollector.recordQueueDepth(queue.name, globalSnapshot.depth, tenantId);
 
-  if (isCriticalDepth && isDominating) {
-    logger.warn(`[QueueBackpressure] Flood detected for tenant ${tenantId} on queue ${queue.name}`);
-
-    // Lazy import to avoid circular dependency
-    void import("@/lib/services/monitoring/monitoring-service").then(({ MonitoringService }) => {
-       MonitoringService.recordTenantFlood(queue.name, tenantId, tenantDepth);
-    });
-
-    // place tenant into cooldown window
-    await redis.set(cooldownKey, "1", "PX", getCooldownWindowMs());
-
-    if (decision.strategy === "reject") {
-       throw new QueueBackpressureError(
-         `Queue flooded by tenant ${tenantId}`,
-         queue.name,
-         globalSnapshot.depth,
-         globalThreshold
-       );
-    } else {
-       // Extreme delay to force tenant to back off
-       jobOptions.delay = (jobOptions.delay || 0) + maxDelayMs;
-    }
-  }
-
-  // 4. repeated-delay guard: if this job has been delayed too often in a short
-  // window we assume the producer is stuck in a loop and reject it.
-  if (jobOptions.delay && jobOptions.delay > 0) {
-    const delayKey = `pp:queue:delays:${queue.name}:${tenantId}`;
-    const repeat = await redis.incr(delayKey);
-    await redis.expire(delayKey, 60); // 1-minute window
-    if (repeat > getMaxRepeatDelayCount()) {
-      logger.warn("[QueueBackpressure] Repeated backpressure loop detected", {
+    // phase‑2 enhancement: enforce cooldown window if previously flooded
+    const redis = getRedisConnection();
+    const cooldownKey = `pp:queue:cooldown:${queue.name}:${tenantId}`;
+    const inCooldown = await redis.ttl(cooldownKey);
+    if (inCooldown > 0) {
+      logger.warn("[QueueBackpressure] Tenant in cooldown", {
         queue: queue.name,
         tenantId,
-        count: repeat,
+        remainingMs: inCooldown * 1000,
       });
-      throw new QueueBackpressureError(
-        `Repeated delay loop for tenant ${tenantId}`,
-        queue.name,
-        globalSnapshot.depth,
-        globalThreshold,
-      );
+      void OperationalMetricsService.recordQueueLifecycle(queue.name, "cooldown", tenantId);
+      if (decision.strategy === "reject") {
+        throw new QueueBackpressureError(
+          `Tenant ${tenantId} is in cooldown`,
+          queue.name,
+          globalSnapshot.depth,
+          globalThreshold,
+        );
+      } else {
+        jobOptions.delay = (jobOptions.delay || 0) + maxDelayMs;
+      }
     }
-  }
 
-  // Inject groupId for BullMQ fairness
-  (jobOptions as any).removeOnComplete = jobOptions.removeOnComplete ?? true;
-  const finalOptions: JobsOptions = {
-    ...jobOptions,
-    groupId: tenantId,
-  } as any;
+    // 1. Global Backpressure
+    if (globalSnapshot.depth > globalThreshold) {
+      logger.warn("[QueueBackpressure] Global queue depth exceeded", {
+        queue: queue.name,
+        depth: globalSnapshot.depth,
+        threshold: globalThreshold,
+      });
+      // Global overflow always uses delay to avoid dropping data
+      const delay = calculateDelayMs(globalSnapshot.depth, globalThreshold, minDelayMs, maxDelayMs);
+      jobOptions.delay = (jobOptions.delay || 0) + delay;
+    }
 
-  const job = await queue.add(name, data as any, finalOptions);
+    // 2. Tenant FAIR-SHARE Backpressure
+    if (tenantDepth > tenantThreshold) {
+      logger.info("[QueueBackpressure] Tenant fair-share depth exceeded", {
+        queue: queue.name,
+        tenantId,
+        depth: tenantDepth,
+        threshold: tenantThreshold,
+      });
 
-  // record lifecycle events: queued and possibly delayed
-  void OperationalMetricsService.recordQueueLifecycle(queue.name, "queued", tenantId);
-  if (finalOptions.delay && finalOptions.delay > 0) {
-    void OperationalMetricsService.recordQueueLifecycle(queue.name, "delayed", tenantId);
-  }
+      // Apply exponential delay for the specific tenant
+      const tenantDelay = calculateDelayMs(tenantDepth, tenantThreshold, minDelayMs * 2, maxDelayMs);
+      jobOptions.delay = (jobOptions.delay || 0) + tenantDelay;
+    }
 
-  // Track tenant depth (increment on add)
-  await incrementTenantQueueDepth(queue.name, tenantId);
+    // 3. Flood Detection (Phase 8)
+    const isCriticalDepth = globalSnapshot.depth > globalThreshold * 0.8;
+    const isDominating = tenantDepth > Math.max(10, globalSnapshot.depth * 0.5);
 
-  return job;
+    if (isCriticalDepth && isDominating) {
+      logger.warn(`[QueueBackpressure] Flood detected for tenant ${tenantId} on queue ${queue.name}`);
+
+      // Lazy import to avoid circular dependency
+      void import("@/lib/services/monitoring/monitoring-service").then(({ MonitoringService }) => {
+        MonitoringService.recordTenantFlood(queue.name, tenantId, tenantDepth);
+      });
+
+      // place tenant into cooldown window
+      await redis.set(cooldownKey, "1", "PX", getCooldownWindowMs());
+
+      if (decision.strategy === "reject") {
+        throw new QueueBackpressureError(
+          `Queue flooded by tenant ${tenantId}`,
+          queue.name,
+          globalSnapshot.depth,
+          globalThreshold
+        );
+      } else {
+        // Extreme delay to force tenant to back off
+        jobOptions.delay = (jobOptions.delay || 0) + maxDelayMs;
+      }
+    }
+
+    // 4. repeated-delay guard: if this job has been delayed too often in a short
+    // window we assume the producer is stuck in a loop and reject it.
+    if (jobOptions.delay && jobOptions.delay > 0) {
+      const delayKey = `pp:queue:delays:${queue.name}:${tenantId}`;
+      const repeat = await redis.incr(delayKey);
+      await redis.expire(delayKey, 60); // 1-minute window
+      if (repeat > getMaxRepeatDelayCount()) {
+        logger.warn("[QueueBackpressure] Repeated backpressure loop detected", {
+          queue: queue.name,
+          tenantId,
+          count: repeat,
+        });
+        throw new QueueBackpressureError(
+          `Repeated delay loop for tenant ${tenantId}`,
+          queue.name,
+          globalSnapshot.depth,
+          globalThreshold,
+        );
+      }
+    }
+
+    // Inject groupId for BullMQ fairness
+    (jobOptions as any).removeOnComplete = jobOptions.removeOnComplete ?? true;
+    const finalOptions: JobsOptions = {
+      ...jobOptions,
+      groupId: tenantId,
+    } as any;
+
+    const job = await queue.add(name, data as any, finalOptions);
+
+    // record lifecycle events: queued and possibly delayed
+    void OperationalMetricsService.recordQueueLifecycle(queue.name, "queued", tenantId);
+    if (finalOptions.delay && finalOptions.delay > 0) {
+      void OperationalMetricsService.recordQueueLifecycle(queue.name, "delayed", tenantId);
+    }
+
+    // Track tenant depth (increment on add)
+    await incrementTenantQueueDepth(queue.name, tenantId);
+
+    return job;
+  });
 }
 

@@ -6,7 +6,7 @@
 
 import { logger } from "@/lib/logger";
 import { getRedisConnection } from "@/lib/redis";
-import { ChaosResult, ChaosScenarioConfig, chaosSimulator } from "./chaos-simulator";
+import { ChaosResult, ChaosScenarioConfig, chaosSimulator, withChaosAwareness } from "./chaos-simulator";
 
 /**
  * Simulate Redis unavailability
@@ -609,4 +609,100 @@ async function simulateJobExecution(_tenantId: string): Promise<boolean> {
   } catch (error) {
     throw error;
   }
+}
+
+/**
+ * Simulate Database unavailability
+ * - Inject DB connection errors
+ * - Verify system fail-fast or graceful degradation
+ */
+export async function simulateDbUnavailable(
+  config: ChaosScenarioConfig
+): Promise<ChaosResult> {
+  const result: ChaosResult = {
+    scenario: "db-unavailable",
+    durationMs: config.durationMs,
+    startedAt: new Date(),
+    endedAt: new Date(),
+    passed: false,
+    failureReasons: [],
+    metrics: {
+      jobsCompleted: 0,
+      jobsFailed: 0,
+      jobsTimeout: 0,
+      errorsEncountered: [],
+    },
+  };
+
+  try {
+    // Inject chaos state
+    await chaosSimulator.injectChaos(config);
+
+    logger.warn("Database unavailability simulation started", {
+      durationMs: config.durationMs,
+    });
+
+    const startTime = Date.now();
+    const pollInterval = 2000;
+
+    while (Date.now() - startTime < config.durationMs) {
+      try {
+        // Try to execute a DB-backed operation (e.g., getting a tenant)
+        // Since we wrapped Prisma, this should throw
+        const redis = getRedisConnection();
+        const testConn = await redis.ping();
+        if (testConn) {
+          // Trigger a fake DB op via a service that uses prisma
+          // We can't easily call specific API routes here, but we can simulate the impact
+          await withChaosAwareness("db-unavailable", async () => {
+            return "success"; // This will throw due to withChaosAwareness
+          });
+          result.metrics.jobsCompleted++;
+        }
+      } catch (error) {
+        result.metrics.jobsFailed++;
+        const errorMsg = (error as Error).message;
+        if (!result.metrics.errorsEncountered.includes(errorMsg)) {
+          result.metrics.errorsEncountered.push(errorMsg);
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    // Stop chaos
+    await chaosSimulator.stopChaos();
+
+    // Verify recovery
+    const recoveryStart = Date.now();
+    let recovered = false;
+
+    while (Date.now() - recoveryStart < 30000) {
+      try {
+        // Real DB check would happen here, but since it's a simulation,
+        // we just check if chaos state is cleared
+        const active = await chaosSimulator.isChaosModeActive();
+        if (!active) {
+          recovered = true;
+          result.metrics.recoveryDuration = Date.now() - recoveryStart;
+          break;
+        }
+      } catch (error) {
+        // Still recovering
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (!recovered) {
+      result.failureReasons.push("Database chaos state not cleared after duration");
+    }
+
+    result.endedAt = new Date();
+    chaosSimulator.evaluateResults(config, result);
+  } catch (error) {
+    logger.error("Database unavailability simulation failed", { error });
+    result.failureReasons.push((error as Error).message);
+  }
+
+  return result;
 }

@@ -9,6 +9,8 @@
 
 import { Prisma, PrismaClient } from '@prisma/client';
 
+import { withChaosAwareness } from '../testing/chaos-simulator';
+
 export interface QueryMetrics {
     model: string;
     operation: string;
@@ -185,7 +187,9 @@ export function createPerformanceExtension() {
                     const startTime = performance.now();
 
                     try {
-                        const result = await query(args);
+                        const result = await withChaosAwareness('db-unavailable', async () => {
+                            return await query(args);
+                        });
                         const executionTime = performance.now() - startTime;
 
                         tracker.recordQuery(model, operation, executionTime);
