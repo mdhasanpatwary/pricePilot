@@ -87,15 +87,15 @@
 - [x] Add alert: memory slope increase over 1h.
 
 ## Phase 7 - Security Hardening Layer
-- [ ] Enforce rate limits by tenant, IP, and endpoint class.
-- [ ] Add SSRF protections for any retained scraper playground path:
-- [ ] Outbound domain allowlist.
-- [ ] Block private/internal IP ranges.
-- [ ] Block metadata endpoints.
-- [ ] Enforce environment separation:
-- [ ] Exclude debug routes in production builds.
-- [ ] Disallow `INTERNAL_MODE` in production runtime.
-- [ ] Fail CI if debug code is imported in production bundles.
+- [x] Enforce rate limits by tenant, IP, and endpoint class.
+- [x] Add SSRF protections for any retained scraper playground path:
+  - [x] Outbound domain allowlist.
+  - [x] Block private/internal IP ranges.
+  - [x] Block metadata endpoints.
+- [x] Enforce environment separation:
+  - [x] Exclude debug routes in production builds.
+  - [x] Disallow `INTERNAL_MODE` in production runtime.
+  - [x] Fail CI if debug code is imported in production bundles.
 
 ## Phase 8 - Chaos & Failure Testing
 - [ ] Simulate Redis unavailability.
