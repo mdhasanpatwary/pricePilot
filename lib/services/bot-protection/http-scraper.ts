@@ -6,7 +6,26 @@
  */
 
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { Agent as HttpsAgent } from 'https';
 import { Cookie } from './session-manager';
+
+/**
+ * Create a custom HTTPS agent with proper SSL configuration
+ * This handles corporate proxies and custom CA certificates
+ */
+function createHttpsAgent(): HttpsAgent {
+    return new HttpsAgent({
+        keepAlive: true,
+        // Use system CA certificates by default
+        // Can be overridden via NODE_EXTRA_CA_CERTS environment variable
+        rejectUnauthorized: true,
+        // Timeout for TLS handshake
+        timeout: 30000,
+    });
+}
+
+// Reusable HTTPS agent instance
+const httpsAgent = createHttpsAgent();
 
 /**
  * Configuration for a scrape request
@@ -89,6 +108,8 @@ export class HttpScraper {
                 timeout: config.timeout,
                 maxRedirects: config.followRedirects ? 5 : 0,
                 validateStatus: () => true, // Accept all status codes
+                // Use custom HTTPS agent for SSL/TLS connections
+                httpsAgent: config.url.startsWith('https://') ? httpsAgent : undefined,
             };
 
             // Add cookies to headers if provided
@@ -141,6 +162,13 @@ export class HttpScraper {
                 } else if (error.code === 'ENOTFOUND') {
                     // DNS resolution failed
                     throw new Error('DNS resolution failed');
+                } else if (error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || 
+                           error.code === 'UNABLE_TO_GET_ISSUER_CERT' ||
+                           error.code === 'UNABLE_TO_DECODE_ISSUER_SIGNATURE' ||
+                           error.code === 'CERT_HAS_EXPIRED' ||
+                           error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+                    // SSL certificate errors
+                    throw new Error(`SSL certificate error: ${error.code}`);
                 }
             }
 

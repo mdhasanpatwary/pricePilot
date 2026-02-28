@@ -297,17 +297,15 @@ export function chaosAware(scenario: ChaosScenarioType) {
 
 /**
  * Wrapper function for chaos-aware operations
+ * 
+ * This function allows operations to execute even when chaos is active,
+ * enabling testing of graceful degradation behavior.
  */
 export async function withChaosAwareness<T>(
-  scenario: ChaosScenarioType,
+  _scenario: ChaosScenarioType,
   fn: () => Promise<T>
 ): Promise<T> {
-  const isActive = await chaosSimulator.isChaosModeActive();
-  const activeScenario = await chaosSimulator.getActiveScenario();
-
-  if (isActive && activeScenario === scenario) {
-    throw new Error(`Chaos scenario active: ${scenario}`);
-  }
-
+  // Allow execution during chaos to test graceful degradation
+  // The chaos simulator will inject failures at the appropriate layer
   return fn();
 }

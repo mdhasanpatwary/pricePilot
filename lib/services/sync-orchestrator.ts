@@ -323,6 +323,7 @@ export class SyncOrchestrator {
         where: { id: siteId },
         data: {
           isSyncing: false,
+          syncState: "IDLE",
           syncLastAction:
             "Advanced anti-bot protection detected. Configure proxy + captcha solver to continue.",
         },

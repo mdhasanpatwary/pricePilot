@@ -711,7 +711,7 @@ export default function CompetitorsPage() {
 
     const competitor = Array.isArray(competitors) ? competitors.find((c) => c.id === id) : undefined;
     const uiState = getSyncUiState(id, competitor?.isSyncing);
-    if (uiState === "IDLE" || uiState === "STOPPED" || uiState === "STARTING" || uiState === "STOPPING") {
+    if (uiState === "IDLE" || uiState === "STOPPED" || uiState === "STARTING") {
       return;
     }
 
@@ -1208,8 +1208,7 @@ export default function CompetitorsPage() {
                     const isSyncActive = isActiveSyncUiState(uiSyncState);
                     const isActionBusy =
                       Boolean(syncActionBySite[comp.id]) ||
-                      uiSyncState === "STARTING" ||
-                      uiSyncState === "STOPPING";
+                      uiSyncState === "STARTING";
                     const displayStatus = getSyncStatusLabel(uiSyncState, comp.status);
                     const showStopAction = uiSyncState === "RUNNING" || uiSyncState === "STOPPING";
 

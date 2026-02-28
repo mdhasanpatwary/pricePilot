@@ -2,6 +2,29 @@
  * Target Score Validation Tests
  */
 
+// Add global test types for TypeScript
+declare const describe: {
+  (name: string, fn: () => void): void;
+};
+declare const it: {
+  (name: string, fn: () => void | Promise<void>): void;
+};
+declare const expect: {
+  (actual: unknown): {
+    toBe(expected: unknown): void;
+    toEqual(expected: unknown): void;
+    toBeTruthy(): void;
+    toBeFalsy(): void;
+    toBeDefined(): void;
+    toBeUndefined(): void;
+    toBeNull(): void;
+    toBeGreaterThanOrEqual(number: number): void;
+    toBeLessThanOrEqual(number: number): void;
+    toBeGreaterThan(number: number): void;
+    toContain(expected: unknown): void;
+  };
+};
+
 import { calculateHardeningScorecard } from "@/lib/scoring/hardening-scorecard";
 import { generateValidationReport } from "@/lib/scoring/target-score-validator";
 

@@ -128,6 +128,30 @@ export async function getTenantQueueDepth(queueName: string, tenantId: string): 
   return depth ? parseInt(depth, 10) : 0;
 }
 
+/**
+ * Check if tenant just crossed the threshold (for logging purposes)
+ * Returns true only on the first enqueue that exceeds the threshold
+ */
+async function isThresholdTransition(queueName: string, tenantId: string, tenantDepth: number, threshold: number): Promise<boolean> {
+  const redis = getRedisConnection();
+  const key = `pp:queue:threshold:${queueName}:${tenantId}`;
+  
+  if (tenantDepth > threshold) {
+    // Check if we've already logged this threshold breach
+    const alreadyLogged = await redis.get(key);
+    if (!alreadyLogged) {
+      // Mark as logged with expiry matching the cooldown window
+      await redis.set(key, '1', 'PX', getCooldownWindowMs());
+      return true;
+    }
+    return false;
+  } else {
+    // Reset threshold log state when under threshold
+    await redis.del(key);
+    return false;
+  }
+}
+
 export async function incrementTenantQueueDepth(queueName: string, tenantId: string): Promise<void> {
   const redis = getRedisConnection();
   const key = `${TENANT_QUEUE_DEPTH_KEY_PREFIX}${queueName}:${tenantId}`;
@@ -205,13 +229,17 @@ export async function enqueueWithBackpressure<TData extends { tenantId: string }
     }
 
     // 2. Tenant FAIR-SHARE Backpressure
+    // Only log on threshold transition to avoid log spam
+    const shouldLogThreshold = await isThresholdTransition(queue.name, tenantId, tenantDepth, tenantThreshold);
     if (tenantDepth > tenantThreshold) {
-      logger.info("[QueueBackpressure] Tenant fair-share depth exceeded", {
-        queue: queue.name,
-        tenantId,
-        depth: tenantDepth,
-        threshold: tenantThreshold,
-      });
+      if (shouldLogThreshold) {
+        logger.info("[QueueBackpressure] Tenant fair-share depth exceeded", {
+          queue: queue.name,
+          tenantId,
+          depth: tenantDepth,
+          threshold: tenantThreshold,
+        });
+      }
 
       // Apply exponential delay for the specific tenant
       const tenantDelay = calculateDelayMs(tenantDepth, tenantThreshold, minDelayMs * 2, maxDelayMs);
@@ -248,18 +276,23 @@ export async function enqueueWithBackpressure<TData extends { tenantId: string }
 
     // 4. repeated-delay guard: if this job has been delayed too often in a short
     // window we assume the producer is stuck in a loop and reject it.
+    // Falls back to tenant-based tracking if jobId is not provided.
     if (jobOptions.delay && jobOptions.delay > 0) {
-      const delayKey = `pp:queue:delays:${queue.name}:${tenantId}`;
+      // Use jobId if available, otherwise fall back to tenantId for tracking
+      const delayKey = jobOptions.jobId
+        ? `pp:queue:delays:${queue.name}:${jobOptions.jobId}`
+        : `pp:queue:delays:${queue.name}:${tenantId}`;
       const repeat = await redis.incr(delayKey);
       await redis.expire(delayKey, 60); // 1-minute window
       if (repeat > getMaxRepeatDelayCount()) {
         logger.warn("[QueueBackpressure] Repeated backpressure loop detected", {
           queue: queue.name,
+          jobId: jobOptions.jobId,
           tenantId,
           count: repeat,
         });
         throw new QueueBackpressureError(
-          `Repeated delay loop for tenant ${tenantId}`,
+          `Repeated delay loop for job ${jobOptions.jobId}`,
           queue.name,
           globalSnapshot.depth,
           globalThreshold,

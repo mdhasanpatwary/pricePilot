@@ -14,10 +14,17 @@ import { RetryStrategy, RetryContext } from "./retry-strategy";
 import { RetryQueueService } from "./retry-queue";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
 import { CaptchaSolver } from "./captcha-solver";
-import { getAllUserAgents, getRandomUserAgentExcluding } from "../config/user-agents";
+import {
+  getAllUserAgents,
+  getRandomUserAgentExcluding,
+} from "../config/user-agents";
 import { getUserAgentTracker } from "./user-agent-tracker";
 import { sessionTracker } from "./session-tracker";
-import { ExternalServiceError, RateLimitError, AppError } from "../utils/error-handler";
+import {
+  ExternalServiceError,
+  RateLimitError,
+  AppError,
+} from "../utils/error-handler";
 import { SystemConfigService } from "@/lib/config";
 import { detectOpenCartFromUrlAndHtml } from "./platform-detector";
 import { isUrlSafe } from "../utils/url-validator";
@@ -42,7 +49,11 @@ interface ScrapeProductOptions {
 }
 
 export class ScrapeBlockError extends Error {
-  constructor(public provider: string, public url: string, public isAdvanced: boolean = false) {
+  constructor(
+    public provider: string,
+    public url: string,
+    public isAdvanced: boolean = false,
+  ) {
     super(`BLOCKED: ${provider} at ${url}`);
     this.name = "ScrapeBlockError";
   }
@@ -52,7 +63,10 @@ export class ScrapeBlockError extends Error {
  * Adapter function for backward compatibility with new error handling system
  * Wraps ScrapeBlockError into the new AppError hierarchy
  */
-import type { AppError as AppErrorType, ErrorOptions as ErrorOptionsType } from '../utils/error-handler';
+import type {
+  AppError as AppErrorType,
+  ErrorOptions as ErrorOptionsType,
+} from "../utils/error-handler";
 
 /**
  * Wraps a ScrapeBlockError into the new error handling system
@@ -64,10 +78,10 @@ import type { AppError as AppErrorType, ErrorOptions as ErrorOptionsType } from 
  */
 export function wrapScrapeBlockError(
   originalError: ScrapeBlockError,
-  context?: Partial<ErrorOptionsType['context']>
+  context?: Partial<ErrorOptionsType["context"]>,
 ): AppErrorType {
   // Dynamic import to avoid circular dependencies
-  const { ExternalServiceError } = require('../utils/error-handler');
+  const { ExternalServiceError } = require("../utils/error-handler");
 
   return new ExternalServiceError(
     originalError.provider,
@@ -80,7 +94,7 @@ export function wrapScrapeBlockError(
       cause: originalError,
       context: {
         ...context,
-        operation: 'scraping',
+        operation: "scraping",
         metadata: {
           provider: originalError.provider,
           url: originalError.url,
@@ -89,7 +103,7 @@ export function wrapScrapeBlockError(
       },
       isRetryable: !originalError.isAdvanced, // Only retry if not advanced blocking
       retryAfter: originalError.isAdvanced ? undefined : 300, // 5 minutes for simple blocks
-    }
+    },
   );
 }
 
@@ -140,14 +154,21 @@ export class ScraperService {
   private retryQueueService: RetryQueueService;
   private concurrencyLimiter: ConcurrencyLimiter;
   private captchaSolver: CaptchaSolver | null = null;
-  private captchaConfigState: { enabled: boolean; apiKey: string; timeout: number } | null = null;
+  private captchaConfigState: {
+    enabled: boolean;
+    apiKey: string;
+    timeout: number;
+  } | null = null;
   private unsubscribeConfigChange?: () => void;
   private disposed = false;
   // Lazy-init: init() is called once; subsequent calls resolve immediately
   private _initPromise: Promise<void> | null = null;
 
-  private static parsePositiveInt(value: string | undefined, fallback: number): number {
-    const parsed = parseInt(value || '', 10);
+  private static parsePositiveInt(
+    value: string | undefined,
+    fallback: number,
+  ): number {
+    const parsed = parseInt(value || "", 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
@@ -155,7 +176,10 @@ export class ScraperService {
    * Normalize scraped image URLs so relative paths from competitor sites
    * become absolute URLs resolvable by the frontend.
    */
-  private normalizeImageUrl(imageUrl: string | undefined, pageUrl: string): string | undefined {
+  private normalizeImageUrl(
+    imageUrl: string | undefined,
+    pageUrl: string,
+  ): string | undefined {
     if (!imageUrl) return undefined;
 
     const trimmed = imageUrl.trim();
@@ -166,7 +190,10 @@ export class ScraperService {
 
       // Secondary check: ensure normalized URL is safe
       if (!isUrlSafe(absoluteUrl)) {
-        logger.warn('[ScraperService] SSRF Blocked: Unsafe normalized image URL', { url: absoluteUrl });
+        logger.warn(
+          "[ScraperService] SSRF Blocked: Unsafe normalized image URL",
+          { url: absoluteUrl },
+        );
         return undefined;
       }
 
@@ -190,16 +217,29 @@ export class ScraperService {
       jitter: true,
     });
 
-    const configuredMinConcurrency = ScraperService.parsePositiveInt(process.env.CONCURRENCY_MIN, 1);
-    const configuredMaxConcurrency = ScraperService.parsePositiveInt(process.env.CONCURRENCY_MAX, 10);
-    const configuredInitialConcurrency = ScraperService.parsePositiveInt(process.env.CONCURRENCY_INITIAL, 3);
-    const configuredDevConcurrencyCap = ScraperService.parsePositiveInt(process.env.CONCURRENCY_DEV_MAX, 2);
+    const configuredMinConcurrency = ScraperService.parsePositiveInt(
+      process.env.CONCURRENCY_MIN,
+      1,
+    );
+    const configuredMaxConcurrency = ScraperService.parsePositiveInt(
+      process.env.CONCURRENCY_MAX,
+      10,
+    );
+    const configuredInitialConcurrency = ScraperService.parsePositiveInt(
+      process.env.CONCURRENCY_INITIAL,
+      3,
+    );
+    const configuredDevConcurrencyCap = ScraperService.parsePositiveInt(
+      process.env.CONCURRENCY_DEV_MAX,
+      2,
+    );
     const safeDevConcurrencyCap =
-      Number.isFinite(configuredDevConcurrencyCap) && configuredDevConcurrencyCap > 0
+      Number.isFinite(configuredDevConcurrencyCap) &&
+      configuredDevConcurrencyCap > 0
         ? configuredDevConcurrencyCap
         : 2;
     const runtimeMaxConcurrency =
-      process.env.NODE_ENV === 'production'
+      process.env.NODE_ENV === "production"
         ? configuredMaxConcurrency
         : Math.min(configuredMaxConcurrency, safeDevConcurrencyCap);
     const runtimeInitialConcurrency = Math.min(
@@ -214,9 +254,12 @@ export class ScraperService {
     });
 
     // Initialize CaptchaSolver if enabled
-    const captchaEnabled = process.env.CAPTCHA_SOLVER_ENABLED === 'true';
-    const captchaApiKey = (process.env.CAPTCHA_SOLVER_API_KEY || '').trim();
-    const captchaTimeout = parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || '120000', 10);
+    const captchaEnabled = process.env.CAPTCHA_SOLVER_ENABLED === "true";
+    const captchaApiKey = (process.env.CAPTCHA_SOLVER_API_KEY || "").trim();
+    const captchaTimeout = parseInt(
+      process.env.CAPTCHA_SOLVER_TIMEOUT || "120000",
+      10,
+    );
     this.captchaConfigState = {
       enabled: captchaEnabled,
       apiKey: captchaApiKey,
@@ -228,47 +271,59 @@ export class ScraperService {
         apiKey: captchaApiKey,
         timeout: captchaTimeout,
       });
-      logger.info('[ScraperService] CaptchaSolver initialized');
+      logger.info("[ScraperService] CaptchaSolver initialized");
     } else {
-      logger.info('[ScraperService] CaptchaSolver disabled or API key not configured');
+      logger.info(
+        "[ScraperService] CaptchaSolver disabled or API key not configured",
+      );
     }
 
     // Load configuration from ConfigurationManager
     const config = configurationManager.getConfiguration();
 
     if (config.proxies.length > 0) {
-      this.proxies = config.proxies.map(p => p.url);
+      this.proxies = config.proxies.map((p) => p.url);
       logger.info(
         `[ScraperService] Initialized with ${this.proxies.length} proxies from ConfigurationManager.`,
       );
 
       // Initialize ProxyManager with proxies from configuration
       this.proxyManager = new ProxyManager(config.proxies);
-      logger.info(`[ScraperService] ProxyManager initialized with ${config.proxies.length} proxies`);
+      logger.info(
+        `[ScraperService] ProxyManager initialized with ${config.proxies.length} proxies`,
+      );
     } else {
-      logger.info('[ScraperService] No proxies configured, operating in direct mode');
+      logger.info(
+        "[ScraperService] No proxies configured, operating in direct mode",
+      );
       if (!this.captchaSolver) {
-        logger.warn('[ScraperService] Direct mode without captcha solver will have lower success on protected sites');
+        logger.warn(
+          "[ScraperService] Direct mode without captcha solver will have lower success on protected sites",
+        );
       }
     }
 
     // Register for configuration changes
-    this.unsubscribeConfigChange = configurationManager.onConfigChange((newConfig) => {
-      this.handleConfigurationChange(newConfig);
-    });
+    this.unsubscribeConfigChange = configurationManager.onConfigChange(
+      (newConfig) => {
+        this.handleConfigurationChange(newConfig);
+      },
+    );
   }
 
-  private mapProviderToAntiBotSystem(provider?: string): 'cloudflare' | 'perimeterx' | 'datadome' | null {
-    const normalized = provider?.toUpperCase?.() || '';
+  private mapProviderToAntiBotSystem(
+    provider?: string,
+  ): "cloudflare" | "perimeterx" | "datadome" | null {
+    const normalized = provider?.toUpperCase?.() || "";
 
-    if (normalized.includes('CLOUDFLARE') || normalized.includes('CF')) {
-      return 'cloudflare';
+    if (normalized.includes("CLOUDFLARE") || normalized.includes("CF")) {
+      return "cloudflare";
     }
-    if (normalized.includes('PERIMETERX') || normalized.includes('PX')) {
-      return 'perimeterx';
+    if (normalized.includes("PERIMETERX") || normalized.includes("PX")) {
+      return "perimeterx";
     }
-    if (normalized.includes('DATADOME')) {
-      return 'datadome';
+    if (normalized.includes("DATADOME")) {
+      return "datadome";
     }
 
     return null;
@@ -283,36 +338,45 @@ export class ScraperService {
   }
 
   private isStartechFallbackEnabled(): boolean {
-    const raw = (process.env.SCRAPER_STARTECH_FALLBACK || "true").trim().toLowerCase();
+    const raw = (process.env.SCRAPER_STARTECH_FALLBACK || "true")
+      .trim()
+      .toLowerCase();
     return raw !== "false" && raw !== "0" && raw !== "off";
   }
 
   private isRyansFallbackEnabled(): boolean {
-    const raw = (process.env.SCRAPER_RYANS_FALLBACK || "true").trim().toLowerCase();
+    const raw = (process.env.SCRAPER_RYANS_FALLBACK || "true")
+      .trim()
+      .toLowerCase();
     return raw !== "false" && raw !== "0" && raw !== "off";
   }
 
-  private async resolveCaptchaRuntimeConfig(): Promise<{ enabled: boolean; apiKey: string; timeout: number }> {
+  private async resolveCaptchaRuntimeConfig(): Promise<{
+    enabled: boolean;
+    apiKey: string;
+    timeout: number;
+  }> {
     const keys = [
-      'CAPTCHA_SOLVER_ENABLED',
-      'CAPTCHA_SOLVER_API_KEY',
-      'CAPTCHA_SOLVER_TIMEOUT',
+      "CAPTCHA_SOLVER_ENABLED",
+      "CAPTCHA_SOLVER_API_KEY",
+      "CAPTCHA_SOLVER_TIMEOUT",
     ];
 
     const configs = await SystemConfigService.getMany(keys);
-    const hasKey = (key: string): boolean => Object.prototype.hasOwnProperty.call(configs, key);
+    const hasKey = (key: string): boolean =>
+      Object.prototype.hasOwnProperty.call(configs, key);
 
-    const enabled = hasKey('CAPTCHA_SOLVER_ENABLED')
+    const enabled = hasKey("CAPTCHA_SOLVER_ENABLED")
       ? Boolean(configs.CAPTCHA_SOLVER_ENABLED)
-      : process.env.CAPTCHA_SOLVER_ENABLED === 'true';
+      : process.env.CAPTCHA_SOLVER_ENABLED === "true";
 
-    const apiKey = hasKey('CAPTCHA_SOLVER_API_KEY')
-      ? String(configs.CAPTCHA_SOLVER_API_KEY || '').trim()
-      : (process.env.CAPTCHA_SOLVER_API_KEY || '').trim();
+    const apiKey = hasKey("CAPTCHA_SOLVER_API_KEY")
+      ? String(configs.CAPTCHA_SOLVER_API_KEY || "").trim()
+      : (process.env.CAPTCHA_SOLVER_API_KEY || "").trim();
 
-    const timeoutFromConfig = hasKey('CAPTCHA_SOLVER_TIMEOUT')
+    const timeoutFromConfig = hasKey("CAPTCHA_SOLVER_TIMEOUT")
       ? Number(configs.CAPTCHA_SOLVER_TIMEOUT)
-      : Number.parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || '120000', 10);
+      : Number.parseInt(process.env.CAPTCHA_SOLVER_TIMEOUT || "120000", 10);
 
     const timeout = Number.isFinite(timeoutFromConfig)
       ? Math.max(10_000, Math.min(300_000, Math.round(timeoutFromConfig)))
@@ -326,7 +390,8 @@ export class ScraperService {
       const runtimeConfig = await this.resolveCaptchaRuntimeConfig();
       const previous = this.captchaConfigState;
 
-      const isUnchanged = previous &&
+      const isUnchanged =
+        previous &&
         previous.enabled === runtimeConfig.enabled &&
         previous.apiKey === runtimeConfig.apiKey &&
         previous.timeout === runtimeConfig.timeout;
@@ -342,18 +407,25 @@ export class ScraperService {
           apiKey: runtimeConfig.apiKey,
           timeout: runtimeConfig.timeout,
         });
-        logger.info('[ScraperService] CaptchaSolver initialized');
+        logger.info("[ScraperService] CaptchaSolver initialized");
         return;
       }
 
       this.captchaSolver = null;
       if (runtimeConfig.enabled && !runtimeConfig.apiKey) {
-        logger.warn('[ScraperService] CaptchaSolver enabled but API key is missing');
+        logger.warn(
+          "[ScraperService] CaptchaSolver enabled but API key is missing",
+        );
       } else {
-        logger.info('[ScraperService] CaptchaSolver disabled or API key not configured');
+        logger.info(
+          "[ScraperService] CaptchaSolver disabled or API key not configured",
+        );
       }
     } catch (error) {
-      logger.warn('[ScraperService] Failed to refresh captcha solver configuration', { error });
+      logger.warn(
+        "[ScraperService] Failed to refresh captcha solver configuration",
+        { error },
+      );
     }
   }
 
@@ -370,11 +442,14 @@ export class ScraperService {
       const currentProfile = siteProfileManager.getProfile(hostname);
       const existingRpm = currentProfile.rateLimit?.requestsPerMinute;
       const existingConcurrent = currentProfile.rateLimit?.concurrentRequests;
-      const existingBaseDelay = currentProfile.adaptiveDelay?.baseDelay ?? currentProfile.waitTime;
-      const existingMaxDelay = currentProfile.adaptiveDelay?.maxDelay ?? Math.max(currentProfile.waitTime * 10, 30000);
+      const existingBaseDelay =
+        currentProfile.adaptiveDelay?.baseDelay ?? currentProfile.waitTime;
+      const existingMaxDelay =
+        currentProfile.adaptiveDelay?.maxDelay ??
+        Math.max(currentProfile.waitTime * 10, 30000);
 
       siteProfileManager.updateProfile(hostname, {
-        strategy: 'full-js',
+        strategy: "full-js",
         waitTime: Math.max(currentProfile.waitTime, 5000),
         rateLimit: {
           requestsPerMinute: Math.min(existingRpm ?? 4, 4),
@@ -391,20 +466,30 @@ export class ScraperService {
           visitHomepage: true,
           visitPaths: currentProfile.sessionWarmup?.visitPaths?.length
             ? currentProfile.sessionWarmup.visitPaths
-            : ['/'],
+            : ["/"],
         },
         referrerChain: {
           enabled: true,
         },
       });
 
-      logger.warn(`[ScraperService] Applied no-proxy safe profile for ${hostname}`, { reason });
+      logger.warn(
+        `[ScraperService] Applied no-proxy safe profile for ${hostname}`,
+        { reason },
+      );
     } catch (error) {
-      logger.warn(`[ScraperService] Failed to apply no-proxy safe profile for ${hostname}`, { error, reason });
+      logger.warn(
+        `[ScraperService] Failed to apply no-proxy safe profile for ${hostname}`,
+        { error, reason },
+      );
     }
   }
 
-  private hardenProtectionForDomain(hostname: string, provider?: string, increaseDelay: boolean = true): void {
+  private hardenProtectionForDomain(
+    hostname: string,
+    provider?: string,
+    increaseDelay: boolean = true,
+  ): void {
     try {
       const antiBotSystem = this.mapProviderToAntiBotSystem(provider);
 
@@ -413,13 +498,16 @@ export class ScraperService {
       }
 
       // Keep conservative constraints in no-proxy mode even after anti-bot profiles are applied.
-      this.applyNoProxySafeProfile(hostname, provider || 'UNKNOWN');
+      this.applyNoProxySafeProfile(hostname, provider || "UNKNOWN");
 
       if (increaseDelay) {
         siteProfileManager.increaseDelay(hostname);
       }
     } catch (error) {
-      logger.warn(`[ScraperService] Failed to harden protection profile for ${hostname}`, { error });
+      logger.warn(
+        `[ScraperService] Failed to harden protection profile for ${hostname}`,
+        { error },
+      );
     }
   }
 
@@ -427,7 +515,10 @@ export class ScraperService {
     try {
       siteProfileManager.decreaseDelay(hostname);
     } catch (error) {
-      logger.warn(`[ScraperService] Failed to relax protection profile for ${hostname}`, { error });
+      logger.warn(
+        `[ScraperService] Failed to relax protection profile for ${hostname}`,
+        { error },
+      );
     }
   }
 
@@ -435,7 +526,9 @@ export class ScraperService {
    * Handle configuration changes at runtime
    */
   private handleConfigurationChange(newConfig: any): void {
-    logger.info('[ScraperService] Configuration changed, updating proxy manager');
+    logger.info(
+      "[ScraperService] Configuration changed, updating proxy manager",
+    );
     const hadProxies = this.proxies.length > 0 || !!this.proxyManager;
     const hasProxiesNow = newConfig.proxies.length > 0;
 
@@ -448,7 +541,9 @@ export class ScraperService {
         this.proxyManager.destroy();
       }
       this.proxyManager = new ProxyManager(newConfig.proxies);
-      logger.info(`[ScraperService] ProxyManager updated with ${newConfig.proxies.length} proxies`);
+      logger.info(
+        `[ScraperService] ProxyManager updated with ${newConfig.proxies.length} proxies`,
+      );
     } else {
       // No proxies configured
       if (this.proxyManager) {
@@ -457,9 +552,13 @@ export class ScraperService {
       }
       this.proxies = [];
       if (hadProxies) {
-        logger.info('[ScraperService] Proxies removed, operating in direct mode');
+        logger.info(
+          "[ScraperService] Proxies removed, operating in direct mode",
+        );
       } else {
-        logger.debug('[ScraperService] Configuration updated in direct mode (no proxy changes)');
+        logger.debug(
+          "[ScraperService] Configuration updated in direct mode (no proxy changes)",
+        );
       }
     }
   }
@@ -471,39 +570,46 @@ export class ScraperService {
   private isNetworkError(error: any): boolean {
     if (!error) return false;
 
-    const errorMessage = error.message?.toLowerCase() || '';
+    const errorMessage = error.message?.toLowerCase() || "";
     const networkErrorPatterns = [
-      'econnrefused',
-      'econnreset',
-      'etimedout',
-      'enetunreach',
-      'ehostunreach',
-      'network',
-      'timeout',
-      'socket hang up',
-      'fetch failed',
+      "econnrefused",
+      "econnreset",
+      "etimedout",
+      "enetunreach",
+      "ehostunreach",
+      "network",
+      "timeout",
+      "socket hang up",
+      "fetch failed",
     ];
 
-    return networkErrorPatterns.some(pattern => errorMessage.includes(pattern));
+    return networkErrorPatterns.some((pattern) =>
+      errorMessage.includes(pattern),
+    );
   }
 
   /**
    * Get the next proxy in rotation
    * Uses ProxyManager if available, otherwise falls back to simple rotation
    */
-  private async getNextProxy(): Promise<{ url: string; config: ProxyConfig | null }> {
+  private async getNextProxy(): Promise<{
+    url: string;
+    config: ProxyConfig | null;
+  }> {
     if (this.proxyManager) {
       const proxyConfig = await this.proxyManager.getHealthyProxy();
       if (proxyConfig) {
         return { url: proxyConfig.url, config: proxyConfig };
       }
-      logger.warn('[ScraperService] No healthy proxies available from ProxyManager');
-      return { url: '', config: null };
+      logger.warn(
+        "[ScraperService] No healthy proxies available from ProxyManager",
+      );
+      return { url: "", config: null };
     }
 
     // Fallback to simple rotation if ProxyManager not available
     if (this.proxies.length === 0) {
-      return { url: '', config: null };
+      return { url: "", config: null };
     }
     const url = this.proxies[this.proxyIndex];
     this.proxyIndex = (this.proxyIndex + 1) % this.proxies.length;
@@ -543,8 +649,14 @@ export class ScraperService {
    * Initialize the browser pool
    */
   async init() {
-    const configuredMaxContexts = ScraperService.parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS, 10);
-    const configuredDevMaxContexts = ScraperService.parsePositiveInt(process.env.SCRAPER_MAX_CONTEXTS_DEV_MAX, 2);
+    const configuredMaxContexts = ScraperService.parsePositiveInt(
+      process.env.SCRAPER_MAX_CONTEXTS,
+      10,
+    );
+    const configuredDevMaxContexts = ScraperService.parsePositiveInt(
+      process.env.SCRAPER_MAX_CONTEXTS_DEV_MAX,
+      2,
+    );
     const safeDevMaxContexts =
       Number.isFinite(configuredDevMaxContexts) && configuredDevMaxContexts > 0
         ? configuredDevMaxContexts
@@ -568,7 +680,7 @@ export class ScraperService {
 
     if (options.flushMetrics !== false) {
       await this.metricsTracker.persistMetrics().catch((error) => {
-        logger.error('Failed to persist metrics on dispose', { error });
+        logger.error("Failed to persist metrics on dispose", { error });
       });
     }
     this.metricsTracker.stopAutoPersist();
@@ -600,10 +712,13 @@ export class ScraperService {
    * Called after each request to dynamically adapt to site behavior
    * Requirement 6.6
    */
-  private async adjustConcurrencyForSite(hostname: string, statusCode: number): Promise<void> {
+  private async adjustConcurrencyForSite(
+    hostname: string,
+    statusCode: number,
+  ): Promise<void> {
     try {
       // Get recent metrics for the site
-      const metrics = await this.metricsTracker.getSiteMetrics(hostname, '24h');
+      const metrics = await this.metricsTracker.getSiteMetrics(hostname, "24h");
 
       if (!metrics || metrics.totalRequests === 0) {
         return; // Not enough data yet
@@ -612,7 +727,10 @@ export class ScraperService {
       // Handle immediate rate limit (HTTP 429)
       // Requirement 6.1
       if (statusCode === 429) {
-        this.concurrencyLimiter.reduceImmediately(hostname, 'HTTP 429 Rate Limit');
+        this.concurrencyLimiter.reduceImmediately(
+          hostname,
+          "HTTP 429 Rate Limit",
+        );
         return;
       }
 
@@ -627,7 +745,10 @@ export class ScraperService {
       // Adjust concurrency based on metrics
       this.concurrencyLimiter.adjustConcurrency(hostname, siteMetrics);
     } catch (error) {
-      logger.error(`[ScraperService] Failed to adjust concurrency for ${hostname}`, { error });
+      logger.error(
+        `[ScraperService] Failed to adjust concurrency for ${hostname}`,
+        { error },
+      );
     }
   }
 
@@ -644,10 +765,10 @@ export class ScraperService {
     blocked: boolean,
     challenged: boolean,
     responseTime: number,
-    statusCode: number
+    statusCode: number,
   ): void {
     // Record metrics
-    this.metricsTracker.recordRequest(hostname, proxyUrl || 'direct', {
+    this.metricsTracker.recordRequest(hostname, proxyUrl || "direct", {
       success,
       blocked,
       challenged,
@@ -695,14 +816,17 @@ export class ScraperService {
   /**
    * Get site metrics for a specific time range
    */
-  async getSiteMetrics(site: string, timeRange: '24h' | '7d' = '24h') {
+  async getSiteMetrics(site: string, timeRange: "24h" | "7d" = "24h") {
     return this.metricsTracker.getSiteMetrics(site, timeRange);
   }
 
   /**
    * Get proxy metrics for a specific time range (if using MetricsTracker)
    */
-  async getProxyMetricsForProxy(proxy: string, timeRange: '24h' | '7d' = '24h') {
+  async getProxyMetricsForProxy(
+    proxy: string,
+    timeRange: "24h" | "7d" = "24h",
+  ) {
     return this.metricsTracker.getProxyMetrics(proxy, timeRange);
   }
 
@@ -722,7 +846,7 @@ export class ScraperService {
     options?: ScrapeProductOptions,
   ): Promise<ScrapedProduct | null> {
     // Extract hostname for context (used in error metadata)
-    let hostname = 'unknown';
+    let hostname = "unknown";
 
     try {
       // Ensure browser pool is initialized once; subsequent calls resolve instantly
@@ -733,16 +857,16 @@ export class ScraperService {
       } catch (error) {
         // Requirement 6.5: Throw ExternalServiceError for invalid URLs
         throw new ExternalServiceError(
-          'Unknown',
-          'Invalid product URL provided',
+          "Unknown",
+          "Invalid product URL provided",
           {
             cause: error as Error,
             context: {
-              operation: 'scrapeProductPage',
+              operation: "scrapeProductPage",
               metadata: { url },
             },
             isRetryable: false,
-          }
+          },
         );
       }
 
@@ -758,7 +882,11 @@ export class ScraperService {
       return await this.retryStrategy.executeWithRetry(
         async (context: RetryContext) => {
           // pass tenantId from options if available
-          return this._scrapeProductPageInternal(url, context, options?.tenantId);
+          return this._scrapeProductPageInternal(
+            url,
+            context,
+            options?.tenantId,
+          );
         },
         (error: Error) => {
           // Maintain compatibility with existing ScrapeBlockError (Requirement 8.3)
@@ -771,19 +899,23 @@ export class ScraperService {
               {
                 cause: error,
                 context: {
-                  operation: 'scrapeProductPage',
-                  metadata: { url, provider: error.provider, isAdvanced: error.isAdvanced },
+                  operation: "scrapeProductPage",
+                  metadata: {
+                    url,
+                    provider: error.provider,
+                    isAdvanced: error.isAdvanced,
+                  },
                 },
                 isRetryable: true, // Requirement 9.1: Mark transient errors as retryable
                 retryAfter: 60, // Retry after 60 seconds
-              }
+              },
             );
             throw wrappedError;
           }
 
           // Use the RetryStrategy's error classification
           return this.retryStrategy.shouldRetryError(error);
-        }
+        },
       );
     } catch (error) {
       // Requirement 6.8: Include operation name in context
@@ -793,7 +925,7 @@ export class ScraperService {
       if (error instanceof AppError) {
         // Add operation context if not already present
         if (!error.context.operation) {
-          error.context.operation = 'scrapeProductPage';
+          error.context.operation = "scrapeProductPage";
         }
         if (!error.context.metadata?.url) {
           error.context.metadata = { ...error.context.metadata, url, hostname };
@@ -804,16 +936,16 @@ export class ScraperService {
       // Wrap unexpected errors in ExternalServiceError
       // Requirement 6.2: Wrap scraper errors in appropriate AppError subclass
       throw new ExternalServiceError(
-        'Scraper',
-        'Failed to scrape product page',
+        "Scraper",
+        "Failed to scrape product page",
         {
           cause: error as Error,
           context: {
-            operation: 'scrapeProductPage',
+            operation: "scrapeProductPage",
             metadata: { url, hostname },
           },
           isRetryable: this.isNetworkError(error), // Requirement 9.1: Mark network errors as retryable
-        }
+        },
       );
     }
   }
@@ -835,7 +967,7 @@ export class ScraperService {
     tenantId: string,
     siteId: string,
     productId: string,
-    tenantName?: string
+    tenantName?: string,
   ): Promise<ScrapedProduct | null> {
     try {
       // Attempt to scrape with immediate retries and session tracking
@@ -844,17 +976,18 @@ export class ScraperService {
         tenantId,
         siteId,
         productId,
-        tenantName
+        tenantName,
       );
       return result;
     } catch (error) {
       // All immediate retries exhausted, add to retry queue
       // Requirement 6.8: Include operation name in context
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       logger.warn(
         `[ScraperService] All immediate retries exhausted for ${url}, adding to retry queue`,
-        { error: errorMessage, productId, tenantId }
+        { error: errorMessage, productId, tenantId },
       );
 
       try {
@@ -866,27 +999,29 @@ export class ScraperService {
           error: errorMessage,
         });
 
-        logger.info(`[ScraperService] Added product ${productId} to retry queue`);
+        logger.info(
+          `[ScraperService] Added product ${productId} to retry queue`,
+        );
       } catch (queueError) {
         logger.error(
           `[ScraperService] Failed to add product ${productId} to retry queue`,
-          { error: queueError }
+          { error: queueError },
         );
 
         // Wrap queue error in ExternalServiceError
         // Requirement 6.2: Wrap errors in appropriate AppError subclass
         throw new ExternalServiceError(
-          'RetryQueue',
-          'Failed to add product to retry queue',
+          "RetryQueue",
+          "Failed to add product to retry queue",
           {
             cause: queueError as Error,
             context: {
-              operation: 'scrapeProductPageWithRetryQueue',
+              operation: "scrapeProductPageWithRetryQueue",
               tenantId,
               metadata: { url, productId, siteId },
             },
             isRetryable: false,
-          }
+          },
         );
       }
 
@@ -912,7 +1047,7 @@ export class ScraperService {
     tenantId: string,
     siteId: string,
     _productId: string,
-    tenantName?: string
+    tenantName?: string,
   ): Promise<ScrapedProduct | null> {
     try {
       await this.init();
@@ -929,17 +1064,17 @@ export class ScraperService {
 
         // Requirement 6.5: Throw ExternalServiceError for invalid URLs
         throw new ExternalServiceError(
-          'Unknown',
-          'Invalid product URL provided',
+          "Unknown",
+          "Invalid product URL provided",
           {
             cause: error as Error,
             context: {
-              operation: 'scrapeProductPageWithTracking',
+              operation: "scrapeProductPageWithTracking",
               tenantId,
               metadata: { url },
             },
             isRetryable: false,
-          }
+          },
         );
       }
 
@@ -962,13 +1097,19 @@ export class ScraperService {
       // Auto-clear completed/failed sessions for this tenant before starting new scraping
       // This ensures only fresh logs are shown for the new session
       try {
-        const clearedCount = await sessionTracker.clearCompletedSessions(tenantId);
+        const clearedCount =
+          await sessionTracker.clearCompletedSessions(tenantId);
         if (clearedCount > 0) {
-          logger.info(`[ScraperService] Auto-cleared ${clearedCount} completed/failed sessions for tenant ${tenantId}`);
+          logger.info(
+            `[ScraperService] Auto-cleared ${clearedCount} completed/failed sessions for tenant ${tenantId}`,
+          );
         }
       } catch (error) {
         // Don't fail the scraping operation if clearing fails
-        logger.warn(`[ScraperService] Failed to auto-clear sessions for tenant ${tenantId}`, { error });
+        logger.warn(
+          `[ScraperService] Failed to auto-clear sessions for tenant ${tenantId}`,
+          { error },
+        );
       }
 
       // Create session for tracking
@@ -977,14 +1118,19 @@ export class ScraperService {
         tenantId,
         displayTenantName,
         siteUrl,
-        url
+        url,
       );
 
       try {
         // Use RetryStrategy to handle retries with exponential backoff
         const result = await this.retryStrategy.executeWithRetry(
           async (context: RetryContext) => {
-            return this._scrapeProductPageInternalWithTracking(url, context, sessionId, tenantId);
+            return this._scrapeProductPageInternalWithTracking(
+              url,
+              context,
+              sessionId,
+              tenantId,
+            );
           },
           (error: Error) => {
             // Record error in session
@@ -999,20 +1145,25 @@ export class ScraperService {
                 {
                   cause: error,
                   context: {
-                    operation: 'scrapeProductPageWithTracking',
+                    operation: "scrapeProductPageWithTracking",
                     tenantId,
-                    metadata: { url, hostname, provider: error.provider, isAdvanced: error.isAdvanced },
+                    metadata: {
+                      url,
+                      hostname,
+                      provider: error.provider,
+                      isAdvanced: error.isAdvanced,
+                    },
                   },
                   isRetryable: true, // Requirement 9.1: Mark transient errors as retryable
                   retryAfter: 60,
-                }
+                },
               );
               throw wrappedError;
             }
 
             // Use the RetryStrategy's error classification
             return this.retryStrategy.shouldRetryError(error);
-          }
+          },
         );
 
         // Complete session successfully
@@ -1039,10 +1190,14 @@ export class ScraperService {
             error.context.tenantId = tenantId;
           }
           if (!error.context.operation) {
-            error.context.operation = 'scrapeProductPageWithTracking';
+            error.context.operation = "scrapeProductPageWithTracking";
           }
           if (!error.context.metadata?.url) {
-            error.context.metadata = { ...error.context.metadata, url, hostname };
+            error.context.metadata = {
+              ...error.context.metadata,
+              url,
+              hostname,
+            };
           }
           throw error;
         }
@@ -1050,17 +1205,17 @@ export class ScraperService {
         // Wrap unexpected errors in ExternalServiceError
         // Requirement 6.2: Wrap scraper errors in appropriate AppError subclass
         throw new ExternalServiceError(
-          'Scraper',
-          'Failed to scrape product page with tracking',
+          "Scraper",
+          "Failed to scrape product page with tracking",
           {
             cause: error as Error,
             context: {
-              operation: 'scrapeProductPageWithTracking',
+              operation: "scrapeProductPageWithTracking",
               tenantId,
               metadata: { url, hostname },
             },
             isRetryable: this.isNetworkError(error), // Requirement 9.1: Mark network errors as retryable
-          }
+          },
         );
       }
     } catch (error) {
@@ -1071,17 +1226,17 @@ export class ScraperService {
       }
 
       throw new ExternalServiceError(
-        'Scraper',
-        'Failed to initialize scraping with tracking',
+        "Scraper",
+        "Failed to initialize scraping with tracking",
         {
           cause: error as Error,
           context: {
-            operation: 'scrapeProductPageWithTracking',
+            operation: "scrapeProductPageWithTracking",
             tenantId,
             metadata: { url },
           },
           isRetryable: false,
-        }
+        },
       );
     }
   }
@@ -1093,7 +1248,7 @@ export class ScraperService {
   private async _scrapeProductPageInternal(
     url: string,
     retryContext: RetryContext,
-    tenantId?: string
+    tenantId?: string,
   ): Promise<ScrapedProduct | null> {
     const proxyResult = await this.getNextProxy();
     const proxyUrl = proxyResult.url;
@@ -1103,7 +1258,9 @@ export class ScraperService {
     const proxy = proxyUrl ? { server: proxyUrl } : undefined;
 
     if (proxyUrl) {
-      logger.info(`[ScraperService] Attempt ${retryContext.attempt} using proxy for ${url}: ${proxyUrl}`);
+      logger.info(
+        `[ScraperService] Attempt ${retryContext.attempt} using proxy for ${url}: ${proxyUrl}`,
+      );
     }
 
     // Extract hostname for rate limiting
@@ -1130,11 +1287,20 @@ export class ScraperService {
 
     try {
       context = await withChaosAwareness("browser-crash", async () => {
-        return await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname, tenantId);
+        return await this.browserPool.acquireContext(
+          userAgent,
+          proxy,
+          undefined,
+          hostname,
+          tenantId,
+        );
       });
       page = await context.newPage();
     } catch (error) {
-      logger.error(`[ScraperService] Failed to acquire context or create page for ${url}:`, { error });
+      logger.error(
+        `[ScraperService] Failed to acquire context or create page for ${url}:`,
+        { error },
+      );
       // Release concurrent slot before throwing
       this.concurrencyLimiter.releaseSlot(hostname);
       siteProfileManager.releaseConcurrentSlot(hostname);
@@ -1152,9 +1318,9 @@ export class ScraperService {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
         // Close page and release context (don't close context)
         if (page) {
-          await page.close().catch(() => { });
+          await page.close().catch(() => {});
         }
-        await this.browserPool.releaseContext(context).catch(() => { });
+        await this.browserPool.releaseContext(context).catch(() => {});
         // Release concurrent slot
         this.concurrencyLimiter.releaseSlot(hostname);
         siteProfileManager.releaseConcurrentSlot(hostname);
@@ -1174,11 +1340,14 @@ export class ScraperService {
         await this.performSessionWarmup(page, hostname, profile);
       }
 
-      if (profile.strategy !== 'full-js') {
+      if (profile.strategy !== "full-js") {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 8000);
-          const preFlight = await fetch(url, { method: "HEAD", signal: controller.signal });
+          const preFlight = await fetch(url, {
+            method: "HEAD",
+            signal: controller.signal,
+          });
           clearTimeout(timeout);
 
           if (!preFlight.ok) {
@@ -1187,7 +1356,9 @@ export class ScraperService {
                 `[Scraper] 🛡️ Potential anti-bot response during pre-flight (${preFlight.status}) for ${url}. Continuing with browser.`,
               );
             } else if (preFlight.status === 404) {
-              logger.warn(`[Scraper] 🛑 Pre-flight 404 for ${url}. Page likely gone.`);
+              logger.warn(
+                `[Scraper] 🛑 Pre-flight 404 for ${url}. Page likely gone.`,
+              );
               return null;
             } else {
               logger.warn(
@@ -1196,42 +1367,48 @@ export class ScraperService {
             }
           }
         } catch (e) {
-          logger.warn(`[Scraper] Pre-flight net warning: ${e}. Continuing with browser.`);
+          logger.warn(
+            `[Scraper] Pre-flight net warning: ${e}. Continuing with browser.`,
+          );
         }
       }
 
       // 1. Navigate with referrer chain if enabled
-      const referrer = profile.referrerChain?.enabled ? siteProfileManager.getReferrer(hostname) : undefined;
+      const referrer = profile.referrerChain?.enabled
+        ? siteProfileManager.getReferrer(hostname)
+        : undefined;
 
       if (referrer) {
-        await page.setExtraHTTPHeaders({ 'Referer': referrer });
+        await page.setExtraHTTPHeaders({ Referer: referrer });
       }
 
       const response = await page.goto(url, {
-        waitUntil: 'domcontentloaded', // Always use domcontentloaded for faster navigation
+        waitUntil: "domcontentloaded", // Always use domcontentloaded for faster navigation
         timeout: 15000, // Reduced from 30s to 15s
       });
 
       // Add manual wait for common price selectors to ensure content is loaded (Task 1 in Plan)
       const commonPriceSelectors = [
         '[itemprop="price"]',
-        '.price',
-        '.product-price',
-        '.current-price',
-        '.p-item-price', // Startech
-        '.rp-product-price', // Ryans
+        ".price",
+        ".product-price",
+        ".current-price",
+        ".p-item-price", // Startech
+        ".rp-product-price", // Ryans
       ];
 
       // Wait for any of the common price selectors to become visible
       await Promise.any(
-        commonPriceSelectors.map(selector =>
+        commonPriceSelectors.map((selector) =>
           page.waitForSelector(selector, {
-            state: 'visible',
-            timeout: 5000
-          })
-        )
+            state: "visible",
+            timeout: 5000,
+          }),
+        ),
       ).catch(() => {
-        logger.debug(`[ScraperService] No common price selectors found within 5s for ${hostname}`);
+        logger.debug(
+          `[ScraperService] No common price selectors found within 5s for ${hostname}`,
+        );
       });
 
       // Track this navigation for future referrer chain
@@ -1246,19 +1423,21 @@ export class ScraperService {
         this.hardenProtectionForDomain(hostname, "RATE_LIMIT");
 
         // Extract retry-after header if available
-        const retryAfterHeader = response?.headers()['retry-after'];
-        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 60;
+        const retryAfterHeader = response?.headers()["retry-after"];
+        const retryAfter = retryAfterHeader
+          ? parseInt(retryAfterHeader, 10)
+          : 60;
 
         throw new RateLimitError(
           profile.rateLimit?.requestsPerMinute || 10,
           60,
           {
             context: {
-              operation: 'scrapeProductPage',
+              operation: "scrapeProductPage",
               metadata: { url, hostname, statusCode },
             },
             retryAfter,
-          }
+          },
         );
       }
 
@@ -1267,10 +1446,15 @@ export class ScraperService {
 
       if (challengeResult.detected) {
         wasChallenged = true;
-        logger.info(`[ScraperService] Challenge detected: ${challengeResult.type} on ${hostname}`);
+        logger.info(
+          `[ScraperService] Challenge detected: ${challengeResult.type} on ${hostname}`,
+        );
 
         // Wait for challenge to complete
-        const waitResult = await this.challengeHandler.waitForChallenge(page, 60000);
+        const waitResult = await this.challengeHandler.waitForChallenge(
+          page,
+          60000,
+        );
 
         // Record challenge attempt
         this.challengeHandler.recordChallengeAttempt(hostname, waitResult);
@@ -1287,10 +1471,10 @@ export class ScraperService {
             proxyUrl,
             userAgent,
             false, // success
-            true,  // blocked
-            true,  // challenged
+            true, // blocked
+            true, // challenged
             responseTime,
-            statusCode
+            statusCode,
           );
 
           // Adjust concurrency based on metrics
@@ -1301,12 +1485,17 @@ export class ScraperService {
 
           // Record proxy failure if using ProxyManager
           if (proxyConfig && this.proxyManager) {
-            this.proxyManager.recordFailure(proxyConfig, new Error(`Challenge not solved: ${waitResult.type}`));
+            this.proxyManager.recordFailure(
+              proxyConfig,
+              new Error(`Challenge not solved: ${waitResult.type}`),
+            );
           }
 
           // Check if fallback should be triggered
           if (this.challengeHandler.shouldTriggerFallback(hostname)) {
-            logger.warn(`[ScraperService] Fallback strategy triggered for ${hostname}`);
+            logger.warn(
+              `[ScraperService] Fallback strategy triggered for ${hostname}`,
+            );
           }
 
           // Update retry context for rotation
@@ -1316,7 +1505,9 @@ export class ScraperService {
           throw new ScrapeBlockError(waitResult.type, url, true);
         }
 
-        logger.info(`[ScraperService] Challenge solved successfully for ${hostname}`);
+        logger.info(
+          `[ScraperService] Challenge solved successfully for ${hostname}`,
+        );
       }
 
       // 2.5. Captcha Detection and Solving
@@ -1326,32 +1517,50 @@ export class ScraperService {
         const captchaRequest = await this.captchaSolver.detectCaptchaType(page);
 
         if (captchaRequest) {
-          logger.info(`[ScraperService] Captcha detected: ${captchaRequest.type} on ${hostname}`);
+          logger.info(
+            `[ScraperService] Captcha detected: ${captchaRequest.type} on ${hostname}`,
+          );
 
           // Attempt to solve captcha with retry logic (up to 3 attempts)
           // Requirement 4.4
           let captchaSolved = false;
           const maxCaptchaAttempts = 3;
 
-          for (let captchaAttempt = 1; captchaAttempt <= maxCaptchaAttempts; captchaAttempt++) {
-            logger.info(`[ScraperService] Attempting to solve captcha (attempt ${captchaAttempt}/${maxCaptchaAttempts})`);
+          for (
+            let captchaAttempt = 1;
+            captchaAttempt <= maxCaptchaAttempts;
+            captchaAttempt++
+          ) {
+            logger.info(
+              `[ScraperService] Attempting to solve captcha (attempt ${captchaAttempt}/${maxCaptchaAttempts})`,
+            );
 
             // Solve captcha using 2Captcha API
             // Requirement 4.1, 4.2
-            const solveResult = await this.captchaSolver.solveCaptcha(captchaRequest, hostname);
+            const solveResult = await this.captchaSolver.solveCaptcha(
+              captchaRequest,
+              hostname,
+            );
 
             if (solveResult.success && solveResult.token) {
-              logger.info(`[ScraperService] Captcha solved successfully in ${solveResult.solveTime}ms (cost: $${solveResult.cost.toFixed(4)})`);
+              logger.info(
+                `[ScraperService] Captcha solved successfully in ${solveResult.solveTime}ms (cost: $${solveResult.cost.toFixed(4)})`,
+              );
 
               // Inject solution token into page
               // Requirement 4.3
-              await this.captchaSolver.injectSolution(page, solveResult.token, captchaRequest.type);
+              await this.captchaSolver.injectSolution(
+                page,
+                solveResult.token,
+                captchaRequest.type,
+              );
 
               // Wait for page to reload/update after solution injection
               await page.waitForTimeout(2000);
 
               // Verify captcha was cleared by checking if it's still present
-              const recheckCaptcha = await this.captchaSolver.detectCaptchaType(page);
+              const recheckCaptcha =
+                await this.captchaSolver.detectCaptchaType(page);
               if (!recheckCaptcha) {
                 captchaSolved = true;
                 logger.info(`[ScraperService] Captcha cleared successfully`);
@@ -1368,10 +1577,14 @@ export class ScraperService {
 
                 break;
               } else {
-                logger.warn(`[ScraperService] Captcha still present after solution injection`);
+                logger.warn(
+                  `[ScraperService] Captcha still present after solution injection`,
+                );
               }
             } else {
-              logger.warn(`[ScraperService] Captcha solve failed: ${solveResult.error}`);
+              logger.warn(
+                `[ScraperService] Captcha solve failed: ${solveResult.error}`,
+              );
             }
           }
 
@@ -1380,7 +1593,9 @@ export class ScraperService {
           if (!captchaSolved) {
             this.hardenProtectionForDomain(hostname, captchaRequest.type);
             wasBlocked = true;
-            logger.error(`[ScraperService] All captcha solve attempts failed for ${hostname}`);
+            logger.error(
+              `[ScraperService] All captcha solve attempts failed for ${hostname}`,
+            );
 
             // Record failed captcha solve as a challenge attempt
             // Requirement 10.1, 10.2
@@ -1399,10 +1614,10 @@ export class ScraperService {
               proxyUrl,
               userAgent,
               false, // success
-              true,  // blocked
-              true,  // challenged
+              true, // blocked
+              true, // challenged
               responseTime,
-              statusCode
+              statusCode,
             );
 
             // Adjust concurrency based on metrics
@@ -1413,14 +1628,19 @@ export class ScraperService {
 
             // Record proxy failure if using ProxyManager
             if (proxyConfig && this.proxyManager) {
-              this.proxyManager.recordFailure(proxyConfig, new Error(`Captcha solve failed after ${maxCaptchaAttempts} attempts`));
+              this.proxyManager.recordFailure(
+                proxyConfig,
+                new Error(
+                  `Captcha solve failed after ${maxCaptchaAttempts} attempts`,
+                ),
+              );
             }
 
             // Update retry context for rotation
             retryContext.previousProxy = proxyUrl;
             retryContext.previousUserAgent = userAgent;
 
-            throw new ScrapeBlockError('captcha', url, true);
+            throw new ScrapeBlockError("captcha", url, true);
           }
         }
       }
@@ -1430,7 +1650,9 @@ export class ScraperService {
       if (securityInfo.isBlocked) {
         this.hardenProtectionForDomain(hostname, securityInfo.provider);
         wasBlocked = true;
-        logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`);
+        logger.warn(
+          `[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`,
+        );
 
         // Record metrics for blocked request
         const responseTime = Date.now() - startTime;
@@ -1439,10 +1661,10 @@ export class ScraperService {
           proxyUrl,
           userAgent,
           false, // success
-          true,  // blocked
+          true, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -1453,14 +1675,21 @@ export class ScraperService {
 
         // Record proxy failure if using ProxyManager
         if (proxyConfig && this.proxyManager) {
-          this.proxyManager.recordFailure(proxyConfig, new Error(`Blocked by ${securityInfo.provider}`));
+          this.proxyManager.recordFailure(
+            proxyConfig,
+            new Error(`Blocked by ${securityInfo.provider}`),
+          );
         }
 
         // Update retry context for rotation
         retryContext.previousProxy = proxyUrl;
         retryContext.previousUserAgent = userAgent;
 
-        throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
+        throw new ScrapeBlockError(
+          securityInfo.provider,
+          url,
+          securityInfo.isAdvanced,
+        );
       }
 
       // 4. Platform Optimization (OpenCart)
@@ -1494,7 +1723,9 @@ export class ScraperService {
       // Only enable when bot detection/challenge was detected for this attempt.
       const effectiveProfile = siteProfileManager.getProfile(hostname);
       if (effectiveProfile.strategy === "full-js" && wasChallenged) {
-        logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
+        logger.info(
+          `[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`,
+        );
 
         await HumanSimulation.randomPause(300, 800);
         await HumanSimulation.simulateMouseMove(page);
@@ -1520,10 +1751,16 @@ export class ScraperService {
           ...jsonLdData,
           url,
           imageUrl: this.normalizeImageUrl(jsonLdData.imageUrl, url),
-          specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
+          specifications: this.parseSpecifications(
+            jsonLdData.title,
+            jsonLdData.specifications,
+          ),
         };
         const validation = TechProductValidator.validateProduct(result);
-        if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
+        if (!validation.isValid)
+          logger.warn(
+            `[Scraper] Validation Warning: ${validation.errors.join(",")}`,
+          );
         await cache.set(cacheKey, result, profile.cacheTime);
 
         // Record successful metrics
@@ -1532,11 +1769,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -1567,11 +1804,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -1602,11 +1839,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -1637,11 +1874,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -1666,7 +1903,7 @@ export class ScraperService {
         false, // blocked
         wasChallenged,
         responseTime,
-        statusCode
+        statusCode,
       );
 
       // Adjust concurrency based on metrics
@@ -1684,7 +1921,7 @@ export class ScraperService {
         wasBlocked,
         wasChallenged,
         errorResponseTime,
-        statusCode
+        statusCode,
       );
 
       // Adjust concurrency based on metrics
@@ -1694,7 +1931,11 @@ export class ScraperService {
       this.metricsTracker.checkThresholds();
 
       // Record proxy failure if using ProxyManager
-      if (proxyConfig && this.proxyManager && !(error instanceof ScrapeBlockError)) {
+      if (
+        proxyConfig &&
+        this.proxyManager &&
+        !(error instanceof ScrapeBlockError)
+      ) {
         this.proxyManager.recordFailure(proxyConfig, error as Error);
       }
 
@@ -1707,13 +1948,18 @@ export class ScraperService {
       // Close page first, then release context (don't close context)
       if (page) {
         await page.close().catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to close page for ${url}:`, { error: err });
+          logger.warn(`[ScraperService] Failed to close page for ${url}:`, {
+            error: err,
+          });
         });
       }
 
       if (context) {
         await this.browserPool.releaseContext(context).catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to release context for ${url}:`, { error: err });
+          logger.warn(
+            `[ScraperService] Failed to release context for ${url}:`,
+            { error: err },
+          );
         });
       }
 
@@ -1733,7 +1979,7 @@ export class ScraperService {
     url: string,
     retryContext: RetryContext,
     sessionId: string,
-    tenantId?: string
+    tenantId?: string,
   ): Promise<ScrapedProduct | null> {
     const navigationStartTime = Date.now();
 
@@ -1747,13 +1993,15 @@ export class ScraperService {
     const proxy = proxyUrl ? { server: proxyUrl } : undefined;
 
     // Update session with proxy selection
-    await sessionTracker.updateStage(sessionId, 'proxy_selection', {
-      proxy: proxyUrl || 'direct',
+    await sessionTracker.updateStage(sessionId, "proxy_selection", {
+      proxy: proxyUrl || "direct",
       userAgent,
     });
 
     if (proxyUrl) {
-      logger.info(`[ScraperService] Attempt ${retryContext.attempt} using proxy for ${url}: ${proxyUrl}`);
+      logger.info(
+        `[ScraperService] Attempt ${retryContext.attempt} using proxy for ${url}: ${proxyUrl}`,
+      );
     }
 
     // Extract hostname for rate limiting
@@ -1779,7 +2027,13 @@ export class ScraperService {
     let page: any = null;
 
     try {
-      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname, tenantId);
+      context = await this.browserPool.acquireContext(
+        userAgent,
+        proxy,
+        undefined,
+        hostname,
+        tenantId,
+      );
       page = await context.newPage();
     } catch (error) {
       // Release concurrent slot before throwing
@@ -1799,9 +2053,9 @@ export class ScraperService {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
         // Close page and release context
         if (page) {
-          await page.close().catch(() => { });
+          await page.close().catch(() => {});
         }
-        await this.browserPool.releaseContext(context).catch(() => { });
+        await this.browserPool.releaseContext(context).catch(() => {});
         // Release concurrent slot
         this.concurrencyLimiter.releaseSlot(hostname);
         siteProfileManager.releaseConcurrentSlot(hostname);
@@ -1823,12 +2077,12 @@ export class ScraperService {
         await this.performSessionWarmup(page, hostname, profile);
       }
 
-      if (profile.strategy !== 'full-js') {
+      if (profile.strategy !== "full-js") {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 8000); // Increased to 8s
           const headers: HeadersInit = {
-            'User-Agent': userAgent, // Use the rotated UA for pre-flight
+            "User-Agent": userAgent, // Use the rotated UA for pre-flight
           };
           if (proxyUrl) {
             // Note: native fetch doesn't support proxy easily without agent,
@@ -1836,44 +2090,62 @@ export class ScraperService {
             // This pre-flight is just an early check.
           }
 
-          const preFlight = await fetch(url, { method: "HEAD", signal: controller.signal, headers });
+          const preFlight = await fetch(url, {
+            method: "HEAD",
+            signal: controller.signal,
+            headers,
+          });
           clearTimeout(timeout);
 
           // Enhanced Anti-Bot Detection in Pre-flight
-          const serverHeader = preFlight.headers.get('server') || '';
-          const cfRay = preFlight.headers.get('cf-ray');
+          const serverHeader = preFlight.headers.get("server") || "";
+          const cfRay = preFlight.headers.get("cf-ray");
 
           if (!preFlight.ok) {
-            if (preFlight.status === 403 || preFlight.status === 429 || serverHeader.includes('cloudflare')) {
-              logger.warn(`[Scraper] 🛡️ Potentially blocked by Anti-Bot (${preFlight.status}) for ${url}. CF-Ray: ${cfRay || 'none'}. Proceeding with browser for better evasion.`);
+            if (
+              preFlight.status === 403 ||
+              preFlight.status === 429 ||
+              serverHeader.includes("cloudflare")
+            ) {
+              logger.warn(
+                `[Scraper] 🛡️ Potentially blocked by Anti-Bot (${preFlight.status}) for ${url}. CF-Ray: ${cfRay || "none"}. Proceeding with browser for better evasion.`,
+              );
               // Don't return null, let the browser attempt to bypass
             } else if (preFlight.status === 404) {
-              logger.warn(`[Scraper] 🛑 Pre-flight 404 for ${url}. Page likely gone.`);
+              logger.warn(
+                `[Scraper] 🛑 Pre-flight 404 for ${url}. Page likely gone.`,
+              );
               return null;
             } else {
-              logger.warn(`[Scraper] ⚠️ Pre-flight warning: ${preFlight.status} for ${url}. Continuing.`);
+              logger.warn(
+                `[Scraper] ⚠️ Pre-flight warning: ${preFlight.status} for ${url}. Continuing.`,
+              );
             }
           }
         } catch (e) {
-          logger.warn(`[Scraper] Pre-flight net warning: ${e}. Continuing with browser.`);
+          logger.warn(
+            `[Scraper] Pre-flight net warning: ${e}. Continuing with browser.`,
+          );
         }
       }
 
       // Requirement 2.2: Track navigation
-      await sessionTracker.updateStage(sessionId, 'navigation', {
+      await sessionTracker.updateStage(sessionId, "navigation", {
         requestsCompleted: 0,
         requestsTotal: 1,
       });
 
       // 1. Navigate with referrer chain if enabled
-      const referrer = profile.referrerChain?.enabled ? siteProfileManager.getReferrer(hostname) : undefined;
+      const referrer = profile.referrerChain?.enabled
+        ? siteProfileManager.getReferrer(hostname)
+        : undefined;
 
       if (referrer) {
-        await page.setExtraHTTPHeaders({ 'Referer': referrer });
+        await page.setExtraHTTPHeaders({ Referer: referrer });
       }
 
       const response = await page.goto(url, {
-        waitUntil: 'domcontentloaded', // Always use domcontentloaded for faster navigation
+        waitUntil: "domcontentloaded", // Always use domcontentloaded for faster navigation
         timeout: 15000, // Reduced from 30s to 15s
       });
 
@@ -1892,16 +2164,20 @@ export class ScraperService {
         const lowerContent = pageContent.toLowerCase();
 
         if (
-          lowerContent.includes('cf-browser-verification') ||
-          lowerContent.includes('just a moment...') ||
-          lowerContent.includes('cloudflare') ||
-          lowerContent.includes('attention required')
+          lowerContent.includes("cf-browser-verification") ||
+          lowerContent.includes("just a moment...") ||
+          lowerContent.includes("cloudflare") ||
+          lowerContent.includes("attention required")
         ) {
-          logger.warn(`[ScraperService] 🛡️ Cloudflare detected for ${url} (Status: ${statusCode})`);
+          logger.warn(
+            `[ScraperService] 🛡️ Cloudflare detected for ${url} (Status: ${statusCode})`,
+          );
 
-          const isAdvanced = lowerContent.includes('turnstile') || lowerContent.includes('challenge');
+          const isAdvanced =
+            lowerContent.includes("turnstile") ||
+            lowerContent.includes("challenge");
 
-          throw new ScrapeBlockError('Cloudflare', url, isAdvanced);
+          throw new ScrapeBlockError("Cloudflare", url, isAdvanced);
         }
       }
 
@@ -1910,24 +2186,26 @@ export class ScraperService {
         this.hardenProtectionForDomain(hostname, "RATE_LIMIT");
 
         // Extract retry-after header if available
-        const retryAfterHeader = response?.headers()['retry-after'];
-        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 60;
+        const retryAfterHeader = response?.headers()["retry-after"];
+        const retryAfter = retryAfterHeader
+          ? parseInt(retryAfterHeader, 10)
+          : 60;
 
         throw new RateLimitError(
           profile.rateLimit?.requestsPerMinute || 10,
           60,
           {
             context: {
-              operation: 'scrapeProductPageWithTracking',
+              operation: "scrapeProductPageWithTracking",
               metadata: { url, hostname, statusCode },
             },
             retryAfter,
-          }
+          },
         );
       }
 
       // Update session with navigation complete
-      await sessionTracker.updateStage(sessionId, 'navigation', {
+      await sessionTracker.updateStage(sessionId, "navigation", {
         requestsCompleted: 1,
         requestsTotal: 1,
         metrics: { navigationTime },
@@ -1940,21 +2218,26 @@ export class ScraperService {
         wasChallenged = true;
         challengeSolveStartTime = Date.now();
 
-        logger.info(`[ScraperService] Challenge detected: ${challengeResult.type} on ${hostname}`);
+        logger.info(
+          `[ScraperService] Challenge detected: ${challengeResult.type} on ${hostname}`,
+        );
 
         // Update session with challenge detection
-        await sessionTracker.updateStage(sessionId, 'challenge_detection', {
+        await sessionTracker.updateStage(sessionId, "challenge_detection", {
           challengeType: challengeResult.type,
-          challengeStatus: 'waiting',
+          challengeStatus: "waiting",
         });
 
         // Wait for challenge to complete
-        await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+        await sessionTracker.updateStage(sessionId, "challenge_solving", {
           challengeType: challengeResult.type,
-          challengeStatus: 'solving',
+          challengeStatus: "solving",
         });
 
-        const waitResult = await this.challengeHandler.waitForChallenge(page, 60000);
+        const waitResult = await this.challengeHandler.waitForChallenge(
+          page,
+          60000,
+        );
 
         const challengeSolveTime = Date.now() - challengeSolveStartTime;
 
@@ -1967,9 +2250,9 @@ export class ScraperService {
           logger.warn(`[ScraperService] Challenge not solved for ${hostname}`);
 
           // Update session with failed challenge
-          await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+          await sessionTracker.updateStage(sessionId, "challenge_solving", {
             challengeType: waitResult.type,
-            challengeStatus: 'failed',
+            challengeStatus: "failed",
             metrics: { challengeSolveTime },
           });
 
@@ -1980,10 +2263,10 @@ export class ScraperService {
             proxyUrl,
             userAgent,
             false, // success
-            true,  // blocked
-            true,  // challenged
+            true, // blocked
+            true, // challenged
             responseTime,
-            statusCode
+            statusCode,
           );
 
           // Adjust concurrency based on metrics
@@ -1994,12 +2277,17 @@ export class ScraperService {
 
           // Record proxy failure if using ProxyManager
           if (proxyConfig && this.proxyManager) {
-            this.proxyManager.recordFailure(proxyConfig, new Error(`Challenge not solved: ${waitResult.type}`));
+            this.proxyManager.recordFailure(
+              proxyConfig,
+              new Error(`Challenge not solved: ${waitResult.type}`),
+            );
           }
 
           // Check if fallback should be triggered
           if (this.challengeHandler.shouldTriggerFallback(hostname)) {
-            logger.warn(`[ScraperService] Fallback strategy triggered for ${hostname}`);
+            logger.warn(
+              `[ScraperService] Fallback strategy triggered for ${hostname}`,
+            );
           }
 
           // Update retry context for rotation
@@ -2010,13 +2298,15 @@ export class ScraperService {
         }
 
         // Update session with solved challenge
-        await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+        await sessionTracker.updateStage(sessionId, "challenge_solving", {
           challengeType: waitResult.type,
-          challengeStatus: 'solved',
+          challengeStatus: "solved",
           metrics: { challengeSolveTime },
         });
 
-        logger.info(`[ScraperService] Challenge solved successfully for ${hostname}`);
+        logger.info(
+          `[ScraperService] Challenge solved successfully for ${hostname}`,
+        );
       }
 
       // 2.5. Captcha Detection and Solving
@@ -2027,40 +2317,58 @@ export class ScraperService {
           wasChallenged = true;
           challengeSolveStartTime = Date.now();
 
-          logger.info(`[ScraperService] Captcha detected: ${captchaRequest.type} on ${hostname}`);
+          logger.info(
+            `[ScraperService] Captcha detected: ${captchaRequest.type} on ${hostname}`,
+          );
 
           // Update session with captcha detection
-          await sessionTracker.updateStage(sessionId, 'challenge_detection', {
+          await sessionTracker.updateStage(sessionId, "challenge_detection", {
             challengeType: captchaRequest.type,
-            challengeStatus: 'waiting',
+            challengeStatus: "waiting",
           });
 
           // Attempt to solve captcha with retry logic (up to 3 attempts)
           let captchaSolved = false;
           const maxCaptchaAttempts = 3;
 
-          await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+          await sessionTracker.updateStage(sessionId, "challenge_solving", {
             challengeType: captchaRequest.type,
-            challengeStatus: 'solving',
+            challengeStatus: "solving",
           });
 
-          for (let captchaAttempt = 1; captchaAttempt <= maxCaptchaAttempts; captchaAttempt++) {
-            logger.info(`[ScraperService] Attempting to solve captcha (attempt ${captchaAttempt}/${maxCaptchaAttempts})`);
+          for (
+            let captchaAttempt = 1;
+            captchaAttempt <= maxCaptchaAttempts;
+            captchaAttempt++
+          ) {
+            logger.info(
+              `[ScraperService] Attempting to solve captcha (attempt ${captchaAttempt}/${maxCaptchaAttempts})`,
+            );
 
             // Solve captcha using 2Captcha API
-            const solveResult = await this.captchaSolver.solveCaptcha(captchaRequest, hostname);
+            const solveResult = await this.captchaSolver.solveCaptcha(
+              captchaRequest,
+              hostname,
+            );
 
             if (solveResult.success && solveResult.token) {
-              logger.info(`[ScraperService] Captcha solved successfully in ${solveResult.solveTime}ms (cost: ${solveResult.cost.toFixed(4)})`);
+              logger.info(
+                `[ScraperService] Captcha solved successfully in ${solveResult.solveTime}ms (cost: ${solveResult.cost.toFixed(4)})`,
+              );
 
               // Inject solution token into page
-              await this.captchaSolver.injectSolution(page, solveResult.token, captchaRequest.type);
+              await this.captchaSolver.injectSolution(
+                page,
+                solveResult.token,
+                captchaRequest.type,
+              );
 
               // Wait for page to reload/update after solution injection
               await page.waitForTimeout(2000);
 
               // Verify captcha was cleared by checking if it's still present
-              const recheckCaptcha = await this.captchaSolver.detectCaptchaType(page);
+              const recheckCaptcha =
+                await this.captchaSolver.detectCaptchaType(page);
               if (!recheckCaptcha) {
                 captchaSolved = true;
                 const challengeSolveTime = Date.now() - challengeSolveStartTime;
@@ -2068,11 +2376,15 @@ export class ScraperService {
                 logger.info(`[ScraperService] Captcha cleared successfully`);
 
                 // Update session with solved captcha
-                await sessionTracker.updateStage(sessionId, 'challenge_solving', {
-                  challengeType: captchaRequest.type,
-                  challengeStatus: 'solved',
-                  metrics: { challengeSolveTime },
-                });
+                await sessionTracker.updateStage(
+                  sessionId,
+                  "challenge_solving",
+                  {
+                    challengeType: captchaRequest.type,
+                    challengeStatus: "solved",
+                    metrics: { challengeSolveTime },
+                  },
+                );
 
                 // Record successful captcha solve as a challenge attempt
                 this.challengeHandler.recordChallengeAttempt(hostname, {
@@ -2085,10 +2397,14 @@ export class ScraperService {
 
                 break;
               } else {
-                logger.warn(`[ScraperService] Captcha still present after solution injection`);
+                logger.warn(
+                  `[ScraperService] Captcha still present after solution injection`,
+                );
               }
             } else {
-              logger.warn(`[ScraperService] Captcha solve failed: ${solveResult.error}`);
+              logger.warn(
+                `[ScraperService] Captcha solve failed: ${solveResult.error}`,
+              );
             }
           }
 
@@ -2098,12 +2414,14 @@ export class ScraperService {
             wasBlocked = true;
             const challengeSolveTime = Date.now() - challengeSolveStartTime;
 
-            logger.error(`[ScraperService] All captcha solve attempts failed for ${hostname}`);
+            logger.error(
+              `[ScraperService] All captcha solve attempts failed for ${hostname}`,
+            );
 
             // Update session with failed captcha
-            await sessionTracker.updateStage(sessionId, 'challenge_solving', {
+            await sessionTracker.updateStage(sessionId, "challenge_solving", {
               challengeType: captchaRequest.type,
-              challengeStatus: 'failed',
+              challengeStatus: "failed",
               metrics: { challengeSolveTime },
             });
 
@@ -2123,10 +2441,10 @@ export class ScraperService {
               proxyUrl,
               userAgent,
               false, // success
-              true,  // blocked
-              true,  // challenged
+              true, // blocked
+              true, // challenged
               responseTime,
-              statusCode
+              statusCode,
             );
 
             // Adjust concurrency based on metrics
@@ -2137,14 +2455,19 @@ export class ScraperService {
 
             // Record proxy failure if using ProxyManager
             if (proxyConfig && this.proxyManager) {
-              this.proxyManager.recordFailure(proxyConfig, new Error(`Captcha solve failed after ${maxCaptchaAttempts} attempts`));
+              this.proxyManager.recordFailure(
+                proxyConfig,
+                new Error(
+                  `Captcha solve failed after ${maxCaptchaAttempts} attempts`,
+                ),
+              );
             }
 
             // Update retry context for rotation
             retryContext.previousProxy = proxyUrl;
             retryContext.previousUserAgent = userAgent;
 
-            throw new ScrapeBlockError('captcha', url, true);
+            throw new ScrapeBlockError("captcha", url, true);
           }
         }
       }
@@ -2154,7 +2477,9 @@ export class ScraperService {
       if (securityInfo.isBlocked) {
         this.hardenProtectionForDomain(hostname, securityInfo.provider);
         wasBlocked = true;
-        logger.warn(`[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`);
+        logger.warn(
+          `[ScraperService] 🛡️ BLOCKED by ${securityInfo.provider} at ${url} (Attempt ${retryContext.attempt})`,
+        );
 
         // Record metrics for blocked request
         const responseTime = Date.now() - startTime;
@@ -2163,10 +2488,10 @@ export class ScraperService {
           proxyUrl,
           userAgent,
           false, // success
-          true,  // blocked
+          true, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -2177,14 +2502,21 @@ export class ScraperService {
 
         // Record proxy failure if using ProxyManager
         if (proxyConfig && this.proxyManager) {
-          this.proxyManager.recordFailure(proxyConfig, new Error(`Blocked by ${securityInfo.provider}`));
+          this.proxyManager.recordFailure(
+            proxyConfig,
+            new Error(`Blocked by ${securityInfo.provider}`),
+          );
         }
 
         // Update retry context for rotation
         retryContext.previousProxy = proxyUrl;
         retryContext.previousUserAgent = userAgent;
 
-        throw new ScrapeBlockError(securityInfo.provider, url, securityInfo.isAdvanced);
+        throw new ScrapeBlockError(
+          securityInfo.provider,
+          url,
+          securityInfo.isAdvanced,
+        );
       }
 
       // 4. Platform Optimization (OpenCart)
@@ -2218,7 +2550,9 @@ export class ScraperService {
       // Only enable when bot detection/challenge was detected for this attempt.
       const effectiveProfile = siteProfileManager.getProfile(hostname);
       if (effectiveProfile.strategy === "full-js" && wasChallenged) {
-        logger.info(`[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`);
+        logger.info(
+          `[ScraperService] 🖱️ Performing enhanced human simulation for ${hostname}`,
+        );
 
         await HumanSimulation.randomPause(300, 800);
         await HumanSimulation.simulateMouseMove(page);
@@ -2238,7 +2572,7 @@ export class ScraperService {
 
       // Requirement 2.4: Track data extraction
       extractionStartTime = Date.now();
-      await sessionTracker.updateStage(sessionId, 'data_extraction');
+      await sessionTracker.updateStage(sessionId, "data_extraction");
 
       // 6. Extraction Strategies
       const jsonLdData = await this.extractFromJsonLd(page);
@@ -2248,14 +2582,20 @@ export class ScraperService {
           ...jsonLdData,
           url,
           imageUrl: this.normalizeImageUrl(jsonLdData.imageUrl, url),
-          specifications: this.parseSpecifications(jsonLdData.title, jsonLdData.specifications),
+          specifications: this.parseSpecifications(
+            jsonLdData.title,
+            jsonLdData.specifications,
+          ),
         };
         const validation = TechProductValidator.validateProduct(result);
-        if (!validation.isValid) logger.warn(`[Scraper] Validation Warning: ${validation.errors.join(",")}`);
+        if (!validation.isValid)
+          logger.warn(
+            `[Scraper] Validation Warning: ${validation.errors.join(",")}`,
+          );
         await cache.set(cacheKey, result, profile.cacheTime);
 
         // Update session with extraction complete
-        await sessionTracker.updateStage(sessionId, 'validation', {
+        await sessionTracker.updateStage(sessionId, "validation", {
           extractedData: result,
           metrics: { extractionTime },
         });
@@ -2266,11 +2606,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -2297,7 +2637,7 @@ export class ScraperService {
         await cache.set(cacheKey, result, profile.cacheTime);
 
         // Update session with extraction complete
-        await sessionTracker.updateStage(sessionId, 'validation', {
+        await sessionTracker.updateStage(sessionId, "validation", {
           extractedData: result,
           metrics: { extractionTime },
         });
@@ -2308,11 +2648,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -2339,7 +2679,7 @@ export class ScraperService {
         await cache.set(cacheKey, result, profile.cacheTime);
 
         // Update session with extraction complete
-        await sessionTracker.updateStage(sessionId, 'validation', {
+        await sessionTracker.updateStage(sessionId, "validation", {
           extractedData: result,
           metrics: { extractionTime },
         });
@@ -2350,11 +2690,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -2381,7 +2721,7 @@ export class ScraperService {
         await cache.set(cacheKey, result, profile.cacheTime);
 
         // Update session with extraction complete
-        await sessionTracker.updateStage(sessionId, 'validation', {
+        await sessionTracker.updateStage(sessionId, "validation", {
           extractedData: result,
           metrics: { extractionTime },
         });
@@ -2392,11 +2732,11 @@ export class ScraperService {
           hostname,
           proxyUrl,
           userAgent,
-          true,  // success
+          true, // success
           false, // blocked
           wasChallenged,
           responseTime,
-          statusCode
+          statusCode,
         );
 
         // Adjust concurrency based on metrics
@@ -2421,7 +2761,7 @@ export class ScraperService {
         false, // blocked
         wasChallenged,
         responseTime,
-        statusCode
+        statusCode,
       );
 
       // Adjust concurrency based on metrics
@@ -2442,7 +2782,7 @@ export class ScraperService {
         wasBlocked,
         wasChallenged,
         errorResponseTime,
-        statusCode
+        statusCode,
       );
 
       // Adjust concurrency based on metrics
@@ -2452,7 +2792,11 @@ export class ScraperService {
       this.metricsTracker.checkThresholds();
 
       // Record proxy failure if using ProxyManager
-      if (proxyConfig && this.proxyManager && !(error instanceof ScrapeBlockError)) {
+      if (
+        proxyConfig &&
+        this.proxyManager &&
+        !(error instanceof ScrapeBlockError)
+      ) {
         this.proxyManager.recordFailure(proxyConfig, error as Error);
       }
 
@@ -2465,13 +2809,18 @@ export class ScraperService {
       // Close page first, then release context (don't close context)
       if (page) {
         await page.close().catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to close page for ${url}:`, { error: err });
+          logger.warn(`[ScraperService] Failed to close page for ${url}:`, {
+            error: err,
+          });
         });
       }
 
       if (context) {
         await this.browserPool.releaseContext(context).catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to release context for ${url}:`, { error: err });
+          logger.warn(
+            `[ScraperService] Failed to release context for ${url}:`,
+            { error: err },
+          );
         });
       }
 
@@ -2485,29 +2834,41 @@ export class ScraperService {
    * Perform session warmup by visiting homepage and configured paths
    * This makes the scraping session appear more natural
    */
-  private async performSessionWarmup(page: Page, hostname: string, profile: any): Promise<void> {
+  private async performSessionWarmup(
+    page: Page,
+    hostname: string,
+    profile: any,
+  ): Promise<void> {
     // Skip warmup if disabled via environment variable
-    if (process.env.SCRAPING_ENABLE_WARMUP === 'false') {
-      logger.info(`[ScraperService] ⏭️  Skipping session warmup for ${hostname} (disabled via env)`);
+    if (process.env.SCRAPING_ENABLE_WARMUP === "false") {
+      logger.info(
+        `[ScraperService] ⏭️  Skipping session warmup for ${hostname} (disabled via env)`,
+      );
       return;
     }
 
     try {
-      logger.info(`[ScraperService] 🔥 Performing session warmup for ${hostname}`);
+      logger.info(
+        `[ScraperService] 🔥 Performing session warmup for ${hostname}`,
+      );
 
-      const protocol = page.url().startsWith('https') ? 'https' : 'http';
+      const protocol = page.url().startsWith("https") ? "https" : "http";
       const baseUrl = `${protocol}://${hostname}`;
 
       // Visit homepage if configured
       if (profile.sessionWarmup.visitHomepage) {
         const homepageUrl = profile.referrerChain?.startUrl || baseUrl;
 
-        await page.goto(homepageUrl, {
-          waitUntil: 'domcontentloaded',
-          timeout: 15000
-        }).catch((error) => {
-          logger.warn(`[ScraperService] Homepage warmup failed: ${error.message}`);
-        });
+        await page
+          .goto(homepageUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 15000,
+          })
+          .catch((error) => {
+            logger.warn(
+              `[ScraperService] Homepage warmup failed: ${error.message}`,
+            );
+          });
 
         // Track navigation for referrer chain
         if (profile.referrerChain?.enabled) {
@@ -2518,23 +2879,30 @@ export class ScraperService {
         await HumanSimulation.randomPause(1000, 3000);
 
         // Simulate some human behavior on homepage
-        await HumanSimulation.simulateMouseMove(page).catch(() => { });
+        await HumanSimulation.simulateMouseMove(page).catch(() => {});
         await HumanSimulation.randomPause(500, 1500);
-        await HumanSimulation.simulateScroll(page).catch(() => { });
+        await HumanSimulation.simulateScroll(page).catch(() => {});
         await HumanSimulation.randomPause(800, 2000);
       }
 
       // Visit additional warmup paths if configured
-      if (profile.sessionWarmup.visitPaths && profile.sessionWarmup.visitPaths.length > 0) {
+      if (
+        profile.sessionWarmup.visitPaths &&
+        profile.sessionWarmup.visitPaths.length > 0
+      ) {
         for (const path of profile.sessionWarmup.visitPaths) {
           const warmupUrl = `${baseUrl}${path}`;
 
-          await page.goto(warmupUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: 15000
-          }).catch((error) => {
-            logger.warn(`[ScraperService] Warmup path ${path} failed: ${error.message}`);
-          });
+          await page
+            .goto(warmupUrl, {
+              waitUntil: "domcontentloaded",
+              timeout: 15000,
+            })
+            .catch((error) => {
+              logger.warn(
+                `[ScraperService] Warmup path ${path} failed: ${error.message}`,
+              );
+            });
 
           // Track navigation for referrer chain
           if (profile.referrerChain?.enabled) {
@@ -2545,14 +2913,18 @@ export class ScraperService {
           await HumanSimulation.randomPause(1500, 3500);
 
           // Simulate human behavior
-          await HumanSimulation.simulateMouseMove(page).catch(() => { });
+          await HumanSimulation.simulateMouseMove(page).catch(() => {});
           await HumanSimulation.randomPause(400, 1000);
         }
       }
 
-      logger.info(`[ScraperService] ✅ Session warmup completed for ${hostname}`);
+      logger.info(
+        `[ScraperService] ✅ Session warmup completed for ${hostname}`,
+      );
     } catch (error) {
-      logger.warn(`[ScraperService] Session warmup error for ${hostname}:`, { error });
+      logger.warn(`[ScraperService] Session warmup error for ${hostname}:`, {
+        error,
+      });
       // Don't fail the scraping if warmup fails
     }
   }
@@ -2564,7 +2936,10 @@ export class ScraperService {
    * Helper to parse tech specs from title or extra data
    * (RAM, Storage, etc.)
    */
-  private parseSpecifications(title: string, rawSpecs?: Record<string, string>): Record<string, string> {
+  private parseSpecifications(
+    title: string,
+    rawSpecs?: Record<string, string>,
+  ): Record<string, string> {
     const specs: Record<string, string> = { ...rawSpecs };
     // 1. RAM Logic (e.g. 8GB, 16GB)
     if (!specs.ram) {
@@ -2581,7 +2956,9 @@ export class ScraperService {
     }
     // 2. Storage Logic (e.g. 256GB SSD)
     if (!specs.storage) {
-      const storageMatch = title.match(/(\d{1,4})\s*(GB|TB)\s*(SSD|HDD|NVMe|Gen4)/i);
+      const storageMatch = title.match(
+        /(\d{1,4})\s*(GB|TB)\s*(SSD|HDD|NVMe|Gen4)/i,
+      );
       if (storageMatch) {
         let val = storageMatch[1];
         let unit = storageMatch[2].toUpperCase();
@@ -2591,7 +2968,9 @@ export class ScraperService {
     }
     // 3. Processor Logic
     if (!specs.processor) {
-      const procMatch = title.match(/(core\s*i\d|ryzen\s*\d|m1|m2|m3|celeron|pentium)/i);
+      const procMatch = title.match(
+        /(core\s*i\d|ryzen\s*\d|m1|m2|m3|celeron|pentium)/i,
+      );
       if (procMatch) {
         specs.processor = procMatch[0].replace(/\s+/g, " ");
       }
@@ -2610,9 +2989,9 @@ export class ScraperService {
     // Safely extract headers - handle both real responses and mocks
     let headers: Record<string, string> = {};
     try {
-      if (response?.headers && typeof response.headers === 'function') {
+      if (response?.headers && typeof response.headers === "function") {
         headers = response.headers() || {};
-      } else if (response?.headers && typeof response.headers === 'object') {
+      } else if (response?.headers && typeof response.headers === "object") {
         headers = response.headers;
       }
     } catch {
@@ -2623,29 +3002,93 @@ export class ScraperService {
     let isBlocked = false;
     let isAdvanced = false;
 
-    const captchaKeywords = ["captcha", "verify you are human", "robot check", "hcaptcha", "recaptcha"];
-    const accessDeniedKeywords = ["access denied", "permission denied", "forbidden", "blocked"];
+    const strictCaptchaKeywords = [
+      "verify you are human",
+      "robot check",
+      "please complete the security check",
+    ];
+    const looseCaptchaKeywords = ["captcha", "hcaptcha", "recaptcha"];
+    const accessDeniedKeywords = [
+      "access denied",
+      "permission denied",
+      "forbidden",
+      "you have been blocked",
+    ];
 
-    const hasCaptcha = captchaKeywords.some(kw => content.includes(kw) || title.includes(kw));
-    const hasAccessDenied = accessDeniedKeywords.some(kw => content.includes(kw) || title.includes(kw));
+    let hasCaptcha = false;
+    let hasAccessDenied = false;
 
-    if (title.includes("cloudflare") || content.includes("cf-browser-verification") || headers['server'] === 'cloudflare') {
+    if (status && status >= 400) {
+      hasCaptcha = [...strictCaptchaKeywords, ...looseCaptchaKeywords].some(
+        (kw) => content.includes(kw) || title.includes(kw),
+      );
+      hasAccessDenied = accessDeniedKeywords.some(
+        (kw) => content.includes(kw) || title.includes(kw),
+      );
+    } else {
+      // On 200 OK, only flag if it's a very explicit challenge to avoid false positives on pages with login forms or scripts
+      hasCaptcha = strictCaptchaKeywords.some(
+        (kw) => title.includes(kw) || content.includes(kw),
+      );
+      hasAccessDenied = accessDeniedKeywords.some((kw) => title.includes(kw)); // Only look at title for generic denisels on 200 OK
+    }
+
+    const serverHeader = (headers["server"] || "").toLowerCase();
+    const isCloudflareServer = serverHeader.includes("cloudflare");
+    const isCloudflareChallengeTitle =
+      title.includes("just a moment") || title.includes("attention required!");
+    const hasCfChallengeElements =
+      content.includes("cf-browser-verification") ||
+      content.includes('id="cf-wrapper"');
+
+    if (
+      isCloudflareChallengeTitle ||
+      hasCfChallengeElements ||
+      (isCloudflareServer && (status === 403 || status === 503))
+    ) {
       provider = "CLOUDFLARE";
-      if (status === 403 || status === 503 || title.includes("just a moment")) isBlocked = true;
+      if (
+        status === 403 ||
+        status === 503 ||
+        isCloudflareChallengeTitle ||
+        hasCfChallengeElements
+      )
+        isBlocked = true;
       isAdvanced = true; // Cloudflare is always treated as advanced
-    } else if (content.includes("perimeterx") || content.includes("px-captcha")) {
-      provider = "PERIMETERX";
+    } else if (
+      content.includes("perimeterx") ||
+      content.includes("px-captcha")
+    ) {
+      // PerimeterX sets 403 when blocking. If 200 OK with normal content, it's just a script tag.
+      if (status === 403 || content.length < 30000) {
+        provider = "PERIMETERX";
+        isBlocked = true;
+        isAdvanced = true;
+      }
+    } else if (content.includes("datadome") || headers["x-datadome-response"]) {
+      if (status === 403 || headers["x-datadome-response"] === "block") {
+        provider = "DATADOME";
+        isBlocked = true;
+        isAdvanced = true;
+      }
+    } else if (
+      status === 403 ||
+      status === 429 ||
+      hasCaptcha ||
+      hasAccessDenied
+    ) {
+      provider = hasCaptcha
+        ? "CAPTCHA"
+        : hasAccessDenied
+          ? "ACCESS_DENIED"
+          : "GENERIC_WA_BLOCK";
       isBlocked = true;
       isAdvanced = true;
-    } else if (content.includes("datadome") || headers['x-datadome-response']) {
-      provider = "DATADOME";
-      isBlocked = status === 403;
-      isAdvanced = true;
-    } else if (status === 403 || status === 429 || hasCaptcha || hasAccessDenied) {
-      provider = hasCaptcha ? "CAPTCHA" : (hasAccessDenied ? "ACCESS_DENIED" : "GENERIC_WA_BLOCK");
-      isBlocked = true;
-      isAdvanced = true;
-    } else if (status === 200 && (title.includes("trusted retail computer store") || title === "techland bd")) {
+    } else if (
+      status === 200 &&
+      (title.includes("trusted retail computer store") ||
+        title === "techland bd")
+    ) {
       // SILENT BLOCK: Redirected to Home page but status is 200
       const currentUrl = page.url();
       if (currentUrl.includes("search") || currentUrl.includes("route=")) {
@@ -2661,11 +3104,13 @@ export class ScraperService {
   /**
    * Dynamic Heuristic Extraction: Analyzes the page to find product data without static selectors
    */
-  private async extractFromHeuristics(page: Page): Promise<Omit<ScrapedProduct, "url"> | null> {
+  private async extractFromHeuristics(
+    page: Page,
+  ): Promise<Omit<ScrapedProduct, "url"> | null> {
     try {
       return await page.evaluate(() => {
         // 1. Find Title: Usually the largest <h1> or <h2> tag in the top 50% of the page
-        const headings = Array.from(document.querySelectorAll('h1, h2'));
+        const headings = Array.from(document.querySelectorAll("h1, h2"));
         let bestTitle = "";
         let maxFontSize = 0;
 
@@ -2677,7 +3122,8 @@ export class ScraperService {
           // Exclude nav symbols, menus, etc.
           if (text.length > 10 && text.length < 200 && size > maxFontSize) {
             const rect = h.getBoundingClientRect();
-            if (rect.top < window.innerHeight * 0.8) { // Must be in visible-ish upper area
+            if (rect.top < window.innerHeight * 0.8) {
+              // Must be in visible-ish upper area
               bestTitle = text;
               maxFontSize = size;
             }
@@ -2686,8 +3132,11 @@ export class ScraperService {
 
         // 2. Find Price: Look for text containing currency symbols or "৳", "TK", "$"
         // Score elements by their proximity to the title and visual prominence
-        const allElements = Array.from(document.querySelectorAll('span, div, b, p, strong, td'));
-        const pricePattern = /([৳\$]|TK|BDT)\s?([\d,]+\.?\d*)|([\d,]+\.?\d*)\s?([৳\$]|TK|BDT)/i;
+        const allElements = Array.from(
+          document.querySelectorAll("span, div, b, p, strong, td"),
+        );
+        const pricePattern =
+          /([৳\$]|TK|BDT)\s?([\d,]+\.?\d*)|([\d,]+\.?\d*)\s?([৳\$]|TK|BDT)/i;
 
         let bestPriceMatch: string | null = null;
         let highestPriceScore = 0;
@@ -2697,14 +3146,20 @@ export class ScraperService {
           if (text.length < 30 && pricePattern.test(text)) {
             // Calculate a visibility/proximity score
             const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            if (style.display === "none" || style.visibility === "hidden")
+              continue;
 
             let score = parseFloat(style.fontSize) || 12;
 
             // Bold price is better
-            if (style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 600) score += 10;
+            if (
+              style.fontWeight === "bold" ||
+              parseInt(style.fontWeight) >= 600
+            )
+              score += 10;
             // Primary colored price (usually red or orange in BD) is better
-            if (style.color.includes('rgb(2') || style.color.includes('rgb(1')) score += 5;
+            if (style.color.includes("rgb(2") || style.color.includes("rgb(1"))
+              score += 5;
 
             if (score > highestPriceScore) {
               highestPriceScore = score;
@@ -2716,14 +3171,14 @@ export class ScraperService {
         if (!bestTitle || !bestPriceMatch) return null;
 
         // Extract numbers only for price
-        const numericPrice = parseFloat(bestPriceMatch.replace(/[^0-9.]/g, ''));
+        const numericPrice = parseFloat(bestPriceMatch.replace(/[^0-9.]/g, ""));
 
         return {
           title: bestTitle,
           price: numericPrice || 0,
           currency: "BDT",
           inStock: true, // Default to true if title/price found
-          imageUrl: undefined
+          imageUrl: undefined,
         };
       });
     } catch (e) {
@@ -2821,8 +3276,8 @@ export class ScraperService {
         brand: ogData.brand || undefined,
         inStock:
           ogData.availability !== "oos" &&
-            ogData.availability !== "out of stock" &&
-            ogData.availability !== "instock"
+          ogData.availability !== "out of stock" &&
+          ogData.availability !== "instock"
             ? true
             : ogData.availability === "instock",
         imageUrl: ogData.image || undefined,
@@ -2903,15 +3358,12 @@ export class ScraperService {
         // Brand and Model extraction (OpenCart specific)
         const brandSelectors = [
           'a[href*="manufacturer"]', // OpenCart brand link
-          '.manufacturer a',
+          ".manufacturer a",
           '[itemprop="brand"]',
-          '.product-brand',
+          ".product-brand",
         ];
 
-        const modelSelectors = [
-          '.product-model',
-          '[itemprop="model"]',
-        ];
+        const modelSelectors = [".product-model", '[itemprop="model"]'];
 
         const getTextContent = (selectors: string[]) => {
           for (const selector of selectors) {
@@ -2925,21 +3377,23 @@ export class ScraperService {
 
         // Extract brand and model from product info list (OpenCart)
         const extractFromProductInfo = () => {
-          const listItems = document.querySelectorAll('.list-unstyled li, .product-info li, ul li');
+          const listItems = document.querySelectorAll(
+            ".list-unstyled li, .product-info li, ul li",
+          );
           let brand = "";
           let model = "";
 
-          listItems.forEach(li => {
+          listItems.forEach((li) => {
             const text = li.textContent || "";
             // OpenCart typically shows "Brand: BrandName" or "Model: ModelName"
-            if (text.toLowerCase().includes('brand:')) {
-              const brandMatch = text.split(':');
+            if (text.toLowerCase().includes("brand:")) {
+              const brandMatch = text.split(":");
               if (brandMatch.length > 1) {
                 brand = brandMatch[1].trim();
               }
             }
-            if (text.toLowerCase().includes('model:')) {
-              const modelMatch = text.split(':');
+            if (text.toLowerCase().includes("model:")) {
+              const modelMatch = text.split(":");
               if (modelMatch.length > 1) {
                 model = modelMatch[1].trim();
               }
@@ -2977,8 +3431,10 @@ export class ScraperService {
           });
 
         // Check for "coming soon" or "pre-order" status
-        const isComingSoon = stockText.includes("coming soon") || stockText.includes("upcoming");
-        const isPreOrder = stockText.includes("pre-order") || stockText.includes("pre order");
+        const isComingSoon =
+          stockText.includes("coming soon") || stockText.includes("upcoming");
+        const isPreOrder =
+          stockText.includes("pre-order") || stockText.includes("pre order");
 
         const imageSrc = (() => {
           for (const selector of imageSelectors) {
@@ -3042,22 +3498,32 @@ export class ScraperService {
 
       // If price is 0 but product exists, check stock status
       if (price === 0 && data.title) {
-        logger.warn(`[ScraperService] Price = 0 detected on first attempt. Stock status: "${data.stockText}"`);
+        logger.warn(
+          `[ScraperService] Price = 0 detected on first attempt. Stock status: "${data.stockText}"`,
+        );
 
         const recovered = await this.recoverMissingPrice(page);
 
         if (recovered > 0) {
           price = recovered;
-          logger.info(`[ScraperService] ✅ Layered price recovery succeeded: ${price}`);
+          logger.info(
+            `[ScraperService] ✅ Layered price recovery succeeded: ${price}`,
+          );
         } else if (!data.isComingSoon && !data.isPreOrder && !data.isOos) {
           // Only treat as parse failure after layered extraction attempts.
-          logger.error(`[ScraperService] ❌ Price still missing after layered extraction - marking as PARSE_FAILED`);
+          logger.error(
+            `[ScraperService] ❌ Price still missing after layered extraction - marking as PARSE_FAILED`,
+          );
         }
 
         if (data.isComingSoon) {
-          logger.info(`[ScraperService] Product is "Coming Soon" - marking as out of stock`);
+          logger.info(
+            `[ScraperService] Product is "Coming Soon" - marking as out of stock`,
+          );
         } else if (data.isPreOrder) {
-          logger.info(`[ScraperService] Product is "Pre-Order" - marking as out of stock`);
+          logger.info(
+            `[ScraperService] Product is "Pre-Order" - marking as out of stock`,
+          );
         } else if (data.isOos) {
           logger.info(`[ScraperService] Product is "Out of Stock"`);
         }
@@ -3119,7 +3585,7 @@ export class ScraperService {
       'meta[property="og:price:amount"]',
       'meta[name="price"]',
       'meta[itemprop="price"]',
-      '[data-price]',
+      "[data-price]",
       '[data-testid*="price"]',
       '[class*="price"]',
       ".sale-price",
@@ -3164,127 +3630,137 @@ export class ScraperService {
     if (og?.price && og.price > 0) return og.price;
 
     // 3) DOM/meta fallbacks (including itemprop content attrs and data-price)
-    const domMetaPrice = await page.evaluate(() => {
-      const selectors = [
-        'meta[property="product:price:amount"]',
-        'meta[property="og:price:amount"]',
-        'meta[name="price"]',
-        'meta[itemprop="price"]',
-        '[itemprop="price"]',
-        '[data-price]',
-        ".sale-price",
-        ".offer-price",
-        ".discounted-price",
-        ".special-price",
-        ".current-price",
-        ".price",
-        ".product-price",
-        "span.price",
-      ];
+    const domMetaPrice = await page
+      .evaluate(() => {
+        const selectors = [
+          'meta[property="product:price:amount"]',
+          'meta[property="og:price:amount"]',
+          'meta[name="price"]',
+          'meta[itemprop="price"]',
+          '[itemprop="price"]',
+          "[data-price]",
+          ".sale-price",
+          ".offer-price",
+          ".discounted-price",
+          ".special-price",
+          ".current-price",
+          ".price",
+          ".product-price",
+          "span.price",
+        ];
 
-      const parse = (t: string) => {
-        const m = t.replace(/,/g, "").match(/\d+(\.\d+)?/);
-        if (!m) return 0;
-        const n = parseFloat(m[0]);
-        return Number.isFinite(n) ? n : 0;
-      };
+        const parse = (t: string) => {
+          const m = t.replace(/,/g, "").match(/\d+(\.\d+)?/);
+          if (!m) return 0;
+          const n = parseFloat(m[0]);
+          return Number.isFinite(n) ? n : 0;
+        };
 
-      for (const selector of selectors) {
-        const el = document.querySelector(selector) as HTMLElement | null;
-        if (!el) continue;
-        const raw =
-          el.getAttribute("content") ||
-          el.getAttribute("data-price") ||
-          el.textContent ||
-          "";
-        const p = parse(raw);
-        if (p > 0) return p;
-      }
+        for (const selector of selectors) {
+          const el = document.querySelector(selector) as HTMLElement | null;
+          if (!el) continue;
+          const raw =
+            el.getAttribute("content") ||
+            el.getAttribute("data-price") ||
+            el.textContent ||
+            "";
+          const p = parse(raw);
+          if (p > 0) return p;
+        }
 
-      return 0;
-    }).catch(() => 0);
+        return 0;
+      })
+      .catch(() => 0);
 
     if (domMetaPrice > 0) return domMetaPrice;
 
     // 4) Hydration blob fallbacks (Next.js __NEXT_DATA__ and common global states)
-    const hydrationPrice = await page.evaluate(() => {
-      const parse = (v: unknown): number => {
-        if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-        if (typeof v !== "string") return 0;
-        const m = v.replace(/,/g, "").match(/\d+(\.\d+)?/);
-        if (!m) return 0;
-        const n = parseFloat(m[0]);
-        return Number.isFinite(n) ? n : 0;
-      };
+    const hydrationPrice = await page
+      .evaluate(() => {
+        const parse = (v: unknown): number => {
+          if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+          if (typeof v !== "string") return 0;
+          const m = v.replace(/,/g, "").match(/\d+(\.\d+)?/);
+          if (!m) return 0;
+          const n = parseFloat(m[0]);
+          return Number.isFinite(n) ? n : 0;
+        };
 
-      const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-        !!v && typeof v === "object" && !Array.isArray(v);
+        const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+          !!v && typeof v === "object" && !Array.isArray(v);
 
-      const candidates: number[] = [];
+        const candidates: number[] = [];
 
-      const scan = (node: unknown, depth: number, budget: { nodes: number }) => {
-        if (depth <= 0 || budget.nodes <= 0) return;
-        budget.nodes--;
+        const scan = (
+          node: unknown,
+          depth: number,
+          budget: { nodes: number },
+        ) => {
+          if (depth <= 0 || budget.nodes <= 0) return;
+          budget.nodes--;
 
-        if (Array.isArray(node)) {
-          for (const item of node) scan(item, depth - 1, budget);
-          return;
-        }
-
-        if (!isPlainObject(node)) return;
-
-        for (const [k, v] of Object.entries(node)) {
-          const key = k.toLowerCase();
-          if (key.includes("price")) {
-            const p = parse(v);
-            if (p > 0) candidates.push(p);
+          if (Array.isArray(node)) {
+            for (const item of node) scan(item, depth - 1, budget);
+            return;
           }
 
-          if (key === "offers") {
-            scan(v, depth - 1, budget);
-            continue;
+          if (!isPlainObject(node)) return;
+
+          for (const [k, v] of Object.entries(node)) {
+            const key = k.toLowerCase();
+            if (key.includes("price")) {
+              const p = parse(v);
+              if (p > 0) candidates.push(p);
+            }
+
+            if (key === "offers") {
+              scan(v, depth - 1, budget);
+              continue;
+            }
+
+            if (isPlainObject(v) || Array.isArray(v)) {
+              scan(v, depth - 1, budget);
+            }
           }
+        };
 
-          if (isPlainObject(v) || Array.isArray(v)) {
-            scan(v, depth - 1, budget);
+        // Next.js: <script id="__NEXT_DATA__">JSON</script>
+        const nextDataScript = document.querySelector(
+          "#__NEXT_DATA__",
+        ) as HTMLScriptElement | null;
+        if (nextDataScript?.textContent) {
+          try {
+            const parsed = JSON.parse(nextDataScript.textContent);
+            scan(parsed, 6, { nodes: 4000 });
+          } catch {
+            // ignore
           }
         }
-      };
 
-      // Next.js: <script id="__NEXT_DATA__">JSON</script>
-      const nextDataScript = document.querySelector("#__NEXT_DATA__") as HTMLScriptElement | null;
-      if (nextDataScript?.textContent) {
-        try {
-          const parsed = JSON.parse(nextDataScript.textContent);
-          scan(parsed, 6, { nodes: 4000 });
-        } catch {
-          // ignore
+        // Common global states (best-effort; not always present)
+        const globals: unknown[] = [];
+        const w = window as any;
+        if (w.__INITIAL_STATE__) globals.push(w.__INITIAL_STATE__);
+        if (w.__APOLLO_STATE__) globals.push(w.__APOLLO_STATE__);
+        if (w.__NUXT__) globals.push(w.__NUXT__);
+        if (w.__STATE__) globals.push(w.__STATE__);
+
+        for (const g of globals) {
+          try {
+            scan(g, 5, { nodes: 3000 });
+          } catch {
+            // ignore
+          }
         }
-      }
 
-      // Common global states (best-effort; not always present)
-      const globals: unknown[] = [];
-      const w = window as any;
-      if (w.__INITIAL_STATE__) globals.push(w.__INITIAL_STATE__);
-      if (w.__APOLLO_STATE__) globals.push(w.__APOLLO_STATE__);
-      if (w.__NUXT__) globals.push(w.__NUXT__);
-      if (w.__STATE__) globals.push(w.__STATE__);
-
-      for (const g of globals) {
-        try {
-          scan(g, 5, { nodes: 3000 });
-        } catch {
-          // ignore
-        }
-      }
-
-      // If we found multiple candidates, prefer the smallest plausible price to reduce false positives
-      // (e.g., avoid huge bundle totals or unrelated "compare at" prices).
-      const plausible = candidates.filter((p) => p > 0 && p < 10000000);
-      if (plausible.length === 0) return 0;
-      plausible.sort((a, b) => a - b);
-      return plausible[0];
-    }).catch(() => 0);
+        // If we found multiple candidates, prefer the smallest plausible price to reduce false positives
+        // (e.g., avoid huge bundle totals or unrelated "compare at" prices).
+        const plausible = candidates.filter((p) => p > 0 && p < 10000000);
+        if (plausible.length === 0) return 0;
+        plausible.sort((a, b) => a - b);
+        return plausible[0];
+      })
+      .catch(() => 0);
 
     if (hydrationPrice > 0) return hydrationPrice;
 
@@ -3386,10 +3862,9 @@ export class ScraperService {
     if (modelToken) {
       const queries = Array.from(
         new Set(
-          [
-            modelToken,
-            brandToken ? `${brandToken} ${modelToken}` : "",
-          ].filter(Boolean),
+          [modelToken, brandToken ? `${brandToken} ${modelToken}` : ""].filter(
+            Boolean,
+          ),
         ),
       ).slice(0, 2); // model-only primary, brand+model secondary
 
@@ -3425,7 +3900,9 @@ export class ScraperService {
       "bluetooth",
     ]);
     const words = cleanQuery.split(/\s+/).filter(Boolean);
-    const coreWords = words.filter((w) => !stopWords.has(w.toLowerCase()) && w.length > 2);
+    const coreWords = words.filter(
+      (w) => !stopWords.has(w.toLowerCase()) && w.length > 2,
+    );
     const generic = coreWords.slice(0, 4).join(" ").trim();
 
     return {
@@ -3448,21 +3925,26 @@ export class ScraperService {
     visitedQueries?: Set<string>,
   ): Promise<ScrapedProduct | null> {
     await this.init();
-    const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    const userAgent =
+      USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
     let context: any = null;
     let page: any = null;
     const releaseSearchResources = async () => {
       if (page) {
         await page.close().catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to close search page: `, { error: err });
+          logger.warn(`[ScraperService] Failed to close search page: `, {
+            error: err,
+          });
         });
         page = null;
       }
 
       if (context) {
         await this.browserPool.releaseContext(context).catch((err: Error) => {
-          logger.warn(`[ScraperService] Failed to release search context: `, { error: err });
+          logger.warn(`[ScraperService] Failed to release search context: `, {
+            error: err,
+          });
         });
         context = null;
       }
@@ -3474,17 +3956,24 @@ export class ScraperService {
       const proxy = proxyUrl ? { server: proxyUrl } : undefined;
       const hostname = new URL(baseUrl).hostname;
 
-      context = await this.browserPool.acquireContext(userAgent, proxy, undefined, hostname);
+      context = await this.browserPool.acquireContext(
+        userAgent,
+        proxy,
+        undefined,
+        hostname,
+      );
       page = await context.newPage();
 
       if (proxyUrl) {
         logger.info(`[ScraperService] Discovery using proxy: ${proxyUrl}`);
       }
     } catch (error) {
-      logger.error(`[ScraperService] Failed to acquire context or create page for search:`, { error });
+      logger.error(
+        `[ScraperService] Failed to acquire context or create page for search:`,
+        { error },
+      );
       return null;
     }
-
 
     try {
       // 0. Clean retry flags from the search term (kept for backwards compatibility with older logs/flows)
@@ -3492,12 +3981,17 @@ export class ScraperService {
 
       // 1. Sanitize query
       const cleanQuery = this.sanitizeQuery(actualQuery);
-      const normalizedQuery = cleanQuery.toLowerCase().replace(/\s+/g, " ").trim();
+      const normalizedQuery = cleanQuery
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
       logger.info(
         `[ScraperService] Original query: "${query}" -> Sanitized: "${cleanQuery}"`,
       );
       if (!normalizedQuery) {
-        logger.warn("[ScraperService] Empty query after sanitization, skipping search.");
+        logger.warn(
+          "[ScraperService] Empty query after sanitization, skipping search.",
+        );
         return null;
       }
       // 2. Resolve Search Strategy
@@ -3544,14 +4038,18 @@ export class ScraperService {
           baseUrlToUse = "";
         }
 
-        const placeholderIndex = p.indexOf("{query}") >= 0 ? p.indexOf("{query}") : p.indexOf("{q}");
+        const placeholderIndex =
+          p.indexOf("{query}") >= 0 ? p.indexOf("{query}") : p.indexOf("{q}");
         const queryStart = p.indexOf("?");
-        const placeholderInQuery = queryStart >= 0 && placeholderIndex > queryStart;
+        const placeholderInQuery =
+          queryStart >= 0 && placeholderIndex > queryStart;
         const encodedQuery = placeholderInQuery
           ? encodeURIComponent(cleanQuery).replace(/%20/g, "+")
           : encodeURIComponent(cleanQuery);
-        if (p.includes("{query}")) return (baseUrlToUse + p).replace("{query}", encodedQuery);
-        if (p.includes("{q}")) return (baseUrlToUse + p).replace("{q}", encodedQuery);
+        if (p.includes("{query}"))
+          return (baseUrlToUse + p).replace("{query}", encodedQuery);
+        if (p.includes("{q}"))
+          return (baseUrlToUse + p).replace("{q}", encodedQuery);
         return baseUrlToUse + p + encodeURIComponent(cleanQuery);
       };
 
@@ -3572,9 +4070,13 @@ export class ScraperService {
         }
       }
 
-      const isTechlandDomain = hostname.includes("techlandbd.com") || hostname.includes("techland.com.bd");
+      const isTechlandDomain =
+        hostname.includes("techlandbd.com") ||
+        hostname.includes("techland.com.bd");
       if (isTechlandDomain && explicitPattern) {
-        const normalizedExplicit = explicitPattern.toLowerCase().replace(/\s+/g, "");
+        const normalizedExplicit = explicitPattern
+          .toLowerCase()
+          .replace(/\s+/g, "");
         const expectedPath = "/search/advance/product/result/{query}";
         if (!normalizedExplicit.includes("/search/advance/product/result/")) {
           const warnKey = `ignore-techland-db-pattern:${hostname}:${normalizedExplicit}`;
@@ -3584,14 +4086,16 @@ export class ScraperService {
             );
           }
           explicitPattern = null;
-        } else if (normalizedExplicit !== expectedPath && !normalizedExplicit.endsWith(expectedPath)) {
+        } else if (
+          normalizedExplicit !== expectedPath &&
+          !normalizedExplicit.endsWith(expectedPath)
+        ) {
           // Keep explicit pattern for full URLs, but still prefer known-safe built-in fallback.
           logger.info(
             `[ScraperService] DB pattern differs from recommended pattern for ${hostname}; builtin fallback retained.`,
           );
         }
       }
-
 
       const searchCandidates: Array<{
         searchUrl: string;
@@ -3602,7 +4106,11 @@ export class ScraperService {
         value.toLowerCase().includes("/search/advance/product/result/");
 
       const usedTemplates = new Set<string>();
-      const pushCandidate = (patternForLearning: string, searchUrl: string, label: string) => {
+      const pushCandidate = (
+        patternForLearning: string,
+        searchUrl: string,
+        label: string,
+      ) => {
         const key = (patternForLearning || "").trim();
         if (!key || usedTemplates.has(key)) return;
         if (isTechlandDomain && !isCompatibleTechlandPattern(key)) {
@@ -3614,15 +4122,29 @@ export class ScraperService {
       };
 
       if (explicitPattern) {
-        pushCandidate(explicitPattern, buildSearchUrlFromTemplate(explicitPattern), "Database Pattern");
+        pushCandidate(
+          explicitPattern,
+          buildSearchUrlFromTemplate(explicitPattern),
+          "Database Pattern",
+        );
       }
 
       if (learnedPattern) {
-        pushCandidate(learnedPattern, buildSearchUrlFromTemplate(learnedPattern), "Learned Pattern");
+        pushCandidate(
+          learnedPattern,
+          buildSearchUrlFromTemplate(learnedPattern),
+          "Learned Pattern",
+        );
       }
 
       if (strategyKey) {
-        const template = strategyPatternTemplate[strategyKey] || strategyPatternTemplate[Object.keys(strategyPatternTemplate).find(k => strategyKey.includes(k)) || ""];
+        const template =
+          strategyPatternTemplate[strategyKey] ||
+          strategyPatternTemplate[
+            Object.keys(strategyPatternTemplate).find((k) =>
+              strategyKey.includes(k),
+            ) || ""
+          ];
         pushCandidate(
           template || defaultPatternTemplate,
           SEARCH_STRATEGIES[strategyKey](baseUrl, cleanQuery),
@@ -3631,13 +4153,23 @@ export class ScraperService {
       }
 
       if (!isTechlandDomain) {
-        pushCandidate(defaultPatternTemplate, DEFAULT_STRATEGY(baseUrl, cleanQuery), "Default Pattern");
+        pushCandidate(
+          defaultPatternTemplate,
+          DEFAULT_STRATEGY(baseUrl, cleanQuery),
+          "Default Pattern",
+        );
       }
 
-      const fallbackTemplatesForHost = isTechlandDomain ? [] : commonFallbackTemplates;
+      const fallbackTemplatesForHost = isTechlandDomain
+        ? []
+        : commonFallbackTemplates;
       for (const template of fallbackTemplatesForHost) {
         if (searchCandidates.length >= 6) break;
-        pushCandidate(template, buildSearchUrlFromTemplate(template), "Common Pattern");
+        pushCandidate(
+          template,
+          buildSearchUrlFromTemplate(template),
+          "Common Pattern",
+        );
       }
 
       if (isAdvancedProtectedSite) {
@@ -3645,9 +4177,11 @@ export class ScraperService {
         // aggressively inflating adaptive delay on every request.
         this.hardenProtectionForDomain(hostname, "CLOUDFLARE", false);
       }
-      const strictSearchMode = isAdvancedProtectedSite || Boolean(
-        profile.adaptiveDelay?.enabled || profile.sessionWarmup?.enabled
-      );
+      const strictSearchMode =
+        isAdvancedProtectedSite ||
+        Boolean(
+          profile.adaptiveDelay?.enabled || profile.sessionWarmup?.enabled,
+        );
 
       let likelyNoResults = false;
       let searchDiagnostics: any = null;
@@ -3657,7 +4191,9 @@ export class ScraperService {
         if (isTechlandDomain && !isCompatibleTechlandPattern(searchUrl)) {
           const warnKey = `skip-techland-url:${hostname}:${searchUrl}`;
           if (this.shouldLogWarningOnce(warnKey)) {
-            logger.warn(`[ScraperService] Skipping known-404 Techland URL: ${searchUrl}`);
+            logger.warn(
+              `[ScraperService] Skipping known-404 Techland URL: ${searchUrl}`,
+            );
           }
           continue;
         }
@@ -3668,21 +4204,31 @@ export class ScraperService {
 
         if (strictSearchMode) {
           const adaptiveDelay = siteProfileManager.getAdaptiveDelay(hostname);
-          const preNavigateDelay = Math.min(Math.max(adaptiveDelay, 1200), 12000);
-          await page.waitForTimeout(preNavigateDelay + Math.floor(Math.random() * 400));
+          const preNavigateDelay = Math.min(
+            Math.max(adaptiveDelay, 1200),
+            12000,
+          );
+          await page.waitForTimeout(
+            preNavigateDelay + Math.floor(Math.random() * 400),
+          );
         } else {
           await page.waitForTimeout(Math.random() * 1000 + 500);
         }
 
-        const response = await withChaosAwareness("network-timeout", async () => {
-          return await page.goto(searchUrl, {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-          });
-        });
+        const response = await withChaosAwareness(
+          "network-timeout",
+          async () => {
+            return await page.goto(searchUrl, {
+              waitUntil: "domcontentloaded",
+              timeout: 30000,
+            });
+          },
+        );
         const status = response?.status() ?? 0;
         if (status === 404) {
-          logger.warn(`[ScraperService] Search URL returned 404, trying next candidate: ${searchUrl}`);
+          logger.warn(
+            `[ScraperService] Search URL returned 404, trying next candidate: ${searchUrl}`,
+          );
           continue;
         }
 
@@ -3694,7 +4240,9 @@ export class ScraperService {
 
           if (securityInfo.provider === "CLOUDFLARE") {
             const challengeWaitMs = strictSearchMode ? 12000 : 8000;
-            logger.info("[ScraperService] Waiting for Cloudflare challenge to complete...");
+            logger.info(
+              "[ScraperService] Waiting for Cloudflare challenge to complete...",
+            );
             await page.waitForTimeout(challengeWaitMs);
 
             const recheckSecurity = await this.analyzeSecurity(page, response);
@@ -3702,7 +4250,11 @@ export class ScraperService {
               this.relaxProtectionForDomain(hostname);
               logger.info("[ScraperService] ✅ Cloudflare challenge passed!");
             } else {
-              throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
+              throw new ScrapeBlockError(
+                securityInfo.provider,
+                searchUrl,
+                true,
+              );
             }
           } else if (securityInfo.isAdvanced) {
             throw new ScrapeBlockError(securityInfo.provider, searchUrl, true);
@@ -3739,7 +4291,8 @@ export class ScraperService {
         searchDiagnostics = null;
         try {
           searchDiagnostics = await page.evaluate(() => {
-            const count = (sel: string) => document.querySelectorAll(sel).length;
+            const count = (sel: string) =>
+              document.querySelectorAll(sel).length;
             const text = (document.body?.innerText || "").toLowerCase();
             const hasNoResultsText =
               text.includes("no results") ||
@@ -3789,48 +4342,64 @@ export class ScraperService {
         );
 
         if (strictSearchMode && !likelyNoResults) {
-          logger.info(`[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`);
+          logger.info(
+            `[ScraperService] 🖱️ Simulating enhanced human behavior on search results for ${hostname}`,
+          );
 
           const searchBehavior = strictSearchMode
             ? {
-              initialPause: [280, 700] as const,
-              betweenPause: [180, 480] as const,
-              reviewPause: [450, 1200] as const,
-              hoverPause: [220, 520] as const,
-            }
+                initialPause: [280, 700] as const,
+                betweenPause: [180, 480] as const,
+                reviewPause: [450, 1200] as const,
+                hoverPause: [220, 520] as const,
+              }
             : {
-              initialPause: [120, 300] as const,
-              betweenPause: [80, 200] as const,
-              reviewPause: [200, 500] as const,
-              hoverPause: [120, 240] as const,
-            };
+                initialPause: [120, 300] as const,
+                betweenPause: [80, 200] as const,
+                reviewPause: [200, 500] as const,
+                hoverPause: [120, 240] as const,
+              };
 
-          await HumanSimulation.randomPause(searchBehavior.initialPause[0], searchBehavior.initialPause[1]);
+          await HumanSimulation.randomPause(
+            searchBehavior.initialPause[0],
+            searchBehavior.initialPause[1],
+          );
           await HumanSimulation.simulateMouseMove(page);
-          await HumanSimulation.randomPause(searchBehavior.betweenPause[0], searchBehavior.betweenPause[1]);
+          await HumanSimulation.randomPause(
+            searchBehavior.betweenPause[0],
+            searchBehavior.betweenPause[1],
+          );
           await HumanSimulation.simulateScroll(page);
-          await HumanSimulation.randomPause(searchBehavior.reviewPause[0], searchBehavior.reviewPause[1]);
+          await HumanSimulation.randomPause(
+            searchBehavior.reviewPause[0],
+            searchBehavior.reviewPause[1],
+          );
 
           const productSelectors = [
-            '.product-thumb a',
-            '.p-item a',
-            '.p-item-name a',
-            '.product-name a',
-            '.product-title a',
-            '.product-box a',
-            '.card a',
-            '.product-item a'
+            ".product-thumb a",
+            ".p-item a",
+            ".p-item-name a",
+            ".product-name a",
+            ".product-title a",
+            ".product-box a",
+            ".card a",
+            ".product-item a",
           ];
 
           for (const selector of productSelectors) {
             const elements = await page.$$(selector);
             if (elements.length > 0) {
-              const randomIndex = Math.floor(Math.random() * Math.min(elements.length, 5));
+              const randomIndex = Math.floor(
+                Math.random() * Math.min(elements.length, 5),
+              );
               try {
                 const element = elements[randomIndex];
                 await element.scrollIntoViewIfNeeded().catch(() => undefined);
                 await element.hover({ timeout: 1000 }).catch(() => undefined);
-                await HumanSimulation.randomPause(searchBehavior.hoverPause[0], searchBehavior.hoverPause[1]);
+                await HumanSimulation.randomPause(
+                  searchBehavior.hoverPause[0],
+                  searchBehavior.hoverPause[1],
+                );
               } catch {
                 // Ignore hover failures
               }
@@ -3849,7 +4418,11 @@ export class ScraperService {
           brand: tokenPlan.brandToken || undefined,
           size: tokenPlan.sizeToken || undefined,
         };
-        let productLink = await this.evaluateProductLink(page, cleanQuery, weightedTokens);
+        let productLink = await this.evaluateProductLink(
+          page,
+          cleanQuery,
+          weightedTokens,
+        );
 
         if (!productLink) {
           productLink = await this.evaluateAdapterProductLink(
@@ -3863,15 +4436,24 @@ export class ScraperService {
         // Search pattern recording removed (legacy)
 
         if (productLink) {
-          logger.info(`[ScraperService] ✅ Direct search found product link: ${productLink} `);
-          logger.info(`[ScraperService] 🎯 Scraping product page: ${productLink} `);
+          logger.info(
+            `[ScraperService] ✅ Direct search found product link: ${productLink} `,
+          );
+          logger.info(
+            `[ScraperService] 🎯 Scraping product page: ${productLink} `,
+          );
 
           if (strictSearchMode) {
             try {
               const linkElement = await page.$(`a[href="${productLink}"]`);
-              const hasBox = linkElement ? await linkElement.boundingBox().catch(() => null) : null;
+              const hasBox = linkElement
+                ? await linkElement.boundingBox().catch(() => null)
+                : null;
               if (linkElement && hasBox) {
-                await HumanSimulation.hoverElement(page, `a[href="${productLink}"]`);
+                await HumanSimulation.hoverElement(
+                  page,
+                  `a[href="${productLink}"]`,
+                );
                 await HumanSimulation.randomPause(100, 220);
               }
             } catch {
@@ -3891,7 +4473,8 @@ export class ScraperService {
         try {
           if (!searchDiagnostics) {
             searchDiagnostics = await page.evaluate(() => {
-              const count = (sel: string) => document.querySelectorAll(sel).length;
+              const count = (sel: string) =>
+                document.querySelectorAll(sel).length;
               const text = (document.body?.innerText || "").toLowerCase();
               const hasNoResultsText =
                 text.includes("no results") ||
@@ -3899,7 +4482,9 @@ export class ScraperService {
                 text.includes("not found") ||
                 text.includes("0 results");
 
-              const productHrefSample = Array.from(document.querySelectorAll('a[href*="/product/"]'))
+              const productHrefSample = Array.from(
+                document.querySelectorAll('a[href*="/product/"]'),
+              )
                 .map((a) => (a as HTMLAnchorElement).href)
                 .filter(Boolean)
                 .slice(0, 3);
@@ -3933,12 +4518,16 @@ export class ScraperService {
             );
             searchDiagnostics.productHrefSample = productHrefSample;
           }
-          logger.warn("[ScraperService] Search diagnostics", { diag: searchDiagnostics });
+          logger.warn("[ScraperService] Search diagnostics", {
+            diag: searchDiagnostics,
+          });
         } catch {
           // Non-fatal
         }
 
-        logger.warn(`[ScraperService] ⚠️ Direct search returned no results for: "${cleanQuery}"`);
+        logger.warn(
+          `[ScraperService] ⚠️ Direct search returned no results for: "${cleanQuery}"`,
+        );
 
         if (likelyNoResults) {
           break;
@@ -3952,21 +4541,30 @@ export class ScraperService {
         const fallbackQueries = fallbackPlan.queries.slice(0, 2); // do not increase request volume
 
         if (fallbackQueries.length > 0) {
-          logger.info(`[ScraperService] 🔄 No results. Trying intelligent fallback queries...`, {
-            attempt,
-            fallbackQueries,
-            likelyNoResults,
-            usedModelStrategy: fallbackPlan.usedModelStrategy,
-            modelToken: fallbackPlan.modelToken,
-            brandToken: fallbackPlan.brandToken,
-          });
+          logger.info(
+            `[ScraperService] 🔄 No results. Trying intelligent fallback queries...`,
+            {
+              attempt,
+              fallbackQueries,
+              likelyNoResults,
+              usedModelStrategy: fallbackPlan.usedModelStrategy,
+              modelToken: fallbackPlan.modelToken,
+              brandToken: fallbackPlan.brandToken,
+            },
+          );
 
           for (const fq of fallbackQueries) {
             if (fq === cleanQuery) continue;
             // Release current context/page before recursive fallback to avoid self-block
             // when maxContextsPerDomain is 1.
             await releaseSearchResources();
-            const result = await this.searchAndScrape(baseUrl, fq, siteId, attempt + 1, seen);
+            const result = await this.searchAndScrape(
+              baseUrl,
+              fq,
+              siteId,
+              attempt + 1,
+              seen,
+            );
             if (result) return result;
           }
         }
@@ -3974,7 +4572,9 @@ export class ScraperService {
       if (likelyNoResults || attempt > 0) {
         // Was rememberNoResultQuery here, now removed
       }
-      logger.error(`[ScraperService] ❌ All strategies exhausted for: "${cleanQuery}"`);
+      logger.error(
+        `[ScraperService] ❌ All strategies exhausted for: "${cleanQuery}"`,
+      );
       return null;
     } catch (error) {
       if (error instanceof ScrapeBlockError) {
@@ -3998,269 +4598,316 @@ export class ScraperService {
     weightedTokens?: { model?: string; brand?: string; size?: string },
   ): Promise<string | null> {
     // Pass TECH_BRANDS to the browser context
-    return await page.evaluate(({ q, wt }) => {
-      const candidates: Array<{
-        href: string;
-        text: string;
-        score: number;
-        reasons: string[];
-      }> = [];
+    return await page.evaluate(
+      ({ q, wt }) => {
+        const candidates: Array<{
+          href: string;
+          text: string;
+          score: number;
+          reasons: string[];
+        }> = [];
 
-      const links = Array.from(document.querySelectorAll("a"));
+        const links = Array.from(document.querySelectorAll("a"));
 
-      // Helper to normalize text
-      const clean = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const normalizeTokens = (str: string) =>
-        str
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .split(" ")
-          .filter(Boolean);
-      const diceCoefficient = (a: string, b: string) => {
-        const sa = a.toLowerCase().replace(/\s+/g, " ").trim();
-        const sb = b.toLowerCase().replace(/\s+/g, " ").trim();
-        if (!sa || !sb) return 0;
-        if (sa === sb) return 1;
-        if (sa.length < 2 || sb.length < 2) return 0;
-        const bigrams = (s: string) => {
-          const out: string[] = [];
-          for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2));
-          return out;
+        // Helper to normalize text
+        const clean = (str: string) =>
+          str.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const normalizeTokens = (str: string) =>
+          str
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .split(" ")
+            .filter(Boolean);
+        const diceCoefficient = (a: string, b: string) => {
+          const sa = a.toLowerCase().replace(/\s+/g, " ").trim();
+          const sb = b.toLowerCase().replace(/\s+/g, " ").trim();
+          if (!sa || !sb) return 0;
+          if (sa === sb) return 1;
+          if (sa.length < 2 || sb.length < 2) return 0;
+          const bigrams = (s: string) => {
+            const out: string[] = [];
+            for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2));
+            return out;
+          };
+          const aBi = bigrams(sa);
+          const bBi = bigrams(sb);
+          const bMap = new Map<string, number>();
+          for (const bi of bBi) bMap.set(bi, (bMap.get(bi) || 0) + 1);
+          let overlap = 0;
+          for (const bi of aBi) {
+            const c = bMap.get(bi) || 0;
+            if (c > 0) {
+              overlap += 1;
+              bMap.set(bi, c - 1);
+            }
+          }
+          return (2 * overlap) / (aBi.length + bBi.length);
         };
-        const aBi = bigrams(sa);
-        const bBi = bigrams(sb);
-        const bMap = new Map<string, number>();
-        for (const bi of bBi) bMap.set(bi, (bMap.get(bi) || 0) + 1);
-        let overlap = 0;
-        for (const bi of aBi) {
-          const c = bMap.get(bi) || 0;
-          if (c > 0) {
-            overlap += 1;
-            bMap.set(bi, c - 1);
-          }
-        }
-        return (2 * overlap) / (aBi.length + bBi.length);
-      };
 
-      links.forEach((a, index) => {
-        const href = a.href.toLowerCase();
-        const text = a.textContent?.trim() || "";
-        const lowerText = text.toLowerCase();
-        const hardBlockedPatterns = [
-          "/return",
-          "refund",
-          "cancel",
-          "privacy",
-          "terms",
-          "policy",
-          "/contact",
-          "/about",
-          "/support",
-          "/help",
-          "/faq",
-          "/career",
-          "/blog",
-          "/news",
-        ];
+        links.forEach((a, index) => {
+          const href = a.href.toLowerCase();
+          const text = a.textContent?.trim() || "";
+          const lowerText = text.toLowerCase();
+          const hardBlockedPatterns = [
+            "/return",
+            "refund",
+            "cancel",
+            "privacy",
+            "terms",
+            "policy",
+            "/contact",
+            "/about",
+            "/support",
+            "/help",
+            "/faq",
+            "/career",
+            "/blog",
+            "/news",
+          ];
 
-        // 1. Basic Filtering (Fail Fast)
-        // Some sites (including common e-commerce templates) use image-only anchors for product links.
-        // Allow those as long as there is *some* labeling signal (image/title/aria-label) or the link
-        // is in a product container (handled later via scoring).
-        const ariaLabel = a.getAttribute("aria-label") || "";
-        const titleAttr = a.getAttribute("title") || "";
-        const hasImg = !!a.querySelector("img");
-        if (
-          text.length < 4 &&
-          !href.includes("product_id=") &&
-          !hasImg &&
-          ariaLabel.trim().length < 3 &&
-          titleAttr.trim().length < 3
-        )
-          return;
-        if (href.includes("javascript:") || href.includes("#")) return;
-        if (hardBlockedPatterns.some((pattern) => href.includes(pattern) || lowerText.includes(pattern))) return;
+          // 1. Basic Filtering (Fail Fast)
+          // Some sites (including common e-commerce templates) use image-only anchors for product links.
+          // Allow those as long as there is *some* labeling signal (image/title/aria-label) or the link
+          // is in a product container (handled later via scoring).
+          const ariaLabel = a.getAttribute("aria-label") || "";
+          const titleAttr = a.getAttribute("title") || "";
+          const hasImg = !!a.querySelector("img");
+          if (
+            text.length < 4 &&
+            !href.includes("product_id=") &&
+            !hasImg &&
+            ariaLabel.trim().length < 3 &&
+            titleAttr.trim().length < 3
+          )
+            return;
+          if (href.includes("javascript:") || href.includes("#")) return;
+          if (
+            hardBlockedPatterns.some(
+              (pattern) =>
+                href.includes(pattern) || lowerText.includes(pattern),
+            )
+          )
+            return;
 
-        // Skip navigation/sort/compare/search links
-        const isJunk =
-          href === window.location.href.toLowerCase() ||
-          href.includes("sort=") || href.includes("limit=") ||
-          href.includes("page=") || href.includes("order=") ||
-          href.includes("compare") || href.includes("wishlist") ||
-          href.includes("/search?") || href.includes("/search/") ||
-          href.includes("search_query=") ||
-          href.includes("/account") || href.includes("/checkout") ||
-          href.includes("/category/") || href.includes("/categories/") ||
-          href.includes("/brand/") || href.includes("/brands/");
+          // Skip navigation/sort/compare/search links
+          const isJunk =
+            href === window.location.href.toLowerCase() ||
+            href.includes("sort=") ||
+            href.includes("limit=") ||
+            href.includes("page=") ||
+            href.includes("order=") ||
+            href.includes("compare") ||
+            href.includes("wishlist") ||
+            href.includes("/search?") ||
+            href.includes("/search/") ||
+            href.includes("search_query=") ||
+            href.includes("/account") ||
+            href.includes("/checkout") ||
+            href.includes("/category/") ||
+            href.includes("/categories/") ||
+            href.includes("/brand/") ||
+            href.includes("/brands/");
 
-        if (isJunk) return;
+          if (isJunk) return;
 
-        let score = 0;
-        const reasons: string[] = [];
-        let hasPriceSignal = false;
-        let queryWordCount = 0;
-        let queryMatchCount = 0;
+          let score = 0;
+          const reasons: string[] = [];
+          let hasPriceSignal = false;
+          let queryWordCount = 0;
+          let queryMatchCount = 0;
 
-        // 2. Container Score (20% Weight)
-        const productContainer =
-          a.closest(".product-thumb") ||
-          a.closest(".product-layout") ||
-          a.closest(".product-box") ||
-          a.closest(".card") ||
-          a.closest(".p-item") ||
-          a.closest(".product-item") ||
-          a.closest(".main-products") ||
-          a.closest(".product-list") ||
-          a.closest(".search-result");
+          // 2. Container Score (20% Weight)
+          const productContainer =
+            a.closest(".product-thumb") ||
+            a.closest(".product-layout") ||
+            a.closest(".product-box") ||
+            a.closest(".card") ||
+            a.closest(".p-item") ||
+            a.closest(".product-item") ||
+            a.closest(".main-products") ||
+            a.closest(".product-list") ||
+            a.closest(".search-result");
 
-        if (productContainer) {
-          score += 20;
-          reasons.push("In Product Container");
+          if (productContainer) {
+            score += 20;
+            reasons.push("In Product Container");
 
-          // --- NEW: Price Detection ---
-          // Check if parent container has something that looks like money
-          if (productContainer.textContent && /([$\u09F3\u20B9]|BDT|TK)\s?\d+/i.test(productContainer.textContent)) {
-            score += 15;
-            reasons.push("Price Detected Nearby");
-            hasPriceSignal = true;
-          }
-        }
-
-        // --- NEW: Image Quality Check ---
-        const img = a.querySelector("img");
-        if (img) {
-          score += 10;
-          reasons.push("Has Image");
-          // Bonus: Alt text matches query?
-          if (q && img.alt) {
-            const altClean = clean(img.alt);
-            const qClean = clean(q);
-            if (altClean.includes(qClean) || qClean.includes(altClean)) {
+            // --- NEW: Price Detection ---
+            // Check if parent container has something that looks like money
+            if (
+              productContainer.textContent &&
+              /([$\u09F3\u20B9]|BDT|TK)\s?\d+/i.test(
+                productContainer.textContent,
+              )
+            ) {
               score += 15;
-              reasons.push("Image Alt Match");
+              reasons.push("Price Detected Nearby");
+              hasPriceSignal = true;
             }
           }
-        }
 
-        // --- NEW: Text Quality Score ---
-        if (text.length > 10 && text.length < 150) {
-          // Sweet spot for titles
-          score += 5;
-        } else if (text.length < 5) {
-          // "Buy", "More", "View" usually short
-          score -= 5;
-        }
-
-        // 3. Query Match Score (40% Weight)
-        if (q) {
-          const queryWords = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-          queryWordCount = queryWords.length;
-          if (queryWords.length > 0) {
-            queryMatchCount = queryWords.filter(w => lowerText.includes(w) || href.includes(w)).length;
-            const matchRatio = queryMatchCount / queryWords.length;
-
-            // Boost for full matches
-            const boost = matchRatio === 1 ? 40 : (matchRatio * 30);
-            score += boost;
-            reasons.push(`Query Match: ${Math.round(matchRatio * 100)}% `);
-
-            // Special penalty: If query has words, but link text has NONE of them, strict penalty
-            if (queryMatchCount === 0 && !productContainer) {
-              score -= 50;
+          // --- NEW: Image Quality Check ---
+          const img = a.querySelector("img");
+          if (img) {
+            score += 10;
+            reasons.push("Has Image");
+            // Bonus: Alt text matches query?
+            if (q && img.alt) {
+              const altClean = clean(img.alt);
+              const qClean = clean(q);
+              if (altClean.includes(qClean) || qClean.includes(altClean)) {
+                score += 15;
+                reasons.push("Image Alt Match");
+              }
             }
           }
-        }
 
-        // Token-priority weighted scoring: model > brand > size.
-        const weightedModel = (wt?.model || "").toLowerCase();
-        const weightedBrand = (wt?.brand || "").toLowerCase();
-        const weightedSize = (wt?.size || "").toLowerCase();
-        const normalizedTextAndHref = `${lowerText} ${href}`;
-        const tokenized = normalizeTokens(normalizedTextAndHref);
-        if (weightedModel) {
-          const modelCompact = weightedModel.replace(/[^a-z0-9]/g, "");
-          const targetCompact = normalizedTextAndHref.replace(/[^a-z0-9]/g, "");
-          if (targetCompact.includes(modelCompact)) {
-            score += 40;
-            reasons.push("Model Match");
-          } else {
-            const fuzzyModel = diceCoefficient(clean(normalizedTextAndHref), clean(weightedModel));
-            if (fuzzyModel >= 0.72) {
-              score += 16;
-              reasons.push(`Model Fuzzy ${Math.round(fuzzyModel * 100)}%`);
+          // --- NEW: Text Quality Score ---
+          if (text.length > 10 && text.length < 150) {
+            // Sweet spot for titles
+            score += 5;
+          } else if (text.length < 5) {
+            // "Buy", "More", "View" usually short
+            score -= 5;
+          }
+
+          // 3. Query Match Score (40% Weight)
+          if (q) {
+            const queryWords = q
+              .toLowerCase()
+              .split(/\s+/)
+              .filter((w) => w.length > 2);
+            queryWordCount = queryWords.length;
+            if (queryWords.length > 0) {
+              queryMatchCount = queryWords.filter(
+                (w) => lowerText.includes(w) || href.includes(w),
+              ).length;
+              const matchRatio = queryMatchCount / queryWords.length;
+
+              // Boost for full matches
+              const boost = matchRatio === 1 ? 40 : matchRatio * 30;
+              score += boost;
+              reasons.push(`Query Match: ${Math.round(matchRatio * 100)}% `);
+
+              // Special penalty: If query has words, but link text has NONE of them, strict penalty
+              if (queryMatchCount === 0 && !productContainer) {
+                score -= 50;
+              }
+            }
+          }
+
+          // Token-priority weighted scoring: model > brand > size.
+          const weightedModel = (wt?.model || "").toLowerCase();
+          const weightedBrand = (wt?.brand || "").toLowerCase();
+          const weightedSize = (wt?.size || "").toLowerCase();
+          const normalizedTextAndHref = `${lowerText} ${href}`;
+          const tokenized = normalizeTokens(normalizedTextAndHref);
+          if (weightedModel) {
+            const modelCompact = weightedModel.replace(/[^a-z0-9]/g, "");
+            const targetCompact = normalizedTextAndHref.replace(
+              /[^a-z0-9]/g,
+              "",
+            );
+            if (targetCompact.includes(modelCompact)) {
+              score += 40;
+              reasons.push("Model Match");
             } else {
-              score -= 35;
-              reasons.push("Model Missing");
+              const fuzzyModel = diceCoefficient(
+                clean(normalizedTextAndHref),
+                clean(weightedModel),
+              );
+              if (fuzzyModel >= 0.72) {
+                score += 16;
+                reasons.push(`Model Fuzzy ${Math.round(fuzzyModel * 100)}%`);
+              } else {
+                score -= 35;
+                reasons.push("Model Missing");
+              }
             }
           }
-        }
 
-        if (weightedBrand) {
-          const brandCompact = weightedBrand.replace(/[^a-z0-9]/g, "");
-          const targetCompact = normalizedTextAndHref.replace(/[^a-z0-9]/g, "");
-          if (targetCompact.includes(brandCompact)) {
-            score += 14;
-            reasons.push("Brand Match");
-          } else {
-            const fuzzyBrand = diceCoefficient(clean(normalizedTextAndHref), clean(weightedBrand));
-            if (fuzzyBrand >= 0.68) {
-              score += 6;
-              reasons.push(`Brand Fuzzy ${Math.round(fuzzyBrand * 100)}%`);
+          if (weightedBrand) {
+            const brandCompact = weightedBrand.replace(/[^a-z0-9]/g, "");
+            const targetCompact = normalizedTextAndHref.replace(
+              /[^a-z0-9]/g,
+              "",
+            );
+            if (targetCompact.includes(brandCompact)) {
+              score += 14;
+              reasons.push("Brand Match");
+            } else {
+              const fuzzyBrand = diceCoefficient(
+                clean(normalizedTextAndHref),
+                clean(weightedBrand),
+              );
+              if (fuzzyBrand >= 0.68) {
+                score += 6;
+                reasons.push(`Brand Fuzzy ${Math.round(fuzzyBrand * 100)}%`);
+              }
             }
           }
-        }
 
-        if (weightedSize) {
-          const sizeMatch = tokenized.some((t) => t === weightedSize || t === `${weightedSize}inch` || t === `${weightedSize}in`);
-          if (sizeMatch) {
-            score += 8;
-            reasons.push("Size Match");
+          if (weightedSize) {
+            const sizeMatch = tokenized.some(
+              (t) =>
+                t === weightedSize ||
+                t === `${weightedSize}inch` ||
+                t === `${weightedSize}in`,
+            );
+            if (sizeMatch) {
+              score += 8;
+              reasons.push("Size Match");
+            }
           }
-        }
 
-        // 4. URL Structure Score (20% Weight)
-        const isProductUrl =
-          href.includes("/product/") ||
-          href.includes("/p/") ||
-          href.includes("/item/") ||
-          (href.includes("/details/") && !href.includes("search"));
+          // 4. URL Structure Score (20% Weight)
+          const isProductUrl =
+            href.includes("/product/") ||
+            href.includes("/p/") ||
+            href.includes("/item/") ||
+            (href.includes("/details/") && !href.includes("search"));
 
-        if (isProductUrl) {
-          score += 20;
-          reasons.push("Product URL Pattern");
-        } else if (href.split('/').length > 4) {
-          // Deeper links are often products
-          score += 5;
-        }
+          if (isProductUrl) {
+            score += 20;
+            reasons.push("Product URL Pattern");
+          } else if (href.split("/").length > 4) {
+            // Deeper links are often products
+            score += 5;
+          }
 
-        // Brand matching logic removed (legacy)
+          // Brand matching logic removed (legacy)
 
-        // 6. Position Score (Small bias to top results)
-        // Top 5 results get a small boost
-        if (index < 5) {
-          score += (5 - index);
-        }
+          // 6. Position Score (Small bias to top results)
+          // Top 5 results get a small boost
+          if (index < 5) {
+            score += 5 - index;
+          }
 
-        const hasStrongQueryMatch =
-          queryWordCount > 0 &&
-          queryMatchCount >= Math.max(1, Math.ceil(queryWordCount * 0.5));
-        const hasProductSignal = Boolean(productContainer) || isProductUrl || hasPriceSignal || hasStrongQueryMatch;
+          const hasStrongQueryMatch =
+            queryWordCount > 0 &&
+            queryMatchCount >= Math.max(1, Math.ceil(queryWordCount * 0.5));
+          const hasProductSignal =
+            Boolean(productContainer) ||
+            isProductUrl ||
+            hasPriceSignal ||
+            hasStrongQueryMatch;
 
-        // Threshold to be considered a candidate
-        if (score > 10 && hasProductSignal) {
-          candidates.push({ href: a.href, text: text, score, reasons });
-        }
-      });
+          // Threshold to be considered a candidate
+          if (score > 10 && hasProductSignal) {
+            candidates.push({ href: a.href, text: text, score, reasons });
+          }
+        });
 
-      // Sort by score descending
-      candidates.sort((a, b) => b.score - a.score);
+        // Sort by score descending
+        candidates.sort((a, b) => b.score - a.score);
 
-      // Return top candidate or null
-      return candidates.length > 0 ? candidates[0].href : null;
-
-    }, { q: query, wt: weightedTokens || {} });
+        // Return top candidate or null
+        return candidates.length > 0 ? candidates[0].href : null;
+      },
+      { q: query, wt: weightedTokens || {} },
+    );
   }
 
   private async evaluateAdapterProductLink(
@@ -4280,7 +4927,9 @@ export class ScraperService {
     const handler = handlers[adapter];
     if (!handler) return null;
 
-    logger.info(`[ScraperService] Trying search adapter "${adapter}" for ${hostname}`);
+    logger.info(
+      `[ScraperService] Trying search adapter "${adapter}" for ${hostname}`,
+    );
     return await handler();
   }
 
@@ -4295,97 +4944,125 @@ export class ScraperService {
     if (!hostname.includes("startech.com.bd")) return null;
     if (!this.isStartechFallbackEnabled()) return null;
 
-    return await page.evaluate(({ q }) => {
-      const normalize = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
+    return await page.evaluate(
+      ({ q }) => {
+        const normalize = (value: string) =>
+          value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
 
-      const queryTokens = normalize(q).split(" ").filter((t) => t.length >= 2);
-      const modelTokens = queryTokens.filter((t) => /[a-z]/.test(t) && /\d/.test(t));
+        const queryTokens = normalize(q)
+          .split(" ")
+          .filter((t) => t.length >= 2);
+        const modelTokens = queryTokens.filter(
+          (t) => /[a-z]/.test(t) && /\d/.test(t),
+        );
 
-      const scoreHref = (href: string, text: string) => {
-        const normalizedText = normalize(`${text} ${href}`);
-        const normalizedHref = href.toLowerCase();
-        let score = 0;
+        const scoreHref = (href: string, text: string) => {
+          const normalizedText = normalize(`${text} ${href}`);
+          const normalizedHref = href.toLowerCase();
+          let score = 0;
 
-        if (normalizedHref.includes("/product/")) score += 20;
-        if (normalizedHref.includes("/item/")) score += 10;
-        if (normalizedHref.includes("/search") || normalizedHref.includes("manufacturer")) score -= 50;
+          if (normalizedHref.includes("/product/")) score += 20;
+          if (normalizedHref.includes("/item/")) score += 10;
+          if (
+            normalizedHref.includes("/search") ||
+            normalizedHref.includes("manufacturer")
+          )
+            score -= 50;
 
-        for (const token of queryTokens) {
-          if (normalizedText.includes(token)) score += 8;
-        }
-        for (const token of modelTokens) {
-          if (normalizedText.includes(token)) score += 14;
-        }
+          for (const token of queryTokens) {
+            if (normalizedText.includes(token)) score += 8;
+          }
+          for (const token of modelTokens) {
+            if (normalizedText.includes(token)) score += 14;
+          }
 
-        return score;
-      };
+          return score;
+        };
 
-      const candidates: Array<{ href: string; score: number }> = [];
-      const candidateSelectors = [
-        ".p-item-name a[href]",
-        ".product-name a[href]",
-        ".product-title a[href]",
-        ".p-item a[href]",
-        ".product-item a[href]",
-        ".product-thumb a[href]",
-        "main a[href]",
-      ];
+        const candidates: Array<{ href: string; score: number }> = [];
+        const candidateSelectors = [
+          ".p-item-name a[href]",
+          ".product-name a[href]",
+          ".product-title a[href]",
+          ".p-item a[href]",
+          ".product-item a[href]",
+          ".product-thumb a[href]",
+          "main a[href]",
+        ];
 
-      for (const selector of candidateSelectors) {
-        const links = Array.from(document.querySelectorAll(selector)) as HTMLAnchorElement[];
-        for (const link of links) {
-          const href = link.href;
-          const text = (link.textContent || link.getAttribute("title") || link.getAttribute("aria-label") || "").trim();
-          if (!href || href.startsWith("javascript:") || href.includes("#")) continue;
-          if (href.includes("/product/search") || href.includes("/product/manufacturer")) continue;
-          const score = scoreHref(href, text);
-          if (score > 14) candidates.push({ href, score });
-        }
-      }
-
-      // JSON-LD fallback
-      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
-      for (const script of scripts) {
-        const raw = script.textContent || "";
-        if (!raw.trim()) continue;
-        try {
-          const parsed = JSON.parse(raw);
-          const items = Array.isArray(parsed) ? parsed : [parsed];
-          const stack = [...items];
-          while (stack.length > 0) {
-            const node = stack.pop() as any;
-            if (!node) continue;
-            if (Array.isArray(node)) {
-              stack.push(...node);
+        for (const selector of candidateSelectors) {
+          const links = Array.from(
+            document.querySelectorAll(selector),
+          ) as HTMLAnchorElement[];
+          for (const link of links) {
+            const href = link.href;
+            const text = (
+              link.textContent ||
+              link.getAttribute("title") ||
+              link.getAttribute("aria-label") ||
+              ""
+            ).trim();
+            if (!href || href.startsWith("javascript:") || href.includes("#"))
               continue;
-            }
-            if (typeof node === "object") {
-              if (node.url && typeof node.url === "string") {
-                const href = node.url;
-                if (!href.includes("/product/search") && !href.includes("/product/manufacturer")) {
-                  const score = scoreHref(href, `${node.name || ""}`);
-                  if (score > 14) candidates.push({ href, score: score + 6 });
+            if (
+              href.includes("/product/search") ||
+              href.includes("/product/manufacturer")
+            )
+              continue;
+            const score = scoreHref(href, text);
+            if (score > 14) candidates.push({ href, score });
+          }
+        }
+
+        // JSON-LD fallback
+        const scripts = Array.from(
+          document.querySelectorAll('script[type="application/ld+json"]'),
+        );
+        for (const script of scripts) {
+          const raw = script.textContent || "";
+          if (!raw.trim()) continue;
+          try {
+            const parsed = JSON.parse(raw);
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+            const stack = [...items];
+            while (stack.length > 0) {
+              const node = stack.pop() as any;
+              if (!node) continue;
+              if (Array.isArray(node)) {
+                stack.push(...node);
+                continue;
+              }
+              if (typeof node === "object") {
+                if (node.url && typeof node.url === "string") {
+                  const href = node.url;
+                  if (
+                    !href.includes("/product/search") &&
+                    !href.includes("/product/manufacturer")
+                  ) {
+                    const score = scoreHref(href, `${node.name || ""}`);
+                    if (score > 14) candidates.push({ href, score: score + 6 });
+                  }
+                }
+                for (const value of Object.values(node)) {
+                  if (value && typeof value === "object") stack.push(value);
                 }
               }
-              for (const value of Object.values(node)) {
-                if (value && typeof value === "object") stack.push(value);
-              }
             }
+          } catch {
+            // ignore malformed JSON-LD
           }
-        } catch {
-          // ignore malformed JSON-LD
         }
-      }
 
-      if (candidates.length === 0) return null;
-      candidates.sort((a, b) => b.score - a.score);
-      return candidates[0].href || null;
-    }, { q: query });
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0].href || null;
+      },
+      { q: query },
+    );
   }
 
   /**
@@ -4396,103 +5073,137 @@ export class ScraperService {
     query: string,
     hostname: string,
   ): Promise<string | null> {
-    if (!hostname.includes("ryans.com") && !hostname.includes("ryanscomputers.com")) return null;
+    if (
+      !hostname.includes("ryans.com") &&
+      !hostname.includes("ryanscomputers.com")
+    )
+      return null;
     if (!this.isRyansFallbackEnabled()) return null;
 
-    return await page.evaluate(({ q }) => {
-      const normalize = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
+    return await page.evaluate(
+      ({ q }) => {
+        const normalize = (value: string) =>
+          value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
 
-      const queryTokens = normalize(q).split(" ").filter((t) => t.length >= 2);
-      const modelTokens = queryTokens.filter((t) => /[a-z]/.test(t) && /\d/.test(t));
+        const queryTokens = normalize(q)
+          .split(" ")
+          .filter((t) => t.length >= 2);
+        const modelTokens = queryTokens.filter(
+          (t) => /[a-z]/.test(t) && /\d/.test(t),
+        );
 
-      const scoreHref = (href: string, text: string) => {
-        const normalizedText = normalize(`${text} ${href}`);
-        const normalizedHref = href.toLowerCase();
-        let score = 0;
+        const scoreHref = (href: string, text: string) => {
+          const normalizedText = normalize(`${text} ${href}`);
+          const normalizedHref = href.toLowerCase();
+          let score = 0;
 
-        if (normalizedHref.includes("/item/")) score += 20;
-        if (normalizedHref.includes("/product/")) score += 14;
-        if (normalizedHref.includes("/search") || normalizedHref.includes("brand") || normalizedHref.includes("category")) {
-          score -= 40;
-        }
+          if (normalizedHref.includes("/item/")) score += 20;
+          if (normalizedHref.includes("/product/")) score += 14;
+          if (
+            normalizedHref.includes("/search") ||
+            normalizedHref.includes("brand") ||
+            normalizedHref.includes("category")
+          ) {
+            score -= 40;
+          }
 
-        for (const token of queryTokens) {
-          if (normalizedText.includes(token)) score += 7;
-        }
-        for (const token of modelTokens) {
-          if (normalizedText.includes(token)) score += 12;
-        }
+          for (const token of queryTokens) {
+            if (normalizedText.includes(token)) score += 7;
+          }
+          for (const token of modelTokens) {
+            if (normalizedText.includes(token)) score += 12;
+          }
 
-        return score;
-      };
+          return score;
+        };
 
-      const candidates: Array<{ href: string; score: number }> = [];
-      const candidateSelectors = [
-        ".product-content a[href]",
-        ".product-info a[href]",
-        ".item-name a[href]",
-        ".product-title a[href]",
-        ".product-thumb a[href]",
-        ".card-body a[href]",
-        "main a[href*='/item/']",
-        "main a[href*='/product/']",
-      ];
+        const candidates: Array<{ href: string; score: number }> = [];
+        const candidateSelectors = [
+          ".product-content a[href]",
+          ".product-info a[href]",
+          ".item-name a[href]",
+          ".product-title a[href]",
+          ".product-thumb a[href]",
+          ".card-body a[href]",
+          "main a[href*='/item/']",
+          "main a[href*='/product/']",
+        ];
 
-      for (const selector of candidateSelectors) {
-        const links = Array.from(document.querySelectorAll(selector)) as HTMLAnchorElement[];
-        for (const link of links) {
-          const href = link.href;
-          const text = (link.textContent || link.getAttribute("title") || link.getAttribute("aria-label") || "").trim();
-          if (!href || href.startsWith("javascript:") || href.includes("#")) continue;
-          if (href.includes("/search") || href.includes("/brand") || href.includes("/category")) continue;
-          const score = scoreHref(href, text);
-          if (score > 12) candidates.push({ href, score });
-        }
-      }
-
-      // JSON-LD fallback
-      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
-      for (const script of scripts) {
-        const raw = script.textContent || "";
-        if (!raw.trim()) continue;
-        try {
-          const parsed = JSON.parse(raw);
-          const items = Array.isArray(parsed) ? parsed : [parsed];
-          const stack = [...items];
-          while (stack.length > 0) {
-            const node = stack.pop() as any;
-            if (!node) continue;
-            if (Array.isArray(node)) {
-              stack.push(...node);
+        for (const selector of candidateSelectors) {
+          const links = Array.from(
+            document.querySelectorAll(selector),
+          ) as HTMLAnchorElement[];
+          for (const link of links) {
+            const href = link.href;
+            const text = (
+              link.textContent ||
+              link.getAttribute("title") ||
+              link.getAttribute("aria-label") ||
+              ""
+            ).trim();
+            if (!href || href.startsWith("javascript:") || href.includes("#"))
               continue;
-            }
-            if (typeof node === "object") {
-              if (node.url && typeof node.url === "string") {
-                const href = node.url;
-                if (!href.includes("/search") && !href.includes("/brand") && !href.includes("/category")) {
-                  const score = scoreHref(href, `${node.name || ""}`);
-                  if (score > 12) candidates.push({ href, score: score + 6 });
+            if (
+              href.includes("/search") ||
+              href.includes("/brand") ||
+              href.includes("/category")
+            )
+              continue;
+            const score = scoreHref(href, text);
+            if (score > 12) candidates.push({ href, score });
+          }
+        }
+
+        // JSON-LD fallback
+        const scripts = Array.from(
+          document.querySelectorAll('script[type="application/ld+json"]'),
+        );
+        for (const script of scripts) {
+          const raw = script.textContent || "";
+          if (!raw.trim()) continue;
+          try {
+            const parsed = JSON.parse(raw);
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+            const stack = [...items];
+            while (stack.length > 0) {
+              const node = stack.pop() as any;
+              if (!node) continue;
+              if (Array.isArray(node)) {
+                stack.push(...node);
+                continue;
+              }
+              if (typeof node === "object") {
+                if (node.url && typeof node.url === "string") {
+                  const href = node.url;
+                  if (
+                    !href.includes("/search") &&
+                    !href.includes("/brand") &&
+                    !href.includes("/category")
+                  ) {
+                    const score = scoreHref(href, `${node.name || ""}`);
+                    if (score > 12) candidates.push({ href, score: score + 6 });
+                  }
+                }
+                for (const value of Object.values(node)) {
+                  if (value && typeof value === "object") stack.push(value);
                 }
               }
-              for (const value of Object.values(node)) {
-                if (value && typeof value === "object") stack.push(value);
-              }
             }
+          } catch {
+            // ignore malformed JSON-LD
           }
-        } catch {
-          // ignore malformed JSON-LD
         }
-      }
 
-      if (candidates.length === 0) return null;
-      candidates.sort((a, b) => b.score - a.score);
-      return candidates[0].href || null;
-    }, { q: query });
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0].href || null;
+      },
+      { q: query },
+    );
   }
 
   /**
@@ -4505,107 +5216,135 @@ export class ScraperService {
     query: string,
     hostname: string,
   ): Promise<string | null> {
-    if (!hostname.includes("techlandbd.com") && !hostname.includes("techland.com.bd")) return null;
+    if (
+      !hostname.includes("techlandbd.com") &&
+      !hostname.includes("techland.com.bd")
+    )
+      return null;
 
-    return await page.evaluate(({ q }) => {
-      const normalize = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
+    return await page.evaluate(
+      ({ q }) => {
+        const normalize = (value: string) =>
+          value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
 
-      const queryTokens = normalize(q).split(" ").filter((t) => t.length >= 2);
-      const modelTokens = queryTokens.filter((t) => /[a-z]/.test(t) && /\d/.test(t));
+        const queryTokens = normalize(q)
+          .split(" ")
+          .filter((t) => t.length >= 2);
+        const modelTokens = queryTokens.filter(
+          (t) => /[a-z]/.test(t) && /\d/.test(t),
+        );
 
-      const scoreHref = (href: string, text: string) => {
-        const normalizedText = normalize(`${text} ${href}`);
-        const normalizedHref = href.toLowerCase();
-        let score = 0;
+        const scoreHref = (href: string, text: string) => {
+          const normalizedText = normalize(`${text} ${href}`);
+          const normalizedHref = href.toLowerCase();
+          let score = 0;
 
-        if (normalizedHref.includes("/product/")) score += 20;
-        if (normalizedHref.includes("/item/")) score += 12;
-        if (normalizedHref.includes("/search/advance/product/result/")) score += 16;
-        if (
-          normalizedHref.includes("/search?") ||
-          normalizedHref.includes("/search/") && !normalizedHref.includes("/search/advance/product/result/") ||
-          normalizedHref.includes("/manufacturer") ||
-          normalizedHref.includes("/brand")
-        ) {
-          score -= 35;
-        }
-
-        for (const token of queryTokens) {
-          if (normalizedText.includes(token)) score += 7;
-        }
-        for (const token of modelTokens) {
-          if (normalizedText.includes(token)) score += 14;
-        }
-
-        return score;
-      };
-
-      const candidates: Array<{ href: string; score: number }> = [];
-      const candidateSelectors = [
-        ".p-item-name a[href]",
-        ".product-name a[href]",
-        ".product-title a[href]",
-        ".p-item a[href]",
-        ".product-item a[href]",
-        ".product-thumb a[href]",
-        ".product-box a[href]",
-        ".card a[href]",
-        "main a[href]",
-      ];
-
-      for (const selector of candidateSelectors) {
-        const links = Array.from(document.querySelectorAll(selector)) as HTMLAnchorElement[];
-        for (const link of links) {
-          const href = link.href;
-          const text = (link.textContent || link.getAttribute("title") || link.getAttribute("aria-label") || "").trim();
-          if (!href || href.startsWith("javascript:") || href.includes("#")) continue;
-          if (href.includes("/search?") || href.includes("/manufacturer") || href.includes("/brand")) continue;
-          const score = scoreHref(href, text);
-          if (score > 10) candidates.push({ href, score });
-        }
-      }
-
-      // JSON-LD fallback
-      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
-      for (const script of scripts) {
-        const raw = script.textContent || "";
-        if (!raw.trim()) continue;
-        try {
-          const parsed = JSON.parse(raw);
-          const items = Array.isArray(parsed) ? parsed : [parsed];
-          const stack = [...items];
-          while (stack.length > 0) {
-            const node = stack.pop() as any;
-            if (!node) continue;
-            if (Array.isArray(node)) {
-              stack.push(...node);
-              continue;
-            }
-            if (typeof node === "object") {
-              if (node.url && typeof node.url === "string") {
-                const href = node.url;
-                const score = scoreHref(href, `${node.name || ""}`);
-                if (score > 10) candidates.push({ href, score: score + 6 });
-              }
-              for (const value of Object.values(node)) {
-                if (value && typeof value === "object") stack.push(value);
-              }
-            }
+          if (normalizedHref.includes("/product/")) score += 20;
+          if (normalizedHref.includes("/item/")) score += 12;
+          if (normalizedHref.includes("/search/advance/product/result/"))
+            score += 16;
+          if (
+            normalizedHref.includes("/search?") ||
+            (normalizedHref.includes("/search/") &&
+              !normalizedHref.includes("/search/advance/product/result/")) ||
+            normalizedHref.includes("/manufacturer") ||
+            normalizedHref.includes("/brand")
+          ) {
+            score -= 35;
           }
-        } catch {
-          // ignore malformed JSON-LD
-        }
-      }
 
-      if (candidates.length === 0) return null;
-      candidates.sort((a, b) => b.score - a.score);
-      return candidates[0].href || null;
-    }, { q: query });
+          for (const token of queryTokens) {
+            if (normalizedText.includes(token)) score += 7;
+          }
+          for (const token of modelTokens) {
+            if (normalizedText.includes(token)) score += 14;
+          }
+
+          return score;
+        };
+
+        const candidates: Array<{ href: string; score: number }> = [];
+        const candidateSelectors = [
+          ".p-item-name a[href]",
+          ".product-name a[href]",
+          ".product-title a[href]",
+          ".p-item a[href]",
+          ".product-item a[href]",
+          ".product-thumb a[href]",
+          ".product-box a[href]",
+          ".card a[href]",
+          "main a[href]",
+        ];
+
+        for (const selector of candidateSelectors) {
+          const links = Array.from(
+            document.querySelectorAll(selector),
+          ) as HTMLAnchorElement[];
+          for (const link of links) {
+            const href = link.href;
+            const text = (
+              link.textContent ||
+              link.getAttribute("title") ||
+              link.getAttribute("aria-label") ||
+              ""
+            ).trim();
+            if (!href || href.startsWith("javascript:") || href.includes("#"))
+              continue;
+            if (
+              href.includes("/search?") ||
+              href.includes("/manufacturer") ||
+              href.includes("/brand")
+            )
+              continue;
+            const score = scoreHref(href, text);
+            if (score > 10) candidates.push({ href, score });
+          }
+        }
+
+        // JSON-LD fallback
+        const scripts = Array.from(
+          document.querySelectorAll('script[type="application/ld+json"]'),
+        );
+        for (const script of scripts) {
+          const raw = script.textContent || "";
+          if (!raw.trim()) continue;
+          try {
+            const parsed = JSON.parse(raw);
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+            const stack = [...items];
+            while (stack.length > 0) {
+              const node = stack.pop() as any;
+              if (!node) continue;
+              if (Array.isArray(node)) {
+                stack.push(...node);
+                continue;
+              }
+              if (typeof node === "object") {
+                if (node.url && typeof node.url === "string") {
+                  const href = node.url;
+                  const score = scoreHref(href, `${node.name || ""}`);
+                  if (score > 10) candidates.push({ href, score: score + 6 });
+                }
+                for (const value of Object.values(node)) {
+                  if (value && typeof value === "object") stack.push(value);
+                }
+              }
+            }
+          } catch {
+            // ignore malformed JSON-LD
+          }
+        }
+
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0].href || null;
+      },
+      { q: query },
+    );
   }
 
   // Helper to handle the magic retry suffix transparently if needed,
@@ -4615,5 +5354,4 @@ export class ScraperService {
   // OR just trust the length check logic if we don't pass a flag.
   // But to be safe, let's just use the words length check logic and valid recursion.
   // We'll strip the flag in sanitizeQuery if it exists to keep the search clean.
-
 }

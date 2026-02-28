@@ -83,6 +83,7 @@ async function handleGET(_req: NextRequest) {
       syncLastAction: site.syncLastAction,
       syncStartedAt: site.syncStartedAt,
       lastSyncAt: site.lastSyncAt,
+      syncState: site.syncState,
       progressPercent,
       latestLogAt: siteLogs[0]?.createdAt || null,
       logs: siteLogs,

@@ -17,6 +17,7 @@ export interface SiteResponseDTO {
 
   // Sync Status
   isSyncing: boolean;
+  syncState: string;
   syncTotal: number;
   syncProcessed: number;
   syncLastAction: string | null;
@@ -52,6 +53,7 @@ type SiteDTOInput = Pick<
   | "baseUrl"
   | "type"
   | "isSyncing"
+  | "syncState"
   | "syncTotal"
   | "syncProcessed"
   | "syncLastAction"
@@ -119,6 +121,7 @@ export function toSiteDTO(site: SiteDTOInput, stats: SiteStats = {}): SiteRespon
     totalScraped: stats.totalScrapedProductsCount || 0,
 
     isSyncing: site.isSyncing,
+    syncState: site.syncState,
     syncTotal: site.syncTotal,
     syncProcessed: site.syncProcessed,
     syncLastAction: site.syncLastAction,

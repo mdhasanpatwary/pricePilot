@@ -47,6 +47,29 @@ import { getRedisConnection } from '@/lib/queue/connection';
 
 const ANON_METRIC_KEY_PREFIX = 'pp:scrape:anon:minute:';
 
+/** Redis key prefix for caching negative API detection results (site has no API) */
+const NEGATIVE_DETECTION_PREFIX = 'pp:api:no-api:';
+/** TTL for negative API detection cache entries (1 hour) */
+const NEGATIVE_DETECTION_TTL_SECONDS = 3600;
+
+/**
+ * URL path patterns that are known to be non-product pages.
+ * Scraping these will always fail price extraction and should be skipped.
+ */
+const NON_PRODUCT_URL_PATTERNS = [
+    '/product/manufacturer',
+    '/product/search',
+    '/product/category',
+    '/products/manufacturer',
+    '/brand/',
+    '/brands/',
+    '/manufacturer/',
+    '/manufacturers/',
+    '/category/',
+    '/categories/',
+    '/shop/manufacturer',
+];
+
 /**
  * Scrape request interface
  */
@@ -106,6 +129,12 @@ export class ScrapeOrchestrator {
     private concurrencyLimiter: ConcurrencyLimiter;
     private statusSpikeTracker: StatusSpikeTracker;
 
+    /**
+     * In-flight API detection promises keyed by competitorWebsiteId.
+     * Prevents multiple concurrent detection attempts for the same site.
+     */
+    private static inFlightDetections = new Map<string, Promise<Partial<APIPattern>[]>>();
+
     constructor() {
         this.detectionEngine = new DetectionEngine();
         this.proxyManager = new ProxyManager();
@@ -134,6 +163,52 @@ export class ScrapeOrchestrator {
 
     private hasProductContext(request: ScrapeRequest): request is ScrapeRequest & { competitorProductId: string } {
         return Boolean(request.competitorProductId);
+    }
+
+    /**
+     * Check if a URL is a non-product page (listing, category, manufacturer index).
+     * Scraping these will always fail price extraction.
+     */
+    private isNonProductUrl(url: string): boolean {
+        try {
+            const pathname = new URL(url).pathname.toLowerCase();
+            return NON_PRODUCT_URL_PATTERNS.some(pattern => pathname.includes(pattern));
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Check if negative API detection result is cached for this site.
+     */
+    private async isNegativeDetectionCached(competitorWebsiteId: string): Promise<boolean> {
+        try {
+            const redis = getRedisConnection();
+            const result = await redis.get(`${NEGATIVE_DETECTION_PREFIX}${competitorWebsiteId}`);
+            return result === '1';
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Cache a negative API detection result (site has no API).
+     */
+    private async cacheNegativeDetection(competitorWebsiteId: string): Promise<void> {
+        try {
+            const redis = getRedisConnection();
+            await redis.set(
+                `${NEGATIVE_DETECTION_PREFIX}${competitorWebsiteId}`,
+                '1',
+                'EX',
+                NEGATIVE_DETECTION_TTL_SECONDS
+            );
+        } catch (error) {
+            logger.debug('[ScrapeOrchestrator] Failed to cache negative detection', {
+                competitorWebsiteId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
 
     private async recordAnonymousScrapeMetric(request: ScrapeRequest, result: ScrapeResult): Promise<void> {
@@ -191,6 +266,30 @@ export class ScrapeOrchestrator {
         const startTime = Date.now();
         const timestamp = new Date();
 
+        // Early exit: skip non-product URLs (listing/category/manufacturer pages)
+        if (this.isNonProductUrl(request.url)) {
+            logger.info('[ScrapeOrchestrator] Skipping non-product URL', {
+                url: request.url,
+                competitorWebsiteId: request.competitorWebsiteId,
+            });
+
+            return {
+                success: false,
+                scrapeStatus: ScrapeExecutionStatus.FAILED,
+                protectionDetected: false,
+                inStock: null,
+                explicitOutOfStock: false,
+                geoVariantDetected: false,
+                attempts: 0,
+                finalStrategy: ScrapingStrategy.HTTP_CLIENT,
+                responseTime: Date.now() - startTime,
+                timestamp,
+                errorMessage: 'Skipped: non-product URL (listing/category/manufacturer page)',
+                method: 'html',
+                proxyUsed: false,
+            };
+        }
+
         logger.info('[ScrapeOrchestrator] Starting scrape', {
             competitorProductId: request.competitorProductId,
             competitorWebsiteId: request.competitorWebsiteId,
@@ -223,77 +322,109 @@ export class ScrapeOrchestrator {
             // Step 2: Run API detection if no cached pattern
             // Requirements: 3.1, 4.1
             if (!apiPattern) {
-                logger.info('[ScrapeOrchestrator] No cached API pattern, running detection', {
-                    competitorWebsiteId: request.competitorWebsiteId,
-                });
+                // Check negative detection cache before running expensive detection
+                const negCached = await this.isNegativeDetectionCached(request.competitorWebsiteId);
 
-                const detectionStart = Date.now();
-
-                try {
-                    // Get base URL for detection (use product listing page if available)
-                    const baseUrl = await this.getBaseUrlForDetection(request.competitorWebsiteId, request.url);
-
-                    const patterns = await this.apiDetector.detectAPIs(baseUrl, {
-                        timeout: 30000,
-                        maxPages: 3,
-                        minConfidence: 70,
-                    });
-
-                    detectionTime = Date.now() - detectionStart;
-
-                    if (patterns.length > 0) {
-                        // Use highest ranked pattern
-                        const bestPattern = patterns[0];
-
-                        logger.info('[ScrapeOrchestrator] API detection successful', {
-                            competitorWebsiteId: request.competitorWebsiteId,
-                            patternsFound: patterns.length,
-                            confidenceScore: bestPattern.confidenceScore,
-                            detectionTime,
-                        });
-
-                        // Store pattern in cache
-                        // Requirement: 6.3
-                        await this.apiCache.storePattern(request.competitorWebsiteId, {
-                            tenantId: request.tenantId,
-                            competitorWebsiteId: request.competitorWebsiteId,
-                            url: bestPattern.url!,
-                            method: bestPattern.method!,
-                            headers: bestPattern.headers!,
-                            queryParams: bestPattern.queryParams!,
-                            bodyTemplate: bestPattern.bodyTemplate,
-                            responseFormat: bestPattern.responseFormat!,
-                            dataPath: bestPattern.dataPath!,
-                            fieldMappings: bestPattern.fieldMappings!,
-                            confidenceScore: bestPattern.confidenceScore!,
-                            paginationPattern: bestPattern.paginationPattern,
-                            successCount: 0,
-                            failureCount: 0,
-                            lastUsedAt: new Date(),
-                        });
-
-                        apiPattern = await this.apiCache.getPattern(request.competitorWebsiteId);
-                    } else {
-                        logger.info('[ScrapeOrchestrator] No API patterns discovered', {
-                            competitorWebsiteId: request.competitorWebsiteId,
-                            detectionTime,
-                        });
-
-                        // No need to mark website - absence of ApiPattern record indicates no API available
-                        // Requirement: 4.5
-                    }
-                } catch (error) {
-                    detectionTime = Date.now() - detectionStart;
-                    logger.error('[ScrapeOrchestrator] API detection failed', {
+                if (negCached) {
+                    logger.debug('[ScrapeOrchestrator] Skipping API detection (negative cache hit)', {
                         competitorWebsiteId: request.competitorWebsiteId,
-                        error: error instanceof Error ? error.message : 'Unknown error',
-                        detectionTime,
+                    });
+                } else {
+                    logger.info('[ScrapeOrchestrator] No cached API pattern, running detection', {
+                        competitorWebsiteId: request.competitorWebsiteId,
                     });
 
-                    // No need to mark website - absence of ApiPattern record indicates no API available
-                    // Requirements: 4.1, 4.5
+                    const detectionStart = Date.now();
 
-                    // Continue to HTML scraping fallback
+                    try {
+                        // Deduplicate: check if detection is already in-flight for this site
+                        let detectionPromise = ScrapeOrchestrator.inFlightDetections.get(request.competitorWebsiteId);
+
+                        if (detectionPromise) {
+                            logger.debug('[ScrapeOrchestrator] Joining in-flight API detection', {
+                                competitorWebsiteId: request.competitorWebsiteId,
+                            });
+                        } else {
+                            // Get base URL for detection (use product listing page if available)
+                            const baseUrl = await this.getBaseUrlForDetection(request.competitorWebsiteId, request.url);
+
+                            detectionPromise = this.apiDetector.detectAPIs(
+                                baseUrl,
+                                {
+                                    timeout: 30000,
+                                    maxPages: 3,
+                                    minConfidence: 70,
+                                },
+                                request.competitorWebsiteId,
+                                request.tenantId
+                            );
+
+                            ScrapeOrchestrator.inFlightDetections.set(request.competitorWebsiteId, detectionPromise);
+
+                            // Cleanup the in-flight entry when done (success or failure)
+                            detectionPromise.finally(() => {
+                                ScrapeOrchestrator.inFlightDetections.delete(request.competitorWebsiteId);
+                            });
+                        }
+
+                        const patterns = await detectionPromise;
+
+                        detectionTime = Date.now() - detectionStart;
+
+                        if (patterns.length > 0) {
+                            // Use highest ranked pattern
+                            const bestPattern = patterns[0];
+
+                            logger.info('[ScrapeOrchestrator] API detection successful', {
+                                competitorWebsiteId: request.competitorWebsiteId,
+                                patternsFound: patterns.length,
+                                confidenceScore: bestPattern.confidenceScore,
+                                detectionTime,
+                            });
+
+                            // Store pattern in cache
+                            // Requirement: 6.3
+                            await this.apiCache.storePattern(request.competitorWebsiteId, {
+                                tenantId: request.tenantId,
+                                competitorWebsiteId: request.competitorWebsiteId,
+                                url: bestPattern.url!,
+                                method: bestPattern.method!,
+                                headers: bestPattern.headers!,
+                                queryParams: bestPattern.queryParams!,
+                                bodyTemplate: bestPattern.bodyTemplate,
+                                responseFormat: bestPattern.responseFormat!,
+                                dataPath: bestPattern.dataPath!,
+                                fieldMappings: bestPattern.fieldMappings!,
+                                confidenceScore: bestPattern.confidenceScore!,
+                                paginationPattern: bestPattern.paginationPattern,
+                                successCount: 0,
+                                failureCount: 0,
+                                lastUsedAt: new Date(),
+                            });
+
+                            apiPattern = await this.apiCache.getPattern(request.competitorWebsiteId);
+                        } else {
+                            logger.info('[ScrapeOrchestrator] No API patterns discovered', {
+                                competitorWebsiteId: request.competitorWebsiteId,
+                                detectionTime,
+                            });
+
+                            // Cache negative result to avoid repeated detection
+                            await this.cacheNegativeDetection(request.competitorWebsiteId);
+                        }
+                    } catch (error) {
+                        detectionTime = Date.now() - detectionStart;
+                        logger.error('[ScrapeOrchestrator] API detection failed', {
+                            competitorWebsiteId: request.competitorWebsiteId,
+                            error: error instanceof Error ? error.message : 'Unknown error',
+                            detectionTime,
+                        });
+
+                        // Cache negative result on failure too to avoid hammering
+                        await this.cacheNegativeDetection(request.competitorWebsiteId);
+
+                        // Continue to HTML scraping fallback
+                    }
                 }
             }
 
@@ -1546,6 +1677,16 @@ export class ScrapeOrchestrator {
         result: ScrapeResult
     ): Promise<void> {
         try {
+            // Don't count failures from non-product URLs toward domain escalation.
+            // These always fail price extraction and would unfairly inflate the counter.
+            if (!result.success && this.isNonProductUrl(request.url)) {
+                logger.debug('[ScrapeOrchestrator] Skipping domain failure escalation for non-product URL', {
+                    url: request.url,
+                    competitorWebsiteId: request.competitorWebsiteId,
+                });
+                return;
+            }
+
             const domain = this.getDomainKey(request.url, request.competitorWebsiteId);
             const existing = await prisma.domainProfile.findUnique({
                 where: { domain },

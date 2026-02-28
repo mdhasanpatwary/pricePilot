@@ -39,10 +39,31 @@ async function handlePOST(req: NextRequest) {
     }
 
     if (site.syncState === "IDLE" || site.syncState === "STOPPED") {
-      return NextResponse.json({ error: "Sync is not currently running" }, { status: 400 });
+      return NextResponse.json({
+        success: true,
+        message: "Sync is already idle",
+      });
     }
 
     if (site.syncState === "STOPPING") {
+      // If stuck in STOPPING for more than 2 minutes, force-reset to IDLE
+      // We use updatedAt as a proxy for when STOPPING began, since the DB updates
+      // the record when syncState changes to STOPPING.
+      const stuckThresholdMs = 2 * 60 * 1000;
+      const updatedAtTime = site.updatedAt ? new Date(site.updatedAt).getTime() : Date.now();
+      const stuckDuration = Date.now() - updatedAtTime;
+
+      if (stuckDuration > stuckThresholdMs || !site.syncStartedAt) {
+        await prisma.site.update({
+          where: { id: siteId },
+          data: { isSyncing: false, syncState: "IDLE", syncLastAction: "Force-stopped (stuck in STOPPING state)" },
+        });
+        return NextResponse.json({
+          success: true,
+          message: "Crawler force-stopped (was stuck)",
+        });
+      }
+
       return NextResponse.json({
         success: true,
         message: "Stop signal already sent",
@@ -51,7 +72,7 @@ async function handlePOST(req: NextRequest) {
 
     await prisma.site.update({
       where: { id: siteId },
-      data: { isSyncing: true, syncState: "STOPPING", syncLastAction: "Stopping sync session..." },
+      data: { isSyncing: false, syncState: "STOPPING", syncLastAction: "Stopping sync session..." },
     });
 
     // Invalidate competitors list cache for this tenant

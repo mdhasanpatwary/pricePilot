@@ -167,7 +167,7 @@ function scheduleRestart(reason: string): void {
     const delay = Math.floor(Math.random() * windowMs);
     console.warn(`[WorkerMemoryGuard] scheduling restart in ${delay}ms (reason=${reason})`);
     setTimeout(() => {
-      gracefulShutdown(1).catch(() => {});
+      gracefulShutdown(1).catch(() => { });
     }, delay);
   } else {
     void gracefulShutdown(1);
@@ -251,7 +251,7 @@ function applyMemoryGuardDefaults(): void {
 
 async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
   if (!shouldEnforceSingleWorkerInstance()) {
-    return async () => {};
+    return async () => { };
   }
 
   const payload: WorkerLockPayload = {
@@ -312,6 +312,59 @@ async function acquireWorkerLock(): Promise<(() => Promise<void>) | null> {
   }
 }
 
+let syncFullWorker: any = null;
+let syncDeltaWorker: any = null;
+let scrapeHighWorker: any = null;
+let scrapeLowWorker: any = null;
+let notificationWorker: any = null;
+let isShuttingDown = false;
+let workerRssMonitorTimer: NodeJS.Timeout | null = null;
+let globalBudgetCleanupTimer: NodeJS.Timeout | null = null;
+let releaseWorkerLock: (() => Promise<void>) | null = null;
+
+// Handle graceful shutdown (works both in active + degraded modes).
+const gracefulShutdown = async (
+  exitOrSignal: number | NodeJS.Signals = 0,
+) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
+    SIGINT: 130,
+    SIGTERM: 143,
+  };
+  const exitCode =
+    typeof exitOrSignal === "number"
+      ? exitOrSignal
+      : (signalExitCodes[exitOrSignal] ?? 0);
+  console.log("🛑 Shutting down workers...");
+  if (workerRssMonitorTimer) {
+    clearInterval(workerRssMonitorTimer);
+    workerRssMonitorTimer = null;
+  }
+  if (globalBudgetCleanupTimer) {
+    clearInterval(globalBudgetCleanupTimer);
+    globalBudgetCleanupTimer = null;
+  }
+  try {
+    if (syncFullWorker) await syncFullWorker.close();
+    if (syncDeltaWorker) await syncDeltaWorker.close();
+  } catch { }
+  try {
+    if (scrapeHighWorker) await scrapeHighWorker.close();
+    if (scrapeLowWorker) await scrapeLowWorker.close();
+  } catch { }
+  try {
+    if (notificationWorker) await notificationWorker.close();
+  } catch { }
+  // Best-effort: close the shared Playwright pool to avoid lingering Chromium processes.
+  try {
+    const { BrowserPool } = await import("../lib/services/browser/unified-browser-pool");
+    await BrowserPool.shutdown();
+  } catch { }
+  await releaseWorkerLock?.().catch(() => { });
+  process.exit(exitCode);
+};
+
 async function start() {
   // apply optional startup jitter so that rolling restarts (e.g. during
   // deployments or memory-based exits) don't all hit at once.
@@ -322,8 +375,6 @@ async function start() {
     await new Promise((r) => setTimeout(r, delay));
   }
 
-  let releaseWorkerLock: (() => Promise<void>) | null = null;
-
   try {
     releaseWorkerLock = await acquireWorkerLock();
     if (!releaseWorkerLock) {
@@ -331,15 +382,7 @@ async function start() {
     }
 
     let started = false;
-    let syncFullWorker: any = null;
-    let syncDeltaWorker: any = null;
-    let scrapeHighWorker: any = null;
-    let scrapeLowWorker: any = null;
-    let notificationWorker: any = null;
     let degraded = false;
-    let isShuttingDown = false;
-    let workerRssMonitorTimer: NodeJS.Timeout | null = null;
-    let globalBudgetCleanupTimer: NodeJS.Timeout | null = null;
 
     const handleProcessError = (err: unknown) => {
       if (process.env.NODE_ENV !== "production" && isRedisStartupError(err)) {
@@ -356,9 +399,9 @@ async function start() {
       process.exit(1);
     };
 
-      // Prevent redis startup failures from hard-crashing `yarn dev:full` in dev.
-      process.on("unhandledRejection", handleProcessError);
-      process.on("uncaughtException", handleProcessError);
+    // Prevent redis startup failures from hard-crashing `yarn dev:full` in dev.
+    process.on("unhandledRejection", handleProcessError);
+    process.on("uncaughtException", handleProcessError);
 
     const startWorkersOnce = async (): Promise<void> => {
       applyMemoryGuardDefaults();
@@ -404,49 +447,6 @@ async function start() {
       started = true;
     };
 
-    // Handle graceful shutdown (works both in active + degraded modes).
-    const gracefulShutdown = async (
-      exitOrSignal: number | NodeJS.Signals = 0,
-    ) => {
-      if (isShuttingDown) return;
-      isShuttingDown = true;
-      const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
-        SIGINT: 130,
-        SIGTERM: 143,
-      };
-      const exitCode =
-        typeof exitOrSignal === "number"
-          ? exitOrSignal
-          : (signalExitCodes[exitOrSignal] ?? 0);
-      console.log("🛑 Shutting down workers...");
-      if (workerRssMonitorTimer) {
-        clearInterval(workerRssMonitorTimer);
-        workerRssMonitorTimer = null;
-      }
-      if (globalBudgetCleanupTimer) {
-        clearInterval(globalBudgetCleanupTimer);
-        globalBudgetCleanupTimer = null;
-      }
-      try {
-        if (syncFullWorker) await syncFullWorker.close();
-        if (syncDeltaWorker) await syncDeltaWorker.close();
-      } catch { }
-      try {
-        if (scrapeHighWorker) await scrapeHighWorker.close();
-        if (scrapeLowWorker) await scrapeLowWorker.close();
-      } catch { }
-      try {
-        if (notificationWorker) await notificationWorker.close();
-      } catch { }
-      // Best-effort: close the shared Playwright pool to avoid lingering Chromium processes.
-      try {
-        const { BrowserPool } = await import("../lib/services/browser/unified-browser-pool");
-        await BrowserPool.shutdown();
-      } catch { }
-      await releaseWorkerLock?.();
-      process.exit(exitCode);
-    };
-
     const startWorkerRssGuard = () => {
       const maxRssMb = parsePositiveInt(process.env.WORKER_MAX_RSS_MB, 0, 0);
       const warnRssMb = parsePositiveInt(process.env.WORKER_RSS_WARN_MB, Math.max(1024, Math.floor(maxRssMb * 0.75)), 256);
@@ -468,7 +468,7 @@ async function start() {
           });
         }
 
-          if (rssMb > maxRssMb) {
+        if (rssMb > maxRssMb) {
           console.error("[WorkerMemoryGuard] RSS limit exceeded, triggering graceful restart", {
             rssMb,
             maxRssMb,

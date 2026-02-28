@@ -74,9 +74,12 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
         },
       });
 
+      // Verify CRON_SECRET is available (use empty string as fallback)
+      const cronSecret = process.env.CRON_SECRET;
+      
       // Attempt to trigger critical cron job
       const cronResponse = await request.post(`${INTERNAL_API}/cron/analytics`, {
-        headers: { "x-cron-secret": process.env.CRON_SECRET },
+        headers: { "x-cron-secret": cronSecret || '' }, // Provide default if undefined
       });
 
       // Critical job should abort, not hang
@@ -100,6 +103,9 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
 
       expect(injectResponse.status()).toBe(200);
       const { chaosId } = await injectResponse.json();
+      // Verify chaosId was returned for cleanup purposes
+      expect(chaosId).toBeDefined();
+      expect(typeof chaosId).toBe('string');
 
       // Enqueue a test job
       const queueResponse = await request.post(
@@ -190,6 +196,9 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
 
       expect(injectResponse.status()).toBe(200);
       const { chaosId } = await injectResponse.json();
+      // Verify chaosId was returned for cleanup purposes
+      expect(chaosId).toBeDefined();
+      expect(typeof chaosId).toBe('string');
 
       // Attempt scrape job (will fail during crash)
       const scrapeResponse = await request.post(
@@ -364,7 +373,10 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
       let requestsInWindow = 0;
 
       for (let i = 0; i < 50; i++) {
+        // Verify health endpoint is responding
         const result = await request.get(`${BASE_URL}/api/v1/health`);
+        expect(result.status()).toBeGreaterThanOrEqual(200);
+        expect(result.status()).toBeLessThan(600);
         requestsInWindow++;
 
         if (Date.now() - startTime > 1000) {
@@ -397,6 +409,9 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
 
       expect(injectResponse.status()).toBe(200);
       const { chaosId } = await injectResponse.json();
+      // Verify chaosId was returned for cleanup purposes
+      expect(chaosId).toBeDefined();
+      expect(typeof chaosId).toBe('string');
 
       // Wait for scenario
       await new Promise((resolve) => setTimeout(resolve, 35000));
@@ -499,6 +514,8 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
           severity: "high",
         },
       });
+      // Verify Redis chaos injection was accepted
+      expect(redis.status()).toBe(200);
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
@@ -509,6 +526,8 @@ test.describe("Phase 8: Chaos & Failure Testing", () => {
           severity: "medium",
         },
       });
+      // Verify Network chaos injection was accepted
+      expect(network.status()).toBe(200);
 
       // System should handle overlapping failures
       const requestDuringChaos = await request.get(`${BASE_URL}/api/v1/health`);

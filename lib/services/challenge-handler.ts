@@ -1,9 +1,15 @@
-import { Page } from 'playwright';
-import { logger } from '@/lib/logger';
+import { Page } from "playwright";
+import { logger } from "@/lib/logger";
 
 export interface ChallengeResult {
   detected: boolean;
-  type: 'cloudflare' | 'turnstile' | 'recaptcha' | 'perimeter-x' | 'datadome' | 'unknown';
+  type:
+    | "cloudflare"
+    | "turnstile"
+    | "recaptcha"
+    | "perimeter-x"
+    | "datadome"
+    | "unknown";
   solved: boolean;
   attempts: number;
   duration: number;
@@ -35,10 +41,10 @@ export class ChallengeHandler {
   /**
    * Detect if a challenge is present on the page.
    * Checks for various anti-bot challenges including Cloudflare, Turnstile, reCAPTCHA, PerimeterX, and DataDome.
-   * 
+   *
    * @param page - Playwright page object to check
    * @returns Challenge detection result with type and detection status
-   * 
+   *
    * @example
    * ```typescript
    * const result = await challengeHandler.detectChallenge(page);
@@ -53,28 +59,40 @@ export class ChallengeHandler {
     try {
       // Check for Cloudflare challenge
       const cloudflareChallenge = await page.evaluate(() => {
+        if (
+          document.body &&
+          document.body.innerText.length > 5000 &&
+          document.querySelectorAll("a").length > 20
+        )
+          return false;
         return !!(
-          document.querySelector('.cf-challenge') ||
+          document.querySelector(".cf-challenge") ||
           document.querySelector('[id*="cf-challenge"]') ||
-          document.body?.textContent?.includes('Checking your browser') ||
-          document.body?.textContent?.includes('cf-browser-verification')
+          document.body?.textContent?.includes("Checking your browser") ||
+          document.body?.textContent?.includes("cf-browser-verification")
         );
       });
 
       if (cloudflareChallenge) {
         return {
           detected: true,
-          type: 'cloudflare',
+          type: "cloudflare",
           solved: false,
           attempts: 0,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         };
       }
 
       // Check for Turnstile challenge
       const turnstileChallenge = await page.evaluate(() => {
+        if (
+          document.body &&
+          document.body.innerText.length > 5000 &&
+          document.querySelectorAll("a").length > 20
+        )
+          return false;
         return !!(
-          document.querySelector('.cf-turnstile') ||
+          document.querySelector(".cf-turnstile") ||
           document.querySelector('iframe[src*="turnstile"]') ||
           document.querySelector('[id*="cf-turnstile"]')
         );
@@ -83,40 +101,52 @@ export class ChallengeHandler {
       if (turnstileChallenge) {
         return {
           detected: true,
-          type: 'turnstile',
+          type: "turnstile",
           solved: false,
           attempts: 0,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         };
       }
 
       // Check for reCAPTCHA challenge
       const recaptchaChallenge = await page.evaluate(() => {
+        if (
+          document.body &&
+          document.body.innerText.length > 5000 &&
+          document.querySelectorAll("a").length > 20
+        )
+          return false;
         return !!(
-          document.querySelector('.g-recaptcha') ||
+          document.querySelector(".g-recaptcha") ||
           document.querySelector('iframe[src*="recaptcha"]') ||
           document.querySelector('[id*="recaptcha"]') ||
-          document.querySelector('.recaptcha')
+          document.querySelector(".recaptcha")
         );
       });
 
       if (recaptchaChallenge) {
         return {
           detected: true,
-          type: 'recaptcha',
+          type: "recaptcha",
           solved: false,
           attempts: 0,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         };
       }
 
       // Check for PerimeterX challenge
       const perimeterXChallenge = await page.evaluate(() => {
-        const hasPxCookie = document.cookie.includes('_px');
+        if (
+          document.body &&
+          document.body.innerText.length > 5000 &&
+          document.querySelectorAll("a").length > 20
+        )
+          return false;
+        const hasPxCookie = document.cookie.includes("_px");
         const hasPxElement = !!(
           document.querySelector('[id*="px-captcha"]') ||
-          document.querySelector('.px-captcha') ||
-          document.body?.textContent?.includes('PerimeterX')
+          document.querySelector(".px-captcha") ||
+          document.body?.textContent?.includes("PerimeterX")
         );
         return hasPxCookie || hasPxElement;
       });
@@ -124,20 +154,26 @@ export class ChallengeHandler {
       if (perimeterXChallenge) {
         return {
           detected: true,
-          type: 'perimeter-x',
+          type: "perimeter-x",
           solved: false,
           attempts: 0,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         };
       }
 
       // Check for DataDome challenge
       const datadomeChallenge = await page.evaluate(() => {
-        const hasDatadomeCookie = document.cookie.includes('datadome');
+        if (
+          document.body &&
+          document.body.innerText.length > 5000 &&
+          document.querySelectorAll("a").length > 20
+        )
+          return false;
+        const hasDatadomeCookie = document.cookie.includes("datadome");
         const hasDatadomeElement = !!(
           document.querySelector('[id*="datadome"]') ||
-          document.querySelector('.datadome') ||
-          document.body?.textContent?.includes('DataDome')
+          document.querySelector(".datadome") ||
+          document.body?.textContent?.includes("DataDome")
         );
         return hasDatadomeCookie || hasDatadomeElement;
       });
@@ -145,29 +181,29 @@ export class ChallengeHandler {
       if (datadomeChallenge) {
         return {
           detected: true,
-          type: 'datadome',
+          type: "datadome",
           solved: false,
           attempts: 0,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         };
       }
 
       // No challenge detected
       return {
         detected: false,
-        type: 'unknown',
+        type: "unknown",
         solved: true,
         attempts: 0,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
       };
     } catch (error) {
-      logger.error('Error detecting challenge:', { error });
+      logger.error("Error detecting challenge:", { error });
       return {
         detected: false,
-        type: 'unknown',
+        type: "unknown",
         solved: false,
         attempts: 0,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
       };
     }
   }
@@ -175,11 +211,11 @@ export class ChallengeHandler {
   /**
    * Wait for a challenge to complete with exponential backoff.
    * Uses exponential backoff timing: 2s, 4s, 8s, 16s, 30s (max).
-   * 
+   *
    * @param page - Playwright page object with the challenge
    * @param maxWaitTime - Maximum time to wait in milliseconds (default: 60000)
    * @returns Challenge result with solve status and duration
-   * 
+   *
    * @example
    * ```typescript
    * const result = await challengeHandler.waitForChallenge(page, 60000);
@@ -190,7 +226,10 @@ export class ChallengeHandler {
    * }
    * ```
    */
-  async waitForChallenge(page: Page, maxWaitTime: number = 60000): Promise<ChallengeResult> {
+  async waitForChallenge(
+    page: Page,
+    maxWaitTime: number = 60000,
+  ): Promise<ChallengeResult> {
     const startTime = Date.now();
     const backoffDelays = [2000, 4000, 8000, 16000, 30000]; // Exponential backoff in ms
     let attempts = 0;
@@ -203,11 +242,13 @@ export class ChallengeHandler {
         ...initialDetection,
         solved: true,
         attempts: 0,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
       };
     }
 
-    logger.info(`Challenge detected: ${initialDetection.type}, waiting for completion...`);
+    logger.info(
+      `Challenge detected: ${initialDetection.type}, waiting for completion...`,
+    );
 
     // Wait for challenge to complete with exponential backoff
     for (const delay of backoffDelays) {
@@ -221,12 +262,12 @@ export class ChallengeHandler {
           type: initialDetection.type,
           solved: false,
           attempts,
-          duration: Date.now() - startTime
+          duration: Date.now() - startTime,
         };
       }
 
       // Wait for the backoff delay
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
 
       // Check if challenge is still present
       try {
@@ -239,24 +280,29 @@ export class ChallengeHandler {
             type: initialDetection.type,
             solved: true,
             attempts,
-            duration: Date.now() - startTime
+            duration: Date.now() - startTime,
           };
         }
 
         // Also check if page has navigated (challenge might be solved)
         const url = page.url();
-        if (!url.includes('challenge') && !url.includes('captcha')) {
-          logger.info(`Challenge appears solved (page navigated) after ${attempts} attempts`);
+        if (!url.includes("challenge") && !url.includes("captcha")) {
+          logger.info(
+            `Challenge appears solved (page navigated) after ${attempts} attempts`,
+          );
           return {
             detected: true,
             type: initialDetection.type,
             solved: true,
             attempts,
-            duration: Date.now() - startTime
+            duration: Date.now() - startTime,
           };
         }
       } catch (error) {
-        logger.error(`Error checking challenge status on attempt ${attempts}:`, { error });
+        logger.error(
+          `Error checking challenge status on attempt ${attempts}:`,
+          { error },
+        );
       }
     }
 
@@ -267,17 +313,17 @@ export class ChallengeHandler {
       type: initialDetection.type,
       solved: false,
       attempts,
-      duration: Date.now() - startTime
+      duration: Date.now() - startTime,
     };
   }
 
   /**
    * Record a challenge attempt for statistics.
    * Stores attempt data for solve rate calculation and fallback triggering.
-   * 
+   *
    * @param site - Domain or site identifier
    * @param result - Challenge result to record
-   * 
+   *
    * @example
    * ```typescript
    * const result = await challengeHandler.waitForChallenge(page);
@@ -288,7 +334,7 @@ export class ChallengeHandler {
     this.attempts.push({
       site,
       result,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // Keep only last 1000 attempts to prevent memory issues
@@ -300,10 +346,10 @@ export class ChallengeHandler {
   /**
    * Get challenge statistics for a specific site.
    * Returns solve rates, attempt counts, and average solve times per challenge type.
-   * 
+   *
    * @param site - Domain or site identifier
    * @returns Array of challenge statistics grouped by challenge type
-   * 
+   *
    * @example
    * ```typescript
    * const stats = challengeHandler.getChallengeStats('example.com');
@@ -313,7 +359,7 @@ export class ChallengeHandler {
    * ```
    */
   getChallengeStats(site: string): ChallengeStats[] {
-    const siteAttempts = this.attempts.filter(a => a.site === site);
+    const siteAttempts = this.attempts.filter((a) => a.site === site);
 
     if (siteAttempts.length === 0) {
       return [];
@@ -332,7 +378,7 @@ export class ChallengeHandler {
           totalAttempts: 0,
           successfulSolves: 0,
           solveRate: 0,
-          avgSolveTime: 0
+          avgSolveTime: 0,
         });
       }
 
@@ -348,19 +394,20 @@ export class ChallengeHandler {
     const results: ChallengeStats[] = [];
 
     for (const stats of statsByType.values()) {
-      stats.solveRate = stats.totalAttempts > 0
-        ? stats.successfulSolves / stats.totalAttempts
-        : 0;
+      stats.solveRate =
+        stats.totalAttempts > 0
+          ? stats.successfulSolves / stats.totalAttempts
+          : 0;
 
       // Calculate average solve time for successful solves
       const successfulAttempts = siteAttempts.filter(
-        a => a.result.type === stats.challengeType && a.result.solved
+        (a) => a.result.type === stats.challengeType && a.result.solved,
       );
 
       if (successfulAttempts.length > 0) {
         const totalTime = successfulAttempts.reduce(
           (sum, a) => sum + a.result.duration,
-          0
+          0,
         );
         stats.avgSolveTime = totalTime / successfulAttempts.length;
       }
@@ -374,10 +421,10 @@ export class ChallengeHandler {
   /**
    * Check if fallback strategy should be triggered based on solve rate.
    * Returns true if any challenge type has a solve rate below the configured threshold.
-   * 
+   *
    * @param site - Domain or site identifier
    * @returns True if fallback should be triggered, false otherwise
-   * 
+   *
    * @example
    * ```typescript
    * if (challengeHandler.shouldTriggerFallback('example.com')) {
@@ -397,7 +444,7 @@ export class ChallengeHandler {
     for (const stat of stats) {
       if (stat.totalAttempts >= 5 && stat.solveRate < this.fallbackThreshold) {
         logger.warn(
-          `Fallback triggered for ${site}: ${stat.challengeType} solve rate ${stat.solveRate.toFixed(2)} below threshold ${this.fallbackThreshold}`
+          `Fallback triggered for ${site}: ${stat.challengeType} solve rate ${stat.solveRate.toFixed(2)} below threshold ${this.fallbackThreshold}`,
         );
         return true;
       }
