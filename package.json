@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "prisma generate && next dev",
+    "dev": "prisma generate && next dev --webpack",
     "dev:full:clean": "pkill -f \"next dev\" || true; pkill -f \"scripts/start-worker.ts\" || true",
     "dev:full": "yarn run dev:full:clean && prisma generate && concurrently --kill-others-on-fail \"next dev\" \"yarn run worker:dev\"",
     "dev:next": "prisma generate && next dev",
@@ -94,6 +94,7 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
+    "server-only": "^0.0.1",
     "shiki": "^3.22.0",
     "sonner": "^2.0.7",
     "string-similarity": "^4.0.4",

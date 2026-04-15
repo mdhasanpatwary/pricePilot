@@ -1,3 +1,4 @@
+import "server-only";
 import { Page } from "playwright";
 import { logger } from "../logger";
 import { BrowserPool } from "./browser-pool";
@@ -235,7 +236,7 @@ export class ScraperService {
     );
     const safeDevConcurrencyCap =
       Number.isFinite(configuredDevConcurrencyCap) &&
-      configuredDevConcurrencyCap > 0
+        configuredDevConcurrencyCap > 0
         ? configuredDevConcurrencyCap
         : 2;
     const runtimeMaxConcurrency =
@@ -1318,9 +1319,9 @@ export class ScraperService {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
         // Close page and release context (don't close context)
         if (page) {
-          await page.close().catch(() => {});
+          await page.close().catch(() => { });
         }
-        await this.browserPool.releaseContext(context).catch(() => {});
+        await this.browserPool.releaseContext(context).catch(() => { });
         // Release concurrent slot
         this.concurrencyLimiter.releaseSlot(hostname);
         siteProfileManager.releaseConcurrentSlot(hostname);
@@ -2053,9 +2054,9 @@ export class ScraperService {
         logger.info(`[ScraperService] ⚡ Cache hit for ${url}`);
         // Close page and release context
         if (page) {
-          await page.close().catch(() => {});
+          await page.close().catch(() => { });
         }
-        await this.browserPool.releaseContext(context).catch(() => {});
+        await this.browserPool.releaseContext(context).catch(() => { });
         // Release concurrent slot
         this.concurrencyLimiter.releaseSlot(hostname);
         siteProfileManager.releaseConcurrentSlot(hostname);
@@ -2879,9 +2880,9 @@ export class ScraperService {
         await HumanSimulation.randomPause(1000, 3000);
 
         // Simulate some human behavior on homepage
-        await HumanSimulation.simulateMouseMove(page).catch(() => {});
+        await HumanSimulation.simulateMouseMove(page).catch(() => { });
         await HumanSimulation.randomPause(500, 1500);
-        await HumanSimulation.simulateScroll(page).catch(() => {});
+        await HumanSimulation.simulateScroll(page).catch(() => { });
         await HumanSimulation.randomPause(800, 2000);
       }
 
@@ -2913,7 +2914,7 @@ export class ScraperService {
           await HumanSimulation.randomPause(1500, 3500);
 
           // Simulate human behavior
-          await HumanSimulation.simulateMouseMove(page).catch(() => {});
+          await HumanSimulation.simulateMouseMove(page).catch(() => { });
           await HumanSimulation.randomPause(400, 1000);
         }
       }
@@ -3276,8 +3277,8 @@ export class ScraperService {
         brand: ogData.brand || undefined,
         inStock:
           ogData.availability !== "oos" &&
-          ogData.availability !== "out of stock" &&
-          ogData.availability !== "instock"
+            ogData.availability !== "out of stock" &&
+            ogData.availability !== "instock"
             ? true
             : ogData.availability === "instock",
         imageUrl: ogData.image || undefined,
@@ -4141,9 +4142,9 @@ export class ScraperService {
         const template =
           strategyPatternTemplate[strategyKey] ||
           strategyPatternTemplate[
-            Object.keys(strategyPatternTemplate).find((k) =>
-              strategyKey.includes(k),
-            ) || ""
+          Object.keys(strategyPatternTemplate).find((k) =>
+            strategyKey.includes(k),
+          ) || ""
           ];
         pushCandidate(
           template || defaultPatternTemplate,
@@ -4348,17 +4349,17 @@ export class ScraperService {
 
           const searchBehavior = strictSearchMode
             ? {
-                initialPause: [280, 700] as const,
-                betweenPause: [180, 480] as const,
-                reviewPause: [450, 1200] as const,
-                hoverPause: [220, 520] as const,
-              }
+              initialPause: [280, 700] as const,
+              betweenPause: [180, 480] as const,
+              reviewPause: [450, 1200] as const,
+              hoverPause: [220, 520] as const,
+            }
             : {
-                initialPause: [120, 300] as const,
-                betweenPause: [80, 200] as const,
-                reviewPause: [200, 500] as const,
-                hoverPause: [120, 240] as const,
-              };
+              initialPause: [120, 300] as const,
+              betweenPause: [80, 200] as const,
+              reviewPause: [200, 500] as const,
+              hoverPause: [120, 240] as const,
+            };
 
           await HumanSimulation.randomPause(
             searchBehavior.initialPause[0],

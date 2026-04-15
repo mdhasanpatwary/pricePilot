@@ -32,7 +32,14 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "2mb",
     },
   },
-  serverExternalPackages: ["bullmq", "ioredis", "nodemailer"],
+  serverExternalPackages: [
+    "bullmq",
+    "ioredis",
+    "nodemailer",
+    "playwright",
+    "playwright-extra",
+    "puppeteer-extra-plugin-stealth",
+  ],
   async rewrites() {
     return [
       {
