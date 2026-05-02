@@ -9,7 +9,7 @@ import { logger } from '../logger';
 
 export interface ProxyConfig {
   url: string;
-  type: 'residential' | 'datacenter' | 'unknown';
+  type: 'residential' | 'datacenter' | 'tor' | 'unknown';
   username?: string;
   password?: string;
 }
@@ -115,7 +115,7 @@ export class ProxyManager {
    * console.log(`Found ${residentialProxies.length} residential proxies`);
    * ```
    */
-  getProxiesByType(type: 'residential' | 'datacenter' | 'unknown'): ProxyConfig[] {
+  getProxiesByType(type: 'residential' | 'datacenter' | 'tor' | 'unknown'): ProxyConfig[] {
     return this.proxies.filter(proxy => proxy.type === type);
   }
 
@@ -178,6 +178,7 @@ export class ProxyManager {
     }
 
     // Separate by type
+    const torProxies = healthyProxies.filter(h => h.proxy.type === 'tor');
     const residentialProxies = healthyProxies.filter(h => h.proxy.type === 'residential');
     const datacenterProxies = healthyProxies.filter(h => h.proxy.type === 'datacenter');
     const unknownProxies = healthyProxies.filter(h => h.proxy.type === 'unknown');
@@ -185,7 +186,11 @@ export class ProxyManager {
     // Select pool based on preference and availability
     let selectedPool: typeof healthyProxies;
 
-    if (preferResidential && residentialProxies.length > 0) {
+    // Expert Strategy: If block rate is critical (> 40%), force Tor if available
+    if (siteBlockRate > 0.4 && torProxies.length > 0) {
+      selectedPool = torProxies;
+      logger.warn(`Critical block rate for ${site} (${(siteBlockRate * 100).toFixed(1)}%). Routing through Tor.`);
+    } else if (preferResidential && residentialProxies.length > 0) {
       selectedPool = residentialProxies;
       logger.info(`Selecting residential proxy for ${site} (block rate: ${(siteBlockRate * 100).toFixed(1)}%)`);
     } else if (datacenterProxies.length > 0) {
@@ -283,8 +288,8 @@ export class ProxyManager {
 
     // Sort by performance: proxy type priority → success rate → response time
     healthyProxies.sort((a, b) => {
-      // Priority order: residential > datacenter > unknown
-      const typeOrder = { residential: 3, datacenter: 2, unknown: 1 };
+      // Priority order: tor > residential > datacenter > unknown
+      const typeOrder = { tor: 4, residential: 3, datacenter: 2, unknown: 1 };
       const aTypePriority = typeOrder[a.proxy.type] || 0;
       const bTypePriority = typeOrder[b.proxy.type] || 0;
 

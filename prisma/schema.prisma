@@ -690,6 +690,7 @@ model PriceUpdateRetryQueue {
 model PricingRule {
   id          String       @id @default(cuid())
   tenantId    String
+  siteId      String?
   name        String
   description String?
   strategy    StrategyType
@@ -699,8 +700,10 @@ model PricingRule {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   Tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  Site        Site?        @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([siteId])
 }
 
 model Product {
@@ -1323,6 +1326,7 @@ model Site {
   StrategyPerformance          StrategyPerformance[]
   Tenant                       Tenant                @relation(fields: [tenantId], references: [id])
   SyncLog                      SyncLog[]
+  PricingRule                  PricingRule[]
 
   @@index([tenantId, type, createdAt(sort: Desc)])
   @@index([tenantId, type, isSyncing])

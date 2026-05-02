@@ -94,30 +94,35 @@ export class ConfigurationManager {
      * Format: "http://proxy1:port,http://proxy2:port,http://user:pass@proxy3:port"
      */
     private loadProxyConfiguration(): ProxyConfig[] {
-        const proxyEnv = process.env.SCRAPER_PROXIES;
-
-        if (!proxyEnv || proxyEnv.trim() === '') {
-            logger.info('[ConfigurationManager] No proxy configuration found in SCRAPER_PROXIES');
-            return [];
-        }
-
-        const proxyUrls = proxyEnv
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean);
-
         const proxies: ProxyConfig[] = [];
-
-        for (const url of proxyUrls) {
-            try {
-                const proxyConfig = this.parseProxyUrl(url);
-                proxies.push(proxyConfig);
-            } catch (error) {
-                logger.error(`[ConfigurationManager] Failed to parse proxy URL: ${url}`, { error });
+        
+        // 1. Load standard proxies
+        const proxyEnv = process.env.SCRAPER_PROXIES;
+        if (proxyEnv && proxyEnv.trim() !== '') {
+            const proxyUrls = proxyEnv.split(',').map(p => p.trim()).filter(Boolean);
+            for (const url of proxyUrls) {
+                try {
+                    proxies.push(this.parseProxyUrl(url));
+                } catch (error) {
+                    logger.error(`[ConfigurationManager] Failed to parse proxy URL: ${url}`, { error });
+                }
             }
         }
 
-        logger.info(`[ConfigurationManager] Loaded ${proxies.length} proxies from environment`);
+        // 2. Load Tor proxy if configured
+        const torUrl = process.env.TOR_PROXY_URL;
+        if (torUrl && torUrl.trim() !== '') {
+            try {
+                const torConfig = this.parseProxyUrl(torUrl);
+                torConfig.type = 'tor'; // Force type to tor
+                proxies.push(torConfig);
+                logger.info(`[ConfigurationManager] Loaded Tor proxy: ${torUrl}`);
+            } catch (error) {
+                logger.error(`[ConfigurationManager] Failed to parse Tor proxy URL: ${torUrl}`, { error });
+            }
+        }
+
+        logger.info(`[ConfigurationManager] Loaded ${proxies.length} total proxies from environment`);
         return proxies;
     }
 
@@ -155,12 +160,17 @@ export class ConfigurationManager {
      * Classify proxy type based on IP address or hostname
      * This is a simple heuristic - can be enhanced with IP range checks
      */
-    private classifyProxyType(hostname: string): 'residential' | 'datacenter' | 'unknown' {
+    private classifyProxyType(hostname: string): 'residential' | 'datacenter' | 'tor' | 'unknown' {
         // Simple heuristic: if hostname contains certain keywords, classify as residential
         const residentialKeywords = ['residential', 'resi', 'mobile', 'isp'];
         const datacenterKeywords = ['datacenter', 'dc', 'server', 'cloud'];
+        const torKeywords = ['tor', 'onion', '127.0.0.1', 'localhost'];
 
         const lowerHostname = hostname.toLowerCase();
+
+        if (torKeywords.some(keyword => lowerHostname.includes(keyword)) && process.env.TOR_PROXY_URL?.includes(hostname)) {
+            return 'tor';
+        }
 
         if (residentialKeywords.some(keyword => lowerHostname.includes(keyword))) {
             return 'residential';

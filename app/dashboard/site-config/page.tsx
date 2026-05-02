@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface TenantSiteConfig {
     siteId: string;
@@ -580,7 +581,7 @@ export default function TenantSiteConfigPage() {
                             </p>
                         </div>
                         <Button className="mt-2" asChild>
-                            <a href="/dashboard/competitors">Add Competitors</a>
+                            <Link href="/dashboard/competitors">Add Competitors</Link>
                         </Button>
                     </div>
                 </Card>

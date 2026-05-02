@@ -145,9 +145,20 @@ export class RulesEngine {
         bestMatch.competitorProduct.currentPrice.toString(),
       );
       const competitorIsOutOfStock = !bestMatch.competitorProduct.inStock;
+      const competitorSiteId = bestMatch.competitorProduct.siteId;
+
+      // Filter and prioritize rules:
+      // 1. Must match the competitor's siteId or be a generic (null) global rule.
+      // 2. Competitor-specific rules override global rules.
+      const applicableRules = rules.filter(r => !r.siteId || r.siteId === competitorSiteId);
+      applicableRules.sort((a, b) => {
+        if (a.siteId && !b.siteId) return -1;
+        if (!a.siteId && b.siteId) return 1;
+        return a.priority - b.priority;
+      });
 
       // Apply rules in priority order
-      for (const rule of rules) {
+      for (const rule of applicableRules) {
         const result = this.applyRule(
           rule,
           currentPrice,

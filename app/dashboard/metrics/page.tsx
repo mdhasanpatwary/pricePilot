@@ -43,6 +43,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface TenantSiteMetrics {
     domain: string;
@@ -641,7 +642,7 @@ export default function TenantMetricsDashboard() {
                             </p>
                         </div>
                         <Button className="mt-2" asChild>
-                            <a href="/dashboard/competitors">Add Competitors</a>
+                            <Link href="/dashboard/competitors">Add Competitors</Link>
                         </Button>
                     </div>
                 </Card>

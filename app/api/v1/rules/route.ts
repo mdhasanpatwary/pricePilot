@@ -23,10 +23,17 @@ async function handleGET(_req: NextRequest) {
   }
 
   const tenantId = session.user.tenantId;
+  const { searchParams } = new URL(req.url);
+  const siteId = searchParams.get("siteId");
 
   const rules = await prisma.pricingRule.findMany({
-    where: { tenantId },
-    orderBy: { priority: "asc" },
+    where: { 
+      tenantId,
+      ...(siteId ? { OR: [{ siteId: siteId }, { siteId: null }] } : {}),
+    },
+    orderBy: [
+      { priority: "asc" }
+    ],
   });
 
   return NextResponse.json(rules);
@@ -52,12 +59,13 @@ async function handlePOST(req: NextRequest) {
     return validationErrorResponse(validation);
   }
 
-  const { name, strategy, parameter, priority, isActive, description } =
+  const { name, strategy, parameter, priority, isActive, description, siteId } =
     validation.data!;
 
   const rule = await prisma.pricingRule.create({
     data: {
       tenantId,
+      siteId,
       name,
       strategy,
       parameter,
@@ -74,7 +82,7 @@ async function handlePOST(req: NextRequest) {
     action: "CREATE_PRICING_RULE",
     entityId: rule.id,
     ipAddress: getIpAddress(req),
-    details: { name, strategy, parameter },
+    details: { name, strategy, parameter, siteId },
   });
 
   return NextResponse.json(rule, { status: 201 });

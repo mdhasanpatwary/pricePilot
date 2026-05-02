@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Plus,
@@ -1238,9 +1239,9 @@ export default function CompetitorsPage() {
                               />
                             </div>
                             <div>
-                              <div className="text-foreground font-semibold">
+                              <Link href={`/dashboard/competitors/${comp.id}`} className="text-foreground font-semibold hover:text-primary transition-colors hover:underline">
                                 {comp.name}
-                              </div>
+                              </Link>
                               <div className="flex items-center gap-2">
                                 <div className="text-[10px] text-muted-foreground font-mono">
                                   {new URL(comp.url).hostname}

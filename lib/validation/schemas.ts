@@ -351,6 +351,7 @@ export const createPricingRuleSchema = z.object({
       message: "Invalid pricing strategy",
     },
   ),
+  siteId: z.string().optional().nullable(),
   parameter: z.number().finite("Parameter must be a valid number"),
   priority: z.number().int().min(1).max(100).default(1),
   isActive: z.boolean().default(true),
@@ -360,6 +361,7 @@ export const createPricingRuleSchema = z.object({
 export const updatePricingRuleSchema = z.object({
   id: uuidSchema,
   name: z.string().trim().min(3).max(100).transform(sanitizeString).optional(),
+  siteId: z.string().optional().nullable(),
   strategy: z
     .enum([
       "UNDERCUT",

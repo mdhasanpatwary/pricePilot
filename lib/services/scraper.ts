@@ -164,6 +164,7 @@ export class ScraperService {
   private disposed = false;
   // Lazy-init: init() is called once; subsequent calls resolve immediately
   private _initPromise: Promise<void> | null = null;
+  private blockAssets: boolean = true;
 
   private static parsePositiveInt(
     value: string | undefined,
@@ -253,6 +254,9 @@ export class ScraperService {
       maxConcurrency: runtimeMaxConcurrency,
       initialConcurrency: runtimeInitialConcurrency,
     });
+
+    // Expert Move: Enabled asset blocking by default to save bandwidth
+    this.blockAssets = process.env.BLOCK_ASSETS !== "false";
 
     // Initialize CaptchaSolver if enabled
     const captchaEnabled = process.env.CAPTCHA_SOLVER_ENABLED === "true";
@@ -1297,6 +1301,11 @@ export class ScraperService {
         );
       });
       page = await context.newPage();
+
+      // Expert Move: Setup Request Interception to block images, CSS, and fonts
+      if (this.blockAssets) {
+        await this.setupRequestInterception(page);
+      }
     } catch (error) {
       logger.error(
         `[ScraperService] Failed to acquire context or create page for ${url}:`,
@@ -1745,7 +1754,23 @@ export class ScraperService {
       await page.waitForTimeout(effectiveProfile.waitTime);
 
       // 6. Extraction Strategies
-      // ... (JSON-LD, OG, CSS, Heuristics)
+      // Expert Move: Try App-State first as it's the most reliable "shadow" data source
+      const appStateData = await this.extractFromAppState(page);
+      if (appStateData && appStateData.price > 0) {
+        const result = {
+          ...appStateData,
+          url,
+          imageUrl: this.normalizeImageUrl(appStateData.imageUrl, url),
+          specifications: this.parseSpecifications(appStateData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(hostname, proxyUrl, userAgent, true, false, wasChallenged, responseTime, statusCode);
+        if (proxyConfig && this.proxyManager) this.proxyManager.recordSuccess(proxyConfig, responseTime);
+        this.relaxProtectionForDomain(hostname);
+        return result;
+      }
+
       const jsonLdData = await this.extractFromJsonLd(page);
       if (jsonLdData && jsonLdData.price > 0) {
         const result = {
@@ -2036,6 +2061,11 @@ export class ScraperService {
         tenantId,
       );
       page = await context.newPage();
+
+      // Expert Move: Setup Request Interception to block images, CSS, and fonts
+      if (this.blockAssets) {
+        await this.setupRequestInterception(page);
+      }
     } catch (error) {
       // Release concurrent slot before throwing
       this.concurrencyLimiter.releaseSlot(hostname);
@@ -2576,6 +2606,32 @@ export class ScraperService {
       await sessionTracker.updateStage(sessionId, "data_extraction");
 
       // 6. Extraction Strategies
+      // Expert Move: Try App-State first as it's the most reliable "shadow" data source
+      const appStateData = await this.extractFromAppState(page);
+      if (appStateData && appStateData.price > 0) {
+        const extractionTime = Date.now() - extractionStartTime;
+        const result = {
+          ...appStateData,
+          url,
+          imageUrl: this.normalizeImageUrl(appStateData.imageUrl, url),
+          specifications: this.parseSpecifications(appStateData.title),
+        };
+        await cache.set(cacheKey, result, profile.cacheTime);
+
+        // Update session with extraction complete
+        await sessionTracker.updateStage(sessionId, "validation", {
+          extractedData: result,
+          metrics: { extractionTime },
+        });
+
+        // Record successful metrics
+        const responseTime = Date.now() - startTime;
+        this.recordRequestMetrics(hostname, proxyUrl, userAgent, true, false, wasChallenged, responseTime, statusCode);
+        if (proxyConfig && this.proxyManager) this.proxyManager.recordSuccess(proxyConfig, responseTime);
+        this.relaxProtectionForDomain(hostname);
+        return result;
+      }
+
       const jsonLdData = await this.extractFromJsonLd(page);
       if (jsonLdData && jsonLdData.price > 0) {
         const extractionTime = Date.now() - extractionStartTime;
@@ -3766,6 +3822,124 @@ export class ScraperService {
     if (hydrationPrice > 0) return hydrationPrice;
 
     return 0;
+  }
+
+  /**
+   * Expert Move: Setup Request Interception to block non-essential assets.
+   * This saves up to 80% bandwidth and significantly speeds up navigation.
+   */
+  private async setupRequestInterception(page: Page): Promise<void> {
+    await page.route("**/*", (route) => {
+      const request = route.request();
+      const resourceType = request.resourceType();
+      const url = request.url().toLowerCase();
+
+      // Block images, stylesheets, fonts, and media
+      const blockedResources = ["image", "stylesheet", "font", "media", "texttrack", "object", "beacon", "csp_report", "imageset"];
+      
+      // Block common tracking and ad domains
+      const blockedDomains = ["google-analytics.com", "doubleclick.net", "facebook.net", "hotjar.com", "bing.com/pixel"];
+
+      if (blockedResources.includes(resourceType) || blockedDomains.some(domain => url.includes(domain))) {
+        route.abort();
+      } else {
+        route.continue();
+      }
+    });
+  }
+
+  /**
+   * Expert Move: Extract product data from hidden Application State (Next.js, Nuxt.js, React).
+   * This is often the most accurate source of data as it's the "raw" JSON used to render the page.
+   */
+  private async extractFromAppState(page: Page): Promise<Omit<ScrapedProduct, "url"> | null> {
+    try {
+      const data = await page.evaluate(() => {
+        const results: any[] = [];
+        
+        // 1. Next.js (__NEXT_DATA__)
+        const nextData = document.querySelector("#__NEXT_DATA__");
+        if (nextData) {
+          try {
+            results.push({ source: "next", data: JSON.parse(nextData.textContent || "{}") });
+          } catch (e) {}
+        }
+
+        // 2. Nuxt.js (__NUXT__)
+        const nuxtData = (window as any).__NUXT__;
+        if (nuxtData) {
+          results.push({ source: "nuxt", data: nuxtData });
+        }
+
+        // 3. Redux / Global State
+        const initialState = (window as any).__INITIAL_STATE__ || (window as any).__STATE__;
+        if (initialState) {
+          results.push({ source: "state", data: initialState });
+        }
+
+        return results;
+      });
+
+      if (data.length === 0) return null;
+
+      // Deep scan the discovered objects for product-like structures
+      for (const item of data) {
+        const product = this.deepSearchProduct(item.data);
+        if (product && product.price > 0) {
+          return product;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(`[ScraperService] Error in extractFromAppState:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Deeply scans an object for product-related keys (price, title, name, sku).
+   */
+  private deepSearchProduct(obj: any, depth = 0): Omit<ScrapedProduct, "url"> | null {
+    if (!obj || depth > 10) return null;
+
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        const found = this.deepSearchProduct(item, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    if (typeof obj !== "object") return null;
+
+    // Check if this object looks like a product
+    const hasPrice = obj.price !== undefined || obj.unit_price !== undefined || obj.amount !== undefined;
+    const hasName = obj.name !== undefined || obj.title !== undefined || obj.productName !== undefined;
+
+    if (hasPrice && hasName) {
+      const price = parseFloat(String(obj.price || obj.unit_price || obj.amount || 0));
+      if (price > 0) {
+        return {
+          title: String(obj.name || obj.title || obj.productName || ""),
+          price: price,
+          currency: String(obj.currency || obj.priceCurrency || "BDT"),
+          sku: String(obj.sku || obj.id || ""),
+          inStock: obj.stock_status === "instock" || obj.availability === "instock" || obj.in_stock === true || true,
+          imageUrl: obj.image || obj.imageUrl || obj.thumbnail || undefined,
+        };
+      }
+    }
+
+    // Recursively search children
+    for (const key in obj) {
+      if (typeof obj[key] === "object") {
+        const found = this.deepSearchProduct(obj[key], depth + 1);
+        if (found) return found;
+      }
+    }
+
+    return null;
   }
 
   /**
